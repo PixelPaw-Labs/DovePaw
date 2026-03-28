@@ -16,7 +16,6 @@
  */
 
 import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { consola } from "consola";
 import express from "express";
@@ -32,6 +31,7 @@ import {
   UserBuilder,
 } from "@a2a-js/sdk/server/express";
 import { PORTS_FILE } from "@/lib/paths";
+import { z } from "zod";
 import { QueryAgentExecutor } from "./query-agent-executor";
 
 // ─── Port utilities ───────────────────────────────────────────────────────────
@@ -44,22 +44,27 @@ export function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.listen(0, "127.0.0.1", () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- address() returns AddressInfo after listen()
-      const { port } = server.address() as AddressInfo;
-      server.close(() => resolve(port));
+      const addr = server.address();
+      if (!addr || typeof addr === "string") {
+        reject(new Error("Unexpected address type after listen()"));
+        return;
+      }
+      server.close(() => resolve(addr.port));
     });
     server.on("error", reject);
   });
 }
 
-export interface PortsManifest {
-  experience_reflector: number;
-  get_shit_done: number;
-  release_log_sentinel: number;
-  memory_distiller: number;
-  oncall_analyzer: number;
-  updatedAt: string;
-}
+const portsManifestSchema = z.object({
+  experience_reflector: z.number(),
+  get_shit_done: z.number(),
+  release_log_sentinel: z.number(),
+  memory_distiller: z.number(),
+  oncall_analyzer: z.number(),
+  updatedAt: z.string(),
+});
+
+export type PortsManifest = z.infer<typeof portsManifestSchema>;
 
 export function writePortsManifest(ports: Omit<PortsManifest, "updatedAt">): void {
   const manifest: PortsManifest = { ...ports, updatedAt: new Date().toISOString() };
@@ -69,8 +74,8 @@ export function writePortsManifest(ports: Omit<PortsManifest, "updatedAt">): voi
 export function readPortsManifest(): PortsManifest | null {
   if (!existsSync(PORTS_FILE)) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known ports manifest format
-    return JSON.parse(readFileSync(PORTS_FILE, "utf-8")) as PortsManifest;
+    const parsed = portsManifestSchema.safeParse(JSON.parse(readFileSync(PORTS_FILE, "utf-8")));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

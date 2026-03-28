@@ -118,6 +118,7 @@
     "node_modules/**",
     ".next/**",
     "skills/**",
-    "chatbot/components/ai-elements/**"
+    "chatbot/components/ai-elements/**",
+    "AGENTS.md"
   ]
 }
