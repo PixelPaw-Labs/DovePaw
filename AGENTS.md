@@ -22,7 +22,6 @@ npm run fmt:check        # Verify formatting without modifying files
 ### Chatbot
 
 ```bash
-npm run chatbot:install  # Install chatbot npm dependencies
 npm run chatbot:dev:all  # Start A2A servers + Next.js dev concurrently (port 7473)
 npm run chatbot:servers  # Start A2A servers only (dynamic ports, --watch)
 npm run chatbot:dev      # Start Next.js dev only (port 7473)
@@ -111,7 +110,7 @@ Agent Scripts (agents/*/main.ts)
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DovePaw** (1164 symbols, 3099 relationships, 92 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DovePaw** (2509 symbols, 5085 relationships, 205 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

@@ -21,7 +21,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** agents/chatbot/ */
 export const CHATBOT_ROOT = join(__dirname, "..");
-/** tsx binary in chatbot's node_modules */
-export const TSX_BIN = join(CHATBOT_ROOT, "node_modules/.bin/tsx");
+/** tsx binary in root node_modules */
+export const TSX_BIN = join(CHATBOT_ROOT, "../node_modules/.bin/tsx");
 /** Runtime port manifest written by a2a/start-all.ts */
 export const PORTS_FILE = join(CHATBOT_ROOT, "a2a/.ports.json");

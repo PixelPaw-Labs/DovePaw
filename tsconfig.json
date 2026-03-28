@@ -9,7 +9,50 @@
     "rootDir": ".",
     "declaration": false,
     "skipLibCheck": true,
-    "types": ["node"]
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "react-jsx",
+    "types": [
+      "node"
+    ],
+    "allowJs": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": [
+        "./chatbot/*"
+      ],
+      "@@/*": [
+        "./*"
+      ]
+    },
+    "noEmit": true
   },
-  "include": ["agents/**/*.ts", "lib/**/*.ts", "plist/**/*.ts", "build.ts"]
+  "include": [
+    "agents/**/*.ts",
+    "lib/**/*.ts",
+    "plist/**/*.ts",
+    "build.ts",
+    "next.config.ts",
+    "vitest.config.ts",
+    "chatbot/**/*.ts",
+    "chatbot/**/*.tsx",
+    "chatbot/next-env.d.ts",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "chatbot/.next"
+  ]
 }

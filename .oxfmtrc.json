@@ -6,5 +6,5 @@
   "semi": true,
   "singleQuote": false,
   "trailingComma": "all",
-  "ignorePatterns": ["dist/", "node_modules/"]
+  "ignorePatterns": ["dist/", "node_modules/", ".next/", "chatbot/.next/"]
 }

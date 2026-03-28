@@ -156,7 +156,6 @@ export async function unloadAgent(agent: AgentDef, uid: string): Promise<void> {
 export async function uninstallAgent(agent: AgentDef, uid: string): Promise<void> {
   await unloadAgent(agent, uid);
   await removePlistFile(agent);
-  await unlinkSkills();
 }
 
 /** Deploy, configure, and load one agent. */
@@ -169,7 +168,6 @@ export async function installAgent(
     deployAgentScript(agent.name),
     writeEnvScript(agent),
     copyNativePackages(nativePackages),
-    linkSkills(),
   ]);
   await uninstallAgent(agent, uid);
   await writePlistFile(agent);
@@ -210,7 +208,7 @@ export async function reloadAgent(agent: AgentDef, uid: string): Promise<void> {
 }
 
 /** Symlink every skill in DovePaw/skills/ into ~/.claude/skills/. */
-async function linkSkills(): Promise<void> {
+export async function linkSkills(): Promise<void> {
   await mkdir(SKILLS_ROOT, { recursive: true });
   const skills = await readdir(SKILLS_DIR);
   await Promise.all(
@@ -223,7 +221,7 @@ async function linkSkills(): Promise<void> {
 }
 
 /** Remove ~/.claude/skills/ symlinks for every skill in DovePaw/skills/. */
-async function unlinkSkills(): Promise<void> {
+export async function unlinkSkills(): Promise<void> {
   const skills = await readdir(SKILLS_DIR);
   await Promise.all(
     skills.map((skill) => rm(join(SKILLS_ROOT, skill), { recursive: true, force: true })),

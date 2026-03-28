@@ -147,6 +147,7 @@ vite.config.ts.timestamp-*
 dist/
 node_modules/
 logs/
+chatbot/tsconfig.json
 state/
 .pir-tmp/
 .envrc
