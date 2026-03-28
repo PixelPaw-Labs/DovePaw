@@ -13,7 +13,7 @@
  *   6. Results: script → sub-agent MCP → sub-agent → A2A SSE → Dove MCP → Dove → SSE to client
  */
 
-import { query, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { AGENTS_ROOT, SCHEDULER_ROOT, SCHEDULER_LOGS, SCHEDULER_STATE } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { AGENTS } from "@@/lib/agents";
@@ -27,7 +27,7 @@ import {
   doveAwaitToolName,
 } from "@/lib/query-tools";
 import { buildDoveHooks } from "@/lib/hooks";
-import { consumeQueryEvents } from "@/lib/query-events";
+import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 
 export const maxDuration = 86400; // 24 hours for long-running agents
@@ -111,14 +111,11 @@ export async function POST(request: Request) {
   const abortController = new AbortController();
   request.signal.addEventListener("abort", () => abortController.abort());
 
-  const mcpServer = createSdkMcpServer({
-    name: "agents",
-    tools: AGENTS.flatMap((agent) => [
-      makeAskTool(agent),
-      makeStartTool(agent),
-      makeAwaitTool(agent),
-    ]),
-  });
+  const tools = AGENTS.flatMap((agent) => [
+    makeAskTool(agent),
+    makeStartTool(agent),
+    makeAwaitTool(agent),
+  ]);
 
   const readable = new ReadableStream({
     cancel() {
@@ -130,56 +127,59 @@ export async function POST(request: Request) {
       };
 
       try {
-        await consumeQueryEvents(
-          query({
-            prompt: message,
-            options: {
-              abortController,
-              env: {
-                ...process.env, // Pass through all env vars so tools can read their configs
-              },
-              promptSuggestions: true,
-              cwd: AGENTS_ROOT,
-              // Expose the launchd install directory so Claude can inspect
-              // installed plist files (written by `npm run install`)
-              additionalDirectories: [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT],
-              systemPrompt: {
-                type: "preset",
-                preset: "claude_code",
-                append: SYSTEM_PROMPT,
-              },
-              permissionMode: "acceptEdits",
-              allowedTools: AGENTS.flatMap((a) => [
-                `mcp__agents__${doveAskToolName(a)}`,
-                `mcp__agents__${doveStartToolName(a)}`,
-                `mcp__agents__${doveAwaitToolName(a)}`,
-              ]),
-              mcpServers: { agents: mcpServer },
-              // Resume the existing session so the full conversation history is preserved.
-              // On the first message sessionId is null and query() starts a fresh session.
-              ...(sessionId ? { resume: sessionId } : {}),
-              // Stream text tokens as they are generated
-              includePartialMessages: true,
-              settingSources: ["project", "user"],
-              hooks: buildDoveHooks(AGENTS),
-            },
-          }),
-          new SseQueryDispatcher(send),
-        );
-        send({ type: "done" });
-      } catch (err: unknown) {
-        const isAbort =
-          err instanceof Error &&
-          (err.name === "AbortError" || err.message === "Operation aborted");
-        if (!isAbort) {
-          try {
-            const msg = err instanceof Error ? err.message : String(err);
-            send({ type: "error", content: msg });
+        await withMcpQuery(
+          tools,
+          async (mcpServer) => {
+            await consumeQueryEvents(
+              query({
+                prompt: message,
+                options: {
+                  abortController,
+                  env: {
+                    ...process.env, // Pass through all env vars so tools can read their configs
+                  },
+                  promptSuggestions: true,
+                  cwd: AGENTS_ROOT,
+                  // Expose the launchd install directory so Claude can inspect
+                  // installed plist files (written by `npm run install`)
+                  additionalDirectories: [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT],
+                  systemPrompt: {
+                    type: "preset",
+                    preset: "claude_code",
+                    append: SYSTEM_PROMPT,
+                  },
+                  permissionMode: "acceptEdits",
+                  allowedTools: AGENTS.flatMap((a) => [
+                    `mcp__agents__${doveAskToolName(a)}`,
+                    `mcp__agents__${doveStartToolName(a)}`,
+                    `mcp__agents__${doveAwaitToolName(a)}`,
+                  ]),
+                  mcpServers: { agents: mcpServer },
+                  // Resume the existing session so the full conversation history is preserved.
+                  // On the first message sessionId is null and query() starts a fresh session.
+                  ...(sessionId ? { resume: sessionId } : {}),
+                  // Stream text tokens as they are generated
+                  includePartialMessages: true,
+                  settingSources: ["project", "user"],
+                  hooks: buildDoveHooks(AGENTS),
+                },
+              }),
+              new SseQueryDispatcher(send),
+            );
             send({ type: "done" });
-          } catch {
-            // Stream already closed — client disconnected
-          }
-        }
+          },
+          (_err, isAbort) => {
+            if (!isAbort) {
+              try {
+                const msg = _err instanceof Error ? _err.message : String(_err);
+                send({ type: "error", content: msg });
+                send({ type: "done" });
+              } catch {
+                // Stream already closed — client disconnected
+              }
+            }
+          },
+        );
       } finally {
         abortController.abort();
         try {

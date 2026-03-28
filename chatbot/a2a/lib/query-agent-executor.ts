@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
-import { createSdkMcpServer, query } from "@anthropic-ai/claude-agent-sdk";
-import { consumeQueryEvents } from "@/lib/query-events";
+import { query } from "@anthropic-ai/claude-agent-sdk";
+import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import { AGENTS_ROOT, agentLogDir, agentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
@@ -110,92 +110,88 @@ export class QueryAgentExecutor implements AgentExecutor {
         extraEnv: workspaceEnv,
       };
 
-      const innerMcpServer = createSdkMcpServer({
-        name: "agents",
-        tools: [
+      await withMcpQuery(
+        [
           makeStartScriptTool(this.def, agentConfig),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
         ],
-      });
-
-      try {
-        await consumeQueryEvents(
-          query({
-            prompt: instruction || "run",
-            options: {
-              cwd: workspace.path,
-              env: { ...process.env, ...agentConfig.extraEnv },
-              agent: this.def.displayName,
-              systemPrompt: {
-                type: "preset",
-                preset: "claude_code",
-                append: buildSubAgentPrompt(this.def),
+        async (innerMcpServer) => {
+          await consumeQueryEvents(
+            query({
+              prompt: instruction || "run",
+              options: {
+                cwd: workspace!.path,
+                env: { ...process.env, ...agentConfig.extraEnv },
+                agent: this.def.displayName,
+                systemPrompt: {
+                  type: "preset",
+                  preset: "claude_code",
+                  append: buildSubAgentPrompt(this.def),
+                },
+                additionalDirectories: [
+                  LAUNCH_AGENTS_DIR,
+                  agentLogDir(this.def.name),
+                  agentStateDir(this.def.name),
+                ],
+                allowedTools: [
+                  `mcp__agents__${START_SCRIPT_TOOL}`,
+                  `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
+                  ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
+                ],
+                mcpServers: { agents: innerMcpServer },
+                hooks: buildSubAgentHooks(),
+                abortController: this.abortController ?? undefined,
+                permissionMode: "acceptEdits",
+                includePartialMessages: true,
+                settingSources: ["project", "user"],
               },
-              additionalDirectories: [
-                LAUNCH_AGENTS_DIR,
-                agentLogDir(this.def.name),
-                agentStateDir(this.def.name),
-              ],
-              allowedTools: [
-                `mcp__agents__${START_SCRIPT_TOOL}`,
-                `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
-                ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
-              ],
-              mcpServers: { agents: innerMcpServer },
-              hooks: buildSubAgentHooks(),
-              abortController: this.abortController,
-              permissionMode: "acceptEdits",
-              includePartialMessages: true,
-              settingSources: ["project", "user"],
-            },
-          }),
-          new A2AQueryDispatcher(eventBus, taskId, contextId),
-        );
+            }),
+            new A2AQueryDispatcher(eventBus, taskId, contextId),
+          );
 
-        consola.success(`${this.def.displayName} sub-agent completed`);
-        eventBus.publish({
-          kind: "status-update",
-          taskId,
-          contextId,
-          status: { state: "completed", timestamp: new Date().toISOString() },
-          final: true,
-        });
-      } catch (err: unknown) {
-        const isAbort =
-          err instanceof Error &&
-          (err.name === "AbortError" || err.message === "Operation aborted");
-        if (isAbort) {
-          consola.info(`${this.def.displayName} sub-agent cancelled`);
+          consola.success(`${this.def.displayName} sub-agent completed`);
           eventBus.publish({
             kind: "status-update",
             taskId,
             contextId,
-            status: { state: "canceled", timestamp: new Date().toISOString() },
+            status: { state: "completed", timestamp: new Date().toISOString() },
             final: true,
           });
-        } else {
-          const msg = err instanceof Error ? err.message : String(err);
-          consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
-          eventBus.publish({
-            kind: "artifact-update",
-            taskId,
-            contextId,
-            artifact: {
-              artifactId: randomUUID(),
-              name: "error",
-              parts: [{ kind: "text", text: `Error: ${msg}` }],
-            },
-          });
-          eventBus.publish({
-            kind: "status-update",
-            taskId,
-            contextId,
-            status: { state: "failed", timestamp: new Date().toISOString() },
-            final: true,
-          });
-        }
-      }
+        },
+        (err, isAbort) => {
+          if (isAbort) {
+            consola.info(`${this.def.displayName} sub-agent cancelled`);
+            eventBus.publish({
+              kind: "status-update",
+              taskId,
+              contextId,
+              status: { state: "canceled", timestamp: new Date().toISOString() },
+              final: true,
+            });
+          } else {
+            const msg = err instanceof Error ? err.message : String(err);
+            consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
+            eventBus.publish({
+              kind: "artifact-update",
+              taskId,
+              contextId,
+              artifact: {
+                artifactId: randomUUID(),
+                name: "error",
+                parts: [{ kind: "text", text: `Error: ${msg}` }],
+              },
+            });
+            eventBus.publish({
+              kind: "status-update",
+              taskId,
+              contextId,
+              status: { state: "failed", timestamp: new Date().toISOString() },
+              final: true,
+            });
+          }
+        },
+      );
     } finally {
       this.abortController?.abort();
       workspace?.cleanup();

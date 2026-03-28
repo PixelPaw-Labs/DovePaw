@@ -6,8 +6,35 @@
  * block tracking) lives here — dispatchers stay stateless per-event.
  */
 
+import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { QueryResponseDispatcher } from "@/lib/query-dispatcher";
+
+/**
+ * Create an in-process MCP server, run a query with it, then close it.
+ * Guarantees `instance.close()` is called regardless of success, abort, or error.
+ */
+export async function withMcpQuery(
+  tools: Parameters<typeof createSdkMcpServer>[0]["tools"],
+  run: (mcpServer: ReturnType<typeof createSdkMcpServer>) => Promise<void>,
+  onError?: (err: unknown, isAbort: boolean) => void,
+): Promise<void> {
+  const mcpServer = createSdkMcpServer({ name: "agents", tools });
+  try {
+    await run(mcpServer);
+  } catch (err: unknown) {
+    const isAbort =
+      err instanceof Error &&
+      (err.name === "AbortError" || err.message === "Operation aborted");
+    onError?.(err, isAbort);
+  } finally {
+    try {
+      await mcpServer.instance.close();
+    } catch {
+      // Already closed or never connected
+    }
+  }
+}
 
 export async function consumeQueryEvents(
   events: AsyncIterable<SDKMessage>,
