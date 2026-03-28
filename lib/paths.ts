@@ -28,6 +28,8 @@ export const agentSettingsFile = (agentName: string) =>
 export const SCHEDULER_ROOT = join(process.env.HOME!, ".claude/scheduler");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
+/** DovePaw/skills — project skills directory */
+export const SKILLS_DIR = join(resolveAgentsRoot(), "skills");
 /** ~/.claude/scheduler/logs */
 export const SCHEDULER_LOGS = join(SCHEDULER_ROOT, "logs");
 /** ~/.claude/scheduler/state */

@@ -23,6 +23,7 @@ import type { AgentDef } from "./agents";
 import {
   AGENTS_ROOT,
   LAUNCH_AGENTS_DIR,
+  SKILLS_DIR,
   SKILLS_ROOT,
   agentDistScript,
   agentLogDir,
@@ -207,8 +208,6 @@ export async function reloadAgent(agent: AgentDef, uid: string): Promise<void> {
   await unloadAgent(agent, uid);
   await loadAgent(agent, uid);
 }
-
-const SKILLS_DIR = join(AGENTS_ROOT, ".claude/skills");
 
 /** Symlink every skill in DovePaw/skills/ into ~/.claude/skills/. */
 async function linkSkills(): Promise<void> {

@@ -142,9 +142,6 @@ vite.config.ts.timestamp-*
 # Implement workflow temp assets
 .implement-assets/
 .claude/**/*
-!.claude/skills/
-!.claude/skills/**
-.claude/skills/gitnexus/
 
 # Runtime data
 dist/
