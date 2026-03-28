@@ -74,7 +74,9 @@ export function useAgentChat() {
         const decoder = new TextDecoder();
         let buffer = "";
 
+        // eslint-disable-next-line no-await-in-loop -- streaming reader pattern requires sequential awaits
         while (true) {
+          // eslint-disable-next-line no-await-in-loop -- streaming reader pattern requires sequential awaits
           const { done, value } = await reader.read();
           if (done) break;
 
@@ -86,6 +88,7 @@ export function useAgentChat() {
             const line = part.trim();
             if (!line.startsWith("data: ")) continue;
             try {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
               const event = JSON.parse(line.slice(6)) as ChatSseEvent;
 
               if (event.type === "session") {
@@ -101,6 +104,7 @@ export function useAgentChat() {
                 pendingToolNameRef.current = null;
                 if (toolName) {
                   try {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
                     const input = JSON.parse(event.content) as Record<string, unknown>;
                     appendToolCallSegment(assistantId, { name: toolName, input });
                   } catch {
@@ -128,7 +132,7 @@ export function useAgentChat() {
                       }
                     }
                     if (lastTextIdx >= 0) {
-                      segments[lastTextIdx] = { type: "text", content: event.content! };
+                      segments[lastTextIdx] = { type: "text", content: event.content };
                     }
                     return { segments, isLoading: false, isProcessStreaming: false };
                   },
@@ -161,7 +165,7 @@ export function useAgentChat() {
           }
         }
       } catch (err: unknown) {
-        if ((err as Error).name === "AbortError") return;
+        if (err instanceof Error && err.name === "AbortError") return;
         const msg = err instanceof Error ? err.message : String(err);
         animation.flush(assistantId);
         setLastTextContent(assistantId, `⚠️ Connection error: ${msg}`);

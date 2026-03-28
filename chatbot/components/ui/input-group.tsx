@@ -67,6 +67,7 @@ function InputGroupAddon({
       data-align={align}
       className={cn(inputGroupAddonVariants({ align }), className)}
       onClick={(e) => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- DOM event target narrowing
         if ((e.target as HTMLElement).closest("button")) {
           return;
         }

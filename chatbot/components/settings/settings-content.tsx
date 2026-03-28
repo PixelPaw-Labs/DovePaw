@@ -27,18 +27,19 @@ function useAgentStatuses() {
 
     function connect() {
       ws = new WebSocket(WS_URL);
-      ws.onmessage = (event) => {
+      ws.addEventListener("message", (event) => {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON.parse from known WebSocket source
           const msg = JSON.parse(event.data as string) as StatusMessage;
           if (msg.type === "status") setStatuses(msg.agents);
         } catch {
           // ignore malformed messages
         }
-      };
-      ws.onclose = () => {
+      });
+      ws.addEventListener("close", () => {
         if (!cancelled) reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
-      };
-      ws.onerror = () => ws?.close();
+      });
+      ws.addEventListener("error", () => ws?.close());
     }
 
     connect();
@@ -89,6 +90,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ repositories: next.map((r) => ({ githubRepo: r.githubRepo })) }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const updated = (await res.json()) as GlobalSettings;
         setRepositories(updated.repositories);
       }
@@ -131,6 +133,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ key, value, isSecret, keychainService, keychainAccount }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const data = (await res.json()) as { envVars: EnvVar[] };
         setEnvVars(data.envVars);
       }
@@ -155,6 +158,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ id, key, value, isSecret, keychainService, keychainAccount }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const data = (await res.json()) as { envVars: EnvVar[] };
         setEnvVars(data.envVars);
       }
@@ -172,6 +176,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ id }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const data = (await res.json()) as { envVars: EnvVar[] };
         setEnvVars(data.envVars);
       }

@@ -44,6 +44,7 @@ export function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.listen(0, "127.0.0.1", () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- address() returns AddressInfo after listen()
       const { port } = server.address() as AddressInfo;
       server.close(() => resolve(port));
     });
@@ -68,6 +69,7 @@ export function writePortsManifest(ports: Omit<PortsManifest, "updatedAt">): voi
 export function readPortsManifest(): PortsManifest | null {
   if (!existsSync(PORTS_FILE)) return null;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known ports manifest format
     return JSON.parse(readFileSync(PORTS_FILE, "utf-8")) as PortsManifest;
   } catch {
     return null;

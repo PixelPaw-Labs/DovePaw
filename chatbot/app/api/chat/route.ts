@@ -102,6 +102,7 @@ The \`state/\` folder contains lock, processed files and \`dag-store.lbug\` (a L
 export async function POST(request: Request) {
   // sessionId is null for the first message in a chat, set for all subsequent ones.
   // The hook captures it from the "session" SSE event and sends it back on every request.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known request body shape
   const { message, sessionId } = (await request.json()) as {
     message: string;
     sessionId: string | null;

@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import type { Configuration } from "webpack";
 
 const root = import.meta.dirname;
 
@@ -19,7 +18,7 @@ const nextConfig: NextConfig = {
       "@@": root,
     },
   },
-  webpack(config: Configuration): Configuration {
+  webpack(config) {
     config.resolve ??= {};
     config.resolve.alias = {
       ...(config.resolve.alias as Record<string, string>),

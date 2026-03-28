@@ -24,24 +24,25 @@ function useAgentStatuses() {
     function connect() {
       ws = new WebSocket(WS_URL);
 
-      ws.onmessage = (event) => {
+      ws.addEventListener("message", (event) => {
         try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON.parse from known WebSocket source
           const msg = JSON.parse(event.data as string) as StatusMessage;
           if (msg.type === "status") setStatuses(msg.agents);
         } catch {
           // ignore malformed messages
         }
-      };
+      });
 
-      ws.onclose = () => {
+      ws.addEventListener("close", () => {
         if (!cancelled) {
           reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
         }
-      };
+      });
 
-      ws.onerror = () => {
+      ws.addEventListener("error", () => {
         ws?.close();
-      };
+      });
     }
 
     connect();

@@ -20,9 +20,11 @@ async function callAction(agentName: string, action: Action): Promise<AgentLaunc
     body: JSON.stringify({ agentName, action }),
   });
   if (!res.ok) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API error shape
     const data = (await res.json()) as { error?: string };
     throw new Error(data.error ?? "Action failed");
   }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known launchd status response shape
   return res.json() as Promise<AgentLaunchdStatus>;
 }
 
@@ -58,6 +60,7 @@ export function AgentManagementContent() {
     try {
       for (const agent of AGENTS) {
         setBusy(agent.name);
+        // eslint-disable-next-line no-await-in-loop -- sequential install required; launchd plist ordering matters
         const updated = await callAction(agent.name, "install");
         setStatuses((prev) => ({ ...prev, [agent.name]: updated }));
       }

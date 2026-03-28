@@ -46,6 +46,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known request body shape
   const body = (await request.json()) as { agentName?: string; action?: string };
   const { agentName, action } = body;
 

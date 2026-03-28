@@ -22,6 +22,7 @@ export function externalPackagesInBundle(
 
   if (!existsSync(resolvedMetafile)) return [];
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known esbuild metafile format
   const meta = JSON.parse(readFileSync(resolvedMetafile, "utf8")) as Metafile;
 
   const outputKey = Object.keys(meta.outputs).find((k) => k.endsWith(`${agentName}.mjs`));

@@ -41,8 +41,7 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
                 const raw = (msg.processContent ?? "")
                   .split("\n")
                   .map((l) => l.trim())
-                  .filter(Boolean)
-                  .at(-1)
+                  .findLast(Boolean)
                   ?.trim();
                 const preview = raw && raw.length > 60 ? `${raw.slice(0, 60)}…` : raw;
                 return <Shimmer duration={1.5}>{preview || "Thinking..."}</Shimmer>;

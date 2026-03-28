@@ -78,6 +78,7 @@ interface RawAgentSettings {
 export function readSettings(): GlobalSettings {
   if (!existsSync(SETTINGS_FILE)) return defaultSettings();
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Zod validates shape on next line
     const raw = JSON.parse(readFileSync(SETTINGS_FILE, "utf-8")) as RawSettings;
     const parsed = globalSettingsSchema.safeParse(raw);
     return parsed.success ? parsed.data : defaultSettings();
@@ -97,6 +98,7 @@ export function readAgentSettings(agentName: string): AgentSettings {
   const file = agentSettingsFile(agentName);
   if (!existsSync(file)) return defaultAgentSettings();
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Zod validates shape on next line
     const raw = JSON.parse(readFileSync(file, "utf-8")) as RawAgentSettings;
     const parsed = agentSettingsSchema.safeParse(raw);
     return parsed.success ? parsed.data : defaultAgentSettings();

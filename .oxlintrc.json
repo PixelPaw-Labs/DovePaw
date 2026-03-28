@@ -24,15 +24,19 @@
       "files": ["**/*.test.{ts,tsx}", "**/__tests__/**/*.{ts,tsx}"],
       "rules": {
         "no-console": "off",
+        "no-await-in-loop": "off",
         "@typescript-eslint/no-unsafe-argument": "off",
         "@typescript-eslint/no-unsafe-assignment": "off",
         "@typescript-eslint/no-unsafe-call": "off",
         "@typescript-eslint/no-unsafe-member-access": "off",
         "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "@typescript-eslint/no-unnecessary-type-assertion": "off",
         "@typescript-eslint/no-floating-promises": "off",
         "@typescript-eslint/await-thenable": "off",
         "@typescript-eslint/unbound-method": "off",
-        "@typescript-eslint/no-misused-spread": "off"
+        "@typescript-eslint/no-misused-spread": "off",
+        "unicorn/consistent-function-scoping": "off"
       }
     },
     {
@@ -40,7 +44,8 @@
       "rules": {
         "@typescript-eslint/no-unsafe-assignment": "off",
         "@typescript-eslint/no-unsafe-member-access": "off",
-        "@typescript-eslint/no-unsafe-return": "off"
+        "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off"
       }
     },
     {
@@ -51,6 +56,7 @@
         "@typescript-eslint/no-unsafe-call": "off",
         "@typescript-eslint/no-unsafe-member-access": "off",
         "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
         "@typescript-eslint/no-misused-spread": "off"
       }
     },
@@ -61,7 +67,40 @@
         "@typescript-eslint/no-unsafe-assignment": "off",
         "@typescript-eslint/no-unsafe-call": "off",
         "@typescript-eslint/no-unsafe-member-access": "off",
-        "@typescript-eslint/no-unsafe-return": "off"
+        "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "@typescript-eslint/no-unnecessary-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["chatbot/lib/hooks.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["chatbot/lib/query-tools.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["chatbot/a2a/heartbeat-server.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-type-assertion": "off",
+        "@typescript-eslint/no-unnecessary-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["chatbot/a2a/start-all.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-type-assertion": "off"
+      }
+    },
+    {
+      "files": ["agents/get-shit-done/jira.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-type-assertion": "off"
       }
     }
   ],

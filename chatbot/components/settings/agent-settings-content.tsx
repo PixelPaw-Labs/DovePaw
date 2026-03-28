@@ -137,6 +137,7 @@ export function AgentSettingsContent({
         body: JSON.stringify({ agentName, key, value, isSecret, keychainService, keychainAccount }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const data = (await res.json()) as { envVars: EnvVar[] };
         setAgentEnvVars(data.envVars);
       }
@@ -169,6 +170,7 @@ export function AgentSettingsContent({
         }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const data = (await res.json()) as { envVars: EnvVar[] };
         setAgentEnvVars(data.envVars);
       }
@@ -186,6 +188,7 @@ export function AgentSettingsContent({
         body: JSON.stringify({ agentName, id }),
       });
       if (res.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
         const data = (await res.json()) as { envVars: EnvVar[] };
         setAgentEnvVars(data.envVars);
       }

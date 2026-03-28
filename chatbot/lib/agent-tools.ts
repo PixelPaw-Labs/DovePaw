@@ -124,7 +124,7 @@ export function makeAgentMgmtTools(agent: AgentDef) {
     `Read recent log output for ${agent.displayName}`,
     { lines: z.number().optional().describe("Number of lines to return (default 100)") },
     async ({ lines }) => {
-      const output = getAgentLogs(agent, lines);
+      const output = await getAgentLogs(agent, lines);
       return { content: [{ type: "text" as const, text: output }] };
     },
   );
