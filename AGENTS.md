@@ -35,6 +35,16 @@ npm run chatbot:test     # Run vitest tests (chatbot/)
 cd chatbot && npx vitest run <test-file-pattern>
 ```
 
+## Testing Discipline
+
+**Before and after any code change, you MUST:**
+
+1. Check whether existing tests cover the changed code — run `npm run chatbot:test` (or the relevant agent test suite).
+2. If no tests exist for the changed behaviour, write them first.
+3. All tests must pass before committing. The pre-commit hook will also ask you to verify this.
+
+Skipping tests is never acceptable — the pre-commit hook will block and ask you to confirm you have tested.
+
 ## Architecture
 
 ### Three-Layer System
@@ -110,7 +120,7 @@ Agent Scripts (agents/*/main.ts)
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DovePaw** (2519 symbols, 5151 relationships, 206 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DovePaw** (2525 symbols, 5108 relationships, 206 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

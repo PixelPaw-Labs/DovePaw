@@ -15,7 +15,7 @@ ERRORS=""
 
 # --- Format check ---
 FMT_OUTPUT=$(npm run fmt:check 2>&1) || {
-  ERRORS="Format issues found. Run: npm run fmt, stage the changes, then retry the commit.\n\n$FMT_OUTPUT"
+  ERRORS="Format issues found. Run: npm run fmt\n⚠️  STAGE THE FIXED FILES: git add <files>\nThen retry the commit.\n\n$FMT_OUTPUT"
 }
 
 # --- Lint check ---
@@ -25,7 +25,7 @@ if [ $LINT_EXIT -ne 0 ] || echo "$LINT_OUTPUT" | grep -qE "[1-9][0-9]* warnings?
   if [ -n "$ERRORS" ]; then
     ERRORS="$ERRORS\n\nLint issues:\n$LINT_OUTPUT"
   else
-    ERRORS="Lint issues found. Fix each issue properly at the root cause — do NOT add eslint-disable comments or suppress rules. Fix and stage the changes, then retry the commit.\n\n$LINT_OUTPUT"
+    ERRORS="Lint issues found. Fix each issue at the root cause — do NOT add eslint-disable comments.\n⚠️  STAGE THE FIXED FILES: git add <files>\nThen retry the commit.\n\n$LINT_OUTPUT"
   fi
 fi
 
@@ -34,7 +34,7 @@ TSC_OUTPUT=$(npx tsc --noEmit 2>&1) || {
   if [ -n "$ERRORS" ]; then
     ERRORS="$ERRORS\n\nTypeScript errors:\n$TSC_OUTPUT"
   else
-    ERRORS="TypeScript errors found. Fix all type errors properly at the root cause. Fix and stage the changes, then retry the commit.\n\n$TSC_OUTPUT"
+    ERRORS="TypeScript errors found. Fix all type errors at the root cause.\n⚠️  STAGE THE FIXED FILES: git add <files>\nThen retry the commit.\n\n$TSC_OUTPUT"
   fi
 }
 
@@ -47,21 +47,19 @@ fi
 TEST_OUTPUT=$(npm run chatbot:test 2>&1)
 TEST_EXIT=$?
 if [ $TEST_EXIT -ne 0 ]; then
-  REASON="Tests are failing. Fix the tests properly — do NOT skip or disable them — stage the changes, then retry the commit.\n\n$TEST_OUTPUT"
+  REASON="Tests are failing. Fix the tests properly — do NOT skip or disable them.\n⚠️  STAGE THE FIXED FILES: git add <files>\nThen retry the commit.\n\n$TEST_OUTPUT"
   printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi
 
 # --- Self-reflection gate ---
-# If the session-scoped flag exists, Claude already confirmed tests — allow and consume it.
+# Flag must be set explicitly by Claude (separate Bash call) to confirm tests were written.
+# The hook never sets the flag itself — only Claude can, after consciously answering "yes".
 if [ -n "$SESSION_ID" ] && [ -f "$FLAG_FILE" ]; then
   rm -f "$FLAG_FILE"
   exit 0
 fi
 
-# Block and prompt self-reflection. To bypass after confirming, run:
-#   touch <flag_file>
-# then retry the commit.
-REFLECTION="All checks pass. Ask yourself: did you write or update tests for the behaviour you just changed?\n\n  If not → write the tests, stage them, and retry.\n  If yes → run this command to confirm, then retry the commit:\n\n    touch $FLAG_FILE"
+REFLECTION="All checks pass. Did you write or update tests for the behaviour you just changed?\n\n  If not → write the tests, stage them (git add), and retry.\n  If yes → run this in a SEPARATE step, then retry the commit:\n\n    touch $FLAG_FILE"
 printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REFLECTION" | jq -Rs .)"
 exit 0

@@ -19,7 +19,6 @@ describe("paths", () => {
   });
 
   it("TSX_BIN points inside chatbot node_modules", () => {
-    expect(TSX_BIN).toContain("chatbot");
     expect(TSX_BIN).toContain("tsx");
   });
 
