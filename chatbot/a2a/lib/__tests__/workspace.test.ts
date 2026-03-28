@@ -135,12 +135,12 @@ describe("cloneReposIntoWorkspace", () => {
 
 describe("agentSourceDirFromEntry", () => {
   it("returns the directory of the entry file under AGENTS_ROOT", () => {
-    const result = agentSourceDirFromEntry("src/get-shit-done/main.ts");
-    expect(result).toBe(join(TMP_ROOT, "src", "get-shit-done"));
+    const result = agentSourceDirFromEntry("agents/get-shit-done/main.ts");
+    expect(result).toBe(join(TMP_ROOT, "agents", "get-shit-done"));
   });
 
   it("handles nested paths", () => {
-    const result = agentSourceDirFromEntry("src/experience-reflector/main.ts");
-    expect(result).toBe(join(TMP_ROOT, "src", "experience-reflector"));
+    const result = agentSourceDirFromEntry("agents/experience-reflector/main.ts");
+    expect(result).toBe(join(TMP_ROOT, "agents", "experience-reflector"));
   });
 });

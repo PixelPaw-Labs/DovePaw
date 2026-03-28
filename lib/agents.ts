@@ -46,7 +46,7 @@ function defineAgent(input: AgentInput): AgentDef {
   const manifestKey = input.name.replaceAll("-", "_");
   return {
     ...input,
-    entryPath: `src/${input.name}/main.ts`,
+    entryPath: `agents/${input.name}/main.ts`,
     label: `Claude Code Agent - ${input.displayName}`,
     manifestKey,
     toolName: `${TOOL_PREFIX}_${manifestKey}`,

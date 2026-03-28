@@ -48,7 +48,7 @@ export function createAgentWorkspace(
 
 /**
  * Derive the agent source directory from an entryPath (relative to AGENTS_ROOT).
- * e.g. "src/get-shit-done/main.ts" → "{AGENTS_ROOT}/src/get-shit-done"
+ * e.g. "agents/get-shit-done/main.ts" → "{AGENTS_ROOT}/agents/get-shit-done"
  */
 export function agentSourceDirFromEntry(entryPath: string): string {
   return join(AGENTS_ROOT, dirname(entryPath));

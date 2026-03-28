@@ -14,8 +14,8 @@ describe("paths", () => {
     expect(existsSync(AGENTS_ROOT)).toBe(true);
   });
 
-  it("AGENTS_ROOT contains the agent src/ directory", () => {
-    expect(existsSync(resolve(AGENTS_ROOT, "src"))).toBe(true);
+  it("AGENTS_ROOT contains the agents/ directory", () => {
+    expect(existsSync(resolve(AGENTS_ROOT, "agents"))).toBe(true);
   });
 
   it("TSX_BIN points inside chatbot node_modules", () => {

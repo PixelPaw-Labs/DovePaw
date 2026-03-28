@@ -50,7 +50,7 @@ Claude Agent SDK (in-process MCP server)
 A2A Servers (7 processes, dynamic ports)
   Express + @a2a-js/sdk → ScriptAgentExecutor
         ↓ spawn tsx
-Agent Scripts (src/*/main.ts)
+Agent Scripts (agents/*/main.ts)
   Deployed as launchd daemons, stdout streamed as SSE
 ```
 
@@ -68,8 +68,8 @@ Agent Scripts (src/*/main.ts)
 
 ### Key Directories
 
-- `src/` — Agent scripts. `src/lib/` holds shared utilities (claude runner, DAG, JIRA, lock, logger, repos).
-- `src/get-shit-done/` — Most complex agent: discovery → prioritization → forge → merge → PR pipeline with git worktree isolation.
+- `agents/` — Agent scripts. `agents/lib/` holds shared utilities (claude runner, DAG, JIRA, lock, logger, repos).
+- `agents/get-shit-done/` — Most complex agent: discovery → prioritization → forge → merge → PR pipeline with git worktree isolation.
 - `lib/` — Root build infrastructure: `agents.ts` (registry), `installer.ts` (launchd plist generation), `build.ts` (CLI).
 - `chatbot/a2a/` — A2A Express servers (one per agent). `start-all.ts` allocates OS-assigned ports and writes `.ports.json`.
 - `chatbot/a2a/lib/base-server.ts` — Port allocation, `ScriptAgentExecutor`, MCP bridge.

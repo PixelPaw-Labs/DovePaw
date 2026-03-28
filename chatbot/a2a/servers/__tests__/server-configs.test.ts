@@ -37,7 +37,7 @@ import { createServerFromDef } from "@/a2a/lib/base-server";
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe.each(AGENTS)("$name agent", ({ name, entryPath, requiredEnvVars }) => {
-  it("script exists in agents/src/", () => {
+  it("script exists in agents/", () => {
     expect(existsSync(resolve(AGENTS_ROOT, entryPath))).toBe(true);
   });
 

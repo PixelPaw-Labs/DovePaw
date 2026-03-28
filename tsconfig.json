@@ -11,5 +11,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "lib/**/*.ts", "plist/**/*.ts", "build.ts"]
+  "include": ["agents/**/*.ts", "lib/**/*.ts", "plist/**/*.ts", "build.ts"]
 }
