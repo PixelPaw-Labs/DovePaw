@@ -11,7 +11,15 @@
 import { execSync } from "node:child_process";
 import { agents } from "./plist/configs.js";
 import { SCHEDULER_ROOT } from "./lib/paths.js";
-import { getUid, copyNativePackages, installAgent, uninstallAgent, isAgentLoaded, linkSkills, unlinkSkills } from "./lib/installer.js";
+import {
+  getUid,
+  copyNativePackages,
+  installAgent,
+  uninstallAgent,
+  isAgentLoaded,
+  linkSkills,
+  unlinkSkills,
+} from "./lib/installer.js";
 
 const NATIVE_PACKAGES = ["@ladybugdb/core"];
 const uid = getUid();

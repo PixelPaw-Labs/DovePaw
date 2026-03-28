@@ -6,7 +6,6 @@ import { FolderGit2 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { AGENTS } from "@@/lib/agents";
 import type { Repository } from "@@/lib/settings";
-import { cn } from "@/lib/utils";
 
 interface AgentRepoSettingsProps {
   agentName: string;

@@ -99,7 +99,9 @@ export async function PATCH(request: Request) {
   }
 
   settings.envVars = settings.envVars.map((v) =>
-    v.id === id ? buildUpdatedEnvVar(id, key, value, isSecret, keychainService, keychainAccount) : v,
+    v.id === id
+      ? buildUpdatedEnvVar(id, key, value, isSecret, keychainService, keychainAccount)
+      : v,
   );
   writeSettings(settings);
 

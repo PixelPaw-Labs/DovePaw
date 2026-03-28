@@ -17,7 +17,6 @@
 
 import { createServer } from "node:net";
 import type { AddressInfo } from "node:net";
-import { join } from "node:path";
 import { writeFileSync, readFileSync, existsSync } from "node:fs";
 import { consola } from "consola";
 import express from "express";

@@ -21,15 +21,45 @@
   },
   "overrides": [
     {
-      "files": ["**/*.test.{ts,tsx}"],
+      "files": ["**/*.test.{ts,tsx}", "**/__tests__/**/*.{ts,tsx}"],
       "rules": {
-        "no-console": "off"
+        "no-console": "off",
+        "@typescript-eslint/no-unsafe-argument": "off",
+        "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/no-floating-promises": "off",
+        "@typescript-eslint/await-thenable": "off",
+        "@typescript-eslint/unbound-method": "off",
+        "@typescript-eslint/no-misused-spread": "off"
       }
     },
     {
       "files": ["next.config.ts"],
       "rules": {
         "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-return": "off"
+      }
+    },
+    {
+      "files": ["agents/lib/claude.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-argument": "off",
+        "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
+        "@typescript-eslint/no-unsafe-member-access": "off",
+        "@typescript-eslint/no-unsafe-return": "off",
+        "@typescript-eslint/no-misused-spread": "off"
+      }
+    },
+    {
+      "files": ["agents/get-shit-done/dag-store.ts"],
+      "rules": {
+        "@typescript-eslint/no-unsafe-argument": "off",
+        "@typescript-eslint/no-unsafe-assignment": "off",
+        "@typescript-eslint/no-unsafe-call": "off",
         "@typescript-eslint/no-unsafe-member-access": "off",
         "@typescript-eslint/no-unsafe-return": "off"
       }
@@ -44,5 +74,5 @@
     "browser": true
   },
   "globals": {},
-  "ignorePatterns": ["dist/**", "node_modules/**", ".next/**"]
+  "ignorePatterns": ["dist/**", "node_modules/**", ".next/**", "skills/**", "chatbot/components/ai-elements/**"]
 }

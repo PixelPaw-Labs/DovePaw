@@ -139,9 +139,7 @@ describe("agent repos", () => {
 
   it("resolves all three repos in order", () => {
     const env = resolveSettingsEnv("REPO_LIST", makeSettings(), ["r3", "r1", "r2"]);
-    expect(env["REPO_LIST"]).toBe(
-      "org/sso-server,org/repo-alpha,org/repo-beta",
-    );
+    expect(env["REPO_LIST"]).toBe("org/sso-server,org/repo-alpha,org/repo-beta");
   });
 });
 
@@ -149,9 +147,12 @@ describe("agent repos", () => {
 
 describe("per-agent env vars", () => {
   it("includes a plain per-agent var", () => {
-    const env = resolveSettingsEnv(undefined, makeSettings(), [], [
-      { id: "1", key: "ZENDESK_SLACK_CHANNELS", value: "support,billing", isSecret: false },
-    ]);
+    const env = resolveSettingsEnv(
+      undefined,
+      makeSettings(),
+      [],
+      [{ id: "1", key: "ZENDESK_SLACK_CHANNELS", value: "support,billing", isSecret: false }],
+    );
     expect(env["ZENDESK_SLACK_CHANNELS"]).toBe("support,billing");
   });
 
@@ -159,17 +160,23 @@ describe("per-agent env vars", () => {
     const settings = makeSettings({
       envVars: [{ id: "1", key: "SLACK_WORKSPACE", value: "global.slack.com", isSecret: false }],
     });
-    const env = resolveSettingsEnv(undefined, settings, [], [
-      { id: "2", key: "SLACK_WORKSPACE", value: "agent.slack.com", isSecret: false },
-    ]);
+    const env = resolveSettingsEnv(
+      undefined,
+      settings,
+      [],
+      [{ id: "2", key: "SLACK_WORKSPACE", value: "agent.slack.com", isSecret: false }],
+    );
     expect(env["SLACK_WORKSPACE"]).toBe("agent.slack.com");
   });
 
   it("per-agent secret var is resolved from keychain", () => {
     vi.mocked(getSecret).mockReturnValue("agent-secret");
-    const env = resolveSettingsEnv(undefined, makeSettings(), [], [
-      { id: "1", key: "AGENT_TOKEN", value: "", isSecret: true },
-    ]);
+    const env = resolveSettingsEnv(
+      undefined,
+      makeSettings(),
+      [],
+      [{ id: "1", key: "AGENT_TOKEN", value: "", isSecret: true }],
+    );
     expect(env["AGENT_TOKEN"]).toBe("agent-secret");
   });
 

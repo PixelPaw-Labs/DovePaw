@@ -246,7 +246,10 @@ export function makeStartTool(agent: AgentDef) {
           };
         }
 
-        const started: TaskStartedWithKeyContent = { taskId: result.id, manifestKey: agent.manifestKey };
+        const started: TaskStartedWithKeyContent = {
+          taskId: result.id,
+          manifestKey: agent.manifestKey,
+        };
         return {
           content: [{ type: "text" as const, text: `Task started (taskId: ${result.id})` }],
           structuredContent: started,
@@ -277,7 +280,9 @@ export function makeAwaitTool(agent: AgentDef) {
   return tool(
     doveAwaitToolName(agent),
     `Await a previously started ${agent.displayName} task. Returns the final result when complete, or { status: "still_running", taskId } if still in progress.`,
-    { taskId: z.string().describe("The taskId returned by the corresponding start_* or ask_* tool") },
+    {
+      taskId: z.string().describe("The taskId returned by the corresponding start_* or ask_* tool"),
+    },
     async ({ taskId }) => {
       const manifest = readPortsManifest();
       if (!manifest) return noServersMessage();
@@ -311,11 +316,13 @@ export function makeAwaitTool(agent: AgentDef) {
         const timeoutResult = Symbol("timeout");
         const timer = setTimeout(() => abortController.abort(), AWAIT_POLL_TIMEOUT_MS);
         const result = await Promise.race([
-          collectStreamResult(client.resubscribeTask({ id: taskId }, { signal: abortController.signal })).finally(
-            () => clearTimeout(timer),
-          ),
+          collectStreamResult(
+            client.resubscribeTask({ id: taskId }, { signal: abortController.signal }),
+          ).finally(() => clearTimeout(timer)),
           new Promise<typeof timeoutResult>((resolve) =>
-            abortController.signal.addEventListener("abort", () => resolve(timeoutResult), { once: true }),
+            abortController.signal.addEventListener("abort", () => resolve(timeoutResult), {
+              once: true,
+            }),
           ),
         ]);
 

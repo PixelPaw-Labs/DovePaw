@@ -53,8 +53,6 @@ export function buildUpdatedEnvVar(
     key: key.trim(),
     value: isSecret ? "" : value,
     isSecret,
-    ...(keychainService
-      ? { keychainService, keychainAccount: keychainAccount ?? key.trim() }
-      : {}),
+    ...(keychainService ? { keychainService, keychainAccount: keychainAccount ?? key.trim() } : {}),
   };
 }

@@ -17,7 +17,6 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { AGENTS } from "@@/lib/agents";
 import type { Repository, EnvVar } from "@@/lib/settings";
-import { cn } from "@/lib/utils";
 
 type Tab = "repositories" | "env-vars";
 

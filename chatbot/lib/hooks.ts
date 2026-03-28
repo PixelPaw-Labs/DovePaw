@@ -19,14 +19,9 @@ import {
   hasPendingTasks,
   getPendingTaskIds,
   type AwaitToolContent,
-  type ToolResponse,
 } from "@/lib/query-tools";
-import { AWAIT_SCRIPT_TOOL, START_SCRIPT_TOOL } from "@/lib/agent-tools";
-import {
-  hasPendingScripts,
-  getPendingRunIds,
-  type AwaitScriptContent,
-} from "@/a2a/lib/spawn";
+import { AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
+import { hasPendingScripts, getPendingRunIds, type AwaitScriptContent } from "@/a2a/lib/spawn";
 
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 

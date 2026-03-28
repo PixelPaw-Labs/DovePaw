@@ -1,6 +1,4 @@
-import { writeFileSync, rmSync, existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { writeFileSync, rmSync, existsSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Mock paths before importing ──────────────────────────────────────────────
@@ -20,8 +18,11 @@ const { tmpFile, tmpAgentSettingsDir } = vi.hoisted(() => {
 vi.mock("@/lib/paths", () => ({
   SETTINGS_FILE: tmpFile,
   AGENT_SETTINGS_DIR: tmpAgentSettingsDir,
-  agentSettingsFile: (agentName: string) =>
-    require("node:path").join(tmpAgentSettingsDir, `${agentName}.json`),
+  agentSettingsFile: (agentName: string) => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require("node:path") as typeof import("node:path");
+    return path.join(tmpAgentSettingsDir, `${agentName}.json`);
+  },
 }));
 
 import {

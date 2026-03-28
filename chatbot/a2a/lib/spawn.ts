@@ -91,7 +91,7 @@ export async function spawnAndCollect(config: AgentConfig, instruction: string):
   const tsxBin = existsSync(TSX_BIN) ? TSX_BIN : "tsx";
   const scriptArgs = buildScriptArgs(config.scriptPath, instruction);
   const proc = spawn(tsxBin, scriptArgs, {
-    env: { ...process.env, ...(config.extraEnv ?? {}) },
+    env: { ...process.env, ...config.extraEnv },
     cwd: config.workspacePath,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -157,7 +157,9 @@ export async function awaitScript(runId: string): Promise<AwaitScriptContent> {
 
   const timeoutResult = Symbol("timeout");
   const result = await Promise.race([
-    outputPromise.then((output): ScriptCompletedContent => ({ status: "completed", runId, output })),
+    outputPromise.then(
+      (output): ScriptCompletedContent => ({ status: "completed", runId, output }),
+    ),
     new Promise<typeof timeoutResult>((resolve) =>
       setTimeout(() => resolve(timeoutResult), SCRIPT_POLL_TIMEOUT_MS),
     ),

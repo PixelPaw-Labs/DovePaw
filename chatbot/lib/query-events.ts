@@ -24,8 +24,7 @@ export async function withMcpQuery(
     await run(mcpServer);
   } catch (err: unknown) {
     const isAbort =
-      err instanceof Error &&
-      (err.name === "AbortError" || err.message === "Operation aborted");
+      err instanceof Error && (err.name === "AbortError" || err.message === "Operation aborted");
     onError?.(err, isAbort);
   } finally {
     try {

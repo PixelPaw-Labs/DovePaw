@@ -111,6 +111,20 @@ export async function isAgentLoaded(label: string): Promise<boolean> {
   }
 }
 
+/**
+ * Check multiple launchd labels in a single `launchctl list` call.
+ * Use this instead of calling isAgentLoaded() in parallel to avoid
+ * spawning N child processes and buffering N copies of the full output.
+ */
+export async function areAgentsLoaded(labels: string[]): Promise<Record<string, boolean>> {
+  try {
+    const { stdout } = await execAsync("launchctl list");
+    return Object.fromEntries(labels.map((label) => [label, stdout.includes(label)]));
+  } catch {
+    return Object.fromEntries(labels.map((label) => [label, false]));
+  }
+}
+
 export interface AgentStatusDetail {
   state: string | null;
   pid: string | null;

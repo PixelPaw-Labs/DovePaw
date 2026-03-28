@@ -32,7 +32,7 @@ vi.mock("@/lib/keyring", () => ({
   deleteSecret: vi.fn(),
 }));
 
-import { readSettings, writeSettings, isDovepawManaged } from "@@/lib/settings";
+import { readSettings, writeSettings } from "@@/lib/settings";
 import { getSecret, setSecret, deleteSecret } from "@/lib/keyring";
 import { GET, POST, PATCH, DELETE } from "../settings/env-vars/route";
 

@@ -189,7 +189,7 @@ export function useAgentChat() {
     const [next, ...rest] = pendingQueueRef.current;
     pendingQueueRef.current = rest;
     setPendingQueue(rest);
-    sendMessage(next);
+    void sendMessage(next);
   }, [isLoading, sendMessage]);
 
   const removeFromQueue = useCallback((index: number) => {

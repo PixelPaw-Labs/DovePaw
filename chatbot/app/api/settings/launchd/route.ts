@@ -5,6 +5,7 @@ import { plistLabel } from "@@/lib/plist-generate";
 import {
   agentPlistPath,
   isLoaded,
+  areAgentsLoaded,
   writePlist,
   loadAgent,
   unloadAgent,
@@ -32,16 +33,15 @@ export async function GET(request: Request) {
     });
   }
 
-  // All-agents mode
-  const entries = await Promise.all(
-    AGENTS.map(async (agent) => {
-      const plistPath = agentPlistPath(agent.name);
-      return [
-        agent.name,
-        { plistExists: existsSync(plistPath), loaded: await isLoaded(agent.label), plistPath },
-      ] as const;
-    }),
-  );
+  // All-agents mode — single launchctl list call for all labels
+  const loadedMap = await areAgentsLoaded(AGENTS.map((a) => a.label));
+  const entries = AGENTS.map((agent) => {
+    const plistPath = agentPlistPath(agent.name);
+    return [
+      agent.name,
+      { plistExists: existsSync(plistPath), loaded: loadedMap[agent.label] ?? false, plistPath },
+    ] as const;
+  });
   return NextResponse.json({ agents: Object.fromEntries(entries) });
 }
 
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
 
   switch (action) {
     case "upload": {
-      writePlist(agent);
+      await writePlist(agent);
       break;
     }
     case "load": {

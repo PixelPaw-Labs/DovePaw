@@ -24,21 +24,21 @@ function toolMeta(tool: ToolCall): {
         icon: <FileEdit className="w-3 h-3" />,
         label: "Edit",
         detail: shortPath(input.file_path),
-        tooltip: String(input.file_path ?? ""),
+        tooltip: typeof input.file_path === "string" ? input.file_path : "",
       };
     case "Write":
       return {
         icon: <FileText className="w-3 h-3" />,
         label: "Write",
         detail: shortPath(input.file_path),
-        tooltip: String(input.file_path ?? ""),
+        tooltip: typeof input.file_path === "string" ? input.file_path : "",
       };
     case "Read":
       return {
         icon: <FileText className="w-3 h-3" />,
         label: "Read",
         detail: shortPath(input.file_path),
-        tooltip: String(input.file_path ?? ""),
+        tooltip: typeof input.file_path === "string" ? input.file_path : "",
       };
     case "Bash": {
       const cmd = typeof input.command === "string" ? input.command : "";
@@ -51,7 +51,8 @@ function toolMeta(tool: ToolCall): {
     }
     case "Grep":
     case "Glob": {
-      const pattern = String(input.pattern ?? input.query ?? "");
+      const patternVal = input.pattern ?? input.query;
+      const pattern = typeof patternVal === "string" ? patternVal : "";
       return {
         icon: <Search className="w-3 h-3" />,
         label: name,
@@ -95,9 +96,9 @@ export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
   const markdown = edits
     .map((t) =>
       buildDiffMarkdown(
-        String(t.input.file_path ?? ""),
-        String(t.input.old_string ?? ""),
-        String(t.input.new_string ?? ""),
+        typeof t.input.file_path === "string" ? t.input.file_path : "",
+        typeof t.input.old_string === "string" ? t.input.old_string : "",
+        typeof t.input.new_string === "string" ? t.input.new_string : "",
       ),
     )
     .join("\n\n");

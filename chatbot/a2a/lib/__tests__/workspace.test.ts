@@ -116,10 +116,7 @@ describe("cloneReposIntoWorkspace", () => {
 
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
-    expect(ghClone).toHaveBeenCalledWith(
-      "org/my-app",
-      join(TMP_ROOT, "my-app"),
-    );
+    expect(ghClone).toHaveBeenCalledWith("org/my-app", join(TMP_ROOT, "my-app"));
   });
 
   it("rejects when ghClone rejects", async () => {

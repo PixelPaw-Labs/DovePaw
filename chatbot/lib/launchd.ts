@@ -13,6 +13,7 @@ import { externalPackagesInBundle } from "@/lib/bundle-utils";
 import {
   getUid,
   isAgentLoaded,
+  areAgentsLoaded,
   getAgentLogs,
   getAgentStatus as installerGetAgentStatus,
   installAgent as installerInstallAgent,
@@ -22,7 +23,7 @@ import {
   linkSkills,
   unlinkSkills,
 } from "@@/lib/installer";
-export { writePlistFile as writePlist } from "@@/lib/installer";
+export { writePlistFile as writePlist, areAgentsLoaded } from "@@/lib/installer";
 import type { AgentStatusDetail } from "@@/lib/installer";
 import type { LaunchdStatus } from "@/a2a/heartbeat-types";
 export { getUid as uid, isAgentLoaded as isLoaded, getAgentLogs };
@@ -59,7 +60,10 @@ export async function installAgent(agent: AgentDef): Promise<{ loaded: boolean }
   });
 
   // Steps 2+3: Deploy, configure, unload, write plist, bootstrap
-  await Promise.all([installerInstallAgent(agent, u, externalPackagesInBundle(agent.name)), linkSkills()]);
+  await Promise.all([
+    installerInstallAgent(agent, u, externalPackagesInBundle(agent.name)),
+    linkSkills(),
+  ]);
 
   return { loaded: await isAgentLoaded(agent.label) };
 }
