@@ -69,6 +69,7 @@ Agent Scripts (agents/*/main.ts)
 ### Key Directories
 
 - `agents/` — Agent scripts. `agents/lib/` holds shared utilities (claude runner, DAG, JIRA, lock, logger, repos).
+- `skills/` — Claude Code skills used by agents. `npm run install` symlinks each into `~/.claude/skills/`; `npm run uninstall` removes them.
 - `agents/get-shit-done/` — Most complex agent: discovery → prioritization → forge → merge → PR pipeline with git worktree isolation.
 - `lib/` — Root build infrastructure: `agents.ts` (registry), `installer.ts` (launchd plist generation), `build.ts` (CLI).
 - `chatbot/a2a/` — A2A Express servers (one per agent). `start-all.ts` allocates OS-assigned ports and writes `.ports.json`.
