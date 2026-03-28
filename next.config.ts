@@ -2,6 +2,15 @@ import type { NextConfig } from "next";
 
 const root = import.meta.dirname;
 
+/** Minimal webpack config shape covering the fields this file touches. */
+interface WebpackConfig {
+  resolve?: {
+    alias?: Record<string, string | string[] | false>;
+    extensionAlias?: Record<string, string[]>;
+  };
+  [key: string]: unknown;
+}
+
 const nextConfig: NextConfig = {
   typescript: {
     tsconfigPath: "../tsconfig.json",
@@ -18,12 +27,9 @@ const nextConfig: NextConfig = {
       "@@": root,
     },
   },
-  webpack(config) {
+  webpack(config: WebpackConfig): WebpackConfig {
     config.resolve ??= {};
-    config.resolve.alias = {
-      ...(config.resolve.alias as Record<string, string>),
-      "@@": root,
-    };
+    config.resolve.alias = { ...config.resolve.alias, "@@": root };
     // Resolve ESM-style .js imports to their .ts counterparts for files
     // outside the Next.js app root (e.g. @@/lib/agents.ts)
     config.resolve.extensionAlias = {

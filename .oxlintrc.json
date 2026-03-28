@@ -40,27 +40,6 @@
       }
     },
     {
-      "files": ["next.config.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-assignment": "off",
-        "@typescript-eslint/no-unsafe-member-access": "off",
-        "@typescript-eslint/no-unsafe-return": "off",
-        "@typescript-eslint/no-unsafe-type-assertion": "off"
-      }
-    },
-    {
-      "files": ["agents/lib/claude.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-argument": "off",
-        "@typescript-eslint/no-unsafe-assignment": "off",
-        "@typescript-eslint/no-unsafe-call": "off",
-        "@typescript-eslint/no-unsafe-member-access": "off",
-        "@typescript-eslint/no-unsafe-return": "off",
-        "@typescript-eslint/no-unsafe-type-assertion": "off",
-        "@typescript-eslint/no-misused-spread": "off"
-      }
-    },
-    {
       "files": ["agents/get-shit-done/dag-store.ts"],
       "rules": {
         "@typescript-eslint/no-unsafe-argument": "off",
@@ -70,12 +49,6 @@
         "@typescript-eslint/no-unsafe-return": "off",
         "@typescript-eslint/no-unsafe-type-assertion": "off",
         "@typescript-eslint/no-unnecessary-type-assertion": "off"
-      }
-    },
-    {
-      "files": ["agents/get-shit-done/jira.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-type-assertion": "off"
       }
     }
   ],
