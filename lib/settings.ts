@@ -1,3 +1,4 @@
+import "server-only";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { DOVEPAW_DIR, SETTINGS_FILE, AGENT_SETTINGS_DIR, agentSettingsFile } from "./paths";
 import {
