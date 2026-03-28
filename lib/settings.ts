@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
+import { z } from "zod";
 import { DOVEPAW_DIR, SETTINGS_FILE, AGENT_SETTINGS_DIR, agentSettingsFile } from "./paths";
 import {
   globalSettingsSchema,
@@ -19,16 +20,38 @@ export function defaultAgentSettings(): AgentSettings {
   return { repos: [], envVars: [] };
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function tryParse<T>(schema: z.ZodType<T>, file: string): T | null {
+  if (!existsSync(file)) return null;
+  try {
+    const result = schema.safeParse(JSON.parse(readFileSync(file, "utf-8")));
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
+
+function hasContent(s: GlobalSettings): boolean {
+  return s.repositories.length > 0 || s.envVars.length > 0;
+}
+
+function hasAgentContent(s: AgentSettings): boolean {
+  return s.repos.length > 0 || s.envVars.length > 0;
+}
+
 // ─── Global Read / Write ──────────────────────────────────────────────────────
 
 export function readSettings(): GlobalSettings {
-  if (!existsSync(SETTINGS_FILE)) return defaultSettings();
-  try {
-    const parsed = globalSettingsSchema.safeParse(JSON.parse(readFileSync(SETTINGS_FILE, "utf-8")));
-    return parsed.success ? parsed.data : defaultSettings();
-  } catch {
-    return defaultSettings();
+  const primary = tryParse(globalSettingsSchema, SETTINGS_FILE);
+  const bak = `${SETTINGS_FILE}.bak`;
+
+  if (!primary) return tryParse(globalSettingsSchema, bak) ?? defaultSettings();
+  if (!hasContent(primary)) {
+    const backup = tryParse(globalSettingsSchema, bak);
+    if (backup && hasContent(backup)) return backup;
   }
+  return primary;
 }
 
 export function writeSettings(settings: GlobalSettings): void {
@@ -41,13 +64,15 @@ export function writeSettings(settings: GlobalSettings): void {
 
 export function readAgentSettings(agentName: string): AgentSettings {
   const file = agentSettingsFile(agentName);
-  if (!existsSync(file)) return defaultAgentSettings();
-  try {
-    const parsed = agentSettingsSchema.safeParse(JSON.parse(readFileSync(file, "utf-8")));
-    return parsed.success ? parsed.data : defaultAgentSettings();
-  } catch {
-    return defaultAgentSettings();
+  const bak = `${file}.bak`;
+  const primary = tryParse(agentSettingsSchema, file);
+
+  if (!primary) return tryParse(agentSettingsSchema, bak) ?? defaultAgentSettings();
+  if (!hasAgentContent(primary)) {
+    const backup = tryParse(agentSettingsSchema, bak);
+    if (backup && hasAgentContent(backup)) return backup;
   }
+  return primary;
 }
 
 export function writeAgentSettings(agentName: string, settings: AgentSettings): void {
@@ -57,7 +82,7 @@ export function writeAgentSettings(agentName: string, settings: AgentSettings): 
   copyFileSync(file, `${file}.bak`);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Factory helpers ──────────────────────────────────────────────────────────
 
 export function makeRepository(githubRepo: string): Repository {
   const trimmed = githubRepo.trim();
