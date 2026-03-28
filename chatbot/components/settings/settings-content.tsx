@@ -19,7 +19,7 @@ import {
   type EnvVar,
   globalSettingsSchema,
   envVarSchema,
-} from "@@/lib/settings";
+} from "@@/lib/settings-schemas";
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 

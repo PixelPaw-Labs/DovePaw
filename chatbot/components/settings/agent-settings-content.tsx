@@ -17,7 +17,7 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { AGENTS } from "@@/lib/agents";
 import { z } from "zod";
-import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings";
+import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings-schemas";
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 
