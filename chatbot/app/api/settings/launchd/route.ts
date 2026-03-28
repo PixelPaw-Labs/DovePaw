@@ -14,6 +14,12 @@ import {
 } from "@/lib/launchd";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { join } from "node:path";
+import { z } from "zod";
+
+const launchdActionSchema = z.object({
+  agentName: z.string().optional(),
+  action: z.string().optional(),
+});
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -46,8 +52,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known request body shape
-  const body = (await request.json()) as { agentName?: string; action?: string };
+  const body = launchdActionSchema.parse(await request.json());
   const { agentName, action } = body;
 
   const agent = AGENTS.find((a) => a.name === agentName);

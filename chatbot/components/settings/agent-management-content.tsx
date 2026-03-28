@@ -3,6 +3,14 @@
 import * as React from "react";
 import { AGENTS } from "@@/lib/agents";
 import type { AgentDef } from "@@/lib/agents";
+import { z } from "zod";
+
+const agentLaunchdStatusSchema = z.object({
+  plistExists: z.boolean(),
+  loaded: z.boolean(),
+  plistPath: z.string(),
+});
+const actionErrorSchema = z.object({ error: z.string().optional() });
 
 interface AgentLaunchdStatus {
   plistExists: boolean;
@@ -20,12 +28,10 @@ async function callAction(agentName: string, action: Action): Promise<AgentLaunc
     body: JSON.stringify({ agentName, action }),
   });
   if (!res.ok) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API error shape
-    const data = (await res.json()) as { error?: string };
+    const data = actionErrorSchema.parse(await res.json());
     throw new Error(data.error ?? "Action failed");
   }
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known launchd status response shape
-  return res.json() as Promise<AgentLaunchdStatus>;
+  return agentLaunchdStatusSchema.parse(await res.json());
 }
 
 export function AgentManagementContent() {

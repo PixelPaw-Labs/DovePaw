@@ -29,6 +29,12 @@ import {
 import { buildDoveHooks } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
+import { z } from "zod";
+
+const chatRequestSchema = z.object({
+  message: z.string(),
+  sessionId: z.string().nullable(),
+});
 
 export const maxDuration = 86400; // 24 hours for long-running agents
 
@@ -102,11 +108,7 @@ The \`state/\` folder contains lock, processed files and \`dag-store.lbug\` (a L
 export async function POST(request: Request) {
   // sessionId is null for the first message in a chat, set for all subsequent ones.
   // The hook captures it from the "session" SSE event and sends it back on every request.
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known request body shape
-  const { message, sessionId } = (await request.json()) as {
-    message: string;
-    sessionId: string | null;
-  };
+  const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
   const encoder = new TextEncoder();
   const abortController = new AbortController();

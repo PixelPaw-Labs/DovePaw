@@ -55,7 +55,7 @@ export function getAvailablePort(): Promise<number> {
   });
 }
 
-const portsManifestSchema = z.object({
+export const portsManifestSchema = z.object({
   experience_reflector: z.number(),
   get_shit_done: z.number(),
   release_log_sentinel: z.number(),

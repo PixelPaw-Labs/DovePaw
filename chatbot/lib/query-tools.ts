@@ -24,6 +24,12 @@ type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdat
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import type { PortsManifest } from "@/a2a/lib/base-server";
 import { randomUUID } from "node:crypto";
+
+function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(manifest, key)) return undefined;
+  const val = (manifest as Record<string, unknown>)[key];
+  return typeof val === "number" ? val : undefined;
+}
 import type { AgentDef } from "@@/lib/agents";
 import { z } from "zod";
 
@@ -166,7 +172,8 @@ export function makeAskTool(agent: AgentDef) {
       const manifest = readPortsManifest();
       if (!manifest) return noServersMessage();
 
-      const port = manifest[agent.manifestKey as keyof PortsManifest];
+      const port = getManifestPort(manifest, agent.manifestKey);
+      if (!port) return noServersMessage();
 
       try {
         const factory = new ClientFactory();
@@ -220,7 +227,8 @@ export function makeStartTool(agent: AgentDef) {
       const manifest = readPortsManifest();
       if (!manifest) return noServersMessage();
 
-      const port = manifest[agent.manifestKey as keyof PortsManifest];
+      const port = getManifestPort(manifest, agent.manifestKey);
+      if (!port) return noServersMessage();
 
       try {
         const factory = new ClientFactory();
@@ -265,7 +273,16 @@ export function makeStartTool(agent: AgentDef) {
 
 // ─── makeAwaitTool ────────────────────────────────────────────────────────────
 
-const TERMINAL_STATES = new Set(["completed", "canceled", "failed", "rejected"]);
+const TERMINAL_STATES = new Set<TaskCompletedContent["status"]>([
+  "completed",
+  "canceled",
+  "failed",
+  "rejected",
+]);
+
+function isTerminalState(state: string): state is TaskCompletedContent["status"] {
+  return (TERMINAL_STATES as Set<string>).has(state);
+}
 
 /** How long to wait for task completion before returning a still_running status. */
 const AWAIT_POLL_TIMEOUT_MS = 30_000;
@@ -287,7 +304,8 @@ export function makeAwaitTool(agent: AgentDef) {
       const manifest = readPortsManifest();
       if (!manifest) return noServersMessage();
 
-      const port = manifest[agent.manifestKey as keyof PortsManifest];
+      const port = getManifestPort(manifest, agent.manifestKey);
+      if (!port) return noServersMessage();
 
       try {
         const factory = new ClientFactory();
@@ -296,11 +314,11 @@ export function makeAwaitTool(agent: AgentDef) {
         // Check current task state first — no stream needed if already finished
         const task: Task = await client.getTask({ id: taskId });
 
-        if (TERMINAL_STATES.has(task.status.state)) {
+        if (isTerminalState(task.status.state)) {
           markTaskResolved(taskId);
           const text = extractArtifactText(task.artifacts);
           const completed: TaskCompletedContent = {
-            status: task.status.state as TaskCompletedContent["status"],
+            status: task.status.state,
             taskId,
             result: text || "Agent completed.",
           };

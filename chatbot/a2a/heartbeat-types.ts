@@ -1,13 +1,21 @@
 /** Shared types and constants for the WebSocket heartbeat protocol. Safe to import in client components. */
 
+import { z } from "zod";
+
 export const WS_PORT = 7474;
 
-export type LaunchdStatus = { loaded: boolean; running: boolean };
-export type AgentStatus = {
-  online: boolean;
-  latency: number | null;
-  launchd: LaunchdStatus | null;
-  /** True when a Dove-triggered workspace run is actively executing. */
-  processing: boolean;
-};
-export type StatusMessage = { type: "status"; agents: Record<string, AgentStatus> };
+const launchdStatusSchema = z.object({ loaded: z.boolean(), running: z.boolean() });
+const agentStatusSchema = z.object({
+  online: z.boolean(),
+  latency: z.number().nullable(),
+  launchd: launchdStatusSchema.nullable(),
+  processing: z.boolean(),
+});
+export const statusMessageSchema = z.object({
+  type: z.literal("status"),
+  agents: z.record(z.string(), agentStatusSchema),
+});
+
+export type LaunchdStatus = z.infer<typeof launchdStatusSchema>;
+export type AgentStatus = z.infer<typeof agentStatusSchema>;
+export type StatusMessage = z.infer<typeof statusMessageSchema>;

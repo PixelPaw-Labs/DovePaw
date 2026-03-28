@@ -16,7 +16,10 @@ import {
 } from "./data-table";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { AGENTS } from "@@/lib/agents";
-import type { Repository, EnvVar } from "@@/lib/settings";
+import { z } from "zod";
+import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings";
+
+const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 
 type Tab = "repositories" | "env-vars";
 
@@ -137,8 +140,7 @@ export function AgentSettingsContent({
         body: JSON.stringify({ agentName, key, value, isSecret, keychainService, keychainAccount }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const data = (await res.json()) as { envVars: EnvVar[] };
+        const data = envVarsResponseSchema.parse(await res.json());
         setAgentEnvVars(data.envVars);
       }
     } finally {
@@ -170,8 +172,7 @@ export function AgentSettingsContent({
         }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const data = (await res.json()) as { envVars: EnvVar[] };
+        const data = envVarsResponseSchema.parse(await res.json());
         setAgentEnvVars(data.envVars);
       }
     } finally {
@@ -188,8 +189,7 @@ export function AgentSettingsContent({
         body: JSON.stringify({ agentName, id }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const data = (await res.json()) as { envVars: EnvVar[] };
+        const data = envVarsResponseSchema.parse(await res.json());
         setAgentEnvVars(data.envVars);
       }
     } finally {

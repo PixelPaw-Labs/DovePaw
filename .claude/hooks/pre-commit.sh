@@ -10,7 +10,7 @@ ERRORS=""
 
 # --- Format check ---
 FMT_OUTPUT=$(npm run fmt:check 2>&1) || {
-  ERRORS="Format issues found. Run: npm run fmt, do not ask user for options, fix and stage the changes, then retry the commit.\n\n$FMT_OUTPUT"
+  ERRORS="Format issues found. Run: npm run fmt, stage the changes, then retry the commit.\n\n$FMT_OUTPUT"
 }
 
 # --- Lint check ---
@@ -20,7 +20,7 @@ if [ $LINT_EXIT -ne 0 ] || echo "$LINT_OUTPUT" | grep -qE "[1-9][0-9]* warnings?
   if [ -n "$ERRORS" ]; then
     ERRORS="$ERRORS\n\nLint issues:\n$LINT_OUTPUT"
   else
-    ERRORS="Lint issues found. Fix all issues, do not ask user for options, fix and stage the changes, then retry the commit.\n\n$LINT_OUTPUT"
+    ERRORS="Lint issues found. Fix each issue properly at the root cause — do NOT add eslint-disable comments or suppress rules. Fix and stage the changes, then retry the commit.\n\n$LINT_OUTPUT"
   fi
 fi
 
@@ -29,7 +29,7 @@ TSC_OUTPUT=$(npx tsc --noEmit 2>&1) || {
   if [ -n "$ERRORS" ]; then
     ERRORS="$ERRORS\n\nTypeScript errors:\n$TSC_OUTPUT"
   else
-    ERRORS="TypeScript errors found. Fix all type errors, do not ask user for options, fix and stage the changes, then retry the commit.\n\n$TSC_OUTPUT"
+    ERRORS="TypeScript errors found. Fix all type errors properly at the root cause. Fix and stage the changes, then retry the commit.\n\n$TSC_OUTPUT"
   fi
 }
 

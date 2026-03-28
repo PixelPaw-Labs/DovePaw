@@ -10,9 +10,18 @@ import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { AgentManagementContent } from "./agent-management-content";
-import { WS_PORT } from "@/a2a/heartbeat-types";
-import type { AgentStatus, StatusMessage } from "@/a2a/heartbeat-types";
-import type { GlobalSettings, Repository, EnvVar } from "@@/lib/settings";
+import { WS_PORT, statusMessageSchema } from "@/a2a/heartbeat-types";
+import type { AgentStatus } from "@/a2a/heartbeat-types";
+import { z } from "zod";
+import {
+  type GlobalSettings,
+  type Repository,
+  type EnvVar,
+  globalSettingsSchema,
+  envVarSchema,
+} from "@@/lib/settings";
+
+const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 
 const WS_URL = `ws://127.0.0.1:${WS_PORT}`;
 const RECONNECT_DELAY_MS = 3_000;
@@ -29,9 +38,9 @@ function useAgentStatuses() {
       ws = new WebSocket(WS_URL);
       ws.addEventListener("message", (event) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON.parse from known WebSocket source
-          const msg = JSON.parse(event.data as string) as StatusMessage;
-          if (msg.type === "status") setStatuses(msg.agents);
+          if (typeof event.data !== "string") return;
+          const result = statusMessageSchema.safeParse(JSON.parse(event.data));
+          if (result.success) setStatuses(result.data.agents);
         } catch {
           // ignore malformed messages
         }
@@ -90,8 +99,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ repositories: next.map((r) => ({ githubRepo: r.githubRepo })) }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const updated = (await res.json()) as GlobalSettings;
+        const updated = globalSettingsSchema.parse(await res.json());
         setRepositories(updated.repositories);
       }
     } finally {
@@ -133,8 +141,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ key, value, isSecret, keychainService, keychainAccount }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const data = (await res.json()) as { envVars: EnvVar[] };
+        const data = envVarsResponseSchema.parse(await res.json());
         setEnvVars(data.envVars);
       }
     } finally {
@@ -158,8 +165,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ id, key, value, isSecret, keychainService, keychainAccount }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const data = (await res.json()) as { envVars: EnvVar[] };
+        const data = envVarsResponseSchema.parse(await res.json());
         setEnvVars(data.envVars);
       }
     } finally {
@@ -176,8 +182,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         body: JSON.stringify({ id }),
       });
       if (res.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known API response shape
-        const data = (await res.json()) as { envVars: EnvVar[] };
+        const data = envVarsResponseSchema.parse(await res.json());
         setEnvVars(data.envVars);
       }
     } finally {

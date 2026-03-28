@@ -1,10 +1,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod";
 import { AGENTS_ROOT, AGENTS_DIST } from "@@/lib/paths";
 
-type Metafile = {
-  outputs: Record<string, { imports: { path: string; external?: boolean }[] }>;
-};
+const importSchema = z.object({ path: z.string(), external: z.boolean().optional() });
+const metafileSchema = z.object({
+  outputs: z.record(z.string(), z.object({ imports: z.array(importSchema) })),
+});
+type Metafile = z.infer<typeof metafileSchema>;
 
 /**
  * Returns external packages required by a specific agent's bundle, using
@@ -22,8 +25,9 @@ export function externalPackagesInBundle(
 
   if (!existsSync(resolvedMetafile)) return [];
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- known esbuild metafile format
-  const meta = JSON.parse(readFileSync(resolvedMetafile, "utf8")) as Metafile;
+  const parsed = metafileSchema.safeParse(JSON.parse(readFileSync(resolvedMetafile, "utf8")));
+  if (!parsed.success) return [];
+  const meta: Metafile = parsed.data;
 
   const outputKey = Object.keys(meta.outputs).find((k) => k.endsWith(`${agentName}.mjs`));
   if (!outputKey) return [];

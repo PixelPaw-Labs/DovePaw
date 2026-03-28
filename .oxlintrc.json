@@ -73,31 +73,6 @@
       }
     },
     {
-      "files": ["chatbot/lib/hooks.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-type-assertion": "off"
-      }
-    },
-    {
-      "files": ["chatbot/lib/query-tools.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-type-assertion": "off"
-      }
-    },
-    {
-      "files": ["chatbot/a2a/heartbeat-server.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-type-assertion": "off",
-        "@typescript-eslint/no-unnecessary-type-assertion": "off"
-      }
-    },
-    {
-      "files": ["chatbot/a2a/start-all.ts"],
-      "rules": {
-        "@typescript-eslint/no-unsafe-type-assertion": "off"
-      }
-    },
-    {
       "files": ["agents/get-shit-done/jira.ts"],
       "rules": {
         "@typescript-eslint/no-unsafe-type-assertion": "off"

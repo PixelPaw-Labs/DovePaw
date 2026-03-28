@@ -35,12 +35,19 @@ async function pingAgent(port: number): Promise<Pick<AgentStatus, "online" | "la
   }
 }
 
+function isPortKey(
+  k: string,
+  manifest: PortsManifest,
+): k is keyof Omit<PortsManifest, "updatedAt"> {
+  return k !== "updatedAt" && k in manifest;
+}
+
 async function checkAll(manifest: PortsManifest): Promise<Record<string, AgentStatus>> {
-  const keys = Object.keys(manifest).filter((k) => k !== "updatedAt") as Array<
-    keyof Omit<PortsManifest, "updatedAt">
-  >;
+  const keys = Object.keys(manifest).filter((k): k is keyof Omit<PortsManifest, "updatedAt"> =>
+    isPortKey(k, manifest),
+  );
   const [pingResults, launchdMap] = await Promise.all([
-    Promise.all(keys.map((k) => pingAgent(manifest[k] as number))),
+    Promise.all(keys.map((k) => pingAgent(manifest[k]))),
     getLaunchdStatuses(),
   ]);
   return Object.fromEntries(

@@ -6,8 +6,8 @@ import { usePathname } from "next/navigation";
 import { PawPrint, Settings } from "lucide-react";
 import { AGENTS } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
-import { WS_PORT } from "@/a2a/heartbeat-types";
-import type { AgentStatus, StatusMessage } from "@/a2a/heartbeat-types";
+import { WS_PORT, statusMessageSchema } from "@/a2a/heartbeat-types";
+import type { AgentStatus } from "@/a2a/heartbeat-types";
 import { AgentButton } from "./agent-button";
 
 const WS_URL = `ws://127.0.0.1:${WS_PORT}`;
@@ -26,9 +26,9 @@ function useAgentStatuses() {
 
       ws.addEventListener("message", (event) => {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON.parse from known WebSocket source
-          const msg = JSON.parse(event.data as string) as StatusMessage;
-          if (msg.type === "status") setStatuses(msg.agents);
+          if (typeof event.data !== "string") return;
+          const result = statusMessageSchema.safeParse(JSON.parse(event.data));
+          if (result.success) setStatuses(result.data.agents);
         } catch {
           // ignore malformed messages
         }

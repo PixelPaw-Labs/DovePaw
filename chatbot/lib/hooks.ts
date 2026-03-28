@@ -7,21 +7,14 @@
  */
 
 import type {
-  PostToolUseHookInput,
   PostToolUseHookSpecificOutput,
-  StopHookInput,
   HookCallbackMatcher,
   HookEvent,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
-import {
-  doveAwaitToolName,
-  hasPendingTasks,
-  getPendingTaskIds,
-  type AwaitToolContent,
-} from "@/lib/query-tools";
+import { doveAwaitToolName, hasPendingTasks, getPendingTaskIds } from "@/lib/query-tools";
 import { AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
-import { hasPendingScripts, getPendingRunIds, type AwaitScriptContent } from "@/a2a/lib/spawn";
+import { hasPendingScripts, getPendingRunIds } from "@/a2a/lib/spawn";
 
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 
@@ -50,8 +43,8 @@ export function buildAgentHooks(
       {
         hooks: [
           async (input) => {
-            const { stop_hook_active } = input as StopHookInput;
-            if (stop_hook_active || !hasPendingWork()) return { continue: true };
+            if (input.hook_event_name !== "Stop") return { continue: true };
+            if (input.stop_hook_active || !hasPendingWork()) return { continue: true };
             const ids = getPendingIds();
             return {
               continue: false,
@@ -66,15 +59,25 @@ export function buildAgentHooks(
         matcher: postToolUseMatcher,
         hooks: [
           async (input) => {
-            const { tool_response } = input as PostToolUseHookInput;
-            const structured = (tool_response as { structuredContent?: unknown }).structuredContent;
-            if ((structured as { status?: string })?.status === "still_running") {
+            if (input.hook_event_name !== "PostToolUse") return { continue: true };
+            const { tool_response } = input;
+            const structured =
+              typeof tool_response === "object" &&
+              tool_response !== null &&
+              "structuredContent" in tool_response
+                ? (tool_response as { structuredContent: unknown }).structuredContent
+                : undefined;
+            const status =
+              typeof structured === "object" && structured !== null && "status" in structured
+                ? (structured as { status: unknown }).status
+                : undefined;
+            if (status === "still_running") {
               const id = getStillRunningId(structured);
-              return {
-                hookSpecificOutput: {
-                  additionalContext: `⚠️ Still running (id: ${id}). You MUST call the await tool again with id "${id}" — do NOT start a new task or respond to the user until you have the final result.`,
-                } as PostToolUseHookSpecificOutput,
+              const hookSpecificOutput: PostToolUseHookSpecificOutput = {
+                hookEventName: "PostToolUse",
+                additionalContext: `⚠️ Still running (id: ${id}). You MUST call the await tool again with id "${id}" — do NOT start a new task or respond to the user until you have the final result.`,
               };
+              return { hookSpecificOutput };
             }
             return { continue: true };
           },
@@ -94,7 +97,11 @@ export function buildDoveHooks(
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
     hasPendingWork: hasPendingTasks,
     getPendingIds: getPendingTaskIds,
-    getStillRunningId: (s) => (s as AwaitToolContent & { taskId?: string }).taskId,
+    getStillRunningId: (s) => {
+      if (typeof s !== "object" || s === null || !("taskId" in s)) return undefined;
+      const val: unknown = Reflect.get(s, "taskId");
+      return typeof val === "string" ? val : undefined;
+    },
   });
 }
 
@@ -104,6 +111,10 @@ export function buildSubAgentHooks(): Partial<Record<HookEvent, HookCallbackMatc
     postToolUseMatcher: `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
     hasPendingWork: hasPendingScripts,
     getPendingIds: getPendingRunIds,
-    getStillRunningId: (s) => (s as AwaitScriptContent & { runId?: string }).runId,
+    getStillRunningId: (s) => {
+      if (typeof s !== "object" || s === null || !("runId" in s)) return undefined;
+      const val: unknown = Reflect.get(s, "runId");
+      return typeof val === "string" ? val : undefined;
+    },
   });
 }

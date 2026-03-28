@@ -6,7 +6,12 @@
  */
 
 import { consola } from "consola";
-import { getAvailablePort, writePortsManifest, createServerFromDef } from "./lib/base-server.js";
+import {
+  getAvailablePort,
+  writePortsManifest,
+  createServerFromDef,
+  portsManifestSchema,
+} from "./lib/base-server.js";
 import { startHeartbeatServer } from "./heartbeat-server.js";
 import { WS_PORT } from "./heartbeat-types.js";
 import { PORTS_FILE } from "@/lib/paths";
@@ -16,15 +21,15 @@ consola.box("ðŸ±  Agent A2A Servers\nAllocating dynamic ports and starting upâ€
 
 const ports = await Promise.all(AGENTS.map(() => getAvailablePort()));
 
-const manifest = Object.fromEntries(AGENTS.map((a, i) => [a.manifestKey, ports[i]]));
+const rawManifest = Object.fromEntries(AGENTS.map((a, i) => [a.manifestKey, ports[i]]));
+const manifest = portsManifestSchema.omit({ updatedAt: true }).parse(rawManifest);
 
 for (let i = 0; i < AGENTS.length; i++) {
   createServerFromDef(AGENTS[i], ports[i]);
 }
 
-const typedManifest = manifest as Parameters<typeof writePortsManifest>[0];
-writePortsManifest(typedManifest);
-startHeartbeatServer({ ...typedManifest, updatedAt: new Date().toISOString() });
+writePortsManifest(manifest);
+startHeartbeatServer({ ...manifest, updatedAt: new Date().toISOString() });
 
 consola.box(
   [
