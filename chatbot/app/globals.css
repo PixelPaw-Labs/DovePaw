@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+
+/* ─── DovePaw — light-first theme ────────────────────────────────────────────
+   Exact hex values from the DovePaw Stitch screen design (Material Design 3).
+   Named for Dove (Yang's cat) — calm, focused, editorial workspace energy.
+─────────────────────────────────────────────────────────────────────────────── */
+
+@theme inline {
+  /* Core surfaces */
+  --color-background: #f8f9fa; /* surface */
+  --color-foreground: #2b3437; /* on-surface */
+
+  /* Muted — surface-container-low */
+  --color-muted: #f1f4f6;
+  --color-muted-foreground: #586064; /* on-surface-variant */
+
+  /* Card / popover — surface-container-lowest */
+  --color-card: #ffffff;
+  --color-card-foreground: #2b3437;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #2b3437;
+
+  /* Primary — #496173 */
+  --color-primary: #496173;
+  --color-primary-foreground: #f3f8ff; /* on-primary */
+
+  /* Secondary — surface-container #eaeff1 */
+  --color-secondary: #eaeff1;
+  --color-secondary-foreground: #2b3437;
+
+  /* Accent — primary-container #cce6fb */
+  --color-accent: #cce6fb;
+  --color-accent-foreground: #3d5466; /* on-primary-container */
+
+  /* Borders & inputs */
+  --color-border: #abb3b7; /* outline-variant */
+  --color-input: #dbe4e7; /* surface-container-highest */
+  --color-ring: #496173;
+
+  /* Sidebar — same as surface */
+  --color-sidebar: #f8f9fa;
+
+  /* Destructive */
+  --color-destructive: #9f403d;
+  --color-destructive-foreground: #ffffff;
+
+  /* Geometry */
+  --radius: 0.75rem;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Font */
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer utilities {
+  .bg-sidebar {
+    background-color: var(--color-sidebar);
+  }
+
+  /* Thin scrollbar — DovePaw misty-scroll */
+  .misty-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+  .misty-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .misty-scroll::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-border) 40%, transparent);
+    border-radius: 10px;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    min-width: 0;
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  /* Markdown table */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  th,
+  td {
+    border: 1px solid var(--color-border);
+    padding: 0.375rem 0.75rem;
+    text-align: left;
+  }
+  th {
+    background-color: var(--color-muted);
+    font-weight: 600;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+  }
+}

@@ -1,0 +1,114 @@
+/**
+ * Shared query() hook configuration.
+ *
+ * buildAgentHooks — generic factory, usable by any query() caller
+ * buildDoveHooks  — convenience wrapper for Dove's top-level query (route.ts)
+ * buildSubAgentHooks — convenience wrapper for QueryAgentExecutor sub-agents
+ */
+
+import type {
+  PostToolUseHookInput,
+  PostToolUseHookSpecificOutput,
+  StopHookInput,
+  HookCallbackMatcher,
+  HookEvent,
+} from "@anthropic-ai/claude-agent-sdk";
+import type { AgentDef } from "@@/lib/agents";
+import {
+  doveAwaitToolName,
+  hasPendingTasks,
+  getPendingTaskIds,
+  type AwaitToolContent,
+  type ToolResponse,
+} from "@/lib/query-tools";
+import { AWAIT_SCRIPT_TOOL, START_SCRIPT_TOOL } from "@/lib/agent-tools";
+import {
+  hasPendingScripts,
+  getPendingRunIds,
+  type AwaitScriptContent,
+} from "@/a2a/lib/spawn";
+
+// ─── Generic hook builder ─────────────────────────────────────────────────────
+
+export interface AgentHooksConfig {
+  /** Pipe-separated tool name matcher for the PostToolUse still_running hook. */
+  postToolUseMatcher: string;
+  /** Returns true when there is at least one pending in-flight operation. */
+  hasPendingWork: () => boolean;
+  /** Returns the IDs of all currently pending operations. */
+  getPendingIds: () => string[];
+  /** Extracts the operation ID from a still_running structuredContent payload. */
+  getStillRunningId: (structured: unknown) => string | undefined;
+}
+
+/**
+ * Builds a pair of hooks (PostToolUse + Stop) from a generic config.
+ * Suitable for any query() call that uses a start/await tool pattern.
+ */
+export function buildAgentHooks(
+  config: AgentHooksConfig,
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const { postToolUseMatcher, hasPendingWork, getPendingIds, getStillRunningId } = config;
+
+  return {
+    Stop: [
+      {
+        hooks: [
+          async (input) => {
+            const { stop_hook_active } = input as StopHookInput;
+            if (stop_hook_active || !hasPendingWork()) return { continue: true };
+            const ids = getPendingIds();
+            return {
+              continue: false,
+              systemMessage: `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}). Call the await tool with the id before stopping.`,
+            };
+          },
+        ],
+      },
+    ],
+    PostToolUse: [
+      {
+        matcher: postToolUseMatcher,
+        hooks: [
+          async (input) => {
+            const { tool_response } = input as PostToolUseHookInput;
+            const structured = (tool_response as { structuredContent?: unknown }).structuredContent;
+            if ((structured as { status?: string })?.status === "still_running") {
+              const id = getStillRunningId(structured);
+              return {
+                hookSpecificOutput: {
+                  additionalContext: `⚠️ Still running (id: ${id}). You MUST call the await tool again with id "${id}" — do NOT start a new task or respond to the user until you have the final result.`,
+                } as PostToolUseHookSpecificOutput,
+              };
+            }
+            return { continue: true };
+          },
+        ],
+      },
+    ],
+  };
+}
+
+// ─── Convenience wrappers ─────────────────────────────────────────────────────
+
+/** Hooks for Dove's top-level query() in route.ts. */
+export function buildDoveHooks(
+  agents: AgentDef[],
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  return buildAgentHooks({
+    postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
+    hasPendingWork: hasPendingTasks,
+    getPendingIds: getPendingTaskIds,
+    getStillRunningId: (s) => (s as AwaitToolContent & { taskId?: string }).taskId,
+  });
+}
+
+/** Hooks for the QueryAgentExecutor sub-agent query(). */
+export function buildSubAgentHooks(): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  return buildAgentHooks({
+    postToolUseMatcher: `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
+    hasPendingWork: hasPendingScripts,
+    getPendingIds: getPendingRunIds,
+    getStillRunningId: (s) => (s as AwaitScriptContent & { runId?: string }).runId,
+  });
+}

@@ -1,0 +1,51 @@
+#!/usr/bin/env tsx
+
+/**
+ * Build & install scheduler agents.
+ *
+ * Usage:
+ *   npm run install-agents          # build + install + reload all agents
+ *   npm run install-agents -- --uninstall   # unload + remove all agents
+ */
+
+import { execSync } from "node:child_process";
+import { agents } from "./plist/configs.js";
+import { SCHEDULER_ROOT } from "./lib/paths.js";
+import { getUid, copyNativePackages, installAgent, uninstallAgent, isAgentLoaded } from "./lib/installer.js";
+
+const NATIVE_PACKAGES = ["@ladybugdb/core"];
+const uid = getUid();
+const uninstall = process.argv.includes("--uninstall");
+
+// ─── Uninstall ───────────────────────────────────────────────────────────────
+
+if (uninstall) {
+  console.log("Uninstalling all scheduler agents...\n");
+  await Promise.all(agents.map((agent) => uninstallAgent(agent, uid)));
+  console.log(`Done. Scripts remain in ${SCHEDULER_ROOT}/ for manual use.`);
+  process.exit(0);
+}
+
+// ─── Build ───────────────────────────────────────────────────────────────────
+
+console.log("Step 1: Building TypeScript...\n");
+execSync("npx tsup", { stdio: "inherit", cwd: import.meta.dirname });
+
+// ─── Install + load ──────────────────────────────────────────────────────────
+
+console.log("\nStep 2: Installing and loading agents...\n");
+await copyNativePackages(NATIVE_PACKAGES);
+await Promise.all(agents.map((agent) => installAgent(agent, uid, [])));
+console.log("  Done");
+
+// ─── Verify ──────────────────────────────────────────────────────────────────
+
+console.log("\nStep 3: Verifying...\n");
+await Promise.all(
+  agents.map(async (agent) => {
+    const ok = await isAgentLoaded(agent.label);
+    console.log(`  ${ok ? "OK" : "WARN"}: ${agent.name}`);
+  }),
+);
+
+console.log("\nDone!");

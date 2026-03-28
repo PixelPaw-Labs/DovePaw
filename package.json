@@ -1,0 +1,36 @@
+{
+  "name": "dovepaw",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsup --metafile",
+    "postinstall": "npm --prefix chatbot install",
+    "install": "tsx build.ts",
+    "uninstall": "tsx build.ts --uninstall",
+    "lint": "oxlint",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+"chatbot:servers": "npm --prefix chatbot run servers",
+    "chatbot:dev": "npm --prefix chatbot run dev",
+    "chatbot:build": "npm --prefix chatbot run build",
+    "chatbot:test": "npm --prefix chatbot run test",
+    "chatbot:dev:all": "concurrently --kill-others-on-fail --names \"a2a,next\" --prefix-colors \"cyan.bold,magenta.bold\" --prefix \"[{name}]\" \"npm run chatbot:servers\" \"npm run chatbot:dev\""
+  },
+  "dependencies": {
+    "@ladybugdb/core": "latest",
+    "lucide-react": "^0.577.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "concurrently": "^9.2.1",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.56.0",
+    "oxlint-tsgolint": "^0.17.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.1"
+  }
+}
