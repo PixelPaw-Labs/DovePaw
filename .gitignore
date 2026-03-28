@@ -141,7 +141,9 @@ vite.config.ts.timestamp-*
 
 # Implement workflow temp assets
 .implement-assets/
-.claude/**/*
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
 
 # Runtime data
 dist/
@@ -155,5 +157,4 @@ chatbot/.next/
 chatbot/node_modules/
 chatbot/next-env.d.ts
 chatbot/a2a/.ports.json
-.claude/settings.local.json
 .gitnexus

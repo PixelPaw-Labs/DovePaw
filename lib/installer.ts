@@ -63,7 +63,13 @@ export async function deployAgentScript(agentName: string): Promise<void> {
 export async function writeEnvScript(agent: AgentDef): Promise<void> {
   const settings = readSettings();
   const agentSettings = readAgentSettings(agent.name);
-  await writeAgentEnvScript(agent.name, agent.reposEnvVar, settings, agentSettings.repos);
+  await writeAgentEnvScript(
+    agent.name,
+    agent.reposEnvVar,
+    settings,
+    agentSettings.repos,
+    agentSettings.envVars,
+  );
 }
 
 /**

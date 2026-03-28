@@ -59,12 +59,11 @@ export const AGENTS: AgentDef[] = [
 
     displayName: "Experience Reflector",
     description:
-      "Reflect on and learn from past Claude Code sessions: scans checkpoint sessions, " +
-      "extracts domain knowledge and user preferences, and writes learnings into project " +
-      "MEMORY.md files. Use when asked to 'learn from sessions', 'rewind and learn', or " +
-      "'reflect on past Claude Code work'. Requires REPO_LIST env var.",
-    requiredEnvVars: ["REPO_LIST"],
-    reposEnvVar: "REPO_LIST",
+      "Reflect on and learn from past Claude Code sessions: fetches the last 24 hours of sessions " +
+      "via the local session API, extracts domain knowledge and user preferences, and writes " +
+      "learnings into project MEMORY.md files. Use when asked to 'learn from sessions', " +
+      "'rewind and learn', or 'reflect on past Claude Code work'. Requires PROJECTS env var.",
+    requiredEnvVars: ["PROJECTS"],
     icon: Brain,
     scheduleDisplay: "daily 00:00",
     schedule: { type: "calendar", hour: 0, minute: 0 },
@@ -103,9 +102,8 @@ export const AGENTS: AgentDef[] = [
       "Distil and promote common memory patterns across projects into the global ~/.claude/CLAUDE.md. " +
       "Use when asked to 'consolidate memories', 'promote patterns to global', 'summarize memories " +
       "to be generic', or 'extract common learnings across projects'. " +
-      "Requires REPO_LIST env var listing ≥2 project paths.",
-    requiredEnvVars: ["REPO_LIST"],
-    reposEnvVar: "REPO_LIST",
+      "Requires PROJECTS env var listing ≥2 project names.",
+    requiredEnvVars: ["PROJECTS"],
     icon: FlaskConical,
     scheduleDisplay: "Sun 01:00",
     schedule: { type: "calendar", hour: 1, minute: 0, weekday: 0 },

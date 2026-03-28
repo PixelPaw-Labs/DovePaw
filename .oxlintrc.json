@@ -74,5 +74,11 @@
     "browser": true
   },
   "globals": {},
-  "ignorePatterns": ["dist/**", "node_modules/**", ".next/**", "skills/**", "chatbot/components/ai-elements/**"]
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    ".next/**",
+    "skills/**",
+    "chatbot/components/ai-elements/**"
+  ]
 }

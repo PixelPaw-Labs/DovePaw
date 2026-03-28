@@ -33,6 +33,7 @@ function shellQuote(s: string): string {
 
 function generateEnvScript(
   envVars: EnvScriptVar[],
+  agentEnvVars: EnvScriptVar[],
   reposEnvVar: string | undefined,
   repoSlugs: string[],
 ): string {
@@ -42,7 +43,11 @@ function generateEnvScript(
     "",
   ];
 
-  for (const v of envVars) {
+  // Merge global + per-agent vars; per-agent overrides global by key.
+  const merged = new Map<string, EnvScriptVar>(envVars.map((v) => [v.key, v]));
+  for (const v of agentEnvVars) merged.set(v.key, v);
+
+  for (const v of merged.values()) {
     if (v.isSecret) {
       const service = v.keychainService ?? "dovepaw";
       const account = v.keychainAccount ?? v.key;
@@ -70,11 +75,12 @@ export async function writeAgentEnvScript(
   reposEnvVar: string | undefined,
   settings: EnvScriptSettings,
   agentRepoIds: string[],
+  agentEnvVars: EnvScriptVar[] = [],
 ): Promise<void> {
   const repoSlugs = agentRepoIds
     .map((id) => settings.repositories.find((r) => r.id === id))
     .filter((r): r is NonNullable<typeof r> => r !== undefined)
     .map((r) => r.githubRepo);
-  const content = generateEnvScript(settings.envVars, reposEnvVar, repoSlugs);
+  const content = generateEnvScript(settings.envVars, agentEnvVars, reposEnvVar, repoSlugs);
   await writeFile(agentEnvScript(agentName), content, { mode: 0o700 });
 }
