@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import type { Repository } from "@@/lib/settings";
+import type { Repository } from "@@/lib/settings-schemas";
 
 interface EditRepoDialogProps {
   repo: Repository | null;

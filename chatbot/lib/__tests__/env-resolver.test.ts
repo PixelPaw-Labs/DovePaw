@@ -7,7 +7,7 @@ vi.mock("@/lib/keyring", () => ({
 
 import { getSecret } from "@/lib/keyring";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
-import type { GlobalSettings } from "@@/lib/settings";
+import type { GlobalSettings } from "@@/lib/settings-schemas";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

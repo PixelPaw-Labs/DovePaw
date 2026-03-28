@@ -1,7 +1,7 @@
 import * as React from "react";
 import { Trash2, KeyRound, Lock, Eye, EyeOff, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { EnvVar } from "@@/lib/settings";
+import type { EnvVar } from "@@/lib/settings-schemas";
 import {
   DataTable,
   DataTableHeader,

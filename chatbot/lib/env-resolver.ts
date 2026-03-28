@@ -10,7 +10,7 @@
  */
 
 import { getSecret, DOVEPAW_SERVICE } from "@/lib/keyring";
-import type { GlobalSettings, EnvVar, AgentSettings } from "@@/lib/settings";
+import type { GlobalSettings, EnvVar, AgentSettings } from "@@/lib/settings-schemas";
 
 function resolveEnvVar(envVar: EnvVar): string | undefined {
   if (!envVar.isSecret) {

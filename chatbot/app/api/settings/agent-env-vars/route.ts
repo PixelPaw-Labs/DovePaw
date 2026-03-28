@@ -12,7 +12,7 @@ import {
   makeEnvVar,
   isDovepawManaged,
 } from "@@/lib/settings";
-import type { EnvVar } from "@@/lib/settings";
+import type { EnvVar } from "@@/lib/settings-schemas";
 import { getSecret, setSecret, deleteSecret } from "@/lib/keyring";
 import { AGENTS } from "@@/lib/agents";
 import { envVarFields, parseBody, buildUpdatedEnvVar } from "@/lib/env-var-routes";

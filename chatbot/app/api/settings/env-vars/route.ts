@@ -7,7 +7,7 @@
 
 import { z } from "zod";
 import { readSettings, writeSettings, makeEnvVar, isDovepawManaged } from "@@/lib/settings";
-import type { EnvVar } from "@@/lib/settings";
+import type { EnvVar } from "@@/lib/settings-schemas";
 import { getSecret, setSecret, deleteSecret, DOVEPAW_SERVICE } from "@/lib/keyring";
 import { envVarFields, parseBody, buildUpdatedEnvVar } from "@/lib/env-var-routes";
 

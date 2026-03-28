@@ -4,7 +4,7 @@ import { Trash2, FolderGit2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AGENTS } from "@@/lib/agents";
-import type { Repository } from "@@/lib/settings";
+import type { Repository } from "@@/lib/settings-schemas";
 import {
   DataTable,
   DataTableHeader,

@@ -9,9 +9,6 @@ import {
   type EnvVar,
 } from "./settings-schemas";
 
-// Re-export schemas and types so existing importers of "@@/lib/settings" still work.
-export * from "./settings-schemas";
-
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 export function defaultSettings(): GlobalSettings {

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { SecretFields } from "./secret-fields";
 import type { SecretMode } from "./secret-fields";
-import type { EnvVar } from "@@/lib/settings";
+import type { EnvVar } from "@@/lib/settings-schemas";
 
 interface EditEnvVarDialogProps {
   envVar: EnvVar | null;
