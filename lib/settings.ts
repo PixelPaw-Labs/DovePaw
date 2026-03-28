@@ -33,8 +33,8 @@ export function readSettings(): GlobalSettings {
 
 export function writeSettings(settings: GlobalSettings): void {
   mkdirSync(DOVEPAW_DIR, { recursive: true });
-  if (existsSync(SETTINGS_FILE)) copyFileSync(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);
   writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  copyFileSync(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);
 }
 
 // ─── Per-Agent Read / Write ───────────────────────────────────────────────────
@@ -53,8 +53,8 @@ export function readAgentSettings(agentName: string): AgentSettings {
 export function writeAgentSettings(agentName: string, settings: AgentSettings): void {
   mkdirSync(AGENT_SETTINGS_DIR, { recursive: true });
   const file = agentSettingsFile(agentName);
-  if (existsSync(file)) copyFileSync(file, `${file}.bak`);
   writeFileSync(file, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  copyFileSync(file, `${file}.bak`);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
