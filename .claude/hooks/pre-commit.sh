@@ -60,6 +60,6 @@ if [ -n "$SESSION_ID" ] && [ -f "$FLAG_FILE" ]; then
   exit 0
 fi
 
-REFLECTION="All checks pass. Did you write or update tests for the behaviour you just changed?\n\n  If not → write the tests, stage them (git add), and retry.\n  If yes → run this in a SEPARATE step, then retry the commit:\n\n    touch $FLAG_FILE"
+REFLECTION="All checks pass. Did you write or update tests for the behaviour you just changed?\n\n  If not → write the tests then: ⚠️  git add <files>  ⚠️  and retry.\n  If yes → run this in a SEPARATE step, then retry the commit:\n\n    touch $FLAG_FILE"
 printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REFLECTION" | jq -Rs .)"
 exit 0
