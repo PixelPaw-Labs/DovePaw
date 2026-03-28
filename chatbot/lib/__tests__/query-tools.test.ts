@@ -147,25 +147,25 @@ describe("makeAskTool", () => {
       id: "task-abc",
       status: { state: "working" },
     });
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) };
+    } as any);
     const result = await handler({ instruction: "run" });
-    const payload = JSON.parse(result.content[0].text);
-    expect(payload.taskId).toBe("task-abc");
-    expect(payload.result).toBeUndefined();
+    expect(result.content[0].text).toContain("task-abc");
+    // structuredContent carries the typed payload
+    const structured = result.structuredContent as { taskId: string };
+    expect(structured.taskId).toBe("task-abc");
   });
 
   it("returns error when response is not a task", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    vi.mocked(ClientFactory).mockImplementation(
-      () =>
-        ({
-          createFromUrl: vi
-            .fn()
-            .mockResolvedValue({ sendMessage: vi.fn().mockResolvedValue({ kind: "message" }) }),
-        }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ sendMessage: vi.fn().mockResolvedValue({ kind: "message" }) }),
+      };
+    } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("task ID not received");
   });
@@ -177,15 +177,14 @@ describe("makeAskTool", () => {
       id: "task-x",
       status: { state: "working" },
     });
-    vi.mocked(ClientFactory).mockImplementation(
-      () =>
-        ({
-          createFromUrl: vi.fn().mockResolvedValue({
-            sendMessage: mockSendMessage,
-            resubscribeTask: vi.fn().mockReturnValue(asyncEvents()),
-          }),
-        }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessage: mockSendMessage,
+          resubscribeTask: vi.fn().mockReturnValue(asyncEvents()),
+        }),
+      };
+    } as any);
     await handler({});
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -196,14 +195,11 @@ describe("makeAskTool", () => {
 
   it("returns unreachable message on ECONNREFUSED", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    vi.mocked(ClientFactory).mockImplementation(
-      () =>
-        ({
-          createFromUrl: vi
-            .fn()
-            .mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:51001")),
-        }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockRejectedValue(new Error("connect ECONNREFUSED 127.0.0.1:51001")),
+      };
+    } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("unreachable");
     expect(result.content[0].text).toContain("npm run servers");
@@ -211,9 +207,9 @@ describe("makeAskTool", () => {
 
   it("returns generic error for other errors", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockRejectedValue(new Error("unexpected failure")) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockRejectedValue(new Error("unexpected failure")) };
+    } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toBe("Error: unexpected failure");
   });
@@ -252,30 +248,31 @@ describe("makeStartTool", () => {
       id: "task-abc-123",
       status: { state: "submitted" },
     });
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) };
+    } as any);
     const result = await handler({ instruction: "run" });
-    const payload = JSON.parse(result.content[0].text);
-    expect(payload.taskId).toBe("task-abc-123");
-    expect(payload.manifestKey).toBe(AGENT.manifestKey);
+    expect(result.content[0].text).toContain("task-abc-123");
+    const structured = result.structuredContent as { taskId: string; manifestKey: string };
+    expect(structured.taskId).toBe("task-abc-123");
+    expect(structured.manifestKey).toBe(AGENT.manifestKey);
   });
 
   it("returns error message when response is not a task", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     const mockSendMessage = vi.fn().mockResolvedValue({ kind: "message" });
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) };
+    } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("task ID not received");
   });
 
   it("returns unreachable message on ECONNREFUSED", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) };
+    } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("unreachable");
   });
@@ -316,14 +313,13 @@ describe("makeAwaitTool", () => {
       artifacts: [{ artifactId: "a1", parts: [{ kind: "text", text: "done output" }] }],
     });
     const mockResubscribe = vi.fn();
-    vi.mocked(ClientFactory).mockImplementation(
-      () =>
-        ({
-          createFromUrl: vi
-            .fn()
-            .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
-        }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toBe("done output");
     expect(mockResubscribe).not.toHaveBeenCalled();
@@ -337,9 +333,9 @@ describe("makeAwaitTool", () => {
       status: { state: "completed" },
       artifacts: [],
     });
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) };
+    } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toBe("Agent completed.");
   });
@@ -359,16 +355,15 @@ describe("makeAwaitTool", () => {
           { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "result" }] } },
         ),
       );
-    vi.mocked(ClientFactory).mockImplementation(
-      () =>
-        ({
-          createFromUrl: vi
-            .fn()
-            .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
-        }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" });
+    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
     expect(result.content[0].text).toBe("partial\nresult");
   });
 
@@ -385,14 +380,13 @@ describe("makeAwaitTool", () => {
       const mockResubscribe = vi.fn();
       const captured = captureTools(() => makeAwaitTool(AGENT));
       const h = captured[doveAwaitToolName(AGENT)];
-      vi.mocked(ClientFactory).mockImplementation(
-        () =>
-          ({
-            createFromUrl: vi
-              .fn()
-              .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
-          }) as any,
-      );
+      vi.mocked(ClientFactory).mockImplementation(function () {
+        return {
+          createFromUrl: vi
+            .fn()
+            .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+        };
+      } as any);
       await h({ taskId: "task-123" });
       expect(mockResubscribe).not.toHaveBeenCalled();
     }
@@ -401,9 +395,9 @@ describe("makeAwaitTool", () => {
   it("returns task-not-found message on TaskNotFoundError", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     const mockGetTask = vi.fn().mockRejectedValue(new TaskNotFoundError("task-123"));
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) };
+    } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toContain("task-123");
     expect(result.content[0].text).toContain("not found");
@@ -411,18 +405,18 @@ describe("makeAwaitTool", () => {
 
   it("returns unreachable message on ECONNREFUSED", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")) };
+    } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toContain("unreachable");
   });
 
   it("returns generic error for other errors", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    vi.mocked(ClientFactory).mockImplementation(
-      () => ({ createFromUrl: vi.fn().mockRejectedValue(new Error("db timeout")) }) as any,
-    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return { createFromUrl: vi.fn().mockRejectedValue(new Error("db timeout")) };
+    } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toBe("Error: db timeout");
   });

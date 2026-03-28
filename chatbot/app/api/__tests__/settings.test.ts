@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // ─── Mock settings lib before importing route ─────────────────────────────────
 
-vi.mock("@/lib/settings", () => ({
+vi.mock("@@/lib/settings", () => ({
   readSettings: vi.fn(),
   writeSettings: vi.fn(),
   makeRepository: vi.fn((githubRepo: string) => ({
@@ -31,7 +31,7 @@ beforeEach(() => {
 
 describe("GET /api/settings", () => {
   it("returns 200 with current settings", async () => {
-    const response = await GET();
+    const response = GET();
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -39,7 +39,7 @@ describe("GET /api/settings", () => {
   });
 
   it("response contains version and repositories", async () => {
-    const body = await (await GET()).json();
+    const body = await GET().json();
     expect(body.version).toBe(1);
     expect(Array.isArray(body.repositories)).toBe(true);
   });

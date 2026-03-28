@@ -1,10 +1,15 @@
 #!/bin/bash
-# Pre-commit hook: check format and lint; block commit if issues found.
+# Pre-commit hook: check format, lint, types, tests; block commit if issues found.
 # Claude Code will receive the block reason and must fix before retrying.
 
 set -uo pipefail
 
 cd "$CLAUDE_PROJECT_DIR"
+
+# Read session_id from stdin (Claude Code passes BaseHookInput JSON)
+INPUT=$(cat)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
+FLAG_FILE="${TMPDIR:-/tmp}/dovepaw-tests-verified-${SESSION_ID}"
 
 ERRORS=""
 
@@ -38,4 +43,25 @@ if [ -n "$ERRORS" ]; then
   exit 0
 fi
 
+# --- Test check ---
+TEST_OUTPUT=$(npm run chatbot:test 2>&1)
+TEST_EXIT=$?
+if [ $TEST_EXIT -ne 0 ]; then
+  REASON="Tests are failing. Fix the tests properly — do NOT skip or disable them — stage the changes, then retry the commit.\n\n$TEST_OUTPUT"
+  printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REASON" | jq -Rs .)"
+  exit 0
+fi
+
+# --- Self-reflection gate ---
+# If the session-scoped flag exists, Claude already confirmed tests — allow and consume it.
+if [ -n "$SESSION_ID" ] && [ -f "$FLAG_FILE" ]; then
+  rm -f "$FLAG_FILE"
+  exit 0
+fi
+
+# Block and prompt self-reflection. To bypass after confirming, run:
+#   touch <flag_file>
+# then retry the commit.
+REFLECTION="All checks pass. Ask yourself: did you write or update tests for the behaviour you just changed?\n\n  If not → write the tests, stage them, and retry.\n  If yes → run this command to confirm, then retry the commit:\n\n    touch $FLAG_FILE"
+printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REFLECTION" | jq -Rs .)"
 exit 0

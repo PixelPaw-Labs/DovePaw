@@ -525,10 +525,8 @@ describe("useAgentChat", () => {
     expect(result.current.pendingQueue).toEqual(["second"]);
 
     resolveFirst(makeSseResponse([{ type: "result", content: "ok" }, { type: "done" }]));
-    await waitFor(() => !result.current.isLoading);
-
-    // queued message is sent after first completes
-    expect(fetch).toHaveBeenCalledTimes(2);
+    // Wait for the second fetch to actually be initiated (not just for isLoading to momentarily clear)
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
   });
 
   it("ignores empty or whitespace-only messages", async () => {
