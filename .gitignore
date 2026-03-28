@@ -155,3 +155,4 @@ chatbot/node_modules/
 chatbot/next-env.d.ts
 chatbot/a2a/.ports.json
 .claude/settings.local.json
+.gitnexus
