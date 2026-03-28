@@ -42,14 +42,25 @@ function hasAgentContent(s: AgentSettings): boolean {
 
 // ─── Global Read / Write ──────────────────────────────────────────────────────
 
+function restoreFromBak(bak: string, dest: string): void {
+  if (existsSync(bak)) copyFileSync(bak, dest);
+}
+
 export function readSettings(): GlobalSettings {
   const primary = tryParse(globalSettingsSchema, SETTINGS_FILE);
   const bak = `${SETTINGS_FILE}.bak`;
 
-  if (!primary) return tryParse(globalSettingsSchema, bak) ?? defaultSettings();
+  if (!primary) {
+    const backup = tryParse(globalSettingsSchema, bak);
+    if (backup) restoreFromBak(bak, SETTINGS_FILE);
+    return backup ?? defaultSettings();
+  }
   if (!hasContent(primary)) {
     const backup = tryParse(globalSettingsSchema, bak);
-    if (backup && hasContent(backup)) return backup;
+    if (backup && hasContent(backup)) {
+      restoreFromBak(bak, SETTINGS_FILE);
+      return backup;
+    }
   }
   return primary;
 }
@@ -67,10 +78,17 @@ export function readAgentSettings(agentName: string): AgentSettings {
   const bak = `${file}.bak`;
   const primary = tryParse(agentSettingsSchema, file);
 
-  if (!primary) return tryParse(agentSettingsSchema, bak) ?? defaultAgentSettings();
+  if (!primary) {
+    const backup = tryParse(agentSettingsSchema, bak);
+    if (backup) restoreFromBak(bak, file);
+    return backup ?? defaultAgentSettings();
+  }
   if (!hasAgentContent(primary)) {
     const backup = tryParse(agentSettingsSchema, bak);
-    if (backup && hasAgentContent(backup)) return backup;
+    if (backup && hasAgentContent(backup)) {
+      restoreFromBak(bak, file);
+      return backup;
+    }
   }
   return primary;
 }
