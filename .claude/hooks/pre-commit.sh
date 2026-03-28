@@ -6,7 +6,7 @@ set -uo pipefail
 
 cd "$CLAUDE_PROJECT_DIR"
 
-# Read session_id from stdin (Claude Code passes BaseHookInput JSON)
+# Claude Code passes BaseHookInput JSON on stdin; extract session_id from it
 INPUT=$(cat)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 FLAG_FILE="${TMPDIR:-/tmp}/dovepaw-tests-verified-${SESSION_ID}"
