@@ -87,7 +87,7 @@ export const AGENTS: AgentDef[] = [
     displayName: "Release Log Sentinel",
     description:
       "Monitor Claude Code releases: fetch and analyze release notes, check for JSONL format " +
-      "changes that could break tail-claude-gui, and create GitHub issues for new breaking " +
+      "changes that could break claude-code-trace, and create GitHub issues for new breaking " +
       "changes. Requires gh CLI authentication.",
     requiredEnvVars: [],
     icon: Radar,
