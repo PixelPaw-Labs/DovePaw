@@ -46,7 +46,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     const { taskId, contextId } = requestContext;
     const instruction = extractInstruction(requestContext.userMessage.parts);
     this.abortController = new AbortController();
-    markProcessing(this.def.manifestKey, this.abortController);
+    markProcessing(this.def.manifestKey, this.abortController, instruction ? "dove" : "scheduled");
 
     consola.start(`Running ${this.def.displayName} sub-agent…`);
 

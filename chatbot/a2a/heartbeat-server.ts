@@ -14,7 +14,7 @@ import type { PortsManifest } from "./lib/base-server.js";
 import { WS_PORT } from "./heartbeat-types.js";
 import type { AgentStatus, StatusMessage } from "./heartbeat-types.js";
 import { getLaunchdStatuses } from "@/lib/launchd";
-import { isProcessing } from "./lib/processing-registry.js";
+import { isProcessing, getProcessingTrigger } from "./lib/processing-registry.js";
 const INTERVAL_MS = 10_000;
 const PING_TIMEOUT_MS = 5_000;
 
@@ -53,7 +53,12 @@ async function checkAll(manifest: PortsManifest): Promise<Record<string, AgentSt
   return Object.fromEntries(
     keys.map((k, i) => [
       k,
-      { ...pingResults[i], launchd: launchdMap[k] ?? null, processing: isProcessing(k) },
+      {
+        ...pingResults[i],
+        launchd: launchdMap[k] ?? null,
+        processing: isProcessing(k),
+        processingTrigger: getProcessingTrigger(k),
+      },
     ]),
   );
 }

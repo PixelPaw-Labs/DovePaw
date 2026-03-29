@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { Settings } from "lucide-react";
 import { createScope, animate } from "animejs";
+import { HeartbeatLine } from "./heartbeat-line";
 import type { AgentDef } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
 import type { AgentStatus, LaunchdStatus } from "@/a2a/heartbeat-types";
@@ -55,16 +56,19 @@ function ScheduleCountdown({ schedule }: { schedule: AgentDef["schedule"] }) {
 function LaunchdBadge({
   launchd,
   processing,
+  processingTrigger,
   schedule,
 }: {
   launchd: LaunchdStatus | null;
   processing: boolean;
+  processingTrigger: "scheduled" | "dove" | null;
   schedule: AgentDef["schedule"];
 }) {
   if (processing)
     return (
-      <span className="text-[9px] text-purple-500/80 uppercase tracking-wide animate-pulse">
-        ● dove running
+      <span className="text-[9px] text-blue-500/80 uppercase tracking-wide flex items-center gap-1.5">
+        <HeartbeatLine />
+        processing{processingTrigger ? ` · ${processingTrigger}` : ""}
       </span>
     );
 
@@ -77,15 +81,6 @@ function LaunchdBadge({
 
   const countdown = <ScheduleCountdown schedule={schedule} />;
 
-  if (launchd.running)
-    return (
-      <span className="flex items-center gap-1.5">
-        <span className="text-[9px] text-blue-500/80 uppercase tracking-wide animate-pulse">
-          ● processing
-        </span>
-        {countdown}
-      </span>
-    );
   return (
     <span className="flex items-center gap-1.5">
       <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">● idle</span>
@@ -115,7 +110,7 @@ export function AgentButton({
   const scope = React.useRef<ReturnType<typeof createScope> | null>(null);
   const Icon = agent.icon;
   const isOnline = status?.online ?? false;
-  const isRunning = (status?.launchd?.running ?? false) || (status?.processing ?? false);
+  const isRunning = status?.processing ?? false;
 
   React.useEffect(() => {
     if (!isRunning) {
@@ -164,6 +159,7 @@ export function AgentButton({
         <LaunchdBadge
           launchd={status?.launchd ?? null}
           processing={status?.processing ?? false}
+          processingTrigger={status?.processingTrigger ?? null}
           schedule={agent.schedule}
         />
       </div>

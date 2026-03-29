@@ -24,6 +24,10 @@ export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
 /** ~/.dovepaw/settings.agents/<agentName>.json — per-agent settings file */
 export const agentSettingsFile = (agentName: string) =>
   join(AGENT_SETTINGS_DIR, `${agentName}.json`);
+/** ~/.dovepaw/workspaces/ — isolated execution workspace roots for all agents */
+export const WORKSPACES_DIR = join(DOVEPAW_DIR, "workspaces");
+/** ~/.dovepaw/workspaces/.{agentName}/ — per-agent workspace root */
+export const agentWorkspaceDir = (agentName: string) => join(WORKSPACES_DIR, `.${agentName}`);
 /** ~/.claude/scheduler — launchd agent scripts, logs, and state */
 export const SCHEDULER_ROOT = join(process.env.HOME!, ".claude/scheduler");
 /** ~/.claude/skills — user skills directory */

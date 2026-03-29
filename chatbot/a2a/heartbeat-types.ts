@@ -10,6 +10,7 @@ const agentStatusSchema = z.object({
   latency: z.number().nullable(),
   launchd: launchdStatusSchema.nullable(),
   processing: z.boolean(),
+  processingTrigger: z.enum(["scheduled", "dove"]).nullable(),
 });
 export const statusMessageSchema = z.object({
   type: z.literal("status"),

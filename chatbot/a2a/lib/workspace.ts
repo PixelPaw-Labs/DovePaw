@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { AGENTS_ROOT } from "@@/lib/paths";
+import { AGENTS_ROOT, agentWorkspaceDir } from "@@/lib/paths";
 
 export interface AgentWorkspace {
   /** Absolute path to the UUID workspace directory. */
@@ -20,14 +20,14 @@ export interface AgentWorkspace {
  *
  * @param agentName      kebab-case agent name, e.g. "get-shit-done"
  * @param agentSourceDir absolute path to the agent's source directory
- * @param workspaceRoot  optional override; defaults to AGENTS_ROOT/.{agentName}
+ * @param workspaceRoot  optional override; defaults to ~/.dovepaw/workspaces/.{agentName}
  */
 export function createAgentWorkspace(
   agentName: string,
   agentSourceDir: string,
   workspaceRoot?: string,
 ): AgentWorkspace {
-  const root = workspaceRoot ?? join(AGENTS_ROOT, `.${agentName}`);
+  const root = workspaceRoot ?? agentWorkspaceDir(agentName);
   const uuid = randomUUID();
   const workspacePath = join(root, uuid);
 

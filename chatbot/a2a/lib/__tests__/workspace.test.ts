@@ -6,6 +6,10 @@ const TMP_ROOT = `/tmp/workspace-test-${process.pid}`;
 
 vi.mock("@@/lib/paths", () => ({
   AGENTS_ROOT: TMP_ROOT,
+  DOVEPAW_DIR: join(TMP_ROOT, ".dovepaw"),
+  WORKSPACES_DIR: join(TMP_ROOT, ".dovepaw", "workspaces"),
+  agentWorkspaceDir: (agentName: string) =>
+    join(TMP_ROOT, ".dovepaw", "workspaces", `.${agentName}`),
 }));
 
 const { createAgentWorkspace, agentSourceDirFromEntry, cloneReposIntoWorkspace } =
@@ -24,7 +28,7 @@ describe("createAgentWorkspace", () => {
     const ws = createAgentWorkspace("my-agent", sourceDir);
 
     expect(existsSync(ws.path)).toBe(true);
-    expect(ws.path.startsWith(join(TMP_ROOT, ".my-agent"))).toBe(true);
+    expect(ws.path.startsWith(join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent"))).toBe(true);
   });
 
   it("uses a custom workspaceRoot when provided", () => {
