@@ -23,6 +23,8 @@ import {
 } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { AGENTS } from "@@/lib/agents";
+import { readSettings } from "@@/lib/settings";
+import { resolveSettingsEnv } from "@/lib/env-resolver";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import {
   makeAskTool,
@@ -146,6 +148,7 @@ export async function POST(request: Request) {
                   abortController,
                   env: {
                     ...process.env, // Pass through all env vars so tools can read their configs
+                    ...resolveSettingsEnv(undefined, readSettings(), []), // Global settings env vars override process.env
                   },
                   promptSuggestions: true,
                   cwd: AGENTS_ROOT,
