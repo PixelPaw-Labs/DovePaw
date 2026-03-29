@@ -46,7 +46,7 @@ function toolMeta(tool: ToolCall): {
       return {
         icon: <Terminal className="w-3 h-3" />,
         label: "Bash",
-        detail: cmd.length > 40 ? cmd.slice(0, 40) + "…" : cmd,
+        detail: cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd,
         tooltip: cmd,
       };
     }
@@ -57,7 +57,7 @@ function toolMeta(tool: ToolCall): {
       return {
         icon: <Search className="w-3 h-3" />,
         label: name,
-        detail: pattern.length > 40 ? pattern.slice(0, 40) + "…" : pattern,
+        detail: pattern.length > 80 ? pattern.slice(0, 80) + "…" : pattern,
         tooltip: pattern,
       };
     }
@@ -67,7 +67,7 @@ function toolMeta(tool: ToolCall): {
       return {
         icon: <Wrench className="w-3 h-3" />,
         label: name,
-        detail: str.length > 40 ? str.slice(0, 40) + "…" : str,
+        detail: str.length > 80 ? str.slice(0, 80) + "…" : str,
         tooltip: str,
       };
     }
@@ -156,11 +156,11 @@ export function ToolCallList({
             {detail && (
               <>
                 {isActive ? (
-                  <Shimmer as="span" className="font-normal truncate max-w-[200px]">
+                  <Shimmer as="span" className="font-normal truncate max-w-[400px]">
                     {`· ${detail}`}
                   </Shimmer>
                 ) : (
-                  <span className="text-muted-foreground font-normal truncate max-w-[200px]">
+                  <span className="text-muted-foreground font-normal truncate max-w-[400px]">
                     · {detail}
                   </span>
                 )}

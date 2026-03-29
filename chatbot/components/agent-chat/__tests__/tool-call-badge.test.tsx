@@ -25,6 +25,8 @@ vi.mock("@/components/ui/tooltip", () => ({
 const bashTool: ToolCall = { name: "Bash", input: { command: "echo hello" } };
 const skillTool: ToolCall = { name: "Skill", input: { skill: "cloudflare-traffic-investigator" } };
 
+const LONG_CMD = "a".repeat(100); // 100 chars — exceeds 80-char limit
+
 describe("ToolCallList — isActive shimmer", () => {
   it("renders label as plain text when isActive is false (default)", () => {
     render(<ToolCallList toolCalls={[bashTool]} />);
@@ -72,5 +74,45 @@ describe("ToolCallList — isActive shimmer", () => {
   it("no Shimmers when multiple tools and isActive is false", () => {
     render(<ToolCallList toolCalls={[bashTool, skillTool]} isActive={false} />);
     expect(screen.queryAllByTestId("shimmer")).toHaveLength(0);
+  });
+});
+
+describe("ToolCallList — detail truncation at 80 chars", () => {
+  it("shows full detail when command is within 80 chars", () => {
+    const tool: ToolCall = { name: "Bash", input: { command: "echo hello" } };
+    render(<ToolCallList toolCalls={[tool]} />);
+    expect(screen.getAllByText(/echo hello/).length).toBeGreaterThan(0);
+  });
+
+  it("truncates Bash command at 80 chars with ellipsis", () => {
+    const tool: ToolCall = { name: "Bash", input: { command: LONG_CMD } };
+    render(<ToolCallList toolCalls={[tool]} />);
+    const detail = screen.getByText(/^·/);
+    expect(detail.textContent).toContain("…");
+    // detail text (excluding "· ") should be 80 chars + "…"
+    const trimmed = (detail.textContent ?? "").replace(/^·\s*/, "");
+    expect(trimmed).toHaveLength(81); // 80 + "…"
+  });
+
+  it("does not truncate commands exactly 80 chars long", () => {
+    const cmd80 = "b".repeat(80);
+    const tool: ToolCall = { name: "Bash", input: { command: cmd80 } };
+    render(<ToolCallList toolCalls={[tool]} />);
+    const detail = screen.getByText(/^·/);
+    expect(detail.textContent).not.toContain("…");
+  });
+
+  it("truncates Grep pattern at 80 chars", () => {
+    const tool: ToolCall = { name: "Grep", input: { pattern: LONG_CMD } };
+    render(<ToolCallList toolCalls={[tool]} />);
+    const detail = screen.getByText(/^·/);
+    expect(detail.textContent).toContain("…");
+  });
+
+  it("truncates default tool first string value at 80 chars", () => {
+    const tool: ToolCall = { name: "Skill", input: { skill: LONG_CMD } };
+    render(<ToolCallList toolCalls={[tool]} />);
+    const detail = screen.getByText(/^·/);
+    expect(detail.textContent).toContain("…");
   });
 });
