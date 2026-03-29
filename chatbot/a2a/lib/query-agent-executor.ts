@@ -6,7 +6,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
-import { AGENTS_ROOT, agentLogDir, agentStateDir } from "@/lib/paths";
+import { AGENTS_ROOT, agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
@@ -135,8 +135,8 @@ export class QueryAgentExecutor implements AgentExecutor {
                 },
                 additionalDirectories: [
                   LAUNCH_AGENTS_DIR,
-                  agentLogDir(this.def.name),
-                  agentStateDir(this.def.name),
+                  agentPersistentLogDir(this.def.name),
+                  agentPersistentStateDir(this.def.name),
                 ],
                 allowedTools: [
                   `mcp__agents__${START_SCRIPT_TOOL}`,

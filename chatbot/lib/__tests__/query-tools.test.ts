@@ -23,8 +23,8 @@ vi.mock("@/a2a/lib/base-server", () => ({
 
 vi.mock("@/lib/paths", () => ({
   AGENTS_ROOT: "/mock/agents",
-  SCHEDULER_LOGS: "/mock/logs",
-  SCHEDULER_STATE: "/mock/state",
+  DOVEPAW_AGENT_LOGS: "/mock/logs",
+  DOVEPAW_AGENT_STATE: "/mock/state",
 }));
 
 vi.mock("@@/lib/paths", () => ({

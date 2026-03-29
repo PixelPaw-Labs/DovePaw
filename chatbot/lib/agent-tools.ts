@@ -16,7 +16,12 @@ import {
   getAgentLogs,
 } from "@/lib/launchd";
 import type { AgentDef } from "@@/lib/agents";
-import { agentEntryPath, agentLogDir, agentStateDir, plistFilePath } from "@/lib/paths";
+import {
+  agentEntryPath,
+  agentPersistentLogDir,
+  agentPersistentStateDir,
+  plistFilePath,
+} from "@/lib/paths";
 import { z } from "zod";
 import { startScript, awaitScript, type AgentConfig } from "@/a2a/lib/spawn";
 
@@ -232,8 +237,8 @@ You are responsible for installing and uninstalling ONLY yourself (\`${agent.lab
 |---|---|
 | Plist | \`${plistFilePath(agent.label)}\` |
 | Source | \`${agentEntryPath(agent.entryPath)}\` |
-| Logs | \`${agentLogDir(agent.name)}\` |
-| State | \`${agentStateDir(agent.name)}\` |
+| Logs | \`${agentPersistentLogDir(agent.name)}\` |
+| State | \`${agentPersistentStateDir(agent.name)}\` |
 
 Do NOT read, modify, or reference any files outside these paths.
 

@@ -7,15 +7,15 @@ import { DOVEPAW_DIR } from "@@/lib/paths";
 export {
   AGENTS_ROOT,
   DOVEPAW_DIR,
+  DOVEPAW_AGENT_LOGS,
+  DOVEPAW_AGENT_STATE,
   SCHEDULER_ROOT,
-  SCHEDULER_LOGS,
-  SCHEDULER_STATE,
   SETTINGS_FILE,
   AGENT_SETTINGS_DIR,
   agentSettingsFile,
   agentEntryPath,
-  agentLogDir,
-  agentStateDir,
+  agentPersistentLogDir,
+  agentPersistentStateDir,
   plistFilePath,
 } from "@@/lib/paths";
 

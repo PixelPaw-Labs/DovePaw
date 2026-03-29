@@ -1,6 +1,5 @@
-import { join } from "node:path";
 import type { AgentDef } from "./agents";
-import { A2A_TRIGGER_SCRIPT, SCHEDULER_LOGS } from "./paths";
+import { A2A_TRIGGER_SCRIPT, agentPersistentLogDir } from "./paths";
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -58,7 +57,7 @@ export function plistLabel(config: AgentDef): string {
 
 export function generatePlist(config: AgentDef, home: string): string {
   const nodePath = `${home}/.asdf/shims/node`;
-  const logDir = join(SCHEDULER_LOGS, `.${config.name}`);
+  const logDir = agentPersistentLogDir(config.name);
   const runAtLoad = config.runAtLoad ?? false;
 
   // Use zsh login shell + explicitly source asdf.sh to ensure ~/.asdf/shims

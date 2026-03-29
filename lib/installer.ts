@@ -28,7 +28,7 @@ import {
   SKILLS_DIR,
   SKILLS_ROOT,
   agentDistScript,
-  agentLogDir,
+  agentPersistentLogDir,
   plistFilePath,
   schedulerNodeModule,
   schedulerScript,
@@ -102,7 +102,7 @@ export async function writePlistFile(agent: AgentDef): Promise<void> {
   await mkdir(LAUNCH_AGENTS_DIR, { recursive: true });
   await Promise.all([
     writeFile(plistFilePath(plistLabel(agent)), generatePlist(agent, HOME)),
-    mkdir(agentLogDir(agent.name), { recursive: true }),
+    mkdir(agentPersistentLogDir(agent.name), { recursive: true }),
   ]);
 }
 
@@ -206,7 +206,7 @@ export async function loadAgent(agent: AgentDef, uid: string): Promise<void> {
 
 /** Return the last N lines from the most recent log file for an agent. */
 export async function getAgentLogs(agent: AgentDef, lines = 100): Promise<string> {
-  const logDir = agentLogDir(agent.name);
+  const logDir = agentPersistentLogDir(agent.name);
   let files: string[];
   try {
     files = await readdir(logDir);

@@ -14,7 +14,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { AGENTS_ROOT, SCHEDULER_ROOT, SCHEDULER_LOGS, SCHEDULER_STATE } from "@/lib/paths";
+import { AGENTS_ROOT, SCHEDULER_ROOT, DOVEPAW_AGENT_LOGS, DOVEPAW_AGENT_STATE } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { AGENTS } from "@@/lib/agents";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -77,7 +77,7 @@ After editing any source file in \`${AGENTS_ROOT}/\`, always ask the user: "Do y
 **launchd global management:**
 
 Scripts location: ${SCHEDULER_ROOT}/
-Logs location:    ${SCHEDULER_LOGS}/
+Logs location:    ${DOVEPAW_AGENT_LOGS}/
 
 | Task | Command |
 |---|---|
@@ -94,10 +94,10 @@ This directory contains scheduler scripts, logs, and build artifacts. Treat it a
 | Path | Rule |
 |---|---|
 | \`${SCHEDULER_ROOT}/*.mjs\` | READ ONLY — never modify scripts |
-| \`${SCHEDULER_LOGS}/\` | RESTRICTED — may only be modified or deleted with explicit user permission |
+| \`${DOVEPAW_AGENT_LOGS}/\` | RESTRICTED — may only be modified or deleted with explicit user permission |
 | \`${SCHEDULER_ROOT}/node_modules/\` | READ ONLY — never modify |
 | \`${SCHEDULER_ROOT}/*.json\` (except state/) | READ ONLY — never modify config or output files |
-| \`${SCHEDULER_STATE}/\` | RESTRICTED — may only be modified with explicit user permission |
+| \`${DOVEPAW_AGENT_STATE}/\` | RESTRICTED — may only be modified with explicit user permission |
 
 The \`state/\` folder contains lock, processed files and \`dag-store.lbug\` (a LadybugDB graph database tracking ticket/task DAG state).
 - You MAY query \`dag-store.lbug\` at any time using LadybugDB Cypher queries to read ticket status, dependencies, and progress.

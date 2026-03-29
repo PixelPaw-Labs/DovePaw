@@ -28,21 +28,22 @@ export const agentSettingsFile = (agentName: string) =>
 export const WORKSPACES_DIR = join(DOVEPAW_DIR, "workspaces");
 /** ~/.dovepaw/workspaces/.{agentName}/ — per-agent workspace root */
 export const agentWorkspaceDir = (agentName: string) => join(WORKSPACES_DIR, `.${agentName}`);
-/** ~/.dovepaw/agents/state — persistent agent state root (survives agent_logs cleanup) */
+/** ~/.dovepaw/agents/state — persistent agent state root */
 export const DOVEPAW_AGENT_STATE = join(DOVEPAW_DIR, "agents/state");
 /** ~/.dovepaw/agents/state/.<agentName> — persistent per-agent state directory */
 export const agentPersistentStateDir = (agentName: string) =>
   join(DOVEPAW_AGENT_STATE, `.${agentName}`);
-/** ~/.claude/scheduler — launchd agent scripts, logs, and state */
+/** ~/.dovepaw/agents/logs — persistent agent log root */
+export const DOVEPAW_AGENT_LOGS = join(DOVEPAW_DIR, "agents/logs");
+/** ~/.dovepaw/agents/logs/.<agentName> — persistent per-agent log directory */
+export const agentPersistentLogDir = (agentName: string) =>
+  join(DOVEPAW_AGENT_LOGS, `.${agentName}`);
+/** ~/.claude/scheduler — launchd agent scripts and native node_modules */
 export const SCHEDULER_ROOT = join(process.env.HOME!, ".claude/scheduler");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 /** DovePaw/skills — project skills directory */
 export const SKILLS_DIR = join(resolveAgentsRoot(), "skills");
-/** ~/.claude/scheduler/logs */
-export const SCHEDULER_LOGS = join(SCHEDULER_ROOT, "logs");
-/** ~/.claude/scheduler/state */
-export const SCHEDULER_STATE = join(SCHEDULER_ROOT, "state");
 /** ~/Library/LaunchAgents — macOS launchd user agents directory */
 export const LAUNCH_AGENTS_DIR = join(process.env.HOME!, "Library/LaunchAgents");
 /** Resolve an agent's entry point to an absolute path under agents/ root */
@@ -55,10 +56,6 @@ export const agentDistScript = (agentName: string) => join(AGENTS_DIST, `${agent
 export const schedulerScript = (agentName: string) => join(SCHEDULER_ROOT, `${agentName}.mjs`);
 /** ~/.claude/scheduler/node_modules/<pkg> */
 export const schedulerNodeModule = (pkg: string) => join(SCHEDULER_ROOT, "node_modules", pkg);
-/** ~/.claude/scheduler/logs/.<agentName> — agent log directory */
-export const agentLogDir = (agentName: string) => join(SCHEDULER_LOGS, `.${agentName}`);
-/** ~/.claude/scheduler/state/.<agentName> — agent state directory */
-export const agentStateDir = (agentName: string) => join(SCHEDULER_STATE, `.${agentName}`);
 /** ~/Library/LaunchAgents/<label>.plist */
 export const plistFilePath = (label: string) => join(LAUNCH_AGENTS_DIR, `${label}.plist`);
 /** ~/.claude/scheduler/a2a-trigger.mjs — compiled A2A trigger script used by all launchd plists */
