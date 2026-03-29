@@ -17,7 +17,7 @@ ERRORS=""
 FMT_OUTPUT=$(npm run fmt:check 2>&1) || {
   ERRORS=$(cat <<EOF
 Format issues found. Run: npm run fmt
-⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
 Then retry the commit in another Bash tool call.
 
 $FMT_OUTPUT
@@ -40,7 +40,7 @@ EOF
   else
     ERRORS=$(cat <<EOF
 Lint issues found. Fix each issue at the root cause — do NOT add eslint-disable comments.
-⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
 Then retry the commit in another Bash tool call.
 
 $LINT_OUTPUT
@@ -62,7 +62,7 @@ EOF
   else
     ERRORS=$(cat <<EOF
 TypeScript errors found. Fix all type errors at the root cause.
-⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
 Then retry the commit in another Bash tool call.
 
 $TSC_OUTPUT
@@ -82,7 +82,7 @@ TEST_EXIT=$?
 if [ $TEST_EXIT -ne 0 ]; then
   REASON=$(cat <<EOF
 Tests are failing. Fix the tests properly — do NOT skip or disable them.
-⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
 Then retry the commit in another Bash tool call.
 
 $TEST_OUTPUT
