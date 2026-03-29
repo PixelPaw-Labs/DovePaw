@@ -52,17 +52,16 @@ async function tryExec(cmd: string): Promise<void> {
   }
 }
 
-/** Copy compiled .mjs to ~/.claude/scheduler and make it executable. */
+/** Copy compiled .mjs to ~/.dovepaw/cron and make it executable. */
 export async function deployAgentScript(agentName: string): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   await copyFile(agentDistScript(agentName), schedulerScript(agentName));
   await chmod(schedulerScript(agentName), 0o755);
 }
 
-/** Copy compiled a2a-trigger.mjs to ~/.claude/scheduler and make it executable.
+/** Copy compiled a2a-trigger.mjs to ~/.dovepaw/cron and make it executable.
  *  Runs npm run build first if the compiled output is missing.
- *  Also copies @a2a-js/sdk and its dependency uuid to the scheduler
- *  node_modules — same pattern as @ladybugdb/core. */
+ *  Also copies @a2a-js/sdk and its dependency uuid to cron/node_modules. */
 export async function deployTriggerScript(): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   const src = join(AGENTS_DIST, "a2a-trigger.mjs");
@@ -78,7 +77,7 @@ export async function deployTriggerScript(): Promise<void> {
 
 /**
  * Copy native addon packages (those that can't be bundled) from DovePaw/node_modules
- * into ~/.claude/scheduler/node_modules.
+ * into ~/.dovepaw/cron/node_modules.
  */
 export async function copyNativePackages(packages: string[]): Promise<void> {
   await Promise.all(

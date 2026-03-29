@@ -38,8 +38,8 @@ export const DOVEPAW_AGENT_LOGS = join(DOVEPAW_DIR, "agents/logs");
 /** ~/.dovepaw/agents/logs/.<agentName> — persistent per-agent log directory */
 export const agentPersistentLogDir = (agentName: string) =>
   join(DOVEPAW_AGENT_LOGS, `.${agentName}`);
-/** ~/.claude/scheduler — launchd agent scripts and native node_modules */
-export const SCHEDULER_ROOT = join(process.env.HOME!, ".claude/scheduler");
+/** ~/.dovepaw/cron — launchd agent scripts and native node_modules */
+export const SCHEDULER_ROOT = join(DOVEPAW_DIR, "cron");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 /** DovePaw/skills — project skills directory */
@@ -52,11 +52,11 @@ export const agentEntryPath = (entryPath: string) => join(AGENTS_ROOT, entryPath
 export const agentNodeModule = (pkg: string) => join(AGENTS_ROOT, "node_modules", pkg);
 /** DovePaw/dist/<agentName>.mjs — compiled agent script */
 export const agentDistScript = (agentName: string) => join(AGENTS_DIST, `${agentName}.mjs`);
-/** ~/.claude/scheduler/<agentName>.mjs — deployed agent script */
+/** ~/.dovepaw/cron/<agentName>.mjs — deployed agent script */
 export const schedulerScript = (agentName: string) => join(SCHEDULER_ROOT, `${agentName}.mjs`);
-/** ~/.claude/scheduler/node_modules/<pkg> */
+/** ~/.dovepaw/cron/node_modules/<pkg> */
 export const schedulerNodeModule = (pkg: string) => join(SCHEDULER_ROOT, "node_modules", pkg);
 /** ~/Library/LaunchAgents/<label>.plist */
 export const plistFilePath = (label: string) => join(LAUNCH_AGENTS_DIR, `${label}.plist`);
-/** ~/.claude/scheduler/a2a-trigger.mjs — compiled A2A trigger script used by all launchd plists */
+/** ~/.dovepaw/cron/a2a-trigger.mjs — compiled A2A trigger script used by all launchd plists */
 export const A2A_TRIGGER_SCRIPT = join(SCHEDULER_ROOT, "a2a-trigger.mjs");
