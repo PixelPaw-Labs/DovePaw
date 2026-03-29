@@ -156,5 +156,8 @@ state/
 chatbot/.next/
 chatbot/node_modules/
 chatbot/next-env.d.ts
-chatbot/a2a/.ports.json
 .gitnexus
+
+# Electron build artifacts
+electron/.dist/
+electron/release/

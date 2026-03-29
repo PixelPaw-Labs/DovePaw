@@ -22,8 +22,8 @@ describe("paths", () => {
     expect(TSX_BIN).toContain("tsx");
   });
 
-  it("PORTS_FILE is inside chatbot/a2a/", () => {
-    expect(PORTS_FILE).toContain("a2a");
+  it("PORTS_FILE is inside ~/.dovepaw/", () => {
+    expect(PORTS_FILE).toContain(".dovepaw");
     expect(basename(PORTS_FILE)).toBe(".ports.json");
   });
 });

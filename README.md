@@ -372,8 +372,7 @@ npm run chatbot:dev:all
 | Variable      | Example                         | Description                               |
 | ------------- | ------------------------------- | ----------------------------------------- |
 | `REPO_LIST`   | `/path/to/repo1:/path/to/repo2` | Repos to fetch before analysis            |
-| `PIR_DOMAIN`  | `company.com`                   | Cloudflare domain for traffic correlation |
-| `PIR_ZONE_ID` | `abc123`                        | Cloudflare zone ID                        |
+| `CF_DOMAIN_ZONE` | `domain:zone_id`                        | Cloudflare domain:zone ID                        |
 
 ### Release Log Sentinel
 

@@ -16,7 +16,11 @@
     "chatbot:start": "next start chatbot -p 7473",
     "chatbot:test": "vitest run --root chatbot",
     "agents:test": "vitest run --config agents/vitest.config.ts",
-    "chatbot:dev:all": "concurrently --kill-others-on-fail --names \"a2a,next\" --prefix-colors \"cyan.bold,magenta.bold\" --prefix \"[{name}]\" \"npm run chatbot:servers\" \"npm run chatbot:dev\""
+    "chatbot:dev:all": "concurrently --kill-others-on-fail --names \"a2a,next\" --prefix-colors \"cyan.bold,magenta.bold\" --prefix \"[{name}]\" \"npm run chatbot:servers\" \"npm run chatbot:dev\"",
+    "electron:icons": "python3 scripts/generate-electron-icons.py",
+    "electron:compile": "tsup --config electron/tsup.config.ts",
+    "electron:dev": "bash scripts/electron-launch.sh",
+    "electron:build": "npm run electron:compile && electron-builder --config electron-builder.config.ts --mac"
   },
   "dependencies": {
     "@a2a-js/sdk": "latest",
@@ -70,6 +74,8 @@
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^4.5.2",
     "concurrently": "^9.2.1",
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
     "jsdom": "^26.1.0",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.56.0",

@@ -9,7 +9,7 @@ export default defineConfig({
   splitting: false,
   external: ["@ladybugdb/core"], // native addon — cannot be bundled
   platform: "node",
-  target: "node22",
+  target: "node24",
   banner: { js: "#!/usr/bin/env node" },
   outExtension: () => ({ js: ".mjs" }),
   clean: true,
