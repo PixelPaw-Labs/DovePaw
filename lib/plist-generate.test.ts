@@ -36,16 +36,15 @@ describe("generatePlist — ProgramArguments", () => {
     expect(plist).not.toContain('"$@"');
   });
 
-  it("sources the env bootstrap script if present", () => {
+  it("does not source the env script (settings resolved at runtime by QueryAgentExecutor)", () => {
     const plist = generatePlist(BASE, HOME);
-    expect(plist).toContain("test-agent.env.sh");
-    expect(plist).toContain("source");
+    expect(plist).not.toContain("env.sh");
   });
 
-  it("guards env script sourcing with a file existence check", () => {
+  it("runs a2a-trigger.mjs with the agent manifestKey", () => {
     const plist = generatePlist(BASE, HOME);
-    // && is XML-escaped to &amp;&amp; inside the plist string value
-    expect(plist).toMatch(/\[ -f '.*test-agent\.env\.sh' \] &amp;&amp; source/);
+    expect(plist).toContain("a2a-trigger.mjs");
+    expect(plist).toContain(BASE.manifestKey);
   });
 });
 

@@ -21,7 +21,9 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import type { AgentDef } from "./agents";
 import {
+  A2A_TRIGGER_SCRIPT,
   AGENTS_ROOT,
+  AGENTS_DIST,
   LAUNCH_AGENTS_DIR,
   SKILLS_DIR,
   SKILLS_ROOT,
@@ -57,6 +59,14 @@ export async function deployAgentScript(agentName: string): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   await copyFile(agentDistScript(agentName), schedulerScript(agentName));
   await chmod(schedulerScript(agentName), 0o755);
+}
+
+/** Copy compiled a2a-trigger.mjs to ~/.claude/scheduler and make it executable. */
+export async function deployTriggerScript(): Promise<void> {
+  await mkdir(SCHEDULER_ROOT, { recursive: true });
+  const src = join(AGENTS_DIST, "a2a-trigger.mjs");
+  await copyFile(src, A2A_TRIGGER_SCRIPT);
+  await chmod(A2A_TRIGGER_SCRIPT, 0o755);
 }
 
 /** Read settings and write the agent's env bootstrap script. */
@@ -186,6 +196,7 @@ export async function installAgent(
 ): Promise<void> {
   await Promise.all([
     deployAgentScript(agent.name),
+    deployTriggerScript(),
     writeEnvScript(agent),
     copyNativePackages(nativePackages),
   ]);

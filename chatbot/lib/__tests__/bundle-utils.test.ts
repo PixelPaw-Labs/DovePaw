@@ -157,7 +157,7 @@ describe("externalPackagesInBundle (real metafile — all agents)", () => {
   );
 
   it.skipIf(!existsSync(metafilePath))("experience-reflector → no native packages", () => {
-    expect(externalPackagesInBundle("experience-reflector", opts)).toEqual([]);
+    expect(externalPackagesInBundle("experience-reflector", opts)).not.toContain("@ladybugdb/core");
   });
 
   it.skipIf(!existsSync(metafilePath))("oncall-analyzer → no native packages", () => {

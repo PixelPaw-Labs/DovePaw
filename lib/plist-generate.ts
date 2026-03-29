@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { AgentDef } from "./agents";
-import { SCHEDULER_ROOT, SCHEDULER_LOGS } from "./paths";
+import { A2A_TRIGGER_SCRIPT, SCHEDULER_LOGS } from "./paths";
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -58,8 +58,6 @@ export function plistLabel(config: AgentDef): string {
 
 export function generatePlist(config: AgentDef, home: string): string {
   const nodePath = `${home}/.asdf/shims/node`;
-  const scriptPath = join(SCHEDULER_ROOT, `${config.name}.mjs`);
-  const envScriptPath = join(SCHEDULER_ROOT, `${config.name}.env.sh`);
   const logDir = join(SCHEDULER_LOGS, `.${config.name}`);
   const runAtLoad = config.runAtLoad ?? false;
 
@@ -67,7 +65,7 @@ export function generatePlist(config: AgentDef, home: string): string {
   // is on PATH (login shell alone doesn't source .zshrc in launchd context).
   const asdfSh = "/opt/homebrew/opt/asdf/libexec/asdf.sh";
   const shellCmd = escapeXml(
-    `[ -f '${asdfSh}' ] && . '${asdfSh}'; [ -f '${envScriptPath}' ] && source '${envScriptPath}'; exec '${nodePath}' '${scriptPath}'`,
+    `[ -f '${asdfSh}' ] && . '${asdfSh}'; exec '${nodePath}' '${A2A_TRIGGER_SCRIPT}' '${config.manifestKey}'`,
   );
 
   const sections: string[] = [];
