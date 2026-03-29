@@ -1,7 +1,7 @@
 /**
  * Chat API route — Dove (Claude Agent SDK) → ask/start/await tools → A2A server → query() sub-agent.
  *
- * Ports are read from a2a/.ports.json written by `npm run servers`.
+ * Ports are read from ~/.dovepaw/.ports.json written by `npm run servers`.
  * If the manifest is absent or stale the tools return a helpful message.
  *
  * Flow:
@@ -14,7 +14,13 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { AGENTS_ROOT, SCHEDULER_ROOT, DOVEPAW_AGENT_LOGS, DOVEPAW_AGENT_STATE } from "@/lib/paths";
+import {
+  AGENTS_ROOT,
+  SCHEDULER_ROOT,
+  DOVEPAW_AGENT_LOGS,
+  DOVEPAW_AGENT_STATE,
+  PORTS_FILE,
+} from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { AGENTS } from "@@/lib/agents";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -59,8 +65,8 @@ Some examples:
 
 Trust your instincts. If something feels lazy or hallucinated, push back. You are the last line of defence before the user sees the result.
 
-Agents run on dynamically allocated ports discovered from a2a/.ports.json.
-If a tool reports servers are not running, tell the user to run: npm run servers (in agents/chatbot/).
+Agents run on dynamically allocated ports discovered from ${PORTS_FILE}.
+If a tool reports servers are not running, tell the user to run: npm run servers.
 
 **How changes work — codebase is the source of truth:**
 
