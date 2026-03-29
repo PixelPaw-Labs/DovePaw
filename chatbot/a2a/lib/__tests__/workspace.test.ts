@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, readlinkSync, rmSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const TMP_ROOT = `/tmp/workspace-test-${process.pid}`;
@@ -8,8 +8,7 @@ vi.mock("@@/lib/paths", () => ({
   AGENTS_ROOT: TMP_ROOT,
   DOVEPAW_DIR: join(TMP_ROOT, ".dovepaw"),
   WORKSPACES_DIR: join(TMP_ROOT, ".dovepaw", "workspaces"),
-  agentWorkspaceDir: (agentName: string) =>
-    join(TMP_ROOT, ".dovepaw", "workspaces", `.${agentName}`),
+  agentWorkspaceDir: (alias: string) => join(TMP_ROOT, ".dovepaw", "workspaces", `.${alias}`),
 }));
 
 const { createAgentWorkspace, agentSourceDirFromEntry, cloneReposIntoWorkspace } =
@@ -21,14 +20,24 @@ describe("createAgentWorkspace", () => {
   beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
-  it("creates the workspace directory under the default root", () => {
+  it("parent dir uses full agent name", () => {
     const sourceDir = join(TMP_ROOT, "src", "my-agent");
     mkdirSync(sourceDir, { recursive: true });
 
-    const ws = createAgentWorkspace("my-agent", sourceDir);
+    const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
 
     expect(existsSync(ws.path)).toBe(true);
     expect(ws.path.startsWith(join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent"))).toBe(true);
+  });
+
+  it("workspace folder name is {alias}-{shortId}", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+    const folderName = basename(ws.path);
+
+    expect(folderName).toMatch(/^ma-[0-9a-f]{8}$/);
   });
 
   it("uses a custom workspaceRoot when provided", () => {
@@ -36,30 +45,30 @@ describe("createAgentWorkspace", () => {
     const sourceDir = join(TMP_ROOT, "src", "my-agent");
     mkdirSync(sourceDir, { recursive: true });
 
-    const ws = createAgentWorkspace("my-agent", sourceDir, customRoot);
+    const ws = createAgentWorkspace("my-agent", "ma", sourceDir, customRoot);
 
     expect(ws.path.startsWith(customRoot)).toBe(true);
     expect(existsSync(ws.path)).toBe(true);
   });
 
-  it("creates a symlink named source_{agentName} pointing to agentSourceDir", () => {
+  it("creates a symlink named source_{alias} pointing to agentSourceDir", () => {
     const sourceDir = join(TMP_ROOT, "src", "my-agent");
     mkdirSync(sourceDir, { recursive: true });
 
-    const ws = createAgentWorkspace("my-agent", sourceDir);
-    const symlinkPath = join(ws.path, "source_my-agent");
+    const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+    const symlinkPath = join(ws.path, "source_ma");
 
     expect(existsSync(symlinkPath)).toBe(true);
     expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
     expect(readlinkSync(symlinkPath)).toBe(sourceDir);
   });
 
-  it("each call produces a unique workspace path (UUID-based)", () => {
+  it("each call produces a unique workspace path", () => {
     const sourceDir = join(TMP_ROOT, "src", "my-agent");
     mkdirSync(sourceDir, { recursive: true });
 
-    const ws1 = createAgentWorkspace("my-agent", sourceDir);
-    const ws2 = createAgentWorkspace("my-agent", sourceDir);
+    const ws1 = createAgentWorkspace("my-agent", "ma", sourceDir);
+    const ws2 = createAgentWorkspace("my-agent", "ma", sourceDir);
 
     expect(ws1.path).not.toBe(ws2.path);
 
@@ -72,7 +81,7 @@ describe("createAgentWorkspace", () => {
       const sourceDir = join(TMP_ROOT, "src", "my-agent");
       mkdirSync(sourceDir, { recursive: true });
 
-      const ws = createAgentWorkspace("my-agent", sourceDir);
+      const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
       expect(existsSync(ws.path)).toBe(true);
 
       ws.cleanup();
@@ -84,7 +93,7 @@ describe("createAgentWorkspace", () => {
       const sourceDir = join(TMP_ROOT, "src", "my-agent");
       mkdirSync(sourceDir, { recursive: true });
 
-      const ws = createAgentWorkspace("my-agent", sourceDir);
+      const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
       ws.cleanup();
       expect(() => ws.cleanup()).not.toThrow();
     });

@@ -51,6 +51,7 @@ import type { AgentDef } from "@@/lib/agents";
 
 const AGENT: AgentDef = {
   name: "test-agent",
+  alias: "ta",
   entryPath: "agents/test-agent/main.ts",
   displayName: "Test Agent",
   label: "Claude Code Agent - Test Agent",

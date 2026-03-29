@@ -85,7 +85,11 @@ export class QueryAgentExecutor implements AgentExecutor {
     try {
       // Create an isolated workspace for this entire execution — used as cwd for
       // both the query() sub-agent and the agent script spawned by run_script.
-      workspace = createAgentWorkspace(this.def.name, agentSourceDirFromEntry(this.def.entryPath));
+      workspace = createAgentWorkspace(
+        this.def.name,
+        this.def.alias,
+        agentSourceDirFromEntry(this.def.entryPath),
+      );
 
       // Clone each assigned repo into the workspace and remap the repos env var
       // from GitHub slugs to local cloned paths.

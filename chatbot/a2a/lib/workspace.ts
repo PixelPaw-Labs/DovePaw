@@ -15,24 +15,26 @@ export interface AgentWorkspace {
  * Create an isolated workspace directory for a single agent script execution.
  *
  * Structure:
- *   {workspaceRoot}/{UUID}/
- *     └── source_{agentName}  ->  agentSourceDir  (symlink)
+ *   {workspaceRoot}/{alias}-{shortId}/
+ *     └── source_{alias}  ->  agentSourceDir  (symlink)
  *
- * @param agentName      kebab-case agent name, e.g. "get-shit-done"
+ * @param agentName      kebab-case agent name, e.g. "get-shit-done" — used for the parent dir
+ * @param alias          short alias, e.g. "gsd" — used as the workspace folder prefix
  * @param agentSourceDir absolute path to the agent's source directory
  * @param workspaceRoot  optional override; defaults to ~/.dovepaw/workspaces/.{agentName}
  */
 export function createAgentWorkspace(
   agentName: string,
+  alias: string,
   agentSourceDir: string,
   workspaceRoot?: string,
 ): AgentWorkspace {
   const root = workspaceRoot ?? agentWorkspaceDir(agentName);
-  const uuid = randomUUID();
-  const workspacePath = join(root, uuid);
+  const shortId = randomUUID().replace(/-/g, "").slice(0, 8);
+  const workspacePath = join(root, `${alias}-${shortId}`);
 
   mkdirSync(workspacePath, { recursive: true });
-  symlinkSync(agentSourceDir, join(workspacePath, `source_${agentName}`));
+  symlinkSync(agentSourceDir, join(workspacePath, `source_${alias}`));
 
   return {
     path: workspacePath,

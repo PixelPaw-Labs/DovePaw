@@ -6,6 +6,8 @@ const TOOL_PREFIX = "yolo";
 export interface AgentDef {
   /** kebab-case identifier — used for file names, plist label suffix, log dirs */
   name: string;
+  /** Short alias used as workspace directory prefix (e.g. "gsd", "zt") */
+  alias: string;
   /** Source entry point relative to agents/ root */
   entryPath: string;
   /** Human-readable display name */
@@ -56,7 +58,7 @@ function defineAgent(input: AgentInput): AgentDef {
 export const AGENTS: AgentDef[] = [
   defineAgent({
     name: "experience-reflector",
-
+    alias: "er",
     displayName: "Experience Reflector",
     description:
       "Reflect on and learn from past Claude Code sessions: fetches the last 24 hours of sessions " +
@@ -70,7 +72,7 @@ export const AGENTS: AgentDef[] = [
   }),
   defineAgent({
     name: "get-shit-done",
-
+    alias: "gsd",
     displayName: "Get Shit Done",
     description:
       "Automated JIRA ticket implementer: discovers sprint tickets, forges implementations in " +
@@ -83,7 +85,7 @@ export const AGENTS: AgentDef[] = [
   }),
   defineAgent({
     name: "release-log-sentinel",
-
+    alias: "rls",
     displayName: "Release Log Sentinel",
     description:
       "Monitor Claude Code releases: fetch and analyze release notes, check for JSONL format " +
@@ -96,7 +98,7 @@ export const AGENTS: AgentDef[] = [
   }),
   defineAgent({
     name: "memory-distiller",
-
+    alias: "md",
     displayName: "Memory Distiller",
     description:
       "Distil and promote common memory patterns across projects into the global ~/.claude/CLAUDE.md. " +
@@ -110,7 +112,7 @@ export const AGENTS: AgentDef[] = [
   }),
   defineAgent({
     name: "oncall-analyzer",
-
+    alias: "oa",
     displayName: "Oncall Analyzer",
     description:
       "Analyze on-call incidents and generate Post Incident Records (PIRs) from observability " +
@@ -127,7 +129,7 @@ export const AGENTS: AgentDef[] = [
   }),
   defineAgent({
     name: "zendesk-triager",
-
+    alias: "zt",
     displayName: "Zendesk Triager",
     description:
       "Investigate Zendesk support tickets by searching configured Slack channels for ticket " +
@@ -143,7 +145,7 @@ export const AGENTS: AgentDef[] = [
   }),
   defineAgent({
     name: "dependabot-merger",
-
+    alias: "dm",
     displayName: "Dependabot Merger",
     description:
       "Review, risk-assess, and merge Dependabot PRs across configured repos. Maps each PR to " +

@@ -5,6 +5,7 @@ import { Brain } from "lucide-react";
 
 const BASE: AgentDef = {
   name: "test-agent",
+  alias: "ta",
   entryPath: "agents/test-agent/index.ts",
   displayName: "Test Agent",
   label: "Claude Code Agent - Test Agent",
