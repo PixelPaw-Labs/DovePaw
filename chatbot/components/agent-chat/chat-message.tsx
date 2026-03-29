@@ -64,7 +64,7 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
                 </MessageResponse>
               ) : null
             ) : (
-              <ToolCallList key={i} toolCalls={[seg.tool]} />
+              <ToolCallList key={i} toolCalls={[seg.tool]} isActive={!!msg.isLoading} />
             ),
           )}
           {!msg.isLoading && msg.role === "assistant" && (

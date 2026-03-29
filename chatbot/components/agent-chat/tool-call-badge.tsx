@@ -1,6 +1,7 @@
 import { diffLines } from "diff";
 import { FileEdit, Terminal, FileText, Search, Wrench } from "lucide-react";
 import { MessageAction, MessageActions, MessageResponse } from "@/components/ai-elements/message";
+import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Sources, SourcesContent, SourcesTrigger } from "@/components/ai-elements/sources";
 import type { ToolCall } from "@/components/hooks/use-messages";
 
@@ -125,7 +126,13 @@ export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
   );
 }
 
-export function ToolCallList({ toolCalls }: { toolCalls: ToolCall[] }) {
+export function ToolCallList({
+  toolCalls,
+  isActive = false,
+}: {
+  toolCalls: ToolCall[];
+  isActive?: boolean;
+}) {
   return (
     <MessageActions className="flex-wrap">
       {toolCalls.map((tool, i) => {
@@ -139,11 +146,25 @@ export function ToolCallList({ toolCalls }: { toolCalls: ToolCall[] }) {
             className="font-mono text-xs h-7 px-2 gap-1.5 cursor-default"
           >
             {icon}
-            <span className="font-medium">{label}</span>
+            {isActive ? (
+              <Shimmer as="span" className="font-medium">
+                {label}
+              </Shimmer>
+            ) : (
+              <span className="font-medium">{label}</span>
+            )}
             {detail && (
-              <span className="text-muted-foreground font-normal truncate max-w-[200px]">
-                · {detail}
-              </span>
+              <>
+                {isActive ? (
+                  <Shimmer as="span" className="font-normal truncate max-w-[200px]">
+                    {`· ${detail}`}
+                  </Shimmer>
+                ) : (
+                  <span className="text-muted-foreground font-normal truncate max-w-[200px]">
+                    · {detail}
+                  </span>
+                )}
+              </>
             )}
           </MessageAction>
         );
