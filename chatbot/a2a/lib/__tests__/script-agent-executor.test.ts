@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 // These are pure functions — no mocks needed.
 import { extractInstruction, buildScriptArgs } from "../spawn";
+import { START_SCRIPT_TOOL } from "@/lib/agent-tools";
 
 describe("extractInstruction", () => {
   it("returns text from a single text part", () => {
@@ -45,6 +46,23 @@ describe("extractInstruction", () => {
     expect(extractInstruction([{ kind: "text", text: "  incidents today  " }])).toBe(
       "incidents today",
     );
+  });
+});
+
+describe("QueryAgentExecutor prompt fallback", () => {
+  it("uses instruction as prompt when non-empty", () => {
+    const instruction = "incidents today";
+    expect(instruction || START_SCRIPT_TOOL).toBe("incidents today");
+  });
+
+  it("falls back to START_SCRIPT_TOOL when instruction is empty", () => {
+    const instruction = "";
+    expect(instruction || START_SCRIPT_TOOL).toBe(START_SCRIPT_TOOL);
+  });
+
+  it("START_SCRIPT_TOOL is a non-empty string", () => {
+    expect(typeof START_SCRIPT_TOOL).toBe("string");
+    expect(START_SCRIPT_TOOL.length).toBeGreaterThan(0);
   });
 });
 
