@@ -15,7 +15,14 @@ ERRORS=""
 
 # --- Format check ---
 FMT_OUTPUT=$(npm run fmt:check 2>&1) || {
-  ERRORS="Format issues found. Run: npm run fmt\n⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>\nThen retry the commit in another Bash tool call.\n\n$FMT_OUTPUT"
+  ERRORS=$(cat <<EOF
+Format issues found. Run: npm run fmt
+⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+Then retry the commit in another Bash tool call.
+
+$FMT_OUTPUT
+EOF
+)
 }
 
 # --- Lint check ---
@@ -23,18 +30,44 @@ LINT_OUTPUT=$(npm run lint 2>&1)
 LINT_EXIT=$?
 if [ $LINT_EXIT -ne 0 ] || echo "$LINT_OUTPUT" | grep -qE "[1-9][0-9]* warnings? "; then
   if [ -n "$ERRORS" ]; then
-    ERRORS="$ERRORS\n\nLint issues:\n$LINT_OUTPUT"
+    ERRORS=$(cat <<EOF
+$ERRORS
+
+Lint issues:
+$LINT_OUTPUT
+EOF
+)
   else
-    ERRORS="Lint issues found. Fix each issue at the root cause — do NOT add eslint-disable comments.\n⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>\nThen retry the commit in another Bash tool call.\n\n$LINT_OUTPUT"
+    ERRORS=$(cat <<EOF
+Lint issues found. Fix each issue at the root cause — do NOT add eslint-disable comments.
+⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+Then retry the commit in another Bash tool call.
+
+$LINT_OUTPUT
+EOF
+)
   fi
 fi
 
 # --- TypeScript check ---
 TSC_OUTPUT=$(npx tsc --noEmit 2>&1) || {
   if [ -n "$ERRORS" ]; then
-    ERRORS="$ERRORS\n\nTypeScript errors:\n$TSC_OUTPUT"
+    ERRORS=$(cat <<EOF
+$ERRORS
+
+TypeScript errors:
+$TSC_OUTPUT
+EOF
+)
   else
-    ERRORS="TypeScript errors found. Fix all type errors at the root cause.\n⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>\nThen retry the commit in another Bash tool call.\n\n$TSC_OUTPUT"
+    ERRORS=$(cat <<EOF
+TypeScript errors found. Fix all type errors at the root cause.
+⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+Then retry the commit in another Bash tool call.
+
+$TSC_OUTPUT
+EOF
+)
   fi
 }
 
@@ -47,7 +80,14 @@ fi
 TEST_OUTPUT=$(npm run chatbot:test 2>&1)
 TEST_EXIT=$?
 if [ $TEST_EXIT -ne 0 ]; then
-  REASON="Tests are failing. Fix the tests properly — do NOT skip or disable them.\n⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>\nThen retry the commit in another Bash tool call.\n\n$TEST_OUTPUT"
+  REASON=$(cat <<EOF
+Tests are failing. Fix the tests properly — do NOT skip or disable them.
+⚠️  STAGE THE FIXED FILES in a SEPARATE Bash tool call: git add <files>
+Then retry the commit in another Bash tool call.
+
+$TEST_OUTPUT
+EOF
+)
   printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REASON" | jq -Rs .)"
   exit 0
 fi
@@ -60,6 +100,17 @@ if [ -n "$SESSION_ID" ] && [ -f "$FLAG_FILE" ]; then
   exit 0
 fi
 
-REFLECTION="All checks pass. Did you write or update tests for the behaviour you just changed?\n\n  If not → write the tests then in a SEPARATE Bash tool call: git add <files>, then retry.\n  If yes → run this in a SEPARATE Bash tool call, then retry the commit in another:\n\n    touch $FLAG_FILE"
+REFLECTION=$(cat <<EOF
+All checks pass. Did you write or update tests for the behaviour you just changed?
+
+  If not → write the tests then in a SEPARATE Bash tool call: git add <files>, then git commit again — the hook will re-ask this question.
+  If yes → run the touch command below in a SEPARATE Bash tool call, then retry the commit in another:
+
+    touch $FLAG_FILE
+
+  NEVER touch the flag file unless you are answering yes to the question above.
+  If you modified any files since the last git commit, run git commit again first — the hook will re-ask this question.
+EOF
+)
 printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$REFLECTION" | jq -Rs .)"
 exit 0
