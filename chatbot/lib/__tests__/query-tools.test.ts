@@ -170,7 +170,7 @@ describe("makeAskTool", () => {
     expect(result.content[0].text).toContain("task ID not received");
   });
 
-  it("uses 'run' as default instruction", async () => {
+  it("uses empty string as default instruction", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     const mockSendMessage = vi.fn().mockResolvedValue({
       kind: "task",
@@ -188,7 +188,7 @@ describe("makeAskTool", () => {
     await handler({});
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: expect.objectContaining({ parts: [{ kind: "text", text: "run" }] }),
+        message: expect.objectContaining({ parts: [{ kind: "text", text: "" }] }),
       }),
     );
   });

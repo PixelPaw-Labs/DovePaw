@@ -168,7 +168,7 @@ export function makeAskTool(agent: AgentDef) {
     doveAskToolName(agent),
     agent.description,
     { instruction: z.string().optional().describe("Optional instruction for the agent") },
-    async ({ instruction = "run" }) => {
+    async ({ instruction = "" }) => {
       const manifest = readPortsManifest();
       if (!manifest) return noServersMessage();
 
@@ -223,7 +223,7 @@ export function makeStartTool(agent: AgentDef) {
     doveStartToolName(agent),
     `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
     { instruction: z.string().optional().describe("Optional instruction for the agent") },
-    async ({ instruction = "run" }) => {
+    async ({ instruction = "" }) => {
       const manifest = readPortsManifest();
       if (!manifest) return noServersMessage();
 

@@ -119,7 +119,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         async (innerMcpServer) => {
           await consumeQueryEvents(
             query({
-              prompt: instruction || "run",
+              prompt: instruction,
               options: {
                 cwd: workspace!.path,
                 env: { ...process.env, ...agentConfig.extraEnv },
