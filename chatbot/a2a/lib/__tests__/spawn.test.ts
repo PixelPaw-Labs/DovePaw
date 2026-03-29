@@ -42,7 +42,13 @@ vi.mock("node:fs", async (importOriginal) => ({
 vi.mock("@/lib/paths", () => ({ TSX_BIN: "/usr/bin/tsx" }));
 
 import { existsSync } from "node:fs";
-import { spawnAndCollect } from "../spawn.js";
+import {
+  spawnAndCollect,
+  startScript,
+  awaitScript,
+  hasPendingScripts,
+  getPendingRunIds,
+} from "../spawn.js";
 
 const BASE_CONFIG = {
   scriptPath: "/agents/test/main.ts",
@@ -50,6 +56,12 @@ const BASE_CONFIG = {
   whatItDoes: "test agent",
   workspacePath: "/tmp/workspace",
 };
+
+// Drain any pending microtasks (e.g. promise .then callbacks)
+async function flushMicrotasks() {
+  await Promise.resolve();
+  await Promise.resolve();
+}
 
 function makeProc() {
   const proc = new EventEmitter() as EventEmitter & {
@@ -65,6 +77,73 @@ function makeProc() {
   mockSpawn.mockReturnValue(proc);
   return proc;
 }
+
+describe("startScript / awaitScript", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("hasPendingScripts is true while a script is in-flight and false after collection", async () => {
+    const proc = makeProc();
+    const { runId } = startScript(BASE_CONFIG, "run");
+
+    expect(hasPendingScripts()).toBe(true);
+    expect(getPendingRunIds()).toContain(runId);
+
+    const awaitPromise = awaitScript(runId);
+    proc.emit("close", 0);
+    await awaitPromise;
+
+    expect(hasPendingScripts()).toBe(false);
+    expect(getPendingRunIds()).not.toContain(runId);
+  });
+
+  it("returns completed and clears the entry when awaitScript is called while the script is running", async () => {
+    const proc = makeProc();
+    const { runId } = startScript(BASE_CONFIG, "run");
+
+    const awaitPromise = awaitScript(runId);
+    proc.emit("close", 0);
+
+    const result = await awaitPromise;
+    expect(result.status).toBe("completed");
+    expect(hasPendingScripts()).toBe(false);
+    expect(getPendingRunIds()).not.toContain(runId);
+  });
+
+  it("returns completed (not not_found) when awaitScript is called after the script already exited", async () => {
+    // This is the race condition the fix addresses: previously the runningScripts
+    // entry was deleted on process exit (.finally()), so a post-exit awaitScript
+    // call returned "not_found". Now the entry transitions to { phase: "done" }
+    // and is only deleted after awaitScript successfully collects the output.
+    const proc = makeProc();
+    const { runId } = startScript(BASE_CONFIG, "run");
+
+    proc.emit("close", 0);
+    await flushMicrotasks(); // let startScript's .then() set { phase: "done" }
+
+    // Entry still tracked — output cached but not yet collected
+    expect(hasPendingScripts()).toBe(true);
+    expect(getPendingRunIds()).toContain(runId);
+
+    const result = await awaitScript(runId);
+    expect(result.status).toBe("completed"); // was "not_found" before the fix
+
+    // Cleaned up only after collection
+    expect(hasPendingScripts()).toBe(false);
+    expect(getPendingRunIds()).not.toContain(runId);
+  });
+
+  it("returns not_found for an unknown runId", async () => {
+    const result = await awaitScript("no-such-id");
+    expect(result.status).toBe("not_found");
+  });
+});
 
 describe("spawnAndCollect", () => {
   beforeEach(() => {

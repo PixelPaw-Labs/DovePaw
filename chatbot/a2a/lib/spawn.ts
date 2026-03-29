@@ -66,8 +66,19 @@ export type AwaitScriptContent =
 /** How long to wait for script completion before returning still_running. */
 export const SCRIPT_POLL_TIMEOUT_MS = 30_000;
 
-/** In-flight script runs: runId → output promise (resolves when process exits). */
-const runningScripts = new Map<string, Promise<string>>();
+type ScriptState =
+  | { phase: "running"; promise: Promise<string> }
+  | { phase: "done"; output: string };
+
+/**
+ * Tracks script runs until the caller collects the result via awaitScript.
+ *
+ * Entries move from "running" → "done" when the process exits, and are
+ * deleted only after awaitScript successfully returns the output. This
+ * prevents awaitScript from returning "not_found" when called after the
+ * script exits but before the result has been collected.
+ */
+const runningScripts = new Map<string, ScriptState>();
 
 export function hasPendingScripts(): boolean {
   return runningScripts.size > 0;
@@ -160,10 +171,13 @@ export function startScript(
   signal?: AbortSignal,
 ): { runId: string } {
   const runId = randomUUID();
-  const outputPromise = spawnAndCollect(config, instruction, signal).finally(() => {
-    runningScripts.delete(runId);
+  const promise = spawnAndCollect(config, instruction, signal);
+  runningScripts.set(runId, { phase: "running", promise });
+  // Cache the output when the process exits so awaitScript can collect it
+  // even if the script finishes before the next poll (avoids "not_found").
+  void promise.then((output) => {
+    runningScripts.set(runId, { phase: "done", output });
   });
-  runningScripts.set(runId, outputPromise);
   return { runId };
 }
 
@@ -171,14 +185,23 @@ export function startScript(
  * Polls a previously started script run for up to SCRIPT_POLL_TIMEOUT_MS.
  * Returns the output if complete, still_running if still in progress, or
  * not_found if the runId is unknown.
+ *
+ * The entry is removed from the registry only after this function returns
+ * the final output — keeping hasPendingScripts() accurate for the Stop hook.
  */
 export async function awaitScript(runId: string): Promise<AwaitScriptContent> {
-  const outputPromise = runningScripts.get(runId);
-  if (!outputPromise) return { status: "not_found", runId };
+  const state = runningScripts.get(runId);
+  if (!state) return { status: "not_found", runId };
+
+  // Script already finished between polls — return cached output and clean up.
+  if (state.phase === "done") {
+    runningScripts.delete(runId);
+    return { status: "completed", runId, output: state.output };
+  }
 
   const timeoutResult = Symbol("timeout");
   const result = await Promise.race([
-    outputPromise.then(
+    state.promise.then(
       (output): ScriptCompletedContent => ({ status: "completed", runId, output }),
     ),
     new Promise<typeof timeoutResult>((resolve) =>
@@ -187,5 +210,8 @@ export async function awaitScript(runId: string): Promise<AwaitScriptContent> {
   ]);
 
   if (result === timeoutResult) return { status: "still_running", runId };
+
+  // Completed within the poll window — clean up now.
+  runningScripts.delete(runId);
   return result;
 }
