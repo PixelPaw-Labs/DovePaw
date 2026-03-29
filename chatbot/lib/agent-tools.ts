@@ -135,7 +135,7 @@ export function makeAgentMgmtTools(agent: AgentDef) {
 // ─── Script run tools ─────────────────────────────────────────────────────────
 
 /** Fires the agent script in the background and returns a runId immediately. */
-export function makeStartScriptTool(agent: AgentDef, config: AgentConfig) {
+export function makeStartScriptTool(agent: AgentDef, config: AgentConfig, signal?: AbortSignal) {
   return tool(
     START_SCRIPT_TOOL,
     `Start the ${agent.displayName} agent script in the background and return a runId immediately`,
@@ -146,7 +146,7 @@ export function makeStartScriptTool(agent: AgentDef, config: AgentConfig) {
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "run" }) => {
-      const { runId } = startScript(config, instruction);
+      const { runId } = startScript(config, instruction, signal);
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },

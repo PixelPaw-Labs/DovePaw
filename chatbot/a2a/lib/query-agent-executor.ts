@@ -46,7 +46,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     const { taskId, contextId } = requestContext;
     const instruction = extractInstruction(requestContext.userMessage.parts);
     this.abortController = new AbortController();
-    markProcessing(this.def.manifestKey);
+    markProcessing(this.def.manifestKey, this.abortController);
 
     consola.start(`Running ${this.def.displayName} sub-agent…`);
 
@@ -112,7 +112,7 @@ export class QueryAgentExecutor implements AgentExecutor {
 
       await withMcpQuery(
         [
-          makeStartScriptTool(this.def, agentConfig),
+          makeStartScriptTool(this.def, agentConfig, this.abortController.signal),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
         ],

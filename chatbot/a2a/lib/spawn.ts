@@ -83,7 +83,11 @@ export function getPendingRunIds(): string[] {
  * Spawns the agent tsx script and collects all stdout/stderr into a single string.
  * Used by the run_script MCP tool inside QueryAgentExecutor.
  */
-export async function spawnAndCollect(config: AgentConfig, instruction: string): Promise<string> {
+export async function spawnAndCollect(
+  config: AgentConfig,
+  instruction: string,
+  signal?: AbortSignal,
+): Promise<string> {
   if (!existsSync(config.scriptPath)) {
     return `Script not found: ${config.scriptPath}`;
   }
@@ -94,7 +98,20 @@ export async function spawnAndCollect(config: AgentConfig, instruction: string):
     env: { ...process.env, ...config.extraEnv },
     cwd: config.workspacePath,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
   });
+
+  signal?.addEventListener(
+    "abort",
+    () => {
+      try {
+        process.kill(-proc.pid!, "SIGTERM");
+      } catch {
+        proc.kill("SIGTERM");
+      }
+    },
+    { once: true },
+  );
 
   const lines: string[] = [];
 
@@ -137,9 +154,13 @@ export async function spawnAndCollect(config: AgentConfig, instruction: string):
  * Spawns the agent script in the background and returns a runId immediately.
  * Use awaitScript to poll for the result.
  */
-export function startScript(config: AgentConfig, instruction: string): { runId: string } {
+export function startScript(
+  config: AgentConfig,
+  instruction: string,
+  signal?: AbortSignal,
+): { runId: string } {
   const runId = randomUUID();
-  const outputPromise = spawnAndCollect(config, instruction).finally(() => {
+  const outputPromise = spawnAndCollect(config, instruction, signal).finally(() => {
     runningScripts.delete(runId);
   });
   runningScripts.set(runId, outputPromise);

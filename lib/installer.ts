@@ -62,7 +62,9 @@ export async function deployAgentScript(agentName: string): Promise<void> {
 }
 
 /** Copy compiled a2a-trigger.mjs to ~/.claude/scheduler and make it executable.
- *  Runs npm run build first if the compiled output is missing. */
+ *  Runs npm run build first if the compiled output is missing.
+ *  Also copies @a2a-js/sdk and its dependency uuid to the scheduler
+ *  node_modules — same pattern as @ladybugdb/core. */
 export async function deployTriggerScript(): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   const src = join(AGENTS_DIST, "a2a-trigger.mjs");
@@ -73,6 +75,7 @@ export async function deployTriggerScript(): Promise<void> {
   }
   await copyFile(src, A2A_TRIGGER_SCRIPT);
   await chmod(A2A_TRIGGER_SCRIPT, 0o755);
+  await copyNativePackages(["@a2a-js/sdk", "uuid"]);
 }
 
 /** Read settings and write the agent's env bootstrap script. */
