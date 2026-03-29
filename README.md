@@ -369,10 +369,10 @@ npm run chatbot:dev:all
 
 ### Oncall Analyzer
 
-| Variable      | Example                         | Description                               |
-| ------------- | ------------------------------- | ----------------------------------------- |
-| `REPO_LIST`   | `/path/to/repo1:/path/to/repo2` | Repos to fetch before analysis            |
-| `CF_DOMAIN_ZONE` | `domain:zone_id`                        | Cloudflare domain:zone ID                        |
+| Variable         | Example                         | Description                    |
+| ---------------- | ------------------------------- | ------------------------------ |
+| `REPO_LIST`      | `/path/to/repo1:/path/to/repo2` | Repos to fetch before analysis |
+| `CF_DOMAIN_ZONE` | `domain:zone_id`                | Cloudflare domain:zone ID      |
 
 ### Release Log Sentinel
 

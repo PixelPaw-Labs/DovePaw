@@ -49,7 +49,11 @@ function checkHealth(): void {
   }
   try {
     const raw: unknown = JSON.parse(readFileSync(PORTS_FILE, "utf-8"));
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) { healthy = false; refreshTray(); return; }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      healthy = false;
+      refreshTray();
+      return;
+    }
     const manifest: Record<string, unknown> = Object.fromEntries(Object.entries(raw));
     const port = Object.values(manifest).find((v): v is number => typeof v === "number")!;
     const socket = createConnection({ port, host: "127.0.0.1" });
@@ -93,7 +97,9 @@ function buildMenu(isHealthy: boolean): Electron.Menu {
   return Menu.buildFromTemplate([
     {
       label: "DovePaw A2A",
-      icon: nativeImage.createFromPath(resolve(ASSETS_DIR, isHealthy ? "dot-green.png" : "dot-red.png")),
+      icon: nativeImage.createFromPath(
+        resolve(ASSETS_DIR, isHealthy ? "dot-green.png" : "dot-red.png"),
+      ),
       click: () => {},
     },
     { type: "separator" },
@@ -202,7 +208,11 @@ void app.whenReady().then(() => {
 
 function killGroup(proc: ChildProcess | null): void {
   if (!proc?.pid) return;
-  try { process.kill(-proc.pid, "SIGTERM"); } catch { proc.kill("SIGTERM"); }
+  try {
+    process.kill(-proc.pid, "SIGTERM");
+  } catch {
+    proc.kill("SIGTERM");
+  }
 }
 
 app.on("before-quit", () => {
