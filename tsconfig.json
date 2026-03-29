@@ -11,7 +11,7 @@
     "skipLibCheck": true,
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "jsx": "react-jsx",
-    "types": ["node"],
+    "types": ["node", "vitest/globals"],
     "allowJs": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
