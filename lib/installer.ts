@@ -35,8 +35,6 @@ import {
   SCHEDULER_ROOT,
 } from "./paths";
 import { generatePlist, plistLabel } from "./plist-generate";
-import { readSettings, readAgentSettings } from "./settings";
-import { writeAgentEnvScript } from "./env-script";
 
 const execAsync = promisify(exec);
 
@@ -76,19 +74,6 @@ export async function deployTriggerScript(): Promise<void> {
   await copyFile(src, A2A_TRIGGER_SCRIPT);
   await chmod(A2A_TRIGGER_SCRIPT, 0o755);
   await copyNativePackages(["@a2a-js/sdk", "uuid"]);
-}
-
-/** Read settings and write the agent's env bootstrap script. */
-export async function writeEnvScript(agent: AgentDef): Promise<void> {
-  const settings = readSettings();
-  const agentSettings = readAgentSettings(agent.name);
-  await writeAgentEnvScript(
-    agent.name,
-    agent.reposEnvVar,
-    settings,
-    agentSettings.repos,
-    agentSettings.envVars,
-  );
 }
 
 /**
@@ -206,7 +191,6 @@ export async function installAgent(
   await Promise.all([
     deployAgentScript(agent.name),
     deployTriggerScript(),
-    writeEnvScript(agent),
     copyNativePackages(nativePackages),
   ]);
   await uninstallAgent(agent, uid);

@@ -61,7 +61,5 @@ export const agentLogDir = (agentName: string) => join(SCHEDULER_LOGS, `.${agent
 export const agentStateDir = (agentName: string) => join(SCHEDULER_STATE, `.${agentName}`);
 /** ~/Library/LaunchAgents/<label>.plist */
 export const plistFilePath = (label: string) => join(LAUNCH_AGENTS_DIR, `${label}.plist`);
-/** ~/.claude/scheduler/<agentName>.env.sh — env bootstrap script sourced by launchd before the agent starts */
-export const agentEnvScript = (agentName: string) => join(SCHEDULER_ROOT, `${agentName}.env.sh`);
 /** ~/.claude/scheduler/a2a-trigger.mjs — compiled A2A trigger script used by all launchd plists */
 export const A2A_TRIGGER_SCRIPT = join(SCHEDULER_ROOT, "a2a-trigger.mjs");

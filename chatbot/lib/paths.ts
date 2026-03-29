@@ -16,7 +16,6 @@ export {
   agentEntryPath,
   agentLogDir,
   agentStateDir,
-  agentEnvScript,
   plistFilePath,
 } from "@@/lib/paths";
 
