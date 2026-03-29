@@ -15,6 +15,7 @@ import {
   getAgentStatus,
   getAgentLogs,
 } from "@/lib/launchd";
+import { cancelProcessing } from "@/a2a/lib/processing-registry";
 import type { AgentDef } from "@@/lib/agents";
 import {
   agentEntryPath,
@@ -69,6 +70,7 @@ export function makeAgentMgmtTools(agent: AgentDef) {
     `Unload and delete only the ${agent.displayName} agent plist`,
     {},
     async () => {
+      cancelProcessing(agent.manifestKey);
       await uninstallAgent(agent);
       return {
         content: [
@@ -103,6 +105,7 @@ export function makeAgentMgmtTools(agent: AgentDef) {
     `Bootout (unload) the ${agent.displayName} from launchd`,
     {},
     async () => {
+      cancelProcessing(agent.manifestKey);
       await unloadAgent(agent);
       return {
         content: [{ type: "text" as const, text: `✅ ${agent.displayName} unloaded.` }],

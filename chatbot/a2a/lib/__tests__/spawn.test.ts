@@ -168,3 +168,27 @@ describe("spawnAndCollect", () => {
     expect(proc.kill).not.toHaveBeenCalled();
   });
 });
+
+describe("AbortSignal pre-abort semantics (justifies signal.aborted pre-check in spawnAndCollect)", () => {
+  it("addEventListener does NOT fire for a signal that was already aborted", () => {
+    // This is why the signal.aborted pre-check is necessary: if abort() fires
+    // before the listener is registered, the { once: true } listener is a no-op.
+    const controller = new AbortController();
+    controller.abort();
+    let fired = false;
+    controller.signal.addEventListener(
+      "abort",
+      () => {
+        fired = true;
+      },
+      { once: true },
+    );
+    expect(fired).toBe(false);
+  });
+
+  it("signal.aborted is true synchronously after abort()", () => {
+    const controller = new AbortController();
+    controller.abort();
+    expect(controller.signal.aborted).toBe(true);
+  });
+});

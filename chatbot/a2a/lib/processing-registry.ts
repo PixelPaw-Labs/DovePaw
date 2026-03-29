@@ -32,3 +32,11 @@ export function isProcessing(manifestKey: string): boolean {
 export function getProcessingTrigger(manifestKey: string): ProcessingTrigger | null {
   return active.get(manifestKey) ?? null;
 }
+
+/**
+ * Abort the running query for this agent (kills tsx subprocess + claude CLI).
+ * No-op if the agent is not currently processing.
+ */
+export function cancelProcessing(manifestKey: string): void {
+  controllers.get(manifestKey)?.abort();
+}

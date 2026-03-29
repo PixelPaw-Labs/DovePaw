@@ -112,17 +112,19 @@ export async function spawnAndCollect(
     detached: true,
   });
 
-  signal?.addEventListener(
-    "abort",
-    () => {
-      try {
-        process.kill(-proc.pid!, "SIGTERM");
-      } catch {
-        proc.kill("SIGTERM");
-      }
-    },
-    { once: true },
-  );
+  const killProc = () => {
+    try {
+      process.kill(-proc.pid!, "SIGTERM");
+    } catch {
+      proc.kill("SIGTERM");
+    }
+  };
+
+  if (signal?.aborted) {
+    killProc();
+  } else {
+    signal?.addEventListener("abort", killProc, { once: true });
+  }
 
   const lines: string[] = [];
 
