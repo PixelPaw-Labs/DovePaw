@@ -32,6 +32,7 @@ import {
 } from "@a2a-js/sdk/server/express";
 import { PORTS_FILE } from "@/lib/paths";
 import { z } from "zod";
+import { AGENTS } from "@@/lib/agents";
 import { QueryAgentExecutor } from "./query-agent-executor";
 
 // ─── Port utilities ───────────────────────────────────────────────────────────
@@ -55,18 +56,19 @@ export function getAvailablePort(): Promise<number> {
   });
 }
 
-export const portsManifestSchema = z.object({
-  experience_reflector: z.number(),
-  get_shit_done: z.number(),
-  release_log_sentinel: z.number(),
-  memory_distiller: z.number(),
-  oncall_analyzer: z.number(),
-  updatedAt: z.string(),
-});
+export const portsManifestSchema = z
+  .object({ updatedAt: z.string() })
+  .catchall(z.number())
+  .refine((d) => AGENTS.every((a) => a.manifestKey in d), {
+    message: "Missing agent port keys in manifest",
+  });
 
-export type PortsManifest = z.infer<typeof portsManifestSchema>;
+export interface PortsManifest {
+  updatedAt: string;
+  [key: string]: number | string;
+}
 
-export function writePortsManifest(ports: Omit<PortsManifest, "updatedAt">): void {
+export function writePortsManifest(ports: Record<string, number>): void {
   const manifest: PortsManifest = { ...ports, updatedAt: new Date().toISOString() };
   writeFileSync(PORTS_FILE, JSON.stringify(manifest, null, 2));
 }

@@ -62,6 +62,8 @@ const SAMPLE_PORTS = {
   release_log_sentinel: 51003,
   memory_distiller: 51004,
   oncall_analyzer: 51005,
+  zendesk_triager: 51006,
+  dependabot_merger: 51007,
 };
 
 describe("readPortsManifest", () => {
@@ -86,18 +88,11 @@ describe("readPortsManifest", () => {
 });
 
 describe("writePortsManifest", () => {
-  it("writes all 5 agent port keys", () => {
+  it("writes all agent port keys", () => {
     writePortsManifest(SAMPLE_PORTS);
     const result = readPortsManifest()!;
-    const keys = [
-      "experience_reflector",
-      "get_shit_done",
-      "release_log_sentinel",
-      "memory_distiller",
-      "oncall_analyzer",
-    ] as const;
-    for (const key of keys) {
-      expect(result[key]).toBe(SAMPLE_PORTS[key]);
+    for (const [key, port] of Object.entries(SAMPLE_PORTS)) {
+      expect(result[key]).toBe(port);
     }
   });
 

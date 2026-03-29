@@ -63,8 +63,10 @@ export const AGENTS: AgentDef[] = [
     description:
       "Reflect on and learn from past Claude Code sessions: fetches the last 24 hours of sessions " +
       "via the local session API, extracts domain knowledge and user preferences, and writes " +
-      "learnings into project MEMORY.md files. Use when asked to 'learn from sessions', " +
-      "'rewind and learn', or 'reflect on past Claude Code work'. Requires PROJECTS env var.",
+      "learnings into project MEMORY.md files. " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'learn from sessions', 'rewind and learn', or 'reflect on past Claude Code work'. " +
+      "Requires PROJECTS env var.",
     requiredEnvVars: ["PROJECTS"],
     icon: Brain,
     scheduleDisplay: "daily 00:00",
@@ -76,7 +78,10 @@ export const AGENTS: AgentDef[] = [
     displayName: "Get Shit Done",
     description:
       "Automated JIRA ticket implementer: discovers sprint tickets, forges implementations in " +
-      "parallel git worktrees, and creates PRs. Requires REPO_LIST + JIRA_ASSIGNEE env vars.",
+      "parallel git worktrees, and creates PRs. " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'run GSD', 'process tickets', 'forge JIRA tickets', or 'start the pipeline'. " +
+      "Requires REPO_LIST + JIRA_ASSIGNEE env vars.",
     requiredEnvVars: ["REPO_LIST", "JIRA_ASSIGNEE"],
     reposEnvVar: "REPO_LIST",
     icon: Zap,
@@ -89,8 +94,10 @@ export const AGENTS: AgentDef[] = [
     displayName: "Release Log Sentinel",
     description:
       "Monitor Claude Code releases: fetch and analyze release notes, check for JSONL format " +
-      "changes that could break claude-code-trace, and create GitHub issues for new breaking " +
-      "changes. Requires gh CLI authentication.",
+      "changes that could break claude-code-trace, and create GitHub issues for new breaking changes. " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'check Claude Code releases', 'scan release notes', or 'monitor for breaking changes'. " +
+      "Requires gh CLI authentication.",
     requiredEnvVars: [],
     icon: Radar,
     scheduleDisplay: "Sun 10:00",
@@ -102,7 +109,8 @@ export const AGENTS: AgentDef[] = [
     displayName: "Memory Distiller",
     description:
       "Distil and promote common memory patterns across projects into the global ~/.claude/CLAUDE.md. " +
-      "Use when asked to 'consolidate memories', 'promote patterns to global', 'summarize memories " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'consolidate memories', 'promote patterns to global', 'summarize memories " +
       "to be generic', or 'extract common learnings across projects'. " +
       "Requires PROJECTS env var listing ≥2 project names.",
     requiredEnvVars: ["PROJECTS"],
@@ -116,9 +124,10 @@ export const AGENTS: AgentDef[] = [
     displayName: "Oncall Analyzer",
     description:
       "Analyze on-call incidents and generate Post Incident Records (PIRs) from observability " +
-      "data (PagerDuty, Datadog, Cloudflare, Rollbar). Use when asked to 'analyze oncall issues', " +
-      "'generate a PIR', 'investigate incidents', 'what went wrong on-call', or " +
-      "'summarize recent incidents'. Covers the past 24 hours by default. " +
+      "data (PagerDuty, Datadog, Cloudflare, Rollbar). " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'analyze oncall issues', 'generate a PIR', 'investigate incidents', " +
+      "'what went wrong on-call', or 'summarize recent incidents'. Covers the past 24 hours by default. " +
       "Pass the instruction directly, e.g. 'incidents today', 'P1AB1234', " +
       "or 'past 6 hours example.com:zone123'. Requires REPO_LIST env var.",
     requiredEnvVars: ["REPO_LIST"],
@@ -134,9 +143,10 @@ export const AGENTS: AgentDef[] = [
     description:
       "Investigate Zendesk support tickets by searching configured Slack channels for ticket " +
       "discussions within a time scope, clustering by theme, and digging into configured repos " +
-      "to surface potential root causes. Use when asked to 'triage zendesk', 'investigate support " +
-      "issues', 'what are customers reporting', or 'find root cause for support tickets'. " +
-      "Pass a time scope, e.g. 'last 7 days' or 'last 2 weeks'. " +
+      "to surface potential root causes. " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'triage zendesk', 'investigate support issues', 'what are customers reporting', " +
+      "or 'find root cause for support tickets'. Pass a time scope, e.g. 'last 7 days' or 'last 2 weeks'. " +
       "Requires REPO_LIST, SLACK_WORKSPACE, and ZENDESK_SLACK_CHANNELS env vars.",
     requiredEnvVars: ["REPO_LIST", "SLACK_WORKSPACE", "ZENDESK_SLACK_CHANNELS"],
     reposEnvVar: "REPO_LIST",
@@ -151,7 +161,8 @@ export const AGENTS: AgentDef[] = [
       "Review, risk-assess, and merge Dependabot PRs across configured repos. Maps each PR to " +
       "the correct Jira sprint ticket, prepends [Ticket ID] to the PR title, and merges safe PRs " +
       "automatically. Reports blockers with risk reasoning and confidence scores. " +
-      "Use when asked to 'process dependabot PRs', 'merge dependabot', 'triage dependency PRs', " +
+      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "or when asked to 'process dependabot PRs', 'merge dependabot', 'triage dependency PRs', " +
       "'review dependency updates', or 'dependabot sprint cleanup'. " +
       "Pass 'dry-run' to preview without merging, or a sprint keyword to target a specific sprint. " +
       "Requires REPO_LIST (local repo paths). JIRA_SPRINT_PREFIX env var is a fallback only.",
