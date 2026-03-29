@@ -145,7 +145,7 @@ export function makeStartScriptTool(agent: AgentDef, config: AgentConfig, signal
         .optional()
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
-    async ({ instruction = "run" }) => {
+    async ({ instruction = "" }) => {
       const { runId } = startScript(config, instruction, signal);
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
