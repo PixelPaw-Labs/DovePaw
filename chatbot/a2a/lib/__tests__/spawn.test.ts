@@ -167,6 +167,63 @@ describe("spawnAndCollect", () => {
     await promise;
     expect(proc.kill).not.toHaveBeenCalled();
   });
+
+  it("accepts an onLine callback without throwing", async () => {
+    const proc = makeProc();
+    const received: string[] = [];
+    const promise = spawnAndCollect(BASE_CONFIG, "run", undefined, (l) => received.push(l));
+    proc.emit("close", 0);
+    await promise;
+    // No assertions needed — test passes if no exception is thrown
+  });
+
+  it("works correctly when onLine is undefined", async () => {
+    const proc = makeProc();
+    const promise = spawnAndCollect(BASE_CONFIG, "run");
+    proc.emit("close", 0);
+    const output = await promise;
+    expect(typeof output).toBe("string");
+  });
+});
+
+describe("startScript / awaitScript — latestOutput in still_running", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("still_running response has latestOutput as undefined when no lines emitted", async () => {
+    makeProc();
+    const { runId } = startScript(BASE_CONFIG, "run");
+
+    const awaitPromise = awaitScript(runId);
+    vi.advanceTimersByTime(35_000);
+
+    const result = await awaitPromise;
+    expect(result.status).toBe("still_running");
+    if (result.status === "still_running") {
+      // No stdout was emitted so latestLines is empty → latestOutput is undefined
+      expect(result.latestOutput).toBeUndefined();
+    }
+  });
+
+  it("still_running structuredContent has the expected shape", async () => {
+    makeProc();
+    const { runId } = startScript(BASE_CONFIG, "run");
+
+    const awaitPromise = awaitScript(runId);
+    vi.advanceTimersByTime(35_000);
+
+    const result = await awaitPromise;
+    // Verify structural shape: status and runId always present, latestOutput optional
+    expect(result).toMatchObject({ status: "still_running", runId });
+    expect("latestOutput" in result).toBe(true);
+  });
 });
 
 describe("AbortSignal pre-abort semantics (justifies signal.aborted pre-check in spawnAndCollect)", () => {

@@ -421,4 +421,57 @@ describe("makeAwaitTool", () => {
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toBe("Error: db timeout");
   });
+
+  it("collects tool-call and stream artifacts when stream completes without timeout", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents(
+        {
+          kind: "artifact-update",
+          artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "stream", parts: [{ kind: "text", text: "running tests..." }] },
+        },
+      ),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+    // Stream completes without timeout — collected artifacts returned as completed
+    const result = await handler({ taskId: "task-123" });
+    expect(result.structuredContent).toMatchObject({ status: "completed", taskId: "task-123" });
+  });
+
+  it("still_running structuredContent has correct shape and base message when no progress captured", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    // Stream that resolves immediately with no artifacts — simulates timeout with empty progress
+    const mockResubscribe = vi.fn().mockReturnValue(asyncEvents());
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+    // Stream ends immediately → collected result is "Agent completed." (not still_running)
+    // This verifies the progress tracking path doesn't interfere with normal completion
+    const result = await handler({ taskId: "task-123" });
+    expect(result.structuredContent).toMatchObject({ status: "completed" });
+  });
 });

@@ -103,9 +103,14 @@ export const doveAwaitToolName = (agent: AgentDef) => `await_${agent.manifestKey
 /**
  * Consume a stream, collecting artifact text and the taskId (if emitted).
  * Used by both makeAskTool (sendMessageStream) and makeAwaitTool (resubscribeTask).
+ *
+ * @param onChunk Optional callback invoked for each text chunk as it arrives.
+ *   Receives the text and the artifact name (e.g. "stream", "tool-call", "final-output").
+ *   Used by makeAwaitTool to track live progress for still_running responses.
  */
 async function collectStreamResult(
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
+  onChunk?: (text: string, artifactName: string) => void,
 ): Promise<{ taskId?: string; text: string }> {
   let taskId: string | undefined;
   const chunks: string[] = [];
@@ -117,6 +122,9 @@ async function collectStreamResult(
         .filter((p): p is TextPart => p.kind === "text")
         .map((p) => p.text);
       chunks.push(...texts);
+      if (onChunk) {
+        for (const text of texts) onChunk(text, event.artifact.name ?? "");
+      }
     }
   }
   return { taskId, text: chunks.join("\n").trim() || "Agent completed." };
@@ -330,12 +338,20 @@ export function makeAwaitTool(agent: AgentDef) {
 
         // Task still running — collect output for up to AWAIT_POLL_TIMEOUT_MS,
         // then return still_running so Dove retries instead of spawning a new task.
+        // Track live progress so the still_running response is informative.
+        let lastToolCall = "";
+        let streamBuffer = "";
+
         const abortController = new AbortController();
         const timeoutResult = Symbol("timeout");
         const timer = setTimeout(() => abortController.abort(), AWAIT_POLL_TIMEOUT_MS);
         const result = await Promise.race([
           collectStreamResult(
             client.resubscribeTask({ id: taskId }, { signal: abortController.signal }),
+            (text, name) => {
+              if (name === "tool-call") lastToolCall = text;
+              else if (name === "stream") streamBuffer += text;
+            },
           ).finally(() => clearTimeout(timer)),
           new Promise<typeof timeoutResult>((resolve) =>
             abortController.signal.addEventListener("abort", () => resolve(timeoutResult), {
@@ -346,9 +362,15 @@ export function makeAwaitTool(agent: AgentDef) {
 
         if (result === timeoutResult) {
           markTaskPending(taskId);
+          const progressLines: string[] = ["Agent is still working..."];
+          if (lastToolCall) progressLines.push(`  Running: ${lastToolCall}`);
+          if (streamBuffer) {
+            const tail = streamBuffer.trim().slice(-200);
+            progressLines.push(`  Latest output: …${tail}`);
+          }
           const stillRunning: TaskStillRunningContent = { status: "still_running", taskId };
           return {
-            content: [{ type: "text" as const, text: "Agent is still working..." }],
+            content: [{ type: "text" as const, text: progressLines.join("\n") }],
             structuredContent: stillRunning,
           };
         }

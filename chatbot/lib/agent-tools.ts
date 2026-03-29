@@ -179,7 +179,12 @@ export function makeAwaitScriptTool(agent: AgentDef) {
               result.status === "completed"
                 ? result.output
                 : result.status === "still_running"
-                  ? "Script is still running..."
+                  ? [
+                      "Script is still running...",
+                      result.latestOutput ? `Latest output:\n${result.latestOutput}` : "",
+                    ]
+                      .filter(Boolean)
+                      .join("\n")
                   : `⚠️ Run \`${runId}\` not found — it may have completed and been cleaned up.`,
           },
         ],

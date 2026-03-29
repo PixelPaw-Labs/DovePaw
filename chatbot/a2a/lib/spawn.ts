@@ -49,6 +49,8 @@ export type ScriptCompletedContent = {
 export type ScriptStillRunningContent = {
   status: "still_running";
   runId: string;
+  /** Last lines of script output captured so far, for progress reporting. */
+  latestOutput?: string;
 };
 
 export type ScriptNotFoundContent = {
@@ -67,7 +69,7 @@ export type AwaitScriptContent =
 export const SCRIPT_POLL_TIMEOUT_MS = 30_000;
 
 type ScriptState =
-  | { phase: "running"; promise: Promise<string> }
+  | { phase: "running"; promise: Promise<string>; latestLines: string[] }
   | { phase: "done"; output: string };
 
 /**
@@ -93,11 +95,15 @@ export function getPendingRunIds(): string[] {
 /**
  * Spawns the agent tsx script and collects all stdout/stderr into a single string.
  * Used by the run_script MCP tool inside QueryAgentExecutor.
+ *
+ * @param onLine Optional callback invoked for each line as it arrives (stdout + stderr).
+ *   Used by startScript to maintain a live latestLines snapshot for progress reporting.
  */
 export async function spawnAndCollect(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
+  onLine?: (line: string) => void,
 ): Promise<string> {
   if (!existsSync(config.scriptPath)) {
     return `Script not found: ${config.scriptPath}`;
@@ -134,7 +140,12 @@ export async function spawnAndCollect(
       stdoutBuf += chunk.toString();
       const parts = stdoutBuf.split("\n");
       stdoutBuf = parts.pop() ?? "";
-      parts.filter((l) => l.trim()).forEach((l) => lines.push(l));
+      parts
+        .filter((l) => l.trim())
+        .forEach((l) => {
+          lines.push(l);
+          onLine?.(l);
+        });
     });
 
     let stderrBuf = "";
@@ -142,7 +153,13 @@ export async function spawnAndCollect(
       stderrBuf += chunk.toString();
       const parts = stderrBuf.split("\n");
       stderrBuf = parts.pop() ?? "";
-      parts.filter((l) => l.trim()).forEach((l) => lines.push(`[stderr] ${l}`));
+      parts
+        .filter((l) => l.trim())
+        .forEach((l) => {
+          const prefixed = `[stderr] ${l}`;
+          lines.push(prefixed);
+          onLine?.(prefixed);
+        });
     });
 
     proc.on("close", (code) => {
@@ -173,8 +190,16 @@ export function startScript(
   signal?: AbortSignal,
 ): { runId: string } {
   const runId = randomUUID();
-  const promise = spawnAndCollect(config, instruction, signal);
-  runningScripts.set(runId, { phase: "running", promise });
+  const latestLines: string[] = [];
+
+  // Spawn with a line callback so latestLines stays fresh during the run.
+  const promise = spawnAndCollect(config, instruction, signal, (line) => {
+    latestLines.push(line);
+    // Keep only the last 20 lines to bound memory.
+    if (latestLines.length > 20) latestLines.shift();
+  });
+
+  runningScripts.set(runId, { phase: "running", promise, latestLines });
   // Cache the output when the process exits so awaitScript can collect it
   // even if the script finishes before the next poll (avoids "not_found").
   void promise.then((output) => {
@@ -211,7 +236,10 @@ export async function awaitScript(runId: string): Promise<AwaitScriptContent> {
     ),
   ]);
 
-  if (result === timeoutResult) return { status: "still_running", runId };
+  if (result === timeoutResult) {
+    const latestOutput = state.latestLines.slice(-10).join("\n") || undefined;
+    return { status: "still_running", runId, latestOutput };
+  }
 
   // Completed within the poll window — clean up now.
   runningScripts.delete(runId);
