@@ -61,10 +61,16 @@ export async function deployAgentScript(agentName: string): Promise<void> {
   await chmod(schedulerScript(agentName), 0o755);
 }
 
-/** Copy compiled a2a-trigger.mjs to ~/.claude/scheduler and make it executable. */
+/** Copy compiled a2a-trigger.mjs to ~/.claude/scheduler and make it executable.
+ *  Runs npm run build first if the compiled output is missing. */
 export async function deployTriggerScript(): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   const src = join(AGENTS_DIST, "a2a-trigger.mjs");
+  try {
+    await access(src);
+  } catch {
+    await execAsync("npm run build", { cwd: AGENTS_ROOT });
+  }
   await copyFile(src, A2A_TRIGGER_SCRIPT);
   await chmod(A2A_TRIGGER_SCRIPT, 0o755);
 }
