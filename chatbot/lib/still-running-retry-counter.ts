@@ -6,7 +6,7 @@ export class StillRunningRetryCounter {
   private max = StillRunningRetryCounter.randomMax();
 
   private static randomMax(): number {
-    return Math.floor(Math.random() * 5) + 1;
+    return Math.floor(Math.random() * 6) + 10;
   }
 
   /** Returns true when the counter has hit its threshold — reset and re-randomise. */

@@ -88,7 +88,7 @@ describe("buildAgentHooks — PostToolUse hook", () => {
   });
 
   it("injects additionalContext with MUST message on still_running", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0.8); // max = 5, won't release on first call
+    vi.spyOn(Math, "random").mockReturnValue(0); // max = 10, won't release on first call
     const hooks = buildAgentHooks(makeConfig({ getStillRunningId: () => "run-xyz" }));
     const fn = hooks.PostToolUse![0]!.hooks[0]!;
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
@@ -102,9 +102,11 @@ describe("buildAgentHooks — PostToolUse hook", () => {
   });
 
   it("releases (continue: true) when retry counter threshold is hit", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // max = 1, releases immediately
+    vi.spyOn(Math, "random").mockReturnValue(0); // max = 10
     const hooks = buildAgentHooks(makeConfig());
     const fn = hooks.PostToolUse![0]!.hooks[0]!;
+    // exhaust 9 forced-retry calls, 10th should release
+    for (let i = 0; i < 9; i++) await callHook(fn, postToolUseInput({ status: "still_running" }));
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
     expect(result).toEqual({ continue: true });
     vi.restoreAllMocks();
