@@ -59,6 +59,15 @@ const AGENT: AgentDef = {
   requiredEnvVars: ["TEST_VAR"],
   scheduleDisplay: "daily 00:00",
   icon: {} as any,
+  doveCard: {
+    icon: {} as any,
+    iconBg: "",
+    iconColor: "",
+    title: "Test Agent",
+    description: "",
+    prompt: "",
+  },
+  suggestions: [],
 };
 
 const BASE_CONFIG: AgentConfig = {

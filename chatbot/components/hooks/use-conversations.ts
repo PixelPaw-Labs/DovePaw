@@ -30,8 +30,9 @@ const WRITE_DEBOUNCE_MS = 300;
 
 export function useConversations() {
   // ─── Active agent ─────────────────────────────────────────────────────────────
-  const [activeAgentId, setActiveAgentIdState] = useState<string>(() => readActiveAgentId());
-  const activeAgentIdRef = useRef<string>(activeAgentId);
+  // "dove" is the SSR-safe default; localStorage is read after mount to avoid hydration mismatch
+  const [activeAgentId, setActiveAgentIdState] = useState<string>("dove");
+  const activeAgentIdRef = useRef<string>("dove");
 
   useEffect(() => {
     activeAgentIdRef.current = activeAgentId;
@@ -94,9 +95,14 @@ export function useConversations() {
   useEffect(() => {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
-    const storedMessages = readPersistedMessages(activeAgentId);
+    const storedAgentId = readActiveAgentId();
+    if (storedAgentId !== "dove") {
+      activeAgentIdRef.current = storedAgentId;
+      setActiveAgentIdState(storedAgentId);
+    }
+    const storedMessages = readPersistedMessages(storedAgentId);
     if (storedMessages?.length) setMessages(storedMessages);
-    sessionIdRef.current = readPersistedSessionId(activeAgentId);
+    sessionIdRef.current = readPersistedSessionId(storedAgentId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run only once on mount
   }, []);
 

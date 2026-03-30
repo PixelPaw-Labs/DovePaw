@@ -85,7 +85,7 @@ export function AgentChat() {
           <ConversationContent>
             {messages.length === 0 ? (
               <ConversationEmptyState className="justify-start pt-8">
-                <IntroCard onSelect={sendMessage} agentId={activeAgentId} />
+                <IntroCard key={activeAgentId} onSelect={sendMessage} agentId={activeAgentId} />
               </ConversationEmptyState>
             ) : (
               messages.map((msg) => <ChatMessageItem key={msg.id} msg={msg} />)

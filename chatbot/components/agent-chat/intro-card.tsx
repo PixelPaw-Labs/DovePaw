@@ -3,6 +3,7 @@
 import { AGENTS } from "@@/lib/agents";
 import { DOVE_AVATAR } from "@/lib/avatars";
 import { SuggestionChips } from "./suggestion-chips";
+import { AgentSuggestionChips } from "./agent-suggestion-chips";
 
 interface IntroCardProps {
   onSelect: (text: string) => void;
@@ -70,21 +71,7 @@ function AgentIntro({ agentId, onSelect }: { agentId: string; onSelect: (text: s
           </div>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        {[
-          `What is ${agent.displayName} currently doing?`,
-          `Run ${agent.displayName} now`,
-          `Show ${agent.displayName} logs`,
-        ].map((prompt) => (
-          <button
-            key={prompt}
-            onClick={() => onSelect(prompt)}
-            className="px-4 py-2 rounded-full text-sm border border-border/60 bg-card hover:bg-muted transition-colors text-foreground/80"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
+      <AgentSuggestionChips key={agentId} agentName={agentId} onSelect={onSelect} />
     </div>
   );
 }

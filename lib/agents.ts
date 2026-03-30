@@ -1,7 +1,40 @@
 import type { LucideIcon } from "lucide-react";
-import { Brain, Zap, Radar, FlaskConical, BellRing, LifeBuoy, GitMerge } from "lucide-react";
+import {
+  Brain,
+  Zap,
+  Radar,
+  FlaskConical,
+  BellRing,
+  LifeBuoy,
+  GitMerge,
+  Play,
+  FileText,
+  BookOpen,
+  ListTodo,
+  GitPullRequest,
+  AlertTriangle,
+  RefreshCw,
+  TrendingUp,
+  Clock,
+  Search,
+  CheckCircle,
+  Eye,
+  Info,
+  Hammer,
+} from "lucide-react";
 
 const TOOL_PREFIX = "yolo";
+
+export interface AgentSuggestion {
+  icon: LucideIcon;
+  /** Tailwind classes for the icon background circle */
+  iconBg: string;
+  /** Tailwind classes for the icon itself */
+  iconColor: string;
+  title: string;
+  description: string;
+  prompt: string;
+}
 
 export interface AgentDef {
   /** kebab-case identifier — used for file names, plist label suffix, log dirs */
@@ -36,6 +69,10 @@ export interface AgentDef {
     | { type: "calendar"; hour: number; minute: number; weekday?: number };
   /** Icon component for UI display */
   icon: LucideIcon;
+  /** Card shown on the Dove intro suggestion grid */
+  doveCard: AgentSuggestion;
+  /** Starter suggestion cards shown on the agent's empty chat screen */
+  suggestions: AgentSuggestion[];
   /** Whether to run immediately when loaded */
   runAtLoad?: boolean;
   /** Extra static env vars to embed in the launchd plist */
@@ -71,6 +108,64 @@ export const AGENTS: AgentDef[] = [
     icon: Brain,
     scheduleDisplay: "daily 00:00",
     schedule: { type: "calendar", hour: 0, minute: 0 },
+    doveCard: {
+      icon: Brain,
+      iconBg: "bg-accent group-hover:bg-primary",
+      iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+      title: "Experience Reflector",
+      description: "What does the Experience Reflector do?",
+      prompt: "What does the Experience Reflector do?",
+    },
+    suggestions: [
+      {
+        icon: Brain,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "What does it do?",
+        description: "What does Experience Reflector do?",
+        prompt: "What does Experience Reflector do?",
+      },
+      {
+        icon: Play,
+        iconBg: "bg-green-100 group-hover:bg-primary",
+        iconColor: "text-green-700 group-hover:text-primary-foreground",
+        title: "Run now",
+        description: "Run Experience Reflector now",
+        prompt: "Run Experience Reflector now",
+      },
+      {
+        icon: BookOpen,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Recent learnings",
+        description: "Show me recent learnings extracted",
+        prompt: "Show me recent learnings extracted",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Experience Reflector logs",
+        prompt: "Show Experience Reflector logs",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-purple-100 group-hover:bg-primary",
+        iconColor: "text-purple-700 group-hover:text-primary-foreground",
+        title: "Current status",
+        description: "What is Experience Reflector currently doing?",
+        prompt: "What is Experience Reflector currently doing?",
+      },
+      {
+        icon: TrendingUp,
+        iconBg: "bg-orange-100 group-hover:bg-primary",
+        iconColor: "text-orange-600 group-hover:text-primary-foreground",
+        title: "Memory impact",
+        description: "Which MEMORY.md files were updated last run?",
+        prompt: "Which MEMORY.md files were updated last run?",
+      },
+    ],
   }),
   defineAgent({
     name: "get-shit-done",
@@ -87,6 +182,64 @@ export const AGENTS: AgentDef[] = [
     icon: Zap,
     scheduleDisplay: "every 5 min",
     schedule: { type: "interval", seconds: 300 },
+    doveCard: {
+      icon: Zap,
+      iconBg: "bg-yellow-100 group-hover:bg-primary",
+      iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+      title: "Get Shit Done",
+      description: "How does Get Shit Done work?",
+      prompt: "How does Get Shit Done work?",
+    },
+    suggestions: [
+      {
+        icon: Zap,
+        iconBg: "bg-yellow-100 group-hover:bg-primary",
+        iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+        title: "Run now",
+        description: "Run Get Shit Done now",
+        prompt: "Run Get Shit Done now",
+      },
+      {
+        icon: ListTodo,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Ticket queue",
+        description: "What tickets are queued right now?",
+        prompt: "What tickets are queued right now?",
+      },
+      {
+        icon: Hammer,
+        iconBg: "bg-orange-100 group-hover:bg-primary",
+        iconColor: "text-orange-600 group-hover:text-primary-foreground",
+        title: "Active forges",
+        description: "What tickets are being forged right now?",
+        prompt: "What tickets are being forged right now?",
+      },
+      {
+        icon: GitPullRequest,
+        iconBg: "bg-purple-100 group-hover:bg-primary",
+        iconColor: "text-purple-700 group-hover:text-primary-foreground",
+        title: "Recent PRs",
+        description: "Show recent PRs created by Get Shit Done",
+        prompt: "Show recent PRs created by Get Shit Done",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "How it works",
+        description: "How does Get Shit Done work?",
+        prompt: "How does Get Shit Done work?",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Get Shit Done logs",
+        prompt: "Show Get Shit Done logs",
+      },
+    ],
   }),
   defineAgent({
     name: "release-log-sentinel",
@@ -102,6 +255,64 @@ export const AGENTS: AgentDef[] = [
     icon: Radar,
     scheduleDisplay: "Sun 10:00",
     schedule: { type: "calendar", hour: 10, minute: 0, weekday: 0 },
+    doveCard: {
+      icon: Radar,
+      iconBg: "bg-blue-100 group-hover:bg-primary",
+      iconColor: "text-blue-700 group-hover:text-primary-foreground",
+      title: "Release Log Sentinel",
+      description: "Run the Release Log Sentinel",
+      prompt: "Run the Release Log Sentinel",
+    },
+    suggestions: [
+      {
+        icon: Radar,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Run now",
+        description: "Run Release Log Sentinel now",
+        prompt: "Run Release Log Sentinel now",
+      },
+      {
+        icon: AlertTriangle,
+        iconBg: "bg-yellow-100 group-hover:bg-primary",
+        iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+        title: "Breaking changes",
+        description: "What breaking changes were found?",
+        prompt: "What breaking changes were found?",
+      },
+      {
+        icon: RefreshCw,
+        iconBg: "bg-green-100 group-hover:bg-primary",
+        iconColor: "text-green-700 group-hover:text-primary-foreground",
+        title: "Latest releases",
+        description: "Check for new Claude Code releases",
+        prompt: "Check for new Claude Code releases",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Release notes",
+        description: "Show recent Claude Code release notes",
+        prompt: "Show recent Claude Code release notes",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "What does it do?",
+        description: "What does Release Log Sentinel do?",
+        prompt: "What does Release Log Sentinel do?",
+      },
+      {
+        icon: BookOpen,
+        iconBg: "bg-purple-100 group-hover:bg-primary",
+        iconColor: "text-purple-700 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Release Log Sentinel logs",
+        prompt: "Show Release Log Sentinel logs",
+      },
+    ],
   }),
   defineAgent({
     name: "memory-distiller",
@@ -117,6 +328,64 @@ export const AGENTS: AgentDef[] = [
     icon: FlaskConical,
     scheduleDisplay: "Sun 01:00",
     schedule: { type: "calendar", hour: 1, minute: 0, weekday: 0 },
+    doveCard: {
+      icon: FlaskConical,
+      iconBg: "bg-purple-100 group-hover:bg-primary",
+      iconColor: "text-purple-700 group-hover:text-primary-foreground",
+      title: "Memory Distiller",
+      description: "Explain the Memory Distiller",
+      prompt: "Explain the Memory Distiller",
+    },
+    suggestions: [
+      {
+        icon: FlaskConical,
+        iconBg: "bg-purple-100 group-hover:bg-primary",
+        iconColor: "text-purple-700 group-hover:text-primary-foreground",
+        title: "Run now",
+        description: "Run Memory Distiller now",
+        prompt: "Run Memory Distiller now",
+      },
+      {
+        icon: TrendingUp,
+        iconBg: "bg-green-100 group-hover:bg-primary",
+        iconColor: "text-green-700 group-hover:text-primary-foreground",
+        title: "Promoted patterns",
+        description: "What patterns were promoted to global memory?",
+        prompt: "What patterns were promoted to global memory?",
+      },
+      {
+        icon: BookOpen,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Global memory",
+        description: "Show the current global memory state",
+        prompt: "Show the current global memory state",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "How it works",
+        description: "Explain how Memory Distiller works",
+        prompt: "Explain how Memory Distiller works",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Memory Distiller logs",
+        prompt: "Show Memory Distiller logs",
+      },
+      {
+        icon: Search,
+        iconBg: "bg-orange-100 group-hover:bg-primary",
+        iconColor: "text-orange-600 group-hover:text-primary-foreground",
+        title: "Which projects?",
+        description: "Which projects does Memory Distiller cover?",
+        prompt: "Which projects does Memory Distiller cover?",
+      },
+    ],
   }),
   defineAgent({
     name: "oncall-analyzer",
@@ -135,6 +404,64 @@ export const AGENTS: AgentDef[] = [
     icon: BellRing,
     scheduleDisplay: "daily 09:00",
     schedule: { type: "calendar", hour: 9, minute: 0 },
+    doveCard: {
+      icon: BellRing,
+      iconBg: "bg-red-100 group-hover:bg-primary",
+      iconColor: "text-red-600 group-hover:text-primary-foreground",
+      title: "Oncall Analyzer",
+      description: "Run the Oncall Analyzer",
+      prompt: "Run the Oncall Analyzer",
+    },
+    suggestions: [
+      {
+        icon: BellRing,
+        iconBg: "bg-red-100 group-hover:bg-primary",
+        iconColor: "text-red-600 group-hover:text-primary-foreground",
+        title: "Analyze today",
+        description: "Analyze today's on-call incidents",
+        prompt: "Analyze today's on-call incidents",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Generate PIR",
+        description: "Generate a Post Incident Record",
+        prompt: "Generate a Post Incident Record",
+      },
+      {
+        icon: AlertTriangle,
+        iconBg: "bg-yellow-100 group-hover:bg-primary",
+        iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+        title: "What went wrong?",
+        description: "What went wrong on-call recently?",
+        prompt: "What went wrong on-call recently?",
+      },
+      {
+        icon: Clock,
+        iconBg: "bg-orange-100 group-hover:bg-primary",
+        iconColor: "text-orange-600 group-hover:text-primary-foreground",
+        title: "Last 6 hours",
+        description: "Show incidents from the past 6 hours",
+        prompt: "Show incidents from the past 6 hours",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "What does it do?",
+        description: "What does Oncall Analyzer do?",
+        prompt: "What does Oncall Analyzer do?",
+      },
+      {
+        icon: BookOpen,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Oncall Analyzer logs",
+        prompt: "Show Oncall Analyzer logs",
+      },
+    ],
   }),
   defineAgent({
     name: "zendesk-triager",
@@ -152,6 +479,64 @@ export const AGENTS: AgentDef[] = [
     reposEnvVar: "REPO_LIST",
     icon: LifeBuoy,
     scheduleDisplay: "on demand",
+    doveCard: {
+      icon: LifeBuoy,
+      iconBg: "bg-blue-100 group-hover:bg-primary",
+      iconColor: "text-blue-700 group-hover:text-primary-foreground",
+      title: "Zendesk Triager",
+      description: "Triage recent Zendesk tickets",
+      prompt: "Triage recent Zendesk tickets",
+    },
+    suggestions: [
+      {
+        icon: LifeBuoy,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Triage last 7 days",
+        description: "Triage Zendesk tickets from the last 7 days",
+        prompt: "Triage Zendesk tickets from the last 7 days",
+      },
+      {
+        icon: Search,
+        iconBg: "bg-purple-100 group-hover:bg-primary",
+        iconColor: "text-purple-700 group-hover:text-primary-foreground",
+        title: "Find root causes",
+        description: "Find root causes for recent support tickets",
+        prompt: "Find root causes for recent support tickets",
+      },
+      {
+        icon: TrendingUp,
+        iconBg: "bg-orange-100 group-hover:bg-primary",
+        iconColor: "text-orange-600 group-hover:text-primary-foreground",
+        title: "Ticket themes",
+        description: "Summarize recent Zendesk ticket themes",
+        prompt: "Summarize recent Zendesk ticket themes",
+      },
+      {
+        icon: AlertTriangle,
+        iconBg: "bg-yellow-100 group-hover:bg-primary",
+        iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+        title: "Customer issues",
+        description: "What are customers reporting right now?",
+        prompt: "What are customers reporting right now?",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "How it works",
+        description: "How does Zendesk Triager work?",
+        prompt: "How does Zendesk Triager work?",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Zendesk Triager logs",
+        prompt: "Show Zendesk Triager logs",
+      },
+    ],
   }),
   defineAgent({
     name: "dependabot-merger",
@@ -170,5 +555,63 @@ export const AGENTS: AgentDef[] = [
     icon: GitMerge,
     scheduleDisplay: "daily 10:00",
     schedule: { type: "calendar", hour: 10, minute: 0 },
+    doveCard: {
+      icon: GitMerge,
+      iconBg: "bg-green-100 group-hover:bg-primary",
+      iconColor: "text-green-700 group-hover:text-primary-foreground",
+      title: "Dependabot Merger",
+      description: "Review and merge Dependabot PRs",
+      prompt: "Review and merge Dependabot PRs",
+    },
+    suggestions: [
+      {
+        icon: GitMerge,
+        iconBg: "bg-green-100 group-hover:bg-primary",
+        iconColor: "text-green-700 group-hover:text-primary-foreground",
+        title: "Review PRs",
+        description: "Review and merge Dependabot PRs",
+        prompt: "Review and merge Dependabot PRs",
+      },
+      {
+        icon: Eye,
+        iconBg: "bg-blue-100 group-hover:bg-primary",
+        iconColor: "text-blue-700 group-hover:text-primary-foreground",
+        title: "Dry-run preview",
+        description: "Run Dependabot Merger in dry-run mode",
+        prompt: "Run Dependabot Merger dry-run",
+      },
+      {
+        icon: AlertTriangle,
+        iconBg: "bg-yellow-100 group-hover:bg-primary",
+        iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+        title: "Blocked PRs",
+        description: "Show blocked Dependabot PRs",
+        prompt: "Show blocked Dependabot PRs",
+      },
+      {
+        icon: CheckCircle,
+        iconBg: "bg-green-100 group-hover:bg-primary",
+        iconColor: "text-green-600 group-hover:text-primary-foreground",
+        title: "Safe to merge",
+        description: "Which Dependabot PRs are safe to merge?",
+        prompt: "Which Dependabot PRs are safe to merge?",
+      },
+      {
+        icon: Info,
+        iconBg: "bg-accent group-hover:bg-primary",
+        iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+        title: "How it works",
+        description: "How does Dependabot Merger work?",
+        prompt: "How does Dependabot Merger work?",
+      },
+      {
+        icon: FileText,
+        iconBg: "bg-slate-100 group-hover:bg-primary",
+        iconColor: "text-slate-600 group-hover:text-primary-foreground",
+        title: "Last run logs",
+        description: "Show Dependabot Merger logs",
+        prompt: "Show Dependabot Merger logs",
+      },
+    ],
   }),
 ];

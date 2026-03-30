@@ -16,6 +16,15 @@ const BASE: AgentDef = {
   scheduleDisplay: "daily 09:00",
   schedule: { type: "calendar", hour: 9, minute: 0 },
   icon: Brain,
+  doveCard: {
+    icon: Brain,
+    iconBg: "",
+    iconColor: "",
+    title: "Test Agent",
+    description: "",
+    prompt: "",
+  },
+  suggestions: [],
 };
 
 const HOME = "/Users/test";
