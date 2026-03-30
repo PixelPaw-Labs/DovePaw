@@ -1,8 +1,6 @@
-/** Shared types and constants for the WebSocket heartbeat protocol. Safe to import in client components. */
+/** Shared types for the WebSocket heartbeat protocol. Safe to import in client components. */
 
 import { z } from "zod";
-
-export const WS_PORT = 7474;
 
 const launchdStatusSchema = z.object({ loaded: z.boolean(), running: z.boolean() });
 const agentStatusSchema = z.object({

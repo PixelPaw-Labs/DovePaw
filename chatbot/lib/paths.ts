@@ -25,5 +25,5 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const CHATBOT_ROOT = join(__dirname, "..");
 /** tsx binary in root node_modules */
 export const TSX_BIN = join(CHATBOT_ROOT, "../node_modules/.bin/tsx");
-/** Runtime port manifest written by a2a/start-all.ts */
-export const PORTS_FILE = join(DOVEPAW_DIR, ".ports.json");
+/** Runtime port manifest written by a2a/start-all.ts. Scoped per Next.js port to allow concurrent instances. */
+export const PORTS_FILE = join(DOVEPAW_DIR, `.ports.${process.env.DOVEPAW_PORT ?? "0"}.json`);

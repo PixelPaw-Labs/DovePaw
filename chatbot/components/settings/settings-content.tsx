@@ -10,8 +10,7 @@ import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { AgentManagementContent } from "./agent-management-content";
-import { WS_PORT, statusMessageSchema } from "@/a2a/heartbeat-types";
-import type { AgentStatus } from "@/a2a/heartbeat-types";
+import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
 import { z } from "zod";
 import {
   type GlobalSettings,
@@ -22,45 +21,6 @@ import {
 } from "@@/lib/settings-schemas";
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
-
-const WS_URL = `ws://127.0.0.1:${WS_PORT}`;
-const RECONNECT_DELAY_MS = 3_000;
-
-function useAgentStatuses() {
-  const [statuses, setStatuses] = React.useState<Record<string, AgentStatus>>({});
-
-  React.useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let cancelled = false;
-
-    function connect() {
-      ws = new WebSocket(WS_URL);
-      ws.addEventListener("message", (event) => {
-        try {
-          if (typeof event.data !== "string") return;
-          const result = statusMessageSchema.safeParse(JSON.parse(event.data));
-          if (result.success) setStatuses(result.data.agents);
-        } catch {
-          // ignore malformed messages
-        }
-      });
-      ws.addEventListener("close", () => {
-        if (!cancelled) reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
-      });
-      ws.addEventListener("error", () => ws?.close());
-    }
-
-    connect();
-    return () => {
-      cancelled = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      ws?.close();
-    };
-  }, []);
-
-  return statuses;
-}
 
 type Tab = "repositories" | "env-vars" | "agent-management";
 

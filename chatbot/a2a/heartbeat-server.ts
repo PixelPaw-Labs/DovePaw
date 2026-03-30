@@ -2,7 +2,8 @@
  * WebSocket heartbeat server — pings each agent's A2A agent-card endpoint
  * every INTERVAL_MS and broadcasts live status to all connected clients.
  *
- * Port: WS_PORT (Next.js runs on 7473)
+ * Binds to port 0 (OS-assigned). Returns the actual port via Promise so the
+ * caller can write it into the ports manifest for client discovery.
  *
  * Message shape (server → client):
  *   { type: "status", agents: { [manifestKey]: { online: boolean, latency: number | null } } }
@@ -10,8 +11,6 @@
 
 import { WebSocketServer, WebSocket } from "ws";
 import { consola } from "consola";
-import type { PortsManifest } from "./lib/base-server.js";
-import { WS_PORT } from "./heartbeat-types.js";
 import type { AgentStatus, StatusMessage } from "./heartbeat-types.js";
 import { getLaunchdStatuses } from "@/lib/launchd";
 import { isProcessing, getProcessingTrigger } from "./lib/processing-registry.js";
@@ -35,14 +34,10 @@ async function pingAgent(port: number): Promise<Pick<AgentStatus, "online" | "la
   }
 }
 
-function isPortKey(k: string, manifest: PortsManifest): boolean {
-  return k !== "updatedAt" && k in manifest;
-}
-
-async function checkAll(manifest: PortsManifest): Promise<Record<string, AgentStatus>> {
-  const keys = Object.keys(manifest).filter((k) => isPortKey(k, manifest));
+async function checkAll(agentPorts: Record<string, number>): Promise<Record<string, AgentStatus>> {
+  const keys = Object.keys(agentPorts);
   const [pingResults, launchdMap] = await Promise.all([
-    Promise.all(keys.map((k) => pingAgent(Number(manifest[k])))),
+    Promise.all(keys.map((k) => pingAgent(agentPorts[k]))),
     getLaunchdStatuses(),
   ]);
   return Object.fromEntries(
@@ -58,37 +53,46 @@ async function checkAll(manifest: PortsManifest): Promise<Record<string, AgentSt
   );
 }
 
-export function startHeartbeatServer(manifest: PortsManifest): void {
-  const wss = new WebSocketServer({ port: WS_PORT, host: "127.0.0.1" });
+export function startHeartbeatServer(agentPorts: Record<string, number>): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
 
-  let current: Record<string, AgentStatus> = {};
+    let current: Record<string, AgentStatus> = {};
 
-  function broadcast(msg: StatusMessage) {
-    const payload = JSON.stringify(msg);
-    for (const client of wss.clients) {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(payload);
+    function broadcast(msg: StatusMessage) {
+      const payload = JSON.stringify(msg);
+      for (const client of wss.clients) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(payload);
+        }
       }
     }
-  }
 
-  async function heartbeat() {
-    current = await checkAll(manifest);
-    broadcast({ type: "status", agents: current });
-  }
-
-  wss.on("connection", (ws) => {
-    // Send current status immediately so the client doesn't wait for the next interval
-    if (Object.keys(current).length > 0) {
-      ws.send(JSON.stringify({ type: "status", agents: current }));
+    async function heartbeat() {
+      current = await checkAll(agentPorts);
+      broadcast({ type: "status", agents: current });
     }
-  });
 
-  wss.on("listening", () => {
-    consola.success(`Heartbeat WS  →  ws://127.0.0.1:${WS_PORT}`);
-  });
+    wss.on("connection", (ws) => {
+      // Send current status immediately so the client doesn't wait for the next interval
+      if (Object.keys(current).length > 0) {
+        ws.send(JSON.stringify({ type: "status", agents: current }));
+      }
+    });
 
-  // Run first check immediately, then on interval
-  void heartbeat();
-  setInterval(() => void heartbeat(), INTERVAL_MS);
+    wss.on("listening", () => {
+      const addr = wss.address();
+      if (!addr || typeof addr === "string") {
+        reject(new Error("Unexpected address type from WebSocketServer"));
+        return;
+      }
+      consola.success(`Heartbeat WS  →  ws://127.0.0.1:${addr.port}`);
+      // Run first check immediately, then on interval
+      void heartbeat();
+      setInterval(() => void heartbeat(), INTERVAL_MS);
+      resolve(addr.port);
+    });
+
+    wss.on("error", reject);
+  });
 }

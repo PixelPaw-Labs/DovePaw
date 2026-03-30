@@ -6,63 +6,10 @@ import { usePathname } from "next/navigation";
 import { Bot, PawPrint, Settings } from "lucide-react";
 import { AGENTS } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
-import { WS_PORT, statusMessageSchema } from "@/a2a/heartbeat-types";
-import type { AgentStatus } from "@/a2a/heartbeat-types";
+import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
 import { AgentButton } from "./agent-button";
 
-const WS_URL = `ws://127.0.0.1:${WS_PORT}`;
-const RECONNECT_DELAY_MS = 3_000;
-
-function useAgentStatuses() {
-  const [statuses, setStatuses] = React.useState<Record<string, AgentStatus>>({});
-
-  React.useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let cancelled = false;
-
-    function connect() {
-      ws = new WebSocket(WS_URL);
-
-      ws.addEventListener("message", (event) => {
-        try {
-          if (typeof event.data !== "string") return;
-          const result = statusMessageSchema.safeParse(JSON.parse(event.data));
-          if (result.success) setStatuses(result.data.agents);
-        } catch {
-          // ignore malformed messages
-        }
-      });
-
-      ws.addEventListener("close", () => {
-        if (!cancelled) {
-          reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
-        }
-      });
-
-      ws.addEventListener("error", () => {
-        ws?.close();
-      });
-    }
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      ws?.close();
-    };
-  }, []);
-
-  return statuses;
-}
-
-interface AgentSidebarProps {
-  activeAgentId?: string;
-  onSelectAgent?: (agentId: string) => void;
-}
-
-export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSidebarProps) {
+export function AgentSidebar() {
   const statuses = useAgentStatuses();
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
