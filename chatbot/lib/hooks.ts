@@ -50,7 +50,7 @@ export function buildAgentHooks(
             const ids = getPendingIds();
             return {
               continue: false,
-              systemMessage: `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}). Call the await tool with the id before stopping.`,
+              systemMessage: `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}). You MUST call the await tool yourself with the id.`,
             };
           },
         ],
@@ -80,7 +80,7 @@ export function buildAgentHooks(
               const id = getStillRunningId(structured);
               const hookSpecificOutput: PostToolUseHookSpecificOutput = {
                 hookEventName: "PostToolUse",
-                additionalContext: `⚠️ Still running (id: ${id}). You MUST call the await tool again with id "${id}" — do NOT start a new task or respond to the user until you have the final result.`,
+                additionalContext: `⚠️ Still running (id: ${id}). You MUST call the await tool again yourself with id "${id}".`,
               };
               return { hookSpecificOutput };
             }
