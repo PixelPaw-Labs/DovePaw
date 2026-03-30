@@ -9,7 +9,12 @@ import { cn } from "@/lib/utils";
 import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
 import { AgentButton } from "./agent-button";
 
-export function AgentSidebar() {
+interface AgentSidebarProps {
+  activeAgentId?: string;
+  onSelectAgent?: (agentId: string) => void;
+}
+
+export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSidebarProps) {
   const statuses = useAgentStatuses();
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
