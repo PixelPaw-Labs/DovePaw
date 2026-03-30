@@ -77,6 +77,12 @@
   }
 }
 
+/* Streamdown hardcodes text-primary on links. Override for the user bubble where
+   bg-primary makes text-primary invisible. Unlayered = beats @layer utilities. */
+.is-user a[data-streamdown="link"] {
+  color: var(--color-primary-foreground);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

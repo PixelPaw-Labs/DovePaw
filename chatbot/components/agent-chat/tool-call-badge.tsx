@@ -1,6 +1,7 @@
 import { diffLines } from "diff";
 import { FileEdit, Terminal, FileText, Search, Wrench } from "lucide-react";
-import { MessageAction, MessageActions, MessageResponse } from "@/components/ai-elements/message";
+import { cn } from "@/lib/utils";
+import { MessageAction, MessageActions } from "@/components/ai-elements/message";
 import { Sources, SourcesContent, SourcesTrigger } from "@/components/ai-elements/sources";
 import { ShimmerLabel } from "./shimmer-label";
 import type { ToolCall } from "@/components/hooks/use-messages";
@@ -74,17 +75,50 @@ function toolMeta(tool: ToolCall): {
   }
 }
 
-function buildDiffMarkdown(filePath: string, oldStr: string, newStr: string): string {
-  const header = `### ${filePath}\n`;
-  const hunks = diffLines(oldStr, newStr);
-  const body = hunks
-    .flatMap((hunk) => {
-      const lines = hunk.value.replace(/\n$/, "").split("\n");
-      const prefix = hunk.added ? "+" : hunk.removed ? "-" : " ";
-      return lines.map((l) => `${prefix} ${l}`);
-    })
-    .join("\n");
-  return `${header}\`\`\`diff\n${body}\n\`\`\``;
+function DiffBlock({
+  filePath,
+  oldStr,
+  newStr,
+}: {
+  filePath: string;
+  oldStr: string;
+  newStr: string;
+}) {
+  const lines = diffLines(oldStr, newStr).flatMap((hunk) =>
+    hunk.value
+      .replace(/\n$/, "")
+      .split("\n")
+      .map((content) => ({
+        content,
+        type: hunk.added ? "added" : hunk.removed ? "removed" : "context",
+      })),
+  );
+
+  return (
+    <div className="rounded-md border border-border overflow-hidden text-xs font-mono">
+      <div className="px-3 py-1.5 bg-muted border-b border-border text-muted-foreground truncate">
+        {filePath}
+      </div>
+      <pre className="overflow-x-auto bg-background p-0 m-0">
+        {lines.map((line, i) => (
+          <div
+            key={i}
+            className={cn(
+              "px-3 whitespace-pre",
+              line.type === "added" && "bg-green-50 text-green-800",
+              line.type === "removed" && "bg-red-50 text-red-800",
+              line.type === "context" && "text-foreground/70",
+            )}
+          >
+            <span className="select-none mr-2 opacity-60">
+              {line.type === "added" ? "+" : line.type === "removed" ? "-" : " "}
+            </span>
+            {line.content}
+          </div>
+        ))}
+      </pre>
+    </div>
+  );
 }
 
 export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
@@ -93,16 +127,6 @@ export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
       t.name === "Edit" && t.input.old_string !== undefined && t.input.new_string !== undefined,
   );
   if (edits.length === 0) return null;
-
-  const markdown = edits
-    .map((t) =>
-      buildDiffMarkdown(
-        typeof t.input.file_path === "string" ? t.input.file_path : "",
-        typeof t.input.old_string === "string" ? t.input.old_string : "",
-        typeof t.input.new_string === "string" ? t.input.new_string : "",
-      ),
-    )
-    .join("\n\n");
 
   return (
     <Sources>
@@ -120,7 +144,14 @@ export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
         </span>
       </SourcesTrigger>
       <SourcesContent>
-        <MessageResponse className="text-xs">{markdown}</MessageResponse>
+        {edits.map((t, i) => (
+          <DiffBlock
+            key={i}
+            filePath={typeof t.input.file_path === "string" ? t.input.file_path : ""}
+            oldStr={typeof t.input.old_string === "string" ? t.input.old_string : ""}
+            newStr={typeof t.input.new_string === "string" ? t.input.new_string : ""}
+          />
+        ))}
       </SourcesContent>
     </Sources>
   );
