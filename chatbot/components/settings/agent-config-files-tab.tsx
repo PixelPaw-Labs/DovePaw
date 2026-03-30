@@ -13,6 +13,9 @@ import {
 } from "@/components/ui/dialog";
 import { z } from "zod";
 import { DataTableEmpty } from "./data-table";
+import CodeMirror from "@uiw/react-codemirror";
+import { json } from "@codemirror/lang-json";
+import { EditorView } from "@codemirror/view";
 
 const configFileSchema = z.object({ name: z.string(), content: z.string() });
 const configFilesResponseSchema = z.object({ files: z.array(configFileSchema) });
@@ -82,7 +85,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
     setJsonError(null);
   }
 
-  async function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.SyntheticEvent) {
     e.preventDefault();
     const name = editName.trim();
 
@@ -207,7 +210,10 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
           if (!open) closeDialog();
         }}
       >
-        <DialogContent className="sm:max-w-xl">
+        <DialogContent
+          className="sm:max-w-none"
+          style={{ width: "fit-content", maxWidth: "90vw", overflow: "visible" }}
+        >
           <DialogHeader>
             <DialogTitle>
               {dialog?.mode === "add" ? "New Config File" : `Edit ${dialog?.file.name}`}
@@ -234,20 +240,41 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
               </div>
             )}
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="cfg-content" className="text-sm font-medium text-on-surface">
-                JSON Content
-              </label>
-              <textarea
-                id="cfg-content"
-                value={editContent}
-                onChange={(e) => {
-                  setEditContent(e.target.value);
-                  setJsonError(null);
-                }}
-                rows={16}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm font-mono resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                spellCheck={false}
-              />
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-on-surface">JSON Content</label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-xs text-on-surface-variant hover:text-on-surface"
+                  onClick={() => {
+                    try {
+                      setEditContent(JSON.stringify(JSON.parse(editContent), null, 2));
+                      setJsonError(null);
+                    } catch (err) {
+                      setJsonError(err instanceof Error ? err.message : "Invalid JSON");
+                    }
+                  }}
+                >
+                  Format
+                </Button>
+              </div>
+              <div
+                className="rounded-lg border border-input overflow-hidden text-sm"
+                style={{ resize: "both", width: 560, minWidth: 400, height: 320, minHeight: 160 }}
+              >
+                <CodeMirror
+                  value={editContent}
+                  extensions={[json(), EditorView.theme({ ".cm-scroller": { overflow: "auto" } })]}
+                  width="100%"
+                  height="100%"
+                  onChange={(value) => {
+                    setEditContent(value);
+                    setJsonError(null);
+                  }}
+                  basicSetup={{ lineNumbers: true, foldGutter: true }}
+                />
+              </div>
               {jsonError && <p className="text-xs text-error">{jsonError}</p>}
             </div>
             <DialogFooter>
