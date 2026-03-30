@@ -82,10 +82,10 @@ export const ToolHeader = ({
       className={cn("flex w-full items-center justify-between gap-4 p-3", className)}
       {...props}
     >
-      <div className="flex items-center gap-2">
-        <WrenchIcon className="size-4 text-muted-foreground" />
-        <span className="font-medium text-sm">{title ?? derivedName}</span>
-        {getStatusBadge(state)}
+      <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+        <WrenchIcon className="size-4 shrink-0 text-muted-foreground" />
+        <span className="font-medium text-sm truncate">{title ?? derivedName}</span>
+        <div className="shrink-0">{getStatusBadge(state)}</div>
       </div>
       <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>
