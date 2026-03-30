@@ -65,6 +65,19 @@ describe("buildAgentHooks — Stop hook", () => {
     expect((result as { systemMessage: string }).systemMessage).toContain("abc-123");
   });
 
+  it("includes polling guidance in the Stop message", async () => {
+    const hooks = buildAgentHooks(
+      makeConfig({
+        hasPendingWork: () => true,
+        getPendingIds: () => ["abc-123"],
+      }),
+    );
+    const fn = hooks.Stop![0]!.hooks[0]!;
+    const result = (await callHook(fn, stopInput())) as { systemMessage: string };
+    expect(result.systemMessage).toContain("minutes to hours");
+    expect(result.systemMessage).toContain("Never give up or stop polling");
+  });
+
   it("lists all pending ids in the Stop message", async () => {
     const hooks = buildAgentHooks(
       makeConfig({

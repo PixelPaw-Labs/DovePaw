@@ -50,7 +50,13 @@ export function buildAgentHooks(
             const ids = getPendingIds();
             return {
               continue: false,
-              systemMessage: `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}). You MUST call the await tool yourself with the id.`,
+              systemMessage: [
+                `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}).`,
+                `You MUST call the await tool yourself with the id.`,
+                `These operations can run for a long time (minutes to hours) — decide an appropriate sleep interval based on the task type.`,
+                `Keep calling await in a loop until the operation completes.`,
+                `Never give up or stop polling; you are responsible for retrieving the final result.`,
+              ].join(" "),
             };
           },
         ],
