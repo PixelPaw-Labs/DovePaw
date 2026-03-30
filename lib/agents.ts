@@ -77,7 +77,7 @@ export const AGENTS: AgentDef[] = [
     alias: "gsd",
     displayName: "Get Shit Done",
     description:
-      "Automated JIRA ticket implementer: discovers sprint tickets, forges implementations in " +
+      "Automated JIRA ticket implementer: discovers Kanban tickets, forges implementations in " +
       "parallel git worktrees, and creates PRs. " +
       "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
       "or when asked to 'run GSD', 'process tickets', 'forge JIRA tickets', or 'start the pipeline'. " +
@@ -159,13 +159,12 @@ export const AGENTS: AgentDef[] = [
     displayName: "Dependabot Merger",
     description:
       "Review, risk-assess, and merge Dependabot PRs across configured repos. Maps each PR to " +
-      "the correct Jira sprint ticket, prepends [Ticket ID] to the PR title, and merges safe PRs " +
+      "the correct Jira Kanban ticket, prepends [Ticket ID] to the PR title, and merges safe PRs " +
       "automatically. Reports blockers with risk reasoning and confidence scores. " +
       "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
       "or when asked to 'process dependabot PRs', 'merge dependabot', 'triage dependency PRs', " +
-      "'review dependency updates', or 'dependabot sprint cleanup'. " +
-      "Pass 'dry-run' to preview without merging, or a sprint keyword to target a specific sprint. " +
-      "Requires REPO_LIST (local repo paths). JIRA_SPRINT_PREFIX env var is a fallback only.",
+      "or 'review dependency updates'. Pass 'dry-run' to preview without merging. " +
+      "Requires REPO_LIST (local repo paths).",
     requiredEnvVars: ["REPO_LIST"],
     reposEnvVar: "REPO_LIST",
     icon: GitMerge,
