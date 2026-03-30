@@ -97,6 +97,35 @@ describe("createAgentWorkspace", () => {
       ws.cleanup();
       expect(() => ws.cleanup()).not.toThrow();
     });
+
+    it("removes the empty parent dir when it is the last workspace", () => {
+      const sourceDir = join(TMP_ROOT, "src", "my-agent");
+      mkdirSync(sourceDir, { recursive: true });
+
+      const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const parentDir = join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent");
+
+      ws.cleanup();
+
+      expect(existsSync(ws.path)).toBe(false);
+      expect(existsSync(parentDir)).toBe(false);
+    });
+
+    it("leaves the parent dir when sibling workspaces still exist", () => {
+      const sourceDir = join(TMP_ROOT, "src", "my-agent");
+      mkdirSync(sourceDir, { recursive: true });
+
+      const ws1 = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const ws2 = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const parentDir = join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent");
+
+      ws1.cleanup();
+
+      expect(existsSync(ws2.path)).toBe(true);
+      expect(existsSync(parentDir)).toBe(true);
+
+      ws2.cleanup();
+    });
   });
 });
 

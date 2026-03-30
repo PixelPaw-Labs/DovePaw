@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, rmdirSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AGENTS_ROOT, agentWorkspaceDir } from "@@/lib/paths";
@@ -41,6 +41,11 @@ export function createAgentWorkspace(
     cleanup() {
       try {
         rmSync(workspacePath, { recursive: true, force: true });
+      } catch {
+        // best effort — do not propagate
+      }
+      try {
+        rmdirSync(root); // removes parent only if empty; throws ENOTEMPTY or ENOENT otherwise
       } catch {
         // best effort — do not propagate
       }
