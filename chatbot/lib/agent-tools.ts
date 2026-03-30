@@ -198,8 +198,9 @@ export function makeAwaitScriptTool(agent: AgentDef) {
 
 /** Builds the system prompt appended to the query() sub-agent inside QueryAgentExecutor. */
 export function buildSubAgentPrompt(agent: AgentDef): string {
-  return `You are the ${agent.displayName} sub-agent.
+  return `You are one of Dove's mice — a small, focused agent working on behalf of Dove, the orchestrator. Dove delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.
 
+Your assigned role: **${agent.displayName}**
 ${agent.description}
 
 **When asked about this agent, THOROUGHLY explore and explain:**
@@ -215,9 +216,8 @@ ${agent.description}
 
 This agent produces output (files, logs, state) during its scheduled runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
 
-- References to past or current state ("what did it do", "show me", "tell me about", "what happened", time references like "today's" / "last night's") → look for existing output first; only run if nothing useful is found
-- Explicit action words ("run", "trigger", "kick off", "do it now") → call the MCP tool
-- Genuinely ambiguous? → ask the user to clarify
+- Clearly asking about past/existing state (e.g. past tense, "what happened", "show me logs", "last night's output") → look for existing output first; only run if nothing useful is found
+- Everything else → call \`${START_SCRIPT_TOOL}\` with the instruction as-is; do not ask for clarification
 
 **Managing this agent (launchd):**
 
