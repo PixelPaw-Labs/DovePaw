@@ -31,7 +31,8 @@ describe("ToolCallList — isActive shimmer", () => {
   it("renders label as plain text when isActive is false (default)", () => {
     render(<ToolCallList toolCalls={[bashTool]} />);
     expect(screen.queryAllByTestId("shimmer")).toHaveLength(0);
-    expect(screen.getByText("Bash")).toBeTruthy();
+    // label and detail combined into one span: "Bash · echo hello"
+    expect(screen.getByText(/Bash/)).toBeTruthy();
   });
 
   it("renders label as plain text when isActive is explicitly false", () => {
@@ -39,36 +40,28 @@ describe("ToolCallList — isActive shimmer", () => {
     expect(screen.queryAllByTestId("shimmer")).toHaveLength(0);
   });
 
-  it("wraps label in Shimmer when isActive is true", () => {
+  it("wraps label and detail together in one Shimmer when isActive is true", () => {
     render(<ToolCallList toolCalls={[bashTool]} isActive />);
     const shimmers = screen.getAllByTestId("shimmer");
-    expect(shimmers.some((s) => s.textContent === "Bash")).toBe(true);
+    // One shimmer covering "Bash · echo hello" as a single unit
+    expect(shimmers).toHaveLength(1);
+    expect(shimmers[0].textContent).toContain("Bash");
+    expect(shimmers[0].textContent).toContain("echo hello");
   });
 
-  it("wraps detail in Shimmer when isActive is true and detail exists", () => {
-    render(<ToolCallList toolCalls={[bashTool]} isActive />);
-    const shimmers = screen.getAllByTestId("shimmer");
-    expect(shimmers.some((s) => s.textContent?.includes("echo hello"))).toBe(true);
-  });
-
-  it("shows two Shimmer nodes per tool when isActive (label + detail)", () => {
-    render(<ToolCallList toolCalls={[bashTool]} isActive />);
-    expect(screen.getAllByTestId("shimmer")).toHaveLength(2);
-  });
-
-  it("shows one Shimmer per tool when detail is absent", () => {
+  it("shows one Shimmer per tool whether or not detail exists", () => {
     const noDetailTool: ToolCall = { name: "Bash", input: { command: "" } };
     render(<ToolCallList toolCalls={[noDetailTool]} isActive />);
-    // label shimmer only, no detail
     expect(screen.getAllByTestId("shimmer")).toHaveLength(1);
   });
 
-  it("renders multiple tools each with shimmer when isActive", () => {
+  it("renders one Shimmer per tool when multiple tools and isActive", () => {
     render(<ToolCallList toolCalls={[bashTool, skillTool]} isActive />);
     const shimmers = screen.getAllByTestId("shimmer");
-    const labels = shimmers.map((s) => s.textContent ?? "");
-    expect(labels).toContain("Bash");
-    expect(labels).toContain("Skill");
+    expect(shimmers).toHaveLength(2);
+    const texts = shimmers.map((s) => s.textContent ?? "");
+    expect(texts.some((t) => t.includes("Bash"))).toBe(true);
+    expect(texts.some((t) => t.includes("Skill"))).toBe(true);
   });
 
   it("no Shimmers when multiple tools and isActive is false", () => {
@@ -87,32 +80,30 @@ describe("ToolCallList — detail truncation at 80 chars", () => {
   it("truncates Bash command at 80 chars with ellipsis", () => {
     const tool: ToolCall = { name: "Bash", input: { command: LONG_CMD } };
     render(<ToolCallList toolCalls={[tool]} />);
-    const detail = screen.getByText(/^·/);
-    expect(detail.textContent).toContain("…");
-    // detail text (excluding "· ") should be 80 chars + "…"
-    const trimmed = (detail.textContent ?? "").replace(/^·\s*/, "");
-    expect(trimmed).toHaveLength(81); // 80 + "…"
+    // Combined span: "Bash · <truncated>…"
+    const span = screen.getByText(/^Bash/);
+    expect(span.textContent).toContain("…");
   });
 
   it("does not truncate commands exactly 80 chars long", () => {
     const cmd80 = "b".repeat(80);
     const tool: ToolCall = { name: "Bash", input: { command: cmd80 } };
     render(<ToolCallList toolCalls={[tool]} />);
-    const detail = screen.getByText(/^·/);
-    expect(detail.textContent).not.toContain("…");
+    const span = screen.getByText(/^Bash/);
+    expect(span.textContent).not.toContain("…");
   });
 
   it("truncates Grep pattern at 80 chars", () => {
     const tool: ToolCall = { name: "Grep", input: { pattern: LONG_CMD } };
     render(<ToolCallList toolCalls={[tool]} />);
-    const detail = screen.getByText(/^·/);
-    expect(detail.textContent).toContain("…");
+    const span = screen.getByText(/^Grep/);
+    expect(span.textContent).toContain("…");
   });
 
   it("truncates default tool first string value at 80 chars", () => {
     const tool: ToolCall = { name: "Skill", input: { skill: LONG_CMD } };
     render(<ToolCallList toolCalls={[tool]} />);
-    const detail = screen.getByText(/^·/);
-    expect(detail.textContent).toContain("…");
+    const span = screen.getByText(/^Skill/);
+    expect(span.textContent).toContain("…");
   });
 });

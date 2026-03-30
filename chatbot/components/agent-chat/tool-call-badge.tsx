@@ -1,8 +1,8 @@
 import { diffLines } from "diff";
 import { FileEdit, Terminal, FileText, Search, Wrench } from "lucide-react";
 import { MessageAction, MessageActions, MessageResponse } from "@/components/ai-elements/message";
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Sources, SourcesContent, SourcesTrigger } from "@/components/ai-elements/sources";
+import { ShimmerLabel } from "./shimmer-label";
 import type { ToolCall } from "@/components/hooks/use-messages";
 
 function shortPath(p: unknown): string {
@@ -146,26 +146,9 @@ export function ToolCallList({
             className="font-mono text-xs h-7 px-2 gap-1.5 cursor-default"
           >
             {icon}
-            {isActive ? (
-              <Shimmer as="span" className="font-medium">
-                {label}
-              </Shimmer>
-            ) : (
-              <span className="font-medium">{label}</span>
-            )}
-            {detail && (
-              <>
-                {isActive ? (
-                  <Shimmer as="span" className="font-normal truncate max-w-[400px]">
-                    {`· ${detail}`}
-                  </Shimmer>
-                ) : (
-                  <span className="text-muted-foreground font-normal truncate max-w-[400px]">
-                    · {detail}
-                  </span>
-                )}
-              </>
-            )}
+            <ShimmerLabel isActive={isActive} className="truncate max-w-[400px]">
+              {detail ? `${label} · ${detail}` : label}
+            </ShimmerLabel>
           </MessageAction>
         );
       })}

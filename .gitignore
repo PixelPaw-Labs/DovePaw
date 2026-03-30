@@ -151,7 +151,7 @@ node_modules/
 logs/
 chatbot/tsconfig.json
 state/
-.pir-tmp/
+.*-tmp/
 .envrc
 chatbot/.next/
 chatbot/node_modules/

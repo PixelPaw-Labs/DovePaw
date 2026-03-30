@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Settings } from "lucide-react";
 import { createScope, animate } from "animejs";
 import { HeartbeatLine } from "./heartbeat-line";
+import { ShimmerLabel } from "./shimmer-label";
 import type { AgentDef } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
 import type { AgentStatus, LaunchdStatus } from "@/a2a/heartbeat-types";
@@ -153,9 +154,12 @@ export function AgentButton({
 
       <Icon className={cn("w-4 h-4 shrink-0 relative z-10", isActive ? "text-blue-700" : "")} />
       <div className="flex-1 min-w-0 flex flex-col gap-0.5 relative z-10">
-        <span className={cn("text-sm font-medium", !isActive && "text-foreground/80")}>
+        <ShimmerLabel
+          isActive={isRunning}
+          className={cn("text-sm font-medium", !isActive && "text-foreground/80")}
+        >
           {agent.displayName}
-        </span>
+        </ShimmerLabel>
         <LaunchdBadge
           launchd={status?.launchd ?? null}
           processing={status?.processing ?? false}
