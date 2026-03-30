@@ -81,6 +81,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     // Workspace, repo cloning, and query() are all inside the outer try so
     // the finally block always runs cleanup regardless of where a failure occurs.
     let workspace: Awaited<ReturnType<typeof createAgentWorkspace>> | null = null;
+    let exitHandler: (() => void) | null = null;
 
     try {
       // Create an isolated workspace for this entire execution — used as cwd for
@@ -90,6 +91,11 @@ export class QueryAgentExecutor implements AgentExecutor {
         this.def.alias,
         agentSourceDirFromEntry(this.def.entryPath),
       );
+
+      // Guard against process.exit() bypassing the finally block — each executor
+      // is only responsible for its own workspace, not others.
+      exitHandler = () => workspace?.cleanup();
+      process.once("exit", exitHandler);
 
       // Clone each assigned repo into the workspace and remap the repos env var
       // from GitHub slugs to local cloned paths.
@@ -198,6 +204,8 @@ export class QueryAgentExecutor implements AgentExecutor {
       );
     } finally {
       this.abortController?.abort();
+      // Remove the exit handler before calling cleanup() to avoid firing twice.
+      if (exitHandler) process.off("exit", exitHandler);
       workspace?.cleanup();
       this.abortController = null;
       markIdle(this.def.manifestKey);

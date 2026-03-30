@@ -41,3 +41,7 @@ process.on("SIGINT", () => {
   consola.info("Shutting down A2A servers…");
   process.exit(0);
 });
+
+process.on("SIGTERM", () => {
+  process.exit(0);
+});

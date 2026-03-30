@@ -1,8 +1,13 @@
 import { diffLines } from "diff";
-import { FileEdit, Terminal, FileText, Search, Wrench } from "lucide-react";
+import { FileEdit, Terminal, FileText, Search, Wrench, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MessageAction, MessageActions } from "@/components/ai-elements/message";
 import { Sources, SourcesContent, SourcesTrigger } from "@/components/ai-elements/sources";
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought";
 import { ShimmerLabel } from "./shimmer-label";
 import type { ToolCall } from "@/components/hooks/use-messages";
 
@@ -13,7 +18,7 @@ function shortPath(p: unknown): string {
 }
 
 function toolMeta(tool: ToolCall): {
-  icon: React.ReactNode;
+  Icon: LucideIcon;
   label: string;
   detail: string;
   tooltip: string;
@@ -23,21 +28,21 @@ function toolMeta(tool: ToolCall): {
   switch (name) {
     case "Edit":
       return {
-        icon: <FileEdit className="w-3 h-3" />,
+        Icon: FileEdit,
         label: "Edit",
         detail: shortPath(input.file_path),
         tooltip: typeof input.file_path === "string" ? input.file_path : "",
       };
     case "Write":
       return {
-        icon: <FileText className="w-3 h-3" />,
+        Icon: FileText,
         label: "Write",
         detail: shortPath(input.file_path),
         tooltip: typeof input.file_path === "string" ? input.file_path : "",
       };
     case "Read":
       return {
-        icon: <FileText className="w-3 h-3" />,
+        Icon: FileText,
         label: "Read",
         detail: shortPath(input.file_path),
         tooltip: typeof input.file_path === "string" ? input.file_path : "",
@@ -45,7 +50,7 @@ function toolMeta(tool: ToolCall): {
     case "Bash": {
       const cmd = typeof input.command === "string" ? input.command : "";
       return {
-        icon: <Terminal className="w-3 h-3" />,
+        Icon: Terminal,
         label: "Bash",
         detail: cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd,
         tooltip: cmd,
@@ -56,7 +61,7 @@ function toolMeta(tool: ToolCall): {
       const patternVal = input.pattern ?? input.query;
       const pattern = typeof patternVal === "string" ? patternVal : "";
       return {
-        icon: <Search className="w-3 h-3" />,
+        Icon: Search,
         label: name,
         detail: pattern.length > 80 ? pattern.slice(0, 80) + "…" : pattern,
         tooltip: pattern,
@@ -66,7 +71,7 @@ function toolMeta(tool: ToolCall): {
       const first = Object.values(input).find((v) => typeof v === "string") ?? "";
       const str = String(first);
       return {
-        icon: <Wrench className="w-3 h-3" />,
+        Icon: Wrench,
         label: name,
         detail: str.length > 80 ? str.slice(0, 80) + "…" : str,
         tooltip: str,
@@ -157,32 +162,37 @@ export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
   );
 }
 
-export function ToolCallList({
+export function ToolCallChain({
   toolCalls,
   isActive = false,
 }: {
   toolCalls: ToolCall[];
   isActive?: boolean;
 }) {
+  const headerLabel = isActive ? (
+    <ShimmerLabel isActive>Working…</ShimmerLabel>
+  ) : (
+    `${toolCalls.length} step${toolCalls.length !== 1 ? "s" : ""}`
+  );
+
   return (
-    <MessageActions className="flex-wrap">
-      {toolCalls.map((tool, i) => {
-        const { icon, label, detail, tooltip } = toolMeta(tool);
-        return (
-          <MessageAction
-            key={i}
-            tooltip={tooltip || label}
-            variant="outline"
-            size="sm"
-            className="font-mono text-xs h-7 px-2 gap-1.5 cursor-default"
-          >
-            {icon}
-            <ShimmerLabel isActive={isActive} className="truncate max-w-[400px]">
-              {detail ? `${label} · ${detail}` : label}
-            </ShimmerLabel>
-          </MessageAction>
-        );
-      })}
-    </MessageActions>
+    <ChainOfThought>
+      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
+      <ChainOfThoughtContent>
+        {toolCalls.map((tool, i) => {
+          const { Icon, label, detail } = toolMeta(tool);
+          const isLast = i === toolCalls.length - 1;
+          const status = isActive && isLast ? "active" : "complete";
+          return (
+            <ChainOfThoughtStep
+              key={i}
+              icon={Icon}
+              label={detail ? `${label} · ${detail}` : label}
+              status={status}
+            />
+          );
+        })}
+      </ChainOfThoughtContent>
+    </ChainOfThought>
   );
 }
