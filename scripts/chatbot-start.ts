@@ -12,6 +12,10 @@ import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export function buildConcurrentlyCommand(port: number): string {
+  return `npx concurrently --kill-others-on-fail --names "a2a,next" --prefix-colors "cyan.bold,magenta.bold" --prefix "[{name}]" "npm run chatbot:servers" "npx next dev chatbot -p ${port}"`;
+}
+
 function getAvailablePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
@@ -31,22 +35,12 @@ const port = await getAvailablePort();
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const env = { ...process.env, DOVEPAW_PORT: String(port) };
 
-const proc = spawn(
-  "npx",
-  [
-    "concurrently",
-    "--kill-others-on-fail",
-    "--names",
-    "a2a,next",
-    "--prefix-colors",
-    "cyan.bold,magenta.bold",
-    "--prefix",
-    "[{name}]",
-    "npm run chatbot:servers",
-    `npx next dev chatbot -p ${port}`,
-  ],
-  { env, stdio: "inherit", cwd: root, shell: true },
-);
+const proc = spawn(buildConcurrentlyCommand(port), {
+  env,
+  stdio: "inherit",
+  cwd: root,
+  shell: true,
+});
 
 proc.on("exit", (code) => process.exit(code ?? 0));
 process.on("SIGINT", () => proc.kill("SIGINT"));
