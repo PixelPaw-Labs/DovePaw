@@ -1,14 +1,9 @@
 import { diffLines } from "diff";
-import { FileEdit, Terminal, FileText, Search, Wrench, type LucideIcon } from "lucide-react";
+import { FileEdit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sources, SourcesContent, SourcesTrigger } from "@/components/ai-elements/sources";
-import {
-  ChainOfThought,
-  ChainOfThoughtContent,
-  ChainOfThoughtHeader,
-  ChainOfThoughtStep,
-} from "@/components/ai-elements/chain-of-thought";
-import { ShimmerLabel } from "./shimmer-label";
+import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
+import type { DynamicToolUIPart } from "ai";
 import type { ToolCall } from "@/components/hooks/use-messages";
 
 function shortPath(p: unknown): string {
@@ -17,65 +12,27 @@ function shortPath(p: unknown): string {
   return parts.length > 2 ? `…/${parts.slice(-2).join("/")}` : parts.join("/");
 }
 
-function toolMeta(tool: ToolCall): {
-  Icon: LucideIcon;
-  label: string;
-  detail: string;
-  tooltip: string;
-} {
+function toolDetail(tool: ToolCall): string {
   const { name, input } = tool;
-
   switch (name) {
     case "Edit":
-      return {
-        Icon: FileEdit,
-        label: "Edit",
-        detail: shortPath(input.file_path),
-        tooltip: typeof input.file_path === "string" ? input.file_path : "",
-      };
     case "Write":
-      return {
-        Icon: FileText,
-        label: "Write",
-        detail: shortPath(input.file_path),
-        tooltip: typeof input.file_path === "string" ? input.file_path : "",
-      };
     case "Read":
-      return {
-        Icon: FileText,
-        label: "Read",
-        detail: shortPath(input.file_path),
-        tooltip: typeof input.file_path === "string" ? input.file_path : "",
-      };
+      return shortPath(input.file_path);
     case "Bash": {
       const cmd = typeof input.command === "string" ? input.command : "";
-      return {
-        Icon: Terminal,
-        label: "Bash",
-        detail: cmd.length > 80 ? cmd.slice(0, 80) + "…" : cmd,
-        tooltip: cmd,
-      };
+      return cmd.length > 60 ? cmd.slice(0, 60) + "…" : cmd;
     }
     case "Grep":
     case "Glob": {
-      const patternVal = input.pattern ?? input.query;
-      const pattern = typeof patternVal === "string" ? patternVal : "";
-      return {
-        Icon: Search,
-        label: name,
-        detail: pattern.length > 80 ? pattern.slice(0, 80) + "…" : pattern,
-        tooltip: pattern,
-      };
+      const pat = input.pattern ?? input.query;
+      const str = typeof pat === "string" ? pat : "";
+      return str.length > 60 ? str.slice(0, 60) + "…" : str;
     }
     default: {
       const first = Object.values(input).find((v) => typeof v === "string") ?? "";
       const str = String(first);
-      return {
-        Icon: Wrench,
-        label: name,
-        detail: str.length > 80 ? str.slice(0, 80) + "…" : str,
-        tooltip: str,
-      };
+      return str.length > 60 ? str.slice(0, 60) + "…" : str;
     }
   }
 }
@@ -162,37 +119,21 @@ export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
   );
 }
 
-export function ToolCallChain({
-  toolCalls,
-  isActive = false,
-}: {
-  toolCalls: ToolCall[];
-  isActive?: boolean;
-}) {
-  const headerLabel = isActive ? (
-    <ShimmerLabel isActive>Working…</ShimmerLabel>
-  ) : (
-    `${toolCalls.length} step${toolCalls.length !== 1 ? "s" : ""}`
-  );
+export function ToolCallItem({ tool, isActive = false }: { tool: ToolCall; isActive?: boolean }) {
+  const detail = toolDetail(tool);
+  const state: DynamicToolUIPart["state"] = isActive ? "input-available" : "output-available";
 
   return (
-    <ChainOfThought>
-      <ChainOfThoughtHeader>{headerLabel}</ChainOfThoughtHeader>
-      <ChainOfThoughtContent>
-        {toolCalls.map((tool, i) => {
-          const { Icon, label, detail } = toolMeta(tool);
-          const isLast = i === toolCalls.length - 1;
-          const status = isActive && isLast ? "active" : "complete";
-          return (
-            <ChainOfThoughtStep
-              key={i}
-              icon={Icon}
-              label={detail ? `${label} · ${detail}` : label}
-              status={status}
-            />
-          );
-        })}
-      </ChainOfThoughtContent>
-    </ChainOfThought>
+    <Tool>
+      <ToolHeader
+        type="dynamic-tool"
+        toolName={tool.name}
+        title={detail ? `${tool.name} · ${detail}` : tool.name}
+        state={state}
+      />
+      <ToolContent>
+        <ToolInput input={tool.input} />
+      </ToolContent>
+    </Tool>
   );
 }
