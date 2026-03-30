@@ -123,9 +123,9 @@ export async function POST(request: Request) {
   request.signal.addEventListener("abort", () => abortController.abort());
 
   const tools = AGENTS.flatMap((agent) => [
-    makeAskTool(agent),
-    makeStartTool(agent),
-    makeAwaitTool(agent),
+    makeAskTool(agent, abortController.signal),
+    makeStartTool(agent, abortController.signal),
+    makeAwaitTool(agent, abortController.signal),
   ]);
 
   const readable = new ReadableStream({

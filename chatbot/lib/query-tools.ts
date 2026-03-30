@@ -171,7 +171,7 @@ function isConnectionError(msg: string) {
  * Asks an agent and returns a taskId immediately — agent responds asynchronously.
  * Dove should tell the user what was asked, then call await_* to collect the response.
  */
-export function makeAskTool(agent: AgentDef) {
+export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
   return tool(
     doveAskToolName(agent),
     agent.description,
@@ -205,6 +205,15 @@ export function makeAskTool(agent: AgentDef) {
           };
         }
 
+        // Cancel the A2A task if the route aborts (user pressed STOP).
+        signal?.addEventListener(
+          "abort",
+          () => {
+            void client.cancelTask({ id: result.id }).catch(() => {});
+          },
+          { once: true },
+        );
+
         const started: TaskStartedContent = { taskId: result.id };
         return {
           content: [{ type: "text" as const, text: `Task started (taskId: ${result.id})` }],
@@ -226,7 +235,7 @@ export function makeAskTool(agent: AgentDef) {
  * Pair with makeAwaitTool to retrieve the result later.
  * Use when Dove needs to start multiple agents concurrently or inform the user right away.
  */
-export function makeStartTool(agent: AgentDef) {
+export function makeStartTool(agent: AgentDef, signal?: AbortSignal) {
   return tool(
     doveStartToolName(agent),
     `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
@@ -261,6 +270,15 @@ export function makeStartTool(agent: AgentDef) {
             ],
           };
         }
+
+        // Cancel the A2A task if the route aborts (user pressed STOP).
+        signal?.addEventListener(
+          "abort",
+          () => {
+            void client.cancelTask({ id: result.id }).catch(() => {});
+          },
+          { once: true },
+        );
 
         const started: TaskStartedWithKeyContent = {
           taskId: result.id,
@@ -301,7 +319,7 @@ const AWAIT_POLL_TIMEOUT_MS = 30_000;
  * { status: "still_running", taskId } payload if it does not — so Dove
  * can call await_* again with the same taskId instead of starting a new task.
  */
-export function makeAwaitTool(agent: AgentDef) {
+export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal) {
   return tool(
     doveAwaitToolName(agent),
     `Await a previously started ${agent.displayName} task. Returns the final result when complete, or { status: "still_running", taskId } if still in progress.`,
@@ -343,6 +361,15 @@ export function makeAwaitTool(agent: AgentDef) {
         let streamBuffer = "";
 
         const abortController = new AbortController();
+        // Cancel the A2A task and abort the stream if the route aborts (user pressed STOP).
+        signal?.addEventListener(
+          "abort",
+          () => {
+            abortController.abort();
+            void client.cancelTask({ id: taskId }).catch(() => {});
+          },
+          { once: true },
+        );
         const timeoutResult = Symbol("timeout");
         const timer = setTimeout(() => abortController.abort(), AWAIT_POLL_TIMEOUT_MS);
         const result = await Promise.race([

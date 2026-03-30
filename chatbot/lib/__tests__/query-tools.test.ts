@@ -214,6 +214,28 @@ describe("makeAskTool", () => {
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toBe("Error: unexpected failure");
   });
+
+  it("cancels the A2A task when the abort signal fires", async () => {
+    const abortController = new AbortController();
+    const captured = captureTools(() => makeAskTool(AGENT, abortController.signal));
+    const h = captured[doveAskToolName(AGENT)];
+
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockCancelTask = vi.fn().mockResolvedValue({});
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessage: vi.fn().mockResolvedValue({ kind: "task", id: "task-abort" }),
+          cancelTask: mockCancelTask,
+        }),
+      };
+    } as any);
+
+    await h({ instruction: "run" });
+    abortController.abort();
+
+    expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-abort" });
+  });
 });
 
 // ─── makeStartTool ─────────────────────────────────────────────────────────
@@ -276,6 +298,28 @@ describe("makeStartTool", () => {
     } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("unreachable");
+  });
+
+  it("cancels the A2A task when the abort signal fires", async () => {
+    const abortController = new AbortController();
+    const captured = captureTools(() => makeStartTool(AGENT, abortController.signal));
+    const h = captured[doveStartToolName(AGENT)];
+
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockCancelTask = vi.fn().mockResolvedValue({});
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessage: vi.fn().mockResolvedValue({ kind: "task", id: "task-start-abort" }),
+          cancelTask: mockCancelTask,
+        }),
+      };
+    } as any);
+
+    await h({ instruction: "run" });
+    abortController.abort();
+
+    expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-start-abort" });
   });
 });
 
@@ -473,5 +517,48 @@ describe("makeAwaitTool", () => {
     // This verifies the progress tracking path doesn't interfere with normal completion
     const result = await handler({ taskId: "task-123" });
     expect(result.structuredContent).toMatchObject({ status: "completed" });
+  });
+
+  it("cancels the A2A task and aborts the stream when the abort signal fires", async () => {
+    const abortController = new AbortController();
+    const captured = captureTools(() => makeAwaitTool(AGENT, abortController.signal));
+    const h = captured[doveAwaitToolName(AGENT)];
+
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockCancelTask = vi.fn().mockResolvedValue({});
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-await-abort",
+      kind: "task",
+      status: { state: "working" },
+    });
+    // Stream that terminates when the internal abort signal fires — avoids dangling generator.
+    const mockResubscribe = vi
+      .fn()
+      .mockImplementation((_params: unknown, opts?: { signal?: AbortSignal }) =>
+        (async function* () {
+          await new Promise<void>((resolve) => {
+            opts?.signal?.addEventListener("abort", () => resolve(), { once: true });
+          });
+          yield* [];
+        })(),
+      );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          getTask: mockGetTask,
+          resubscribeTask: mockResubscribe,
+          cancelTask: mockCancelTask,
+        }),
+      };
+    } as any);
+
+    const resultPromise = h({ taskId: "task-await-abort" });
+    // Wait for all pending microtasks (createFromUrl, getTask) to resolve so the handler
+    // registers the signal listener before we abort.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    abortController.abort();
+    await resultPromise;
+
+    expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-await-abort" });
   });
 });
