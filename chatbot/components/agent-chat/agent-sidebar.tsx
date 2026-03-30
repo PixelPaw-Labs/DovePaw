@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { PawPrint, Settings } from "lucide-react";
+import { Bot, PawPrint, Settings } from "lucide-react";
 import { AGENTS } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
 import { WS_PORT, statusMessageSchema } from "@/a2a/heartbeat-types";
@@ -57,9 +57,13 @@ function useAgentStatuses() {
   return statuses;
 }
 
-export function AgentSidebar() {
+interface AgentSidebarProps {
+  activeAgentId?: string;
+  onSelectAgent?: (agentId: string) => void;
+}
+
+export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSidebarProps) {
   const statuses = useAgentStatuses();
-  const [activeIndex, setActiveIndex] = React.useState(0);
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
 
@@ -88,7 +92,46 @@ export function AgentSidebar() {
 
       {/* Agent nav */}
       <nav className="flex flex-col gap-1 flex-1 overflow-y-auto misty-scroll px-2">
-        {AGENTS.map((agent, i) => {
+        {/* Dove — the orchestrator (always first) */}
+        <button
+          onClick={() => onSelectAgent?.("dove")}
+          className={cn(
+            "mx-2 my-0.5 rounded-lg px-4 py-2.5 flex items-center gap-3 text-left transition-all w-[calc(100%-1rem)]",
+            activeAgentId === "dove" && !isSettings
+              ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
+              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+          )}
+        >
+          <Bot
+            className={cn(
+              "w-4 h-4 shrink-0",
+              activeAgentId === "dove" && !isSettings ? "text-blue-700" : "",
+            )}
+          />
+          <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+            <span
+              className={cn(
+                "text-sm font-medium",
+                activeAgentId !== "dove" && "text-foreground/80",
+              )}
+            >
+              Dove
+            </span>
+            <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
+              Orchestrator
+            </span>
+          </div>
+          <span
+            className={cn(
+              "w-1.5 h-1.5 rounded-full shrink-0",
+              activeAgentId === "dove" && !isSettings
+                ? "bg-blue-500"
+                : "bg-green-500 animate-pulse",
+            )}
+          />
+        </button>
+
+        {AGENTS.map((agent) => {
           const isAgentSettings =
             pathname === `/settings/agents/${agent.name}` ||
             pathname === `/settings/agents/${agent.name}/repos`;
@@ -96,10 +139,10 @@ export function AgentSidebar() {
             <AgentButton
               key={agent.manifestKey}
               agent={agent}
-              isActive={!isSettings && !isAgentSettings && i === activeIndex}
+              isActive={!isSettings && !isAgentSettings && activeAgentId === agent.name}
               status={statuses[agent.manifestKey]}
               hasData={hasData}
-              onClick={() => setActiveIndex(i)}
+              onClick={() => onSelectAgent?.(agent.name)}
               settingsHref={`/settings/agents/${agent.name}`}
               isAgentSettings={isAgentSettings}
             />

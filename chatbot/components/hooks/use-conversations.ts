@@ -4,12 +4,43 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { useMessages } from "./use-messages";
 import { useTextAnimation } from "./use-text-animation";
+import type { ChatMessage } from "./use-messages";
+import {
+  readActiveAgentId,
+  writeActiveAgentId,
+  readPersistedMessages,
+  writePersistedMessages,
+  readPersistedSessionId,
+  writePersistedSessionId,
+  clearPersistedConversation,
+} from "./use-persisted-conversation";
 
 export type { MessageRole, ChatMessage } from "./use-messages";
 
-export function useAgentChat(agentId = "dove") {
+// ─── Types ─────────────────────────────────────────────────────────────────────
+
+interface CachedConversation {
+  messages: ChatMessage[];
+  sessionId: string | null;
+}
+
+const WRITE_DEBOUNCE_MS = 300;
+
+// ─── Hook ──────────────────────────────────────────────────────────────────────
+
+export function useConversations() {
+  // ─── Active agent ─────────────────────────────────────────────────────────────
+  const [activeAgentId, setActiveAgentIdState] = useState<string>(() => readActiveAgentId());
+  const activeAgentIdRef = useRef<string>(activeAgentId);
+
+  useEffect(() => {
+    activeAgentIdRef.current = activeAgentId;
+  }, [activeAgentId]);
+
+  // ─── Messages (for the currently-active conversation) ─────────────────────────
   const {
     messages,
+    setMessages,
     patch,
     patchWhere,
     appendToProcess,
@@ -18,18 +49,97 @@ export function useAgentChat(agentId = "dove") {
     append,
     clear,
   } = useMessages();
-  const pendingToolNameRef = useRef<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const pendingQueueRef = useRef<string[]>([]);
-  const [pendingQueue, setPendingQueue] = useState<string[]>([]);
-  const sessionIdRef = useRef<string | null>(null);
-  const assistantIdRef = useRef<string | null>(null);
 
+  // Track current messages in a ref so setActiveAgentId can read them synchronously
+  const messagesRef = useRef<ChatMessage[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // ─── Animation ────────────────────────────────────────────────────────────────
   const animation = useTextAnimation((id, content) => {
     setLastTextContent(id, content);
   });
 
+  // ─── Loading / queue ──────────────────────────────────────────────────────────
+  const [isLoading, setIsLoading] = useState(false);
+  const [pendingQueue, setPendingQueue] = useState<string[]>([]);
+  const pendingQueueRef = useRef<string[]>([]);
+
+  // ─── Per-request refs ─────────────────────────────────────────────────────────
+  const sessionIdRef = useRef<string | null>(null);
+  const assistantIdRef = useRef<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const pendingToolNameRef = useRef<string | null>(null);
+
+  // ─── In-memory conversation cache ─────────────────────────────────────────────
+  const cacheRef = useRef<Map<string, CachedConversation>>(new Map());
+
+  // ─── Debounced localStorage write ─────────────────────────────────────────────
+  const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const scheduleWrite = useCallback(
+    (agentId: string, msgs: ChatMessage[], sessId: string | null) => {
+      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+      writeTimerRef.current = setTimeout(() => {
+        writePersistedMessages(agentId, msgs);
+        writePersistedSessionId(agentId, sessId);
+      }, WRITE_DEBOUNCE_MS);
+    },
+    [],
+  );
+
+  // ─── Hydrate from localStorage on mount ───────────────────────────────────────
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    if (hydratedRef.current) return;
+    hydratedRef.current = true;
+    const storedMessages = readPersistedMessages(activeAgentId);
+    if (storedMessages?.length) setMessages(storedMessages);
+    sessionIdRef.current = readPersistedSessionId(activeAgentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run only once on mount
+  }, []);
+
+  // ─── Persist messages whenever they change ────────────────────────────────────
+  useEffect(() => {
+    scheduleWrite(activeAgentId, messages, sessionIdRef.current);
+  }, [messages, activeAgentId, scheduleWrite]);
+
+  // ─── Switch active agent ──────────────────────────────────────────────────────
+  const setActiveAgentId = useCallback(
+    (agentId: string) => {
+      const currentId = activeAgentIdRef.current;
+      if (currentId === agentId) return;
+
+      // Abort in-flight request and stop animation for the current agent
+      abortRef.current?.abort();
+      animation.reset();
+
+      // Save current conversation to in-memory cache + localStorage
+      const currentMessages = messagesRef.current;
+      const currentSessionId = sessionIdRef.current;
+      cacheRef.current.set(currentId, { messages: currentMessages, sessionId: currentSessionId });
+      writePersistedMessages(currentId, currentMessages);
+      writePersistedSessionId(currentId, currentSessionId);
+
+      // Load conversation for the new agent (prefer in-memory cache, then localStorage)
+      const cached = cacheRef.current.get(agentId);
+      const nextMessages = cached ? cached.messages : (readPersistedMessages(agentId) ?? []);
+      const nextSessionId = cached ? cached.sessionId : readPersistedSessionId(agentId);
+
+      setMessages(nextMessages);
+      sessionIdRef.current = nextSessionId;
+      pendingQueueRef.current = [];
+      setPendingQueue([]);
+      setIsLoading(false);
+
+      writeActiveAgentId(agentId);
+      setActiveAgentIdState(agentId);
+    },
+    [animation, setMessages],
+  );
+
+  // ─── Send message ─────────────────────────────────────────────────────────────
   const sendMessage = useCallback(
     async (content: string) => {
       const trimmed = content.trim();
@@ -60,8 +170,10 @@ export function useAgentChat(agentId = "dove") {
       );
       setIsLoading(true);
 
+      const agentId = activeAgentIdRef.current;
+      const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
+
       try {
-        const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
         const response = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -97,7 +209,6 @@ export function useAgentChat(agentId = "dove") {
               } else if (event.type === "thinking" && event.content) {
                 appendToProcess(assistantId, event.content);
               } else if (event.type === "tool_call") {
-                // Close the current text segment and prepare for a new one after the tool call
                 animation.cut(assistantId);
                 pendingToolNameRef.current = event.name;
               } else if (event.type === "tool_input") {
@@ -119,7 +230,6 @@ export function useAgentChat(agentId = "dove") {
                 patch(assistantId, { isProcessStreaming: false });
                 animation.enqueue(assistantId, event.content);
               } else if (event.type === "result" && event.content) {
-                // Fallback for tool-only responses: populate last text segment if still empty
                 patchWhere(
                   assistantId,
                   (m) => !m.segments.some((s) => s.type === "text" && s.content.trim()),
@@ -150,7 +260,6 @@ export function useAgentChat(agentId = "dove") {
                   (m) => {
                     const hasText = m.segments.some((s) => s.type === "text" && s.content.trim());
                     if (hasText) return { isLoading: false, isProcessStreaming: false };
-                    // No text at all — set fallback on last text segment
                     const segments = m.segments.map((s, i, arr) => {
                       if (s.type !== "text") return s;
                       const isLast = arr.slice(i + 1).every((x) => x.type !== "text");
@@ -161,7 +270,7 @@ export function useAgentChat(agentId = "dove") {
                 );
               }
             } catch {
-              // ignore malformed lines
+              // ignore malformed SSE lines
             }
           }
         }
@@ -179,16 +288,16 @@ export function useAgentChat(agentId = "dove") {
     [
       isLoading,
       animation,
+      append,
       patch,
       patchWhere,
       appendToProcess,
       setLastTextContent,
       appendToolCallSegment,
-      append,
     ],
   );
 
-  // When the agent finishes, pop and send the next queued message
+  // ─── Auto-send next queued message after current finishes ─────────────────────
   useEffect(() => {
     if (isLoading || pendingQueueRef.current.length === 0) return;
     const [next, ...rest] = pendingQueueRef.current;
@@ -197,6 +306,7 @@ export function useAgentChat(agentId = "dove") {
     void sendMessage(next);
   }, [isLoading, sendMessage]);
 
+  // ─── Cancel / clear / remove-from-queue ──────────────────────────────────────
   const removeFromQueue = useCallback((index: number) => {
     const next = pendingQueueRef.current.filter((_, i) => i !== index);
     pendingQueueRef.current = next;
@@ -219,9 +329,14 @@ export function useAgentChat(agentId = "dove") {
     clear();
     setIsLoading(false);
     sessionIdRef.current = null;
+    clearPersistedConversation(activeAgentIdRef.current);
+    // Also update the in-memory cache so switching back doesn't restore stale data
+    cacheRef.current.set(activeAgentIdRef.current, { messages: [], sessionId: null });
   }, [animation, clear]);
 
   return {
+    activeAgentId,
+    setActiveAgentId,
     messages,
     isLoading,
     sendMessage,

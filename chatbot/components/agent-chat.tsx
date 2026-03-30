@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Settings, Trash2 } from "lucide-react";
+import { Bell, Bot, Settings, Trash2 } from "lucide-react";
+import { AGENTS } from "@@/lib/agents";
 import { USER_AVATAR } from "@/lib/avatars";
 import {
   Conversation,
@@ -11,14 +12,23 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { ChatInputBar } from "./agent-chat/chat-input-bar";
-import { useAgentChat } from "@/components/hooks/use-agent-chat";
+import { useConversations } from "@/components/hooks/use-conversations";
 import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
 
+function useActiveAgentLabel(activeAgentId: string) {
+  if (activeAgentId === "dove") return { name: "Dove", Icon: Bot };
+  const agent = AGENTS.find((a) => a.name === activeAgentId);
+  if (!agent) return { name: activeAgentId, Icon: Bot };
+  return { name: agent.displayName, Icon: agent.icon };
+}
+
 export function AgentChat() {
   const router = useRouter();
   const {
+    activeAgentId,
+    setActiveAgentId,
     messages,
     isLoading,
     sendMessage,
@@ -26,17 +36,20 @@ export function AgentChat() {
     clearMessages,
     pendingQueue,
     removeFromQueue,
-  } = useAgentChat();
+  } = useConversations();
+
+  const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId);
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AgentSidebar />
+      <AgentSidebar activeAgentId={activeAgentId} onSelectAgent={setActiveAgentId} />
 
       <main className="flex-1 flex flex-col bg-background relative min-w-0">
         {/* Glass header */}
         <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex justify-between items-center w-full px-8 py-4 shrink-0">
           <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold text-foreground tracking-tight">Dove</h1>
+            <AgentIcon className="w-5 h-5 text-primary" />
+            <h1 className="text-xl font-bold text-foreground tracking-tight">{agentName}</h1>
             <span className="px-2.5 py-0.5 rounded-full bg-accent text-[10px] font-bold text-accent-foreground tracking-wider uppercase">
               Active Session
             </span>
@@ -72,7 +85,7 @@ export function AgentChat() {
           <ConversationContent>
             {messages.length === 0 ? (
               <ConversationEmptyState className="justify-start pt-8">
-                <IntroCard onSelect={sendMessage} />
+                <IntroCard onSelect={sendMessage} agentId={activeAgentId} />
               </ConversationEmptyState>
             ) : (
               messages.map((msg) => <ChatMessageItem key={msg.id} msg={msg} />)
