@@ -6,11 +6,12 @@ import { resolve } from "node:path";
 
 // electron/.dist/main.cjs → ../../ = DovePaw repo root
 const REPO_ROOT = resolve(__dirname, "../..");
-const PORTS_FILE = resolve(process.env.HOME!, ".dovepaw/.ports.json");
+const NEXT_PORT = 7473;
+const PORTS_FILE = resolve(process.env.HOME!, `.dovepaw/.ports.${NEXT_PORT}.json`);
 const ASSETS_DIR = resolve(__dirname, "../assets");
 const LOGS_DIR = resolve(process.env.HOME!, ".dovepaw/logs");
 const NPM_BIN = "npm";
-const CHATBOT_URL = "http://localhost:7473";
+const CHATBOT_URL = `http://localhost:${NEXT_PORT}`;
 
 let tray: Tray | null = null;
 let serversProcess: ChildProcess | null = null;
@@ -141,7 +142,7 @@ function startServers(): void {
 
   serversProcess = spawn(NPM_BIN, ["run", "chatbot:servers"], {
     cwd: REPO_ROOT,
-    env: process.env,
+    env: { ...process.env, DOVEPAW_PORT: String(NEXT_PORT) },
     stdio: "pipe",
     detached: true,
   });
@@ -169,7 +170,7 @@ function startNextJs(): void {
 
   nextProcess = spawn(NPM_BIN, ["run", "chatbot:dev"], {
     cwd: REPO_ROOT,
-    env: process.env,
+    env: { ...process.env, DOVEPAW_PORT: String(NEXT_PORT) },
     stdio: "pipe",
     detached: true,
   });
