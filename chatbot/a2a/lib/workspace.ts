@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, rmdirSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, rmdirSync, rmSync, symlinkSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AGENTS_ROOT, agentWorkspaceDir } from "@@/lib/paths";
@@ -110,4 +110,25 @@ export async function cloneReposIntoWorkspace(
       return clonePath;
     }),
   );
+}
+
+/**
+ * Delete any existing clone dirs for the given slugs, then clone fresh.
+ *
+ * Used by start_run_script so that re-invocations always start from a clean
+ * workspace state rather than failing because the clone dir already exists.
+ */
+export async function recloneReposIntoWorkspace(
+  workspacePath: string,
+  slugs: string[],
+  ghClone: GhCloneFn = defaultGhClone,
+): Promise<string[]> {
+  for (const slug of slugs) {
+    const repoName = slug.split("/").pop()!;
+    const clonePath = join(workspacePath, repoName);
+    if (existsSync(clonePath)) {
+      rmSync(clonePath, { recursive: true, force: true });
+    }
+  }
+  return cloneReposIntoWorkspace(workspacePath, slugs, ghClone);
 }

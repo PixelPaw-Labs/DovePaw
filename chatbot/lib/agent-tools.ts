@@ -25,6 +25,7 @@ import {
 } from "@/lib/paths";
 import { z } from "zod";
 import { startScript, awaitScript, type AgentConfig } from "@/a2a/lib/spawn";
+import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 
 // ─── Management tool names ─────────────────────────────────────────────────────
 
@@ -143,7 +144,12 @@ export function makeAgentMgmtTools(agent: AgentDef) {
 // ─── Script run tools ─────────────────────────────────────────────────────────
 
 /** Fires the agent script in the background and returns a runId immediately. */
-export function makeStartScriptTool(agent: AgentDef, config: AgentConfig, signal?: AbortSignal) {
+export function makeStartScriptTool(
+  agent: AgentDef,
+  config: AgentConfig,
+  repoSlugs: string[],
+  signal?: AbortSignal,
+) {
   return tool(
     START_SCRIPT_TOOL,
     `Start the ${agent.displayName} agent script in the background and return a runId immediately`,
@@ -154,7 +160,15 @@ export function makeStartScriptTool(agent: AgentDef, config: AgentConfig, signal
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "" }) => {
-      const { runId } = startScript(config, instruction, signal);
+      // Delete any existing clones then reclone so re-invocations always start from a clean state.
+      const clonedPaths = await recloneReposIntoWorkspace(config.workspacePath, repoSlugs);
+
+      const finalEnv: Record<string, string> = { ...config.extraEnv };
+      if (agent.reposEnvVar && clonedPaths.length > 0) {
+        finalEnv[agent.reposEnvVar] = clonedPaths.join(",");
+      }
+
+      const { runId } = startScript({ ...config, extraEnv: finalEnv }, instruction, signal);
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },

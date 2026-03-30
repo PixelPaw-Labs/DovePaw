@@ -11,8 +11,12 @@ vi.mock("@@/lib/paths", () => ({
   agentWorkspaceDir: (alias: string) => join(TMP_ROOT, ".dovepaw", "workspaces", `.${alias}`),
 }));
 
-const { createAgentWorkspace, agentSourceDirFromEntry, cloneReposIntoWorkspace } =
-  await import("../workspace");
+const {
+  createAgentWorkspace,
+  agentSourceDirFromEntry,
+  cloneReposIntoWorkspace,
+  recloneReposIntoWorkspace,
+} = await import("../workspace");
 
 // ─── createAgentWorkspace ─────────────────────────────────────────────────────
 
@@ -178,6 +182,52 @@ describe("cloneReposIntoWorkspace", () => {
     await expect(cloneReposIntoWorkspace(TMP_ROOT, ["org/missing"], ghClone)).rejects.toThrow(
       "gh: repository not found",
     );
+  });
+});
+
+// ─── recloneReposIntoWorkspace ────────────────────────────────────────────────
+
+describe("recloneReposIntoWorkspace", () => {
+  beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
+  afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
+
+  it("clones repos when no previous clone exists", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    const paths = await recloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    expect(ghClone).toHaveBeenCalledWith("org/my-app", join(TMP_ROOT, "my-app"));
+    expect(paths).toEqual([join(TMP_ROOT, "my-app")]);
+  });
+
+  it("deletes an existing clone dir before recloning", async () => {
+    const existingClone = join(TMP_ROOT, "my-app");
+    mkdirSync(existingClone, { recursive: true });
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await recloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    // ghClone was called (meaning rmSync ran first, otherwise gh would fail on existing dir)
+    expect(ghClone).toHaveBeenCalledWith("org/my-app", existingClone);
+  });
+
+  it("deletes all existing clone dirs when multiple slugs provided", async () => {
+    mkdirSync(join(TMP_ROOT, "app-a"), { recursive: true });
+    mkdirSync(join(TMP_ROOT, "app-b"), { recursive: true });
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await recloneReposIntoWorkspace(TMP_ROOT, ["org/app-a", "org/app-b"], ghClone);
+
+    expect(ghClone).toHaveBeenCalledTimes(2);
+    expect(ghClone).toHaveBeenCalledWith("org/app-a", join(TMP_ROOT, "app-a"));
+    expect(ghClone).toHaveBeenCalledWith("org/app-b", join(TMP_ROOT, "app-b"));
+  });
+
+  it("returns empty array for empty slugs", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+    const result = await recloneReposIntoWorkspace(TMP_ROOT, [], ghClone);
+    expect(result).toEqual([]);
+    expect(ghClone).not.toHaveBeenCalled();
   });
 });
 

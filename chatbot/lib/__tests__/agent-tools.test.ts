@@ -1,8 +1,4 @@
-import { describe, expect, it } from "vitest";
-
-// ─── Module mocks (must come before imports) ──────────────────────────────────
-
-import { vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({ tool: vi.fn() }));
 
@@ -30,10 +26,23 @@ vi.mock("@/a2a/lib/spawn", () => ({
   awaitScript: vi.fn(),
 }));
 
+vi.mock("@/a2a/lib/workspace", () => ({
+  recloneReposIntoWorkspace: vi.fn(),
+}));
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
-import { buildSubAgentPrompt, START_SCRIPT_TOOL, AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
+import {
+  buildSubAgentPrompt,
+  makeStartScriptTool,
+  START_SCRIPT_TOOL,
+  AWAIT_SCRIPT_TOOL,
+} from "@/lib/agent-tools";
 import type { AgentDef } from "@@/lib/agents";
+import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { startScript } from "@/a2a/lib/spawn";
+import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
+import type { AgentConfig } from "@/a2a/lib/spawn";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +60,25 @@ const AGENT: AgentDef = {
   scheduleDisplay: "daily 00:00",
   icon: {} as any,
 };
+
+const BASE_CONFIG: AgentConfig = {
+  scriptPath: "/agents/test-agent/main.ts",
+  agentName: "Test Agent",
+  whatItDoes: "does test things",
+  workspacePath: "/ws/ta-abc123",
+  extraEnv: {},
+};
+
+/** Make tool() capture and return the handler function for direct invocation in tests. */
+function captureToolHandler(
+  agentWithRepos: AgentDef,
+  config: AgentConfig,
+  slugs: string[],
+  signal?: AbortSignal,
+): (args: { instruction?: string }) => Promise<unknown> {
+  vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+  return makeStartScriptTool(agentWithRepos, config, slugs, signal) as any;
+}
 
 // ─── buildSubAgentPrompt ──────────────────────────────────────────────────────
 
@@ -97,5 +125,65 @@ describe("buildSubAgentPrompt", () => {
     const agentNoVars: AgentDef = { ...AGENT, requiredEnvVars: [] };
     const prompt = buildSubAgentPrompt(agentNoVars);
     expect(prompt).toMatch(/required:.*none/i);
+  });
+});
+
+// ─── makeStartScriptTool ──────────────────────────────────────────────────────
+
+describe("makeStartScriptTool", () => {
+  const AGENT_WITH_REPOS: AgentDef = { ...AGENT, reposEnvVar: "REPOS" };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(startScript).mockReturnValue({ runId: "run-abc" } as any);
+  });
+
+  it("reclones repos into workspace before starting the script", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue(["/ws/ta-abc123/my-app"]);
+    const handler = captureToolHandler(AGENT_WITH_REPOS, BASE_CONFIG, ["org/my-app"]);
+
+    await handler({});
+
+    expect(recloneReposIntoWorkspace).toHaveBeenCalledWith("/ws/ta-abc123", ["org/my-app"]);
+  });
+
+  it("remaps reposEnvVar to cloned local paths in extraEnv passed to startScript", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue(["/ws/ta-abc123/my-app"]);
+    const config = { ...BASE_CONFIG, extraEnv: { REPOS: "org/my-app", OTHER: "keep" } };
+    const handler = captureToolHandler(AGENT_WITH_REPOS, config, ["org/my-app"]);
+
+    await handler({ instruction: "go" });
+
+    expect(startScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        extraEnv: { REPOS: "/ws/ta-abc123/my-app", OTHER: "keep" },
+      }),
+      "go",
+      undefined,
+    );
+  });
+
+  it("does not remap reposEnvVar when repoSlugs is empty", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    const config = { ...BASE_CONFIG, extraEnv: { OTHER: "keep" } };
+    const handler = captureToolHandler(AGENT, config, []);
+
+    await handler({});
+
+    expect(startScript).toHaveBeenCalledWith(
+      expect.objectContaining({ extraEnv: { OTHER: "keep" } }),
+      "",
+      undefined,
+    );
+  });
+
+  it("returns the runId from startScript", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    vi.mocked(startScript).mockReturnValue({ runId: "run-xyz" } as any);
+    const handler = captureToolHandler(AGENT, BASE_CONFIG, []);
+
+    const result = await handler({});
+
+    expect(result).toMatchObject({ structuredContent: { runId: "run-xyz" } });
   });
 });

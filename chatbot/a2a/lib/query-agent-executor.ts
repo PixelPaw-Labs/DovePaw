@@ -21,11 +21,7 @@ import {
 } from "@/lib/agent-tools";
 import { extractInstruction, type AgentConfig } from "./spawn";
 import { buildSubAgentHooks } from "@/lib/hooks";
-import {
-  createAgentWorkspace,
-  agentSourceDirFromEntry,
-  cloneReposIntoWorkspace,
-} from "./workspace";
+import { createAgentWorkspace, agentSourceDirFromEntry } from "./workspace";
 import { markProcessing, markIdle } from "./processing-registry";
 
 /**
@@ -99,20 +95,17 @@ export class QueryAgentExecutor implements AgentExecutor {
       exitHandler = () => workspace?.cleanup();
       process.once("exit", exitHandler);
 
-      // Clone each assigned repo into the workspace and remap the repos env var
-      // from GitHub slugs to local cloned paths.
+      // Repo cloning is deferred to makeStartScriptTool so simple ask_* queries
+      // don't block on slow gh repo clone. Slugs are passed to the tool; it
+      // deletes existing clones and reclones on every start_run_script call.
       const repoSlugs = this.def.reposEnvVar
         ? (extraEnv[this.def.reposEnvVar] ?? "").split(",").filter(Boolean)
         : [];
-      const clonedPaths = await cloneReposIntoWorkspace(workspace.path, repoSlugs);
 
       const workspaceEnv: Record<string, string> = {
         ...extraEnv,
         AGENT_WORKSPACE: workspace.path,
       };
-      if (this.def.reposEnvVar && clonedPaths.length > 0) {
-        workspaceEnv[this.def.reposEnvVar] = clonedPaths.join(",");
-      }
 
       const agentConfig: AgentConfig = {
         scriptPath: join(AGENTS_ROOT, this.def.entryPath),
@@ -124,7 +117,7 @@ export class QueryAgentExecutor implements AgentExecutor {
 
       await withMcpQuery(
         [
-          makeStartScriptTool(this.def, agentConfig, this.abortController.signal),
+          makeStartScriptTool(this.def, agentConfig, repoSlugs, this.abortController.signal),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
         ],
