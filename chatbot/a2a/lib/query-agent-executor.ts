@@ -90,6 +90,8 @@ export class QueryAgentExecutor implements AgentExecutor {
         this.def.name,
         this.def.alias,
         agentSourceDirFromEntry(this.def.entryPath),
+        undefined,
+        taskId,
       );
 
       // Guard against process.exit() bypassing the finally block — each executor

@@ -40,6 +40,17 @@ describe("createAgentWorkspace", () => {
     expect(folderName).toMatch(/^ma-[0-9a-f]{8}$/);
   });
 
+  it("uses first 8 chars of taskId (dashes stripped) as shortId when provided", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    const taskId = "abc123de-f456-7890-abcd-ef1234567890";
+    const ws = createAgentWorkspace("my-agent", "ma", sourceDir, undefined, taskId);
+    const folderName = basename(ws.path);
+
+    expect(folderName).toBe("ma-abc123de");
+  });
+
   it("uses a custom workspaceRoot when provided", () => {
     const customRoot = join(TMP_ROOT, "custom-workspaces");
     const sourceDir = join(TMP_ROOT, "src", "my-agent");

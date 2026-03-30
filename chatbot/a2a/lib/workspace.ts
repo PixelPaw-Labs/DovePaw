@@ -28,9 +28,12 @@ export function createAgentWorkspace(
   alias: string,
   agentSourceDir: string,
   workspaceRoot?: string,
+  taskId?: string,
 ): AgentWorkspace {
   const root = workspaceRoot ?? agentWorkspaceDir(agentName);
-  const shortId = randomUUID().replace(/-/g, "").slice(0, 8);
+  const shortId = taskId
+    ? taskId.replace(/-/g, "").slice(0, 8)
+    : randomUUID().replace(/-/g, "").slice(0, 8);
   const workspacePath = join(root, `${alias}-${shortId}`);
 
   mkdirSync(workspacePath, { recursive: true });
