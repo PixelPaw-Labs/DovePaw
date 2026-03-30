@@ -15,6 +15,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { doveAwaitToolName, hasPendingTasks, getPendingTaskIds } from "@/lib/query-tools";
 import { AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
 import { hasPendingScripts, getPendingRunIds } from "@/a2a/lib/spawn";
+import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const { postToolUseMatcher, hasPendingWork, getPendingIds, getStillRunningId } = config;
+  const retryCounter = new StillRunningRetryCounter();
 
   return {
     Stop: [
@@ -72,6 +74,9 @@ export function buildAgentHooks(
                 ? (structured as { status: unknown }).status
                 : undefined;
             if (status === "still_running") {
+              if (retryCounter.shouldRelease()) {
+                return { continue: true };
+              }
               const id = getStillRunningId(structured);
               const hookSpecificOutput: PostToolUseHookSpecificOutput = {
                 hookEventName: "PostToolUse",
