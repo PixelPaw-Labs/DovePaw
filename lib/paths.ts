@@ -38,6 +38,11 @@ export const DOVEPAW_AGENT_LOGS = join(DOVEPAW_DIR, "agents/logs");
 /** ~/.dovepaw/agents/logs/.<agentName> — persistent per-agent log directory */
 export const agentPersistentLogDir = (agentName: string) =>
   join(DOVEPAW_AGENT_LOGS, `.${agentName}`);
+/** ~/.dovepaw/settings.agents/<agentName>/ — per-agent config files directory */
+export const agentConfigDir = (agentName: string) => join(AGENT_SETTINGS_DIR, agentName);
+/** ~/.dovepaw/settings.agents/<agentName>/<filename> — a specific agent config file */
+export const agentConfigFile = (agentName: string, filename: string) =>
+  join(agentConfigDir(agentName), filename);
 /** ~/.dovepaw/cron — launchd agent scripts and native node_modules */
 export const SCHEDULER_ROOT = join(DOVEPAW_DIR, "cron");
 /** ~/.claude/skills — user skills directory */

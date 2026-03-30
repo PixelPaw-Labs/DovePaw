@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
+import { AgentConfigFilesTab } from "./agent-config-files-tab";
 import {
   DataTable,
   DataTableHeader,
@@ -21,7 +22,7 @@ import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings-sche
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 
-type Tab = "repositories" | "env-vars";
+type Tab = "repositories" | "env-vars" | "config-files";
 
 interface AgentSettingsContentProps {
   agentName: string;
@@ -268,6 +269,17 @@ export function AgentSettingsContent({
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setTab("config-files")}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                tab === "config-files"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              Config Files
+            </button>
           </div>
 
           {/* Repositories tab */}
@@ -333,6 +345,9 @@ export function AgentSettingsContent({
               )}
             </>
           )}
+
+          {/* Config Files tab */}
+          {tab === "config-files" && <AgentConfigFilesTab agentName={agentName} />}
 
           {/* Environment Variables tab */}
           {tab === "env-vars" && (
