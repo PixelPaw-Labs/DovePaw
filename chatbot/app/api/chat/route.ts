@@ -207,7 +207,13 @@ export async function POST(request: Request) {
             send({ type: "done" });
           },
           (_err, isAbort) => {
-            if (!isAbort) {
+            if (isAbort) {
+              try {
+                send({ type: "cancelled" });
+              } catch {
+                // stream already closed
+              }
+            } else {
               try {
                 const msg = _err instanceof Error ? _err.message : String(_err);
                 send({ type: "error", content: msg });

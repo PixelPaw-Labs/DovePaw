@@ -31,6 +31,9 @@ export type ChatSseError = { type: "error"; content: string };
 /** Terminal event — stream is done */
 export type ChatSseDone = { type: "done" };
 
+/** User pressed Stop — task was cancelled */
+export type ChatSseCancelled = { type: "cancelled" };
+
 /** Live progress from a downstream A2A task — emitted during await_* polling */
 export type ChatSseProgress = { type: "progress"; result: StreamedResult };
 
@@ -43,4 +46,5 @@ export type ChatSseEvent =
   | ChatSseResult
   | ChatSseError
   | ChatSseProgress
+  | ChatSseCancelled
   | ChatSseDone;

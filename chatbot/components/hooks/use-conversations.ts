@@ -260,6 +260,14 @@ export function useConversations() {
                     return { segments, isLoading: false, isProcessStreaming: false };
                   },
                 );
+              } else if (event.type === "cancelled") {
+                animation.flush(assistantId);
+                setLiveProgress(assistantId, null);
+                patch(assistantId, {
+                  isLoading: false,
+                  isProcessStreaming: false,
+                  isCancelled: true,
+                });
               } else if (event.type === "error" && event.content) {
                 animation.flush(assistantId);
                 setLastTextContent(assistantId, `⚠️ ${event.content}`);

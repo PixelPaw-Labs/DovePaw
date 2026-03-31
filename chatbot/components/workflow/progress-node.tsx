@@ -14,6 +14,7 @@ export interface ProgressNodeData {
   artifacts: Record<string, string>;
   index: number;
   isLast: boolean;
+  isCancelled?: boolean;
 }
 
 const ARTIFACT_LABEL: Record<string, string> = {
@@ -31,9 +32,14 @@ export function ProgressNode({ data }: { data: ProgressNodeData }) {
   const artifactEntries = Object.entries(data.artifacts);
 
   return (
-    <Node handles={{ target: data.index > 0, source: !data.isLast }}>
-      <NodeHeader>
-        <NodeTitle>{data.message}</NodeTitle>
+    <Node
+      handles={{ target: true, source: !data.isLast }}
+      className={data.isCancelled ? "border-amber-500/50 bg-amber-500/5" : undefined}
+    >
+      <NodeHeader className={data.isCancelled ? "bg-amber-500/10 border-amber-500/20" : undefined}>
+        <NodeTitle className={data.isCancelled ? "text-amber-600" : undefined}>
+          {data.message}
+        </NodeTitle>
         <NodeDescription>Step {data.index + 1}</NodeDescription>
       </NodeHeader>
       {artifactEntries.length > 0 && (
