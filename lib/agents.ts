@@ -101,7 +101,7 @@ export const AGENTS: AgentDef[] = [
       "Reflect on and learn from past Claude Code sessions: fetches the last 24 hours of sessions " +
       "via the local session API, extracts domain knowledge and user preferences, and writes " +
       "learnings into project MEMORY.md files. " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'learn from sessions', 'rewind and learn', or 'reflect on past Claude Code work'. " +
       "Requires PROJECTS env var.",
     requiredEnvVars: ["PROJECTS"],
@@ -174,7 +174,7 @@ export const AGENTS: AgentDef[] = [
     description:
       "Automated JIRA ticket implementer: discovers Kanban tickets, forges implementations in " +
       "parallel git worktrees, and creates PRs. " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'run GSD', 'process tickets', 'forge JIRA tickets', or 'start the pipeline'. " +
       "Requires REPO_LIST + JIRA_ASSIGNEE env vars.",
     requiredEnvVars: ["REPO_LIST", "JIRA_ASSIGNEE"],
@@ -248,7 +248,7 @@ export const AGENTS: AgentDef[] = [
     description:
       "Monitor Claude Code releases: fetch and analyze release notes, check for JSONL format " +
       "changes that could break claude-code-trace, and create GitHub issues for new breaking changes. " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'check Claude Code releases', 'scan release notes', or 'monitor for breaking changes'. " +
       "Requires gh CLI authentication.",
     requiredEnvVars: [],
@@ -320,7 +320,7 @@ export const AGENTS: AgentDef[] = [
     displayName: "Memory Distiller",
     description:
       "Distil and promote common memory patterns across projects into the global ~/.claude/CLAUDE.md. " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'consolidate memories', 'promote patterns to global', 'summarize memories " +
       "to be generic', or 'extract common learnings across projects'. " +
       "Requires PROJECTS env var listing ≥2 project names.",
@@ -394,7 +394,7 @@ export const AGENTS: AgentDef[] = [
     description:
       "Analyze on-call incidents and generate Post Incident Records (PIRs) from observability " +
       "data (PagerDuty, Datadog, Cloudflare, Rollbar). " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'analyze oncall issues', 'generate a PIR', 'investigate incidents', " +
       "'what went wrong on-call', or 'summarize recent incidents'. Covers the past 24 hours by default. " +
       "Pass the instruction directly, e.g. 'incidents today', 'P1AB1234', " +
@@ -471,7 +471,7 @@ export const AGENTS: AgentDef[] = [
       "Investigate Zendesk support tickets by searching configured Slack channels for ticket " +
       "discussions within a time scope, clustering by theme, and digging into configured repos " +
       "to surface potential root causes. " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'triage zendesk', 'investigate support issues', 'what are customers reporting', " +
       "or 'find root cause for support tickets'. Pass a time scope, e.g. 'last 7 days' or 'last 2 weeks'. " +
       "Requires REPO_LIST, SLACK_WORKSPACE, and ZENDESK_SLACK_CHANNELS env vars.",
@@ -546,7 +546,7 @@ export const AGENTS: AgentDef[] = [
       "Review, risk-assess, and merge Dependabot PRs across configured repos. Maps each PR to " +
       "the correct Jira Kanban ticket, prepends [Ticket ID] to the PR title, and merges safe PRs " +
       "automatically. Reports blockers with risk reasoning and confidence scores. " +
-      "Use when asked anything about this agent — what it does, its status, recent runs, or logs — " +
+      "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'process dependabot PRs', 'merge dependabot', 'triage dependency PRs', " +
       "or 'review dependency updates'. Pass 'dry-run' to preview without merging. " +
       "Requires REPO_LIST (local repo paths).",
