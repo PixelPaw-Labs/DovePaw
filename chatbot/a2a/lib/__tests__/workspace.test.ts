@@ -78,6 +78,17 @@ describe("createAgentWorkspace", () => {
     expect(readlinkSync(symlinkPath)).toBe(sourceDir);
   });
 
+  it("calls onProgress for workspace creation and symlink steps", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    const onProgress = vi.fn();
+    const ws = createAgentWorkspace("my-agent", "ma", sourceDir, undefined, undefined, onProgress);
+
+    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining(ws.path));
+    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining(sourceDir));
+  });
+
   it("each call produces a unique workspace path", () => {
     const sourceDir = join(TMP_ROOT, "src", "my-agent");
     mkdirSync(sourceDir, { recursive: true });

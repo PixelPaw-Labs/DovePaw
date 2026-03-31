@@ -82,12 +82,25 @@ export class QueryAgentExecutor implements AgentExecutor {
     try {
       // Create an isolated workspace for this entire execution — used as cwd for
       // both the query() sub-agent and the agent script spawned by run_script.
+      const publishStream = (text: string) =>
+        eventBus.publish({
+          kind: "artifact-update",
+          taskId,
+          contextId,
+          artifact: {
+            artifactId: randomUUID(),
+            name: "stream",
+            parts: [{ kind: "text", text: `${text}\n` }],
+          },
+        });
+
       workspace = createAgentWorkspace(
         this.def.name,
         this.def.alias,
         agentSourceDirFromEntry(this.def.entryPath),
         undefined,
         taskId,
+        publishStream,
       );
 
       // Guard against process.exit() bypassing the finally block — each executor
@@ -122,17 +135,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentConfig,
             repoSlugs,
             this.abortController.signal,
-            (slug) =>
-              eventBus.publish({
-                kind: "artifact-update",
-                taskId,
-                contextId,
-                artifact: {
-                  artifactId: randomUUID(),
-                  name: "stream",
-                  parts: [{ kind: "text", text: `Cloning ${slug}…\n` }],
-                },
-              }),
+            (slug) => publishStream(`Cloning ${slug}…`),
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
