@@ -49,14 +49,15 @@ export function buildAgentHooks(
             if (input.stop_hook_active || !hasPendingWork()) return { continue: true };
             const ids = getPendingIds();
             return {
-              continue: false,
-              systemMessage: [
+              decision: "block",
+              reason: [
                 `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}).`,
                 `You MUST call the await tool yourself with the id.`,
                 `These operations can run for a long time (minutes to hours) — decide an appropriate sleep interval based on the task type.`,
                 `Keep calling await in a loop until the operation completes.`,
                 `Never give up or stop polling; you are responsible for retrieving the final result.`,
               ].join(" "),
+              continue: false,
             };
           },
         ],
@@ -81,11 +82,7 @@ export function buildAgentHooks(
                 : undefined;
             if (status === "still_running") {
               if (retryCounter.shouldRelease()) {
-                return {
-                  continue: true,
-                  systemMessage:
-                    "Releasing control to the agent to surface progress updates before the next await attempt.",
-                };
+                return { continue: true };
               }
               const id = getStillRunningId(structured);
               const hookSpecificOutput: PostToolUseHookSpecificOutput = {

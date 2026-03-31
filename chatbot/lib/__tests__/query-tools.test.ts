@@ -273,15 +273,15 @@ describe("makeStartTool", () => {
     expect(result.content[0].text).toContain("npm run servers");
   });
 
-  it("returns taskId and manifestKey from sendMessage task response", async () => {
+  it("returns taskId and manifestKey from sendMessageStream task response", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockSendMessage = vi.fn().mockResolvedValue({
-      kind: "task",
-      id: "task-abc-123",
-      status: { state: "submitted" },
-    });
     vi.mocked(ClientFactory).mockImplementation(function () {
-      return { createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) };
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessageStream: () =>
+            asyncEvents({ kind: "task", id: "task-abc-123", status: { state: "submitted" } }),
+        }),
+      };
     } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("task-abc-123");
@@ -290,11 +290,14 @@ describe("makeStartTool", () => {
     expect(structured.manifestKey).toBe(AGENT.manifestKey);
   });
 
-  it("returns error message when response is not a task", async () => {
+  it("returns error message when first stream event is not a task", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockSendMessage = vi.fn().mockResolvedValue({ kind: "message" });
     vi.mocked(ClientFactory).mockImplementation(function () {
-      return { createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) };
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessageStream: () => asyncEvents({ kind: "message" }),
+        }),
+      };
     } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("task ID not received");
@@ -319,7 +322,8 @@ describe("makeStartTool", () => {
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
-          sendMessage: vi.fn().mockResolvedValue({ kind: "task", id: "task-start-abort" }),
+          sendMessageStream: () =>
+            asyncEvents({ kind: "task", id: "task-start-abort", status: { state: "submitted" } }),
           cancelTask: mockCancelTask,
         }),
       };

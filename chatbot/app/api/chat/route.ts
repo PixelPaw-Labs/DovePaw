@@ -33,6 +33,7 @@ import {
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
+  type StreamedResult,
 } from "@/lib/query-tools";
 import { buildDoveHooks } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
@@ -134,13 +135,33 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
 
-      const tools = AGENTS.flatMap((agent) => [
-        makeAskTool(agent, abortController.signal),
-        makeStartTool(agent, abortController.signal),
-        makeAwaitTool(agent, abortController.signal, (result) => {
-          send({ type: "progress", result });
-        }),
-      ]);
+      const backgroundTasks: Promise<unknown>[] = [];
+
+      const tools = AGENTS.flatMap((agent) => {
+        const makeProgressSender = () => {
+          let lastSentCount = 0;
+          let lastSentArtifactCount = 0;
+          return (result: StreamedResult) => {
+            const newEntries = result.progress.slice(lastSentCount);
+            const lastEntry = result.progress.at(-1);
+            const artifactCount = lastEntry ? Object.keys(lastEntry.artifacts).length : 0;
+
+            if (newEntries.length > 0) {
+              lastSentCount = result.progress.length;
+              lastSentArtifactCount = artifactCount;
+              send({ type: "progress", result: { output: result.output, progress: newEntries } });
+            } else if (lastEntry && artifactCount > lastSentArtifactCount) {
+              lastSentArtifactCount = artifactCount;
+              send({ type: "progress", result: { output: result.output, progress: [lastEntry] } });
+            }
+          };
+        };
+        return [
+          makeAskTool(agent, abortController.signal),
+          makeStartTool(agent, abortController.signal, makeProgressSender(), backgroundTasks),
+          makeAwaitTool(agent, abortController.signal, makeProgressSender()),
+        ];
+      });
 
       try {
         await withMcpQuery(
@@ -198,6 +219,10 @@ export async function POST(request: Request) {
           },
         );
       } finally {
+        // Wait for all background start_* subscriptions to finish streaming
+        // before closing the SSE controller — otherwise their progress events
+        // arrive after the controller is closed and are silently dropped.
+        await Promise.allSettled(backgroundTasks);
         abortController.abort();
         try {
           controller.close();

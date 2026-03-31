@@ -47,6 +47,8 @@ export function useConversations() {
     appendToProcess,
     setLastTextContent,
     appendToolCallSegment,
+    setLiveProgress,
+    appendAgentProgress,
     append,
     clear,
   } = useMessages();
@@ -212,6 +214,10 @@ export function useConversations() {
 
               if (event.type === "session") {
                 sessionIdRef.current = event.sessionId;
+              } else if (event.type === "progress") {
+                const lastToolCall = event.result.progress.at(-1)?.artifacts["tool-call"];
+                if (lastToolCall) setLiveProgress(assistantId, lastToolCall);
+                appendAgentProgress(assistantId, event.result.progress);
               } else if (event.type === "thinking" && event.content) {
                 appendToProcess(assistantId, event.content);
               } else if (event.type === "tool_call") {
@@ -260,6 +266,7 @@ export function useConversations() {
                 patch(assistantId, { isLoading: false, isProcessStreaming: false });
               } else if (event.type === "done") {
                 animation.flush(assistantId);
+                setLiveProgress(assistantId, null);
                 patchWhere(
                   assistantId,
                   (m) => !!m.isLoading,

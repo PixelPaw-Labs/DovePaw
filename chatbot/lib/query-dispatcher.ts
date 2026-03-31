@@ -84,21 +84,15 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
 
   onTurnEnd(): void {} // no-op
 
-  onTextDelta(text: string): void {
-    this.publisher.publishStatus(text, { stream: text });
-  }
+  onTextDelta(_text: string): void {} // no-op: text deltas flood the workflow panel
 
-  onThinking(text: string): void {
-    this.publisher.publishStatus(text, { thinking: text });
-  }
+  onThinking(_text: string): void {} // no-op: thinking tokens are not meaningful workflow steps
 
   onToolCall(name: string): void {
     this.publisher.publishStatus(name, { "tool-call": name });
   }
 
-  onToolInput(content: string): void {
-    this.publisher.publishStatus(content, { "tool-input": content });
-  }
+  onToolInput(_content: string): void {} // no-op: tool input JSON is not a workflow step
 
   onResult(result: string): void {
     if (result) this.publisher.publishStatus(result, { "final-output": result });

@@ -1,0 +1,150 @@
+/**
+ * A2A client helpers shared across query-tools MCP tool factories.
+ *
+ *   resolveAgentPort      — port lookup from the ports manifest
+ *   createAgentClient     — create A2A Client for a port
+ *   subscribeTaskStream   — resubscribe + collect stream, cancels on abort
+ *   collectStreamResult   — consume A2A event stream → StreamedResult
+ *   extractArtifactResult — build StreamedResult from terminal task artifacts
+ */
+
+import { ClientFactory } from "@a2a-js/sdk/client";
+import type { Client } from "@a2a-js/sdk/client";
+import type {
+  Artifact,
+  Task,
+  Message,
+  TaskStatusUpdateEvent,
+  TaskArtifactUpdateEvent,
+} from "@a2a-js/sdk";
+import { readPortsManifest } from "@/a2a/lib/base-server";
+import type { PortsManifest } from "@/a2a/lib/base-server";
+/** A progress message with any artifacts published alongside it. */
+export type ProgressEntry = {
+  message: string;
+  /** Artifacts linked to this progress message — name → text. */
+  artifacts: Record<string, string>;
+};
+
+export type StreamedResult = {
+  /** Primary text output (from artifact-update events), joined for readability. */
+  output: string;
+  /** Progress messages, each carrying its linked artifacts inline. */
+  progress: ProgressEntry[];
+};
+
+type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+
+function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
+  if (!Object.prototype.hasOwnProperty.call(manifest, key)) return undefined;
+  const val = (manifest as Record<string, unknown>)[key];
+  return typeof val === "number" ? val : undefined;
+}
+
+/** Resolve agent port from the ports manifest, or null if servers are unavailable. */
+export function resolveAgentPort(manifestKey: string): number | null {
+  const manifest = readPortsManifest();
+  if (!manifest) return null;
+  return getManifestPort(manifest, manifestKey) ?? null;
+}
+
+/** Create A2A client for the given port. Throws on connection failure. */
+export async function createAgentClient(port: number): Promise<Client> {
+  return new ClientFactory().createFromUrl(`http://localhost:${port}`);
+}
+
+/**
+ * Subscribe to a task's live event stream, forwarding snapshots via onProgress.
+ * Aborts the stream and cancels the task when signal fires.
+ */
+export function subscribeTaskStream(
+  client: Client,
+  taskId: string,
+  signal: AbortSignal | undefined,
+  onProgress: (result: StreamedResult) => void,
+): Promise<{ taskId?: string; result: StreamedResult }> {
+  const ac = new AbortController();
+  signal?.addEventListener(
+    "abort",
+    () => {
+      ac.abort();
+      void client.cancelTask({ id: taskId }).catch(() => {});
+    },
+    { once: true },
+  );
+  return collectStreamResult(
+    client.resubscribeTask({ id: taskId }, { signal: ac.signal }),
+    onProgress,
+  );
+}
+
+function accumulate(target: Record<string, string>, name: string, text: string): void {
+  target[name] = target[name] ? `${target[name]}\n${text}` : text;
+}
+
+/**
+ * Consume an A2A event stream, building a StreamedResult.
+ * Calls onSnapshot after each status-update or artifact-update so callers can
+ * forward live progress to the UI.
+ */
+export async function collectStreamResult(
+  stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
+  onSnapshot?: (result: StreamedResult) => void,
+): Promise<{ taskId?: string; result: StreamedResult }> {
+  let taskId: string | undefined;
+  const progress: ProgressEntry[] = [];
+  let pendingEntry: ProgressEntry | undefined;
+
+  const snapshot = (): StreamedResult => {
+    const output = progress
+      .flatMap((e) => Object.values(e.artifacts))
+      .join("\n")
+      .trim();
+    return {
+      output: output || "Agent completed.",
+      progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),
+    };
+  };
+
+  for await (const event of stream) {
+    if (event.kind === "task") {
+      taskId = event.id;
+    } else if (event.kind === "artifact-update") {
+      const name = event.artifact.name ?? "";
+      for (const p of event.artifact.parts) {
+        if (p.kind === "text" && pendingEntry) {
+          accumulate(pendingEntry.artifacts, name, p.text);
+          onSnapshot?.(snapshot());
+        } else if (p.kind === "text") {
+        }
+      }
+    } else if (event.kind === "status-update") {
+      if (event.status.message) {
+        for (const p of event.status.message.parts) {
+          if (p.kind === "text") {
+            const entry: ProgressEntry = { message: p.text, artifacts: {} };
+            progress.push(entry);
+            pendingEntry = entry;
+            onSnapshot?.(snapshot());
+          }
+        }
+      }
+    }
+  }
+
+  return { taskId, result: snapshot() };
+}
+
+/** Build a StreamedResult from terminal task artifacts (no live stream needed). */
+export function extractArtifactResult(rawArtifacts: Artifact[] | undefined): StreamedResult {
+  const artifacts: Record<string, string> = {};
+  for (const a of rawArtifacts ?? []) {
+    const name = a.name ?? "";
+    for (const p of a.parts) {
+      if (p.kind === "text")
+        artifacts[name] = artifacts[name] ? `${artifacts[name]}\n${p.text}` : p.text;
+    }
+  }
+  const output = Object.values(artifacts).join("\n").trim() || "Agent completed.";
+  return { output, progress: [] };
+}

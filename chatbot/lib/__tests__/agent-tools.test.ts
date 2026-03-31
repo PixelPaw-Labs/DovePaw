@@ -232,7 +232,7 @@ describe("makeStartScriptTool", () => {
       slug: string,
     ) => void;
     cloneCallback("org/my-app");
-    expect(onProgress).toHaveBeenCalledWith("Cloning org/my-app…", { repo: "org/my-app" });
+    expect(onProgress).toHaveBeenCalledWith("Cloning", { repo: "org/my-app" });
   });
 
   it("passes undefined clone callback to recloneReposIntoWorkspace when no onProgress", async () => {

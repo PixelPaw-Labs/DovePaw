@@ -59,10 +59,10 @@ describe("buildAgentHooks — Stop hook", () => {
     const fn = hooks.Stop![0]!.hooks[0]!;
     const result = await callHook(fn, stopInput());
     expect(result).toMatchObject({ continue: false });
-    expect((result as { systemMessage: string }).systemMessage).toContain(
+    expect((result as { reason: string }).reason).toContain(
       "You MUST call the await tool yourself with the id",
     );
-    expect((result as { systemMessage: string }).systemMessage).toContain("abc-123");
+    expect((result as { reason: string }).reason).toContain("abc-123");
   });
 
   it("includes polling guidance in the Stop message", async () => {
@@ -73,9 +73,9 @@ describe("buildAgentHooks — Stop hook", () => {
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
-    const result = (await callHook(fn, stopInput())) as { systemMessage: string };
-    expect(result.systemMessage).toContain("minutes to hours");
-    expect(result.systemMessage).toContain("Never give up or stop polling");
+    const result = (await callHook(fn, stopInput())) as { reason: string };
+    expect(result.reason).toContain("minutes to hours");
+    expect(result.reason).toContain("Never give up or stop polling");
   });
 
   it("lists all pending ids in the Stop message", async () => {
@@ -86,9 +86,9 @@ describe("buildAgentHooks — Stop hook", () => {
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
-    const result = (await callHook(fn, stopInput())) as { systemMessage: string };
-    expect(result.systemMessage).toContain("id-1");
-    expect(result.systemMessage).toContain("id-2");
+    const result = (await callHook(fn, stopInput())) as { reason: string };
+    expect(result.reason).toContain("id-1");
+    expect(result.reason).toContain("id-2");
   });
 });
 
@@ -115,11 +115,11 @@ describe("buildAgentHooks — PostToolUse hook", () => {
   });
 
   it("releases (continue: true) when retry counter threshold is hit", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // max = floor(0 * 3) + 3 = 3
+    vi.spyOn(Math, "random").mockReturnValue(0); // max = floor(0 * 10) + 6 = 6
     const hooks = buildAgentHooks(makeConfig());
     const fn = hooks.PostToolUse![0]!.hooks[0]!;
-    // exhaust 2 forced-retry calls, 3rd should release
-    for (let i = 0; i < 2; i++) await callHook(fn, postToolUseInput({ status: "still_running" }));
+    // exhaust 5 forced-retry calls, 6th should release
+    for (let i = 0; i < 5; i++) await callHook(fn, postToolUseInput({ status: "still_running" }));
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
     expect(result).toMatchObject({ continue: true });
     vi.restoreAllMocks();

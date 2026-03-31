@@ -120,7 +120,7 @@ Agent Scripts (agents/*/main.ts)
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **a2a-response** (2676 symbols, 5489 relationships, 218 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DovePaw** (2688 symbols, 5451 relationships, 219 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
@@ -136,7 +136,7 @@ This project is indexed by GitNexus as **a2a-response** (2676 symbols, 5489 rela
 
 1. `gitnexus_query({query: "<error or symptom>"})` — find execution flows related to the issue
 2. `gitnexus_context({name: "<suspect function>"})` — see all callers, callees, and process participation
-3. `READ gitnexus://repo/a2a-response/process/{processName}` — trace the full execution flow step by step
+3. `READ gitnexus://repo/DovePaw/process/{processName}` — trace the full execution flow step by step
 4. For regressions: `gitnexus_detect_changes({scope: "compare", base_ref: "main"})` — see what your branch changed
 
 ## When Refactoring
@@ -175,10 +175,10 @@ This project is indexed by GitNexus as **a2a-response** (2676 symbols, 5489 rela
 
 | Resource | Use for |
 |----------|---------|
-| `gitnexus://repo/a2a-response/context` | Codebase overview, check index freshness |
-| `gitnexus://repo/a2a-response/clusters` | All functional areas |
-| `gitnexus://repo/a2a-response/processes` | All execution flows |
-| `gitnexus://repo/a2a-response/process/{name}` | Step-by-step execution trace |
+| `gitnexus://repo/DovePaw/context` | Codebase overview, check index freshness |
+| `gitnexus://repo/DovePaw/clusters` | All functional areas |
+| `gitnexus://repo/DovePaw/processes` | All execution flows |
+| `gitnexus://repo/DovePaw/process/{name}` | Step-by-step execution trace |
 
 ## Self-Check Before Finishing
 

@@ -166,7 +166,7 @@ export function makeStartScriptTool(
         config.workspacePath,
         repoSlugs,
         undefined,
-        onProgress ? (slug) => onProgress(`Cloning ${slug}…`, { repo: slug }) : undefined,
+        onProgress ? (slug) => onProgress(`Cloning`, { repo: slug }) : undefined,
       );
 
       const finalEnv: Record<string, string> = { ...config.extraEnv };

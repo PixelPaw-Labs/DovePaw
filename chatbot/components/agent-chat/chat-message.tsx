@@ -6,7 +6,7 @@ import { DOVE_AVATAR } from "@/lib/avatars";
 import { MessageContent, MessageResponse, MessageToolbar } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import type { ChatMessage } from "@/components/hooks/use-agent-chat";
+import type { ChatMessage } from "@/components/hooks/use-messages";
 import { messageText } from "@/components/hooks/use-messages";
 import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";

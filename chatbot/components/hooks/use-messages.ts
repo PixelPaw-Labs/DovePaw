@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import type { ProgressEntry } from "@/lib/query-tools";
 
 export type MessageRole = "user" | "assistant";
 
@@ -22,6 +23,7 @@ export interface ChatMessage {
   isLoading?: boolean;
   isCancelled?: boolean;
   liveProgress?: string | null;
+  agentProgress?: ProgressEntry[];
 }
 
 /** Extract all text from a message's segments as a single string. */
@@ -120,6 +122,35 @@ export function useMessages() {
     [],
   );
 
+  const appendAgentProgress = useCallback(
+    (id: string, incoming: ProgressEntry[]) =>
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== id) return m;
+          const existing = m.agentProgress ?? [];
+          const merged = [...existing];
+          for (const entry of incoming) {
+            const lastIdx = merged.length - 1;
+            const last = merged[lastIdx];
+            const lastHasNoArtifacts = last && Object.keys(last.artifacts).length === 0;
+            const incomingArtifactStr = JSON.stringify(entry.artifacts);
+            const isDuplicate = merged.some(
+              (e) =>
+                e.message === entry.message && JSON.stringify(e.artifacts) === incomingArtifactStr,
+            );
+            if (isDuplicate) continue;
+            if (lastIdx >= 0 && last.message === entry.message && lastHasNoArtifacts) {
+              merged[lastIdx] = { ...last, artifacts: entry.artifacts };
+            } else {
+              merged.push(entry);
+            }
+          }
+          return { ...m, agentProgress: merged };
+        }),
+      ),
+    [],
+  );
+
   const append = useCallback(
     (...newMessages: ChatMessage[]) => setMessages((prev) => [...prev, ...newMessages]),
     [],
@@ -138,6 +169,7 @@ export function useMessages() {
     setLastTextContent,
     appendToolCallSegment,
     setLiveProgress,
+    appendAgentProgress,
     append,
     clear,
     find,

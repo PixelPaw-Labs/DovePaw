@@ -187,7 +187,7 @@ export function spawnAndCollect(
       stdoutBuf += chunk.toString();
       const parts = stdoutBuf.split("\n");
       stdoutBuf = parts.pop() ?? "";
-      for (const l of parts.filter((line) => line.trim())) {
+      for (const l of parts) {
         const result = processor.process(l, lines);
         if (result) onProgress?.(result.message, result.artifacts);
       }
@@ -198,12 +198,17 @@ export function spawnAndCollect(
       stderrBuf += chunk.toString();
       const parts = stderrBuf.split("\n");
       stderrBuf = parts.pop() ?? "";
-      parts.filter((l) => l.trim()).forEach((l) => lines.push(`[stderr] ${l}`));
+      parts.forEach((l) => lines.push(`[stderr] ${l}`));
     });
 
     proc.on("close", (code) => {
-      if (stdoutBuf.trim()) lines.push(stdoutBuf.trim());
-      if (stderrBuf.trim()) lines.push(`[stderr] ${stderrBuf.trim()}`);
+      // Flush any remaining buffered stdout through the processor so trailing
+      // __PROGRESS__ / __ARTIFACT__ sentinels are not silently dropped.
+      if (stdoutBuf) {
+        const result = processor.process(stdoutBuf, lines);
+        if (result) onProgress?.(result.message, result.artifacts);
+      }
+      if (stderrBuf) lines.push(`[stderr] ${stderrBuf}`);
       resolve(
         lines.length > 0
           ? lines.join("\n")

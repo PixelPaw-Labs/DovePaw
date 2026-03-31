@@ -110,8 +110,8 @@ export async function cloneReposIntoWorkspace(
     slugs.map(async (slug) => {
       const repoName = slug.split("/").pop()!;
       const clonePath = join(workspacePath, repoName);
-      await ghClone(slug, clonePath);
       onProgress?.(slug);
+      await ghClone(slug, clonePath);
       return clonePath;
     }),
   );

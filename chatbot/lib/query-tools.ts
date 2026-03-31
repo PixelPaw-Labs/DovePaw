@@ -10,27 +10,19 @@
  */
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
-import { ClientFactory, TaskNotFoundError } from "@a2a-js/sdk/client";
-import type {
-  Artifact,
-  Task,
-  Message,
-  TaskStatusUpdateEvent,
-  TaskArtifactUpdateEvent,
-} from "@a2a-js/sdk";
-
-type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
-import { readPortsManifest } from "@/a2a/lib/base-server";
-import type { PortsManifest } from "@/a2a/lib/base-server";
+import { TaskNotFoundError } from "@a2a-js/sdk/client";
+import type { Task } from "@a2a-js/sdk";
 import { randomUUID } from "node:crypto";
-
-function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
-  if (!Object.prototype.hasOwnProperty.call(manifest, key)) return undefined;
-  const val = (manifest as Record<string, unknown>)[key];
-  return typeof val === "number" ? val : undefined;
-}
 import type { AgentDef } from "@@/lib/agents";
 import { z } from "zod";
+import {
+  resolveAgentPort,
+  createAgentClient,
+  subscribeTaskStream,
+  collectStreamResult,
+  extractArtifactResult,
+} from "@/lib/a2a-client";
+import type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -48,19 +40,7 @@ export type TaskStartedWithKeyContent = TaskStartedContent & {
  * Structured result collected from a completed A2A task stream.
  * Separates content by type so the UI can render each category appropriately.
  */
-/** A progress message with any artifacts published alongside it. */
-export type ProgressEntry = {
-  message: string;
-  /** Artifacts linked to this progress message — name → text. */
-  artifacts: Record<string, string>;
-};
-
-export type StreamedResult = {
-  /** Primary text output (from artifact-update events), joined for readability. */
-  output: string;
-  /** Progress messages, each carrying its linked artifacts inline. */
-  progress: ProgressEntry[];
-};
+export type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 
 /** Returned by await_* when the agent task has reached a terminal state. */
 export type TaskCompletedContent = {
@@ -117,79 +97,6 @@ export const doveAwaitToolName = (agent: AgentDef) => `await_${agent.manifestKey
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
-/**
- * Consume a stream, collecting artifact text and the taskId (if emitted).
- * Used by both makeAskTool (sendMessageStream) and makeAwaitTool (resubscribeTask).
- *
- * @param onSnapshot Optional callback invoked after each event with the current
- *   accumulated StreamedResult snapshot. Used by makeAwaitTool to stream live
- *   progress to the UI as the task runs.
- */
-function accumulate(target: Record<string, string>, name: string, text: string): void {
-  target[name] = target[name] ? `${target[name]}\n${text}` : text;
-}
-
-async function collectStreamResult(
-  stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
-  onSnapshot?: (result: StreamedResult) => void,
-): Promise<{ taskId?: string; result: StreamedResult }> {
-  let taskId: string | undefined;
-  const progress: ProgressEntry[] = [];
-  // Points to the last progress entry while consecutive artifact-updates arrive —
-  // artifacts are always linked to the status-update that preceded them.
-  let pendingEntry: ProgressEntry | undefined;
-
-  const snapshot = (): StreamedResult => {
-    const output = progress
-      .flatMap((e) => Object.values(e.artifacts))
-      .join("\n")
-      .trim();
-    return {
-      output: output || "Agent completed.",
-      progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),
-    };
-  };
-
-  for await (const event of stream) {
-    if (event.kind === "task") {
-      taskId = event.id;
-    } else if (event.kind === "artifact-update") {
-      const name = event.artifact.name ?? "";
-      for (const p of event.artifact.parts) {
-        if (p.kind === "text" && pendingEntry) {
-          accumulate(pendingEntry.artifacts, name, p.text);
-          onSnapshot?.(snapshot());
-        }
-      }
-    } else if (event.kind === "status-update" && event.status.message) {
-      for (const p of event.status.message.parts) {
-        if (p.kind === "text") {
-          const entry: ProgressEntry = { message: p.text, artifacts: {} };
-          progress.push(entry);
-          pendingEntry = entry;
-          onSnapshot?.(snapshot());
-        }
-      }
-    }
-  }
-
-  return { taskId, result: snapshot() };
-}
-
-/** Build a StreamedResult from terminal task artifacts (no stream needed). */
-function extractArtifactResult(rawArtifacts: Artifact[] | undefined): StreamedResult {
-  const artifacts: Record<string, string> = {};
-  for (const a of rawArtifacts ?? []) {
-    const name = a.name ?? "";
-    for (const p of a.parts) {
-      if (p.kind === "text")
-        artifacts[name] = artifacts[name] ? `${artifacts[name]}\n${p.text}` : p.text;
-    }
-  }
-  const output = Object.values(artifacts).join("\n").trim() || "Agent completed.";
-  return { output, progress: [] };
-}
-
 function noServersMessage() {
   return {
     content: [
@@ -228,16 +135,10 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
     agent.description,
     { instruction: z.string().optional().describe("Optional instruction for the agent") },
     async ({ instruction = "" }) => {
-      const manifest = readPortsManifest();
-      if (!manifest) return noServersMessage();
-
-      const port = getManifestPort(manifest, agent.manifestKey);
+      const port = resolveAgentPort(agent.manifestKey);
       if (!port) return noServersMessage();
-
       try {
-        const factory = new ClientFactory();
-        const client = await factory.createFromUrl(`http://localhost:${port}`);
-
+        const client = await createAgentClient(port);
         const result = await client.sendMessage({
           message: {
             kind: "message",
@@ -247,7 +148,6 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
           },
           configuration: { blocking: false },
         });
-
         if (result.kind !== "task") {
           return {
             content: [
@@ -255,16 +155,11 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
             ],
           };
         }
-
-        // Cancel the A2A task if the route aborts (user pressed STOP).
         signal?.addEventListener(
           "abort",
-          () => {
-            void client.cancelTask({ id: result.id }).catch(() => {});
-          },
+          () => void client.cancelTask({ id: result.id }).catch(() => {}),
           { once: true },
         );
-
         const started: TaskStartedContent = { taskId: result.id };
         return {
           content: [{ type: "text" as const, text: `Task started (taskId: ${result.id})` }],
@@ -286,57 +181,66 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
  * Pair with makeAwaitTool to retrieve the result later.
  * Use when Dove needs to start multiple agents concurrently or inform the user right away.
  */
-export function makeStartTool(agent: AgentDef, signal?: AbortSignal) {
+export function makeStartTool(
+  agent: AgentDef,
+  signal?: AbortSignal,
+  onProgress?: (result: StreamedResult) => void,
+  backgroundTasks?: Promise<unknown>[],
+) {
   return tool(
     doveStartToolName(agent),
     `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
     { instruction: z.string().optional().describe("Optional instruction for the agent") },
     async ({ instruction = "" }) => {
-      const manifest = readPortsManifest();
-      if (!manifest) return noServersMessage();
-
-      const port = getManifestPort(manifest, agent.manifestKey);
+      const port = resolveAgentPort(agent.manifestKey);
       if (!port) return noServersMessage();
-
       try {
-        const factory = new ClientFactory();
-        const client = await factory.createFromUrl(`http://localhost:${port}`);
+        const client = await createAgentClient(port);
+        // Use sendMessageStream so the EventQueue is created before execute() runs —
+        // this captures workspace/setup events that fire synchronously during execute()
+        // before any resubscribeTask connection could be opened.
+        const ac = new AbortController();
+        signal?.addEventListener("abort", () => ac.abort(), { once: true });
 
-        // blocking: false returns the initial Task as soon as it's registered
-        // (after the executor publishes its first task event) without waiting for completion
-        const result = await client.sendMessage({
-          message: {
-            kind: "message",
-            messageId: randomUUID(),
-            role: "user",
-            parts: [{ kind: "text", text: instruction }],
+        const stream = client.sendMessageStream(
+          {
+            message: {
+              kind: "message",
+              messageId: randomUUID(),
+              role: "user",
+              parts: [{ kind: "text", text: instruction }],
+            },
           },
-          configuration: { blocking: false },
-        });
+          { signal: ac.signal },
+        );
 
-        if (result.kind !== "task") {
+        // Read the first event to extract the taskId, then hand off to background.
+        const firstEvent = await stream[Symbol.asyncIterator]().next();
+        if (firstEvent.done || firstEvent.value.kind !== "task") {
           return {
             content: [
               { type: "text" as const, text: "Error: task ID not received from agent server." },
             ],
           };
         }
+        const taskId = firstEvent.value.id;
 
-        // Cancel the A2A task if the route aborts (user pressed STOP).
+        // Cancel the A2A task and abort the stream when the route signal fires.
         signal?.addEventListener(
           "abort",
-          () => {
-            void client.cancelTask({ id: result.id }).catch(() => {});
-          },
+          () => void client.cancelTask({ id: taskId }).catch(() => {}),
           { once: true },
         );
 
-        const started: TaskStartedWithKeyContent = {
-          taskId: result.id,
-          manifestKey: agent.manifestKey,
-        };
+        // Continue consuming the stream in the background, forwarding events via onProgress.
+        if (onProgress) {
+          const task = collectStreamResult(stream, onProgress).catch(() => {});
+          backgroundTasks?.push(task);
+        }
+
+        const started: TaskStartedWithKeyContent = { taskId, manifestKey: agent.manifestKey };
         return {
-          content: [{ type: "text" as const, text: `Task started (taskId: ${result.id})` }],
+          content: [{ type: "text" as const, text: `Task started (taskId: ${taskId})` }],
           structuredContent: started,
         };
       } catch (err: unknown) {
@@ -382,16 +286,10 @@ export function makeAwaitTool(
       taskId: z.string().describe("The taskId returned by the corresponding start_* or ask_* tool"),
     },
     async ({ taskId }) => {
-      const manifest = readPortsManifest();
-      if (!manifest) return noServersMessage();
-
-      const port = getManifestPort(manifest, agent.manifestKey);
+      const port = resolveAgentPort(agent.manifestKey);
       if (!port) return noServersMessage();
-
       try {
-        const factory = new ClientFactory();
-        const client = await factory.createFromUrl(`http://localhost:${port}`);
-
+        const client = await createAgentClient(port);
         // Check current task state first — no stream needed if already finished
         const task: Task = await client.getTask({ id: taskId });
 
@@ -410,31 +308,17 @@ export function makeAwaitTool(
 
         // Task still running — collect output for up to AWAIT_POLL_TIMEOUT_MS,
         // then return still_running so Dove retries instead of spawning a new task.
-        // Track live progress so the still_running response is informative.
         let latestSnapshot: StreamedResult | undefined;
-
-        const abortController = new AbortController();
-        // Cancel the A2A task and abort the stream if the route aborts (user pressed STOP).
-        signal?.addEventListener(
-          "abort",
-          () => {
-            abortController.abort();
-            void client.cancelTask({ id: taskId }).catch(() => {});
-          },
-          { once: true },
-        );
+        const timeoutAc = new AbortController();
         const timeoutResult = Symbol("timeout");
-        const timer = setTimeout(() => abortController.abort(), AWAIT_POLL_TIMEOUT_MS);
+        const timer = setTimeout(() => timeoutAc.abort(), AWAIT_POLL_TIMEOUT_MS);
         const result = await Promise.race([
-          collectStreamResult(
-            client.resubscribeTask({ id: taskId }, { signal: abortController.signal }),
-            (snapshot) => {
-              latestSnapshot = snapshot;
-              onProgress?.(snapshot);
-            },
-          ).finally(() => clearTimeout(timer)),
+          subscribeTaskStream(client, taskId, signal, (snapshot) => {
+            latestSnapshot = snapshot;
+            onProgress?.(snapshot);
+          }).finally(() => clearTimeout(timer)),
           new Promise<typeof timeoutResult>((resolve) =>
-            abortController.signal.addEventListener("abort", () => resolve(timeoutResult), {
+            timeoutAc.signal.addEventListener("abort", () => resolve(timeoutResult), {
               once: true,
             }),
           ),

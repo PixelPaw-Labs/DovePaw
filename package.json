@@ -43,6 +43,7 @@
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
     "@uiw/react-codemirror": "^4.25.9",
+    "@xyflow/react": "^12.10.2",
     "ai": "^6.0.141",
     "animejs": "^4.3.6",
     "class-variance-authority": "^0.7.1",
