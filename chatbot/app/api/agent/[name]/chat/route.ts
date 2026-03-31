@@ -9,11 +9,11 @@
  *   onArtifact  → chat SSE (text/thinking/tool_call/result)
  */
 
-import { randomUUID } from "node:crypto";
 import { AGENTS } from "@@/lib/agents";
 import { readPortsManifest } from "@/a2a/lib/base-server";
+import { makeProgressSender } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
-import { createAgentClient, collectStreamResult, type StreamedResult } from "@/lib/a2a-client";
+import { startAgentStream, collectStreamResult } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { z } from "zod";
 
@@ -63,55 +63,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
 
-      // Delta tracker — same pattern as makeProgressSender in route.ts
-      let lastSentCount = 0;
-      let lastSentArtifactCount = 0;
-      const onSnapshot = (result: StreamedResult) => {
-        const newEntries = result.progress.slice(lastSentCount);
-        const lastEntry = result.progress.at(-1);
-        const artifactCount = lastEntry ? Object.keys(lastEntry.artifacts).length : 0;
-        if (newEntries.length > 0) {
-          lastSentCount = result.progress.length;
-          lastSentArtifactCount = artifactCount;
-          send({ type: "progress", result: { output: result.output, progress: newEntries } });
-        } else if (lastEntry && artifactCount > lastSentArtifactCount) {
-          lastSentArtifactCount = artifactCount;
-          send({ type: "progress", result: { output: result.output, progress: [lastEntry] } });
-        }
-      };
+      const onSnapshot = makeProgressSender(send);
 
       const dispatcher = new SseQueryDispatcher(send);
       const onArtifact = (artifactName: string, text: string) =>
         dispatcher.onArtifact(artifactName, text);
 
       try {
-        const client = await createAgentClient(portValue);
-
-        const stream = client.sendMessageStream(
-          {
-            message: {
-              kind: "message",
-              messageId: randomUUID(),
-              role: "user",
-              parts: [{ kind: "text", text: message }],
-            },
-          },
-          { signal: abortController.signal },
-        );
-
-        const firstEvent = await stream[Symbol.asyncIterator]().next();
-        if (firstEvent.done || firstEvent.value.kind !== "task") {
+        const handle = await startAgentStream(portValue, message, abortController.signal);
+        if (!handle) {
           send({ type: "error", content: "Failed to start agent task" });
           send({ type: "done" });
           return;
         }
-        const taskId = firstEvent.value.id;
-
-        abortController.signal.addEventListener(
-          "abort",
-          () => void client.cancelTask({ id: taskId }).catch(() => {}),
-          { once: true },
-        );
+        const { taskId, stream } = handle;
 
         send({ type: "session", sessionId: taskId });
 

@@ -18,6 +18,7 @@ import { z } from "zod";
 import {
   resolveAgentPort,
   createAgentClient,
+  startAgentStream,
   subscribeTaskStream,
   collectStreamResult,
   extractArtifactResult,
@@ -195,42 +196,18 @@ export function makeStartTool(
       const port = resolveAgentPort(agent.manifestKey);
       if (!port) return noServersMessage();
       try {
-        const client = await createAgentClient(port);
-        // Use sendMessageStream so the EventQueue is created before execute() runs —
+        // Use startAgentStream so the EventQueue is created before execute() runs —
         // this captures workspace/setup events that fire synchronously during execute()
         // before any resubscribeTask connection could be opened.
-        const ac = new AbortController();
-        signal?.addEventListener("abort", () => ac.abort(), { once: true });
-
-        const stream = client.sendMessageStream(
-          {
-            message: {
-              kind: "message",
-              messageId: randomUUID(),
-              role: "user",
-              parts: [{ kind: "text", text: instruction }],
-            },
-          },
-          { signal: ac.signal },
-        );
-
-        // Read the first event to extract the taskId, then hand off to background.
-        const firstEvent = await stream[Symbol.asyncIterator]().next();
-        if (firstEvent.done || firstEvent.value.kind !== "task") {
+        const handle = await startAgentStream(port, instruction, signal);
+        if (!handle) {
           return {
             content: [
               { type: "text" as const, text: "Error: task ID not received from agent server." },
             ],
           };
         }
-        const taskId = firstEvent.value.id;
-
-        // Cancel the A2A task and abort the stream when the route signal fires.
-        signal?.addEventListener(
-          "abort",
-          () => void client.cancelTask({ id: taskId }).catch(() => {}),
-          { once: true },
-        );
+        const { taskId, stream } = handle;
 
         // Continue consuming the stream in the background, forwarding events via onProgress.
         if (onProgress) {

@@ -48,3 +48,27 @@ export type ChatSseEvent =
   | ChatSseProgress
   | ChatSseCancelled
   | ChatSseDone;
+
+/**
+ * Returns an onSnapshot callback that delta-tracks a StreamedResult and
+ * forwards only new/updated progress entries via send({ type: "progress" }).
+ */
+export function makeProgressSender(
+  send: (event: ChatSseEvent) => void,
+): (result: StreamedResult) => void {
+  let lastSentCount = 0;
+  let lastSentArtifactCount = 0;
+  return (result: StreamedResult) => {
+    const newEntries = result.progress.slice(lastSentCount);
+    const lastEntry = result.progress.at(-1);
+    const artifactCount = lastEntry ? Object.keys(lastEntry.artifacts).length : 0;
+    if (newEntries.length > 0) {
+      lastSentCount = result.progress.length;
+      lastSentArtifactCount = artifactCount;
+      send({ type: "progress", result: { output: result.output, progress: newEntries } });
+    } else if (lastEntry && artifactCount > lastSentArtifactCount) {
+      lastSentArtifactCount = artifactCount;
+      send({ type: "progress", result: { output: result.output, progress: [lastEntry] } });
+    }
+  };
+}

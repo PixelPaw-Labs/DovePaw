@@ -8,6 +8,7 @@
  *   extractArtifactResult — build StreamedResult from terminal task artifacts
  */
 
+import { randomUUID } from "node:crypto";
 import { ClientFactory } from "@a2a-js/sdk/client";
 import type { Client } from "@a2a-js/sdk/client";
 import type {
@@ -34,7 +35,13 @@ export type StreamedResult = {
   progress: ProgressEntry[];
 };
 
-type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+
+export type AgentStreamHandle = {
+  client: Client;
+  taskId: string;
+  stream: AsyncGenerator<A2AStreamEvent, void, undefined>;
+};
 
 function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
   if (!Object.prototype.hasOwnProperty.call(manifest, key)) return undefined;
@@ -52,6 +59,45 @@ export function resolveAgentPort(manifestKey: string): number | null {
 /** Create A2A client for the given port. Throws on connection failure. */
 export async function createAgentClient(port: number): Promise<Client> {
   return new ClientFactory().createFromUrl(`http://localhost:${port}`);
+}
+
+/**
+ * Opens a sendMessageStream, reads the first event to extract the taskId,
+ * and wires signal → stream abort + task cancellation.
+ * Returns null if the server did not return a task event as the first event.
+ */
+export async function startAgentStream(
+  port: number,
+  message: string,
+  signal?: AbortSignal,
+): Promise<AgentStreamHandle | null> {
+  const client = await createAgentClient(port);
+  const ac = new AbortController();
+  signal?.addEventListener("abort", () => ac.abort(), { once: true });
+
+  const stream = client.sendMessageStream(
+    {
+      message: {
+        kind: "message",
+        messageId: randomUUID(),
+        role: "user",
+        parts: [{ kind: "text", text: message }],
+      },
+    },
+    { signal: ac.signal },
+  ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
+
+  const firstEvent = await stream[Symbol.asyncIterator]().next();
+  if (firstEvent.done || firstEvent.value.kind !== "task") {
+    return null;
+  }
+  const taskId = firstEvent.value.id;
+
+  signal?.addEventListener("abort", () => void client.cancelTask({ id: taskId }).catch(() => {}), {
+    once: true,
+  });
+
+  return { client, taskId, stream };
 }
 
 /**

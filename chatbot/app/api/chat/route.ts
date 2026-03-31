@@ -25,6 +25,7 @@ import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { AGENTS } from "@@/lib/agents";
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
+import { makeProgressSender } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import {
   makeAskTool,
@@ -33,7 +34,6 @@ import {
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
-  type StreamedResult,
 } from "@/lib/query-tools";
 import { buildDoveHooks } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
@@ -138,28 +138,10 @@ export async function POST(request: Request) {
       const backgroundTasks: Promise<unknown>[] = [];
 
       const tools = AGENTS.flatMap((agent) => {
-        const makeProgressSender = () => {
-          let lastSentCount = 0;
-          let lastSentArtifactCount = 0;
-          return (result: StreamedResult) => {
-            const newEntries = result.progress.slice(lastSentCount);
-            const lastEntry = result.progress.at(-1);
-            const artifactCount = lastEntry ? Object.keys(lastEntry.artifacts).length : 0;
-
-            if (newEntries.length > 0) {
-              lastSentCount = result.progress.length;
-              lastSentArtifactCount = artifactCount;
-              send({ type: "progress", result: { output: result.output, progress: newEntries } });
-            } else if (lastEntry && artifactCount > lastSentArtifactCount) {
-              lastSentArtifactCount = artifactCount;
-              send({ type: "progress", result: { output: result.output, progress: [lastEntry] } });
-            }
-          };
-        };
         return [
           makeAskTool(agent, abortController.signal),
-          makeStartTool(agent, abortController.signal, makeProgressSender(), backgroundTasks),
-          makeAwaitTool(agent, abortController.signal, makeProgressSender()),
+          makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks),
+          makeAwaitTool(agent, abortController.signal, makeProgressSender(send)),
         ];
       });
 

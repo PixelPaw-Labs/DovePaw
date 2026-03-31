@@ -54,7 +54,7 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
         </Reasoning>
       ) : null}
 
-      {(hasSegmentContent || (!msg.isLoading && msg.role === "assistant")) && (
+      {(hasSegmentContent || (!msg.isLoading && !msg.isCancelled && msg.role === "assistant")) && (
         <MessageContent>
           {msg.segments.map((seg, i) =>
             seg.type === "text" ? (
@@ -78,23 +78,16 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
       <EditDiffList
         toolCalls={msg.segments.filter((s) => s.type === "tool_call").map((s) => s.tool)}
       />
+      {msg.isCancelled && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-bl-none bg-amber-50 border border-amber-200 text-amber-600 text-sm font-medium">
+          <Ban className="w-3.5 h-3.5 shrink-0" />
+          Stopped
+        </div>
+      )}
     </AnimatedMessage>
   );
 
   if (msg.role === "assistant") {
-    // Cancelled state — amber indicator
-    if (msg.isCancelled && !fullText) {
-      return (
-        <div className="flex items-end gap-2.5 w-full">
-          <AssistantAvatar />
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-bl-none bg-amber-50 border border-amber-200 text-amber-600 text-sm font-medium">
-            <Ban className="w-3.5 h-3.5 shrink-0" />
-            Cancelled
-          </div>
-        </div>
-      );
-    }
-
     // Pure loading state — no avatar, just dots
     if (msg.isLoading && !hasSegmentContent && !msg.processContent) {
       return <ThinkingDots />;
