@@ -149,7 +149,7 @@ export function makeStartScriptTool(
   config: AgentConfig,
   repoSlugs: string[],
   signal?: AbortSignal,
-  onCloneProgress?: (slug: string) => void,
+  onProgress?: (message: string) => void,
 ) {
   return tool(
     START_SCRIPT_TOOL,
@@ -166,7 +166,7 @@ export function makeStartScriptTool(
         config.workspacePath,
         repoSlugs,
         undefined,
-        onCloneProgress,
+        onProgress ? (slug) => onProgress(`Cloning ${slug}…`) : undefined,
       );
 
       const finalEnv: Record<string, string> = { ...config.extraEnv };
@@ -174,7 +174,12 @@ export function makeStartScriptTool(
         finalEnv[agent.reposEnvVar] = clonedPaths.join(",");
       }
 
-      const { runId } = startScript({ ...config, extraEnv: finalEnv }, instruction, signal);
+      const { runId } = startScript(
+        { ...config, extraEnv: finalEnv },
+        instruction,
+        signal,
+        onProgress,
+      );
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },

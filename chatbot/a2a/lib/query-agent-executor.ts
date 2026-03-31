@@ -135,7 +135,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentConfig,
             repoSlugs,
             this.abortController.signal,
-            (slug) => publishStream(`Cloning ${slug}…`),
+            publishStream,
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),

@@ -10,6 +10,27 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN } from "@/lib/paths";
 
+/** Sentinel prefix written by agent scripts via emitProgress(). */
+export const PROGRESS_PREFIX = "__PROGRESS__:";
+
+/**
+ * Route a single stdout line: progress sentinels go to onProgress and are
+ * excluded from the collected output; all other lines go to lines[] and onLine.
+ */
+export function processOutputLine(
+  line: string,
+  lines: string[],
+  onLine?: (line: string) => void,
+  onProgress?: (message: string) => void,
+): void {
+  if (line.startsWith(PROGRESS_PREFIX)) {
+    onProgress?.(line.slice(PROGRESS_PREFIX.length));
+  } else {
+    lines.push(line);
+    onLine?.(line);
+  }
+}
+
 // ─── AgentConfig ──────────────────────────────────────────────────────────────
 
 export interface AgentConfig {
@@ -98,12 +119,15 @@ export function getPendingRunIds(): string[] {
  *
  * @param onLine Optional callback invoked for each line as it arrives (stdout + stderr).
  *   Used by startScript to maintain a live latestLines snapshot for progress reporting.
+ * @param onProgress Optional callback invoked when a `__PROGRESS__:<message>` sentinel
+ *   line is detected. Progress lines are stripped from the collected output.
  */
 export async function spawnAndCollect(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
   onLine?: (line: string) => void,
+  onProgress?: (message: string) => void,
 ): Promise<string> {
   if (!existsSync(config.scriptPath)) {
     return `Script not found: ${config.scriptPath}`;
@@ -140,12 +164,7 @@ export async function spawnAndCollect(
       stdoutBuf += chunk.toString();
       const parts = stdoutBuf.split("\n");
       stdoutBuf = parts.pop() ?? "";
-      parts
-        .filter((l) => l.trim())
-        .forEach((l) => {
-          lines.push(l);
-          onLine?.(l);
-        });
+      parts.filter((l) => l.trim()).forEach((l) => processOutputLine(l, lines, onLine, onProgress));
     });
 
     let stderrBuf = "";
@@ -188,16 +207,23 @@ export function startScript(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
+  onProgress?: (message: string) => void,
 ): { runId: string } {
   const runId = randomUUID();
   const latestLines: string[] = [];
 
   // Spawn with a line callback so latestLines stays fresh during the run.
-  const promise = spawnAndCollect(config, instruction, signal, (line) => {
-    latestLines.push(line);
-    // Keep only the last 20 lines to bound memory.
-    if (latestLines.length > 20) latestLines.shift();
-  });
+  const promise = spawnAndCollect(
+    config,
+    instruction,
+    signal,
+    (line) => {
+      latestLines.push(line);
+      // Keep only the last 20 lines to bound memory.
+      if (latestLines.length > 20) latestLines.shift();
+    },
+    onProgress,
+  );
 
   runningScripts.set(runId, { phase: "running", promise, latestLines });
   // Cache the output when the process exits so awaitScript can collect it

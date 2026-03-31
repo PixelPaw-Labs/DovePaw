@@ -84,10 +84,10 @@ function captureToolHandler(
   config: AgentConfig,
   slugs: string[],
   signal?: AbortSignal,
-  onCloneProgress?: (slug: string) => void,
+  onProgress?: (message: string) => void,
 ): (args: { instruction?: string }) => Promise<unknown> {
   vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
-  return makeStartScriptTool(agentWithRepos, config, slugs, signal, onCloneProgress) as any;
+  return makeStartScriptTool(agentWithRepos, config, slugs, signal, onProgress) as any;
 }
 
 // ─── buildSubAgentPrompt ──────────────────────────────────────────────────────
@@ -158,7 +158,7 @@ describe("makeStartScriptTool", () => {
       "/ws/ta-abc123",
       ["org/my-app"],
       undefined,
-      undefined,
+      undefined, // no onProgress → no clone callback
     );
   });
 
@@ -175,6 +175,7 @@ describe("makeStartScriptTool", () => {
       }),
       "go",
       undefined,
+      undefined,
     );
   });
 
@@ -189,6 +190,7 @@ describe("makeStartScriptTool", () => {
       expect.objectContaining({ extraEnv: { OTHER: "keep" } }),
       "",
       undefined,
+      undefined,
     );
   });
 
@@ -200,5 +202,50 @@ describe("makeStartScriptTool", () => {
     const result = await handler({});
 
     expect(result).toMatchObject({ structuredContent: { runId: "run-xyz" } });
+  });
+
+  it("passes onProgress to startScript when provided", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    const onProgress = vi.fn();
+    const handler = captureToolHandler(AGENT, BASE_CONFIG, [], undefined, onProgress);
+
+    await handler({});
+
+    expect(startScript).toHaveBeenCalledWith(expect.anything(), "", undefined, onProgress);
+  });
+
+  it("wraps onProgress as a clone callback that prefixes the slug", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue(["/ws/ta-abc123/my-app"]);
+    const onProgress = vi.fn();
+    const handler = captureToolHandler(
+      AGENT_WITH_REPOS,
+      BASE_CONFIG,
+      ["org/my-app"],
+      undefined,
+      onProgress,
+    );
+
+    await handler({});
+
+    // The 4th arg to recloneReposIntoWorkspace should be a callback that calls onProgress
+    const cloneCallback = vi.mocked(recloneReposIntoWorkspace).mock.calls[0][3] as (
+      slug: string,
+    ) => void;
+    cloneCallback("org/my-app");
+    expect(onProgress).toHaveBeenCalledWith("Cloning org/my-app…");
+  });
+
+  it("passes undefined clone callback to recloneReposIntoWorkspace when no onProgress", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    const handler = captureToolHandler(AGENT, BASE_CONFIG, []);
+
+    await handler({});
+
+    expect(recloneReposIntoWorkspace).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      undefined,
+      undefined,
+    );
   });
 });

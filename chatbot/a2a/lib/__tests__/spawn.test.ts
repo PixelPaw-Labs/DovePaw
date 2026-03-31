@@ -48,6 +48,8 @@ import {
   awaitScript,
   hasPendingScripts,
   getPendingRunIds,
+  processOutputLine,
+  PROGRESS_PREFIX,
 } from "../spawn.js";
 
 const BASE_CONFIG = {
@@ -223,6 +225,50 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
     // Verify structural shape: status and runId always present, latestOutput optional
     expect(result).toMatchObject({ status: "still_running", runId });
     expect("latestOutput" in result).toBe(true);
+  });
+});
+
+describe("processOutputLine", () => {
+  it("pushes normal lines to the lines array and calls onLine", () => {
+    const lines: string[] = [];
+    const onLine = vi.fn();
+    processOutputLine("hello world", lines, onLine);
+    expect(lines).toEqual(["hello world"]);
+    expect(onLine).toHaveBeenCalledWith("hello world");
+  });
+
+  it("strips __PROGRESS__ lines from lines array and calls onProgress", () => {
+    const lines: string[] = [];
+    const onProgress = vi.fn();
+    processOutputLine(`${PROGRESS_PREFIX}Fetching tickets`, lines, undefined, onProgress);
+    expect(lines).toHaveLength(0);
+    expect(onProgress).toHaveBeenCalledWith("Fetching tickets");
+  });
+
+  it("does not call onLine for __PROGRESS__ lines", () => {
+    const lines: string[] = [];
+    const onLine = vi.fn();
+    processOutputLine(`${PROGRESS_PREFIX}skip me`, lines, onLine);
+    expect(onLine).not.toHaveBeenCalled();
+  });
+
+  it("works with no callbacks", () => {
+    const lines: string[] = [];
+    expect(() => processOutputLine("normal", lines)).not.toThrow();
+    expect(() => processOutputLine(`${PROGRESS_PREFIX}msg`, lines)).not.toThrow();
+  });
+
+  it("mixes normal and progress lines correctly across multiple calls", () => {
+    const lines: string[] = [];
+    const onLine = vi.fn();
+    const onProgress = vi.fn();
+    processOutputLine("line 1", lines, onLine, onProgress);
+    processOutputLine(`${PROGRESS_PREFIX}step 2`, lines, onLine, onProgress);
+    processOutputLine("line 3", lines, onLine, onProgress);
+    expect(lines).toEqual(["line 1", "line 3"]);
+    expect(onLine).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenCalledTimes(1);
+    expect(onProgress).toHaveBeenCalledWith("step 2");
   });
 });
 
