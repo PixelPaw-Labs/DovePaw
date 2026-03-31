@@ -100,6 +100,7 @@ export async function cloneReposIntoWorkspace(
   workspacePath: string,
   slugs: string[],
   ghClone: GhCloneFn = defaultGhClone,
+  onProgress?: (slug: string) => void,
 ): Promise<string[]> {
   if (slugs.length === 0) return [];
   return Promise.all(
@@ -107,6 +108,7 @@ export async function cloneReposIntoWorkspace(
       const repoName = slug.split("/").pop()!;
       const clonePath = join(workspacePath, repoName);
       await ghClone(slug, clonePath);
+      onProgress?.(slug);
       return clonePath;
     }),
   );
@@ -122,6 +124,7 @@ export async function recloneReposIntoWorkspace(
   workspacePath: string,
   slugs: string[],
   ghClone: GhCloneFn = defaultGhClone,
+  onProgress?: (slug: string) => void,
 ): Promise<string[]> {
   for (const slug of slugs) {
     const repoName = slug.split("/").pop()!;
@@ -130,5 +133,5 @@ export async function recloneReposIntoWorkspace(
       rmSync(clonePath, { recursive: true, force: true });
     }
   }
-  return cloneReposIntoWorkspace(workspacePath, slugs, ghClone);
+  return cloneReposIntoWorkspace(workspacePath, slugs, ghClone, onProgress);
 }

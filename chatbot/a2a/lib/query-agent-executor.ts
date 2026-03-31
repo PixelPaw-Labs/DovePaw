@@ -117,7 +117,23 @@ export class QueryAgentExecutor implements AgentExecutor {
 
       await withMcpQuery(
         [
-          makeStartScriptTool(this.def, agentConfig, repoSlugs, this.abortController.signal),
+          makeStartScriptTool(
+            this.def,
+            agentConfig,
+            repoSlugs,
+            this.abortController.signal,
+            (slug) =>
+              eventBus.publish({
+                kind: "artifact-update",
+                taskId,
+                contextId,
+                artifact: {
+                  artifactId: randomUUID(),
+                  name: "stream",
+                  parts: [{ kind: "text", text: `Cloning ${slug}…\n` }],
+                },
+              }),
+          ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
         ],

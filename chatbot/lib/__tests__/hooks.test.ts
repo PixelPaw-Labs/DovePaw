@@ -121,7 +121,7 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     // exhaust 2 forced-retry calls, 3rd should release
     for (let i = 0; i < 2; i++) await callHook(fn, postToolUseInput({ status: "still_running" }));
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
-    expect(result).toEqual({ continue: true });
+    expect(result).toMatchObject({ continue: true });
     vi.restoreAllMocks();
   });
 });

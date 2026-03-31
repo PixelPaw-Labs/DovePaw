@@ -81,7 +81,11 @@ export function buildAgentHooks(
                 : undefined;
             if (status === "still_running") {
               if (retryCounter.shouldRelease()) {
-                return { continue: true };
+                return {
+                  continue: true,
+                  systemMessage:
+                    "Releasing control to the agent to surface progress updates before the next await attempt.",
+                };
               }
               const id = getStillRunningId(structured);
               const hookSpecificOutput: PostToolUseHookSpecificOutput = {

@@ -149,6 +149,7 @@ export function makeStartScriptTool(
   config: AgentConfig,
   repoSlugs: string[],
   signal?: AbortSignal,
+  onCloneProgress?: (slug: string) => void,
 ) {
   return tool(
     START_SCRIPT_TOOL,
@@ -161,7 +162,12 @@ export function makeStartScriptTool(
     },
     async ({ instruction = "" }) => {
       // Delete any existing clones then reclone so re-invocations always start from a clean state.
-      const clonedPaths = await recloneReposIntoWorkspace(config.workspacePath, repoSlugs);
+      const clonedPaths = await recloneReposIntoWorkspace(
+        config.workspacePath,
+        repoSlugs,
+        undefined,
+        onCloneProgress,
+      );
 
       const finalEnv: Record<string, string> = { ...config.extraEnv };
       if (agent.reposEnvVar && clonedPaths.length > 0) {

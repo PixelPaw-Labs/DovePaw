@@ -600,7 +600,7 @@ describe("makeAwaitTool", () => {
     expect(onProgress).toHaveBeenCalledWith("Bash", "tool-call");
   });
 
-  it("does not call onProgress for stream artifacts", async () => {
+  it("calls onProgress for stream artifacts", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     const mockGetTask = vi.fn().mockResolvedValue({
       id: "task-123",
@@ -626,7 +626,7 @@ describe("makeAwaitTool", () => {
     const h = captured[doveAwaitToolName(AGENT)];
     await h({ taskId: "task-123" });
 
-    expect(onProgress).not.toHaveBeenCalled();
+    expect(onProgress).toHaveBeenCalledWith("output text", "stream");
   });
 
   it("works without onProgress (backward compat — no error thrown)", async () => {

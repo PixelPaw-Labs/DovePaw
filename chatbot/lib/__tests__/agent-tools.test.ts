@@ -84,9 +84,10 @@ function captureToolHandler(
   config: AgentConfig,
   slugs: string[],
   signal?: AbortSignal,
+  onCloneProgress?: (slug: string) => void,
 ): (args: { instruction?: string }) => Promise<unknown> {
   vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
-  return makeStartScriptTool(agentWithRepos, config, slugs, signal) as any;
+  return makeStartScriptTool(agentWithRepos, config, slugs, signal, onCloneProgress) as any;
 }
 
 // ─── buildSubAgentPrompt ──────────────────────────────────────────────────────
@@ -153,7 +154,12 @@ describe("makeStartScriptTool", () => {
 
     await handler({});
 
-    expect(recloneReposIntoWorkspace).toHaveBeenCalledWith("/ws/ta-abc123", ["org/my-app"]);
+    expect(recloneReposIntoWorkspace).toHaveBeenCalledWith(
+      "/ws/ta-abc123",
+      ["org/my-app"],
+      undefined,
+      undefined,
+    );
   });
 
   it("remaps reposEnvVar to cloned local paths in extraEnv passed to startScript", async () => {

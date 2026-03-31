@@ -380,12 +380,9 @@ export function makeAwaitTool(
           collectStreamResult(
             client.resubscribeTask({ id: taskId }, { signal: abortController.signal }),
             (text, name) => {
-              if (name === "tool-call") {
-                lastToolCall = text;
-                onProgress?.(text, name);
-              } else if (name === "stream") {
-                streamBuffer += text;
-              }
+              if (name === "tool-call") lastToolCall = text;
+              if (name === "stream") streamBuffer += text;
+              onProgress?.(text, name);
             },
           ).finally(() => clearTimeout(timer)),
           new Promise<typeof timeoutResult>((resolve) =>
