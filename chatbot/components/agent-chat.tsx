@@ -13,6 +13,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { ChatInputBar } from "./agent-chat/chat-input-bar";
 import { useConversations } from "@/components/hooks/use-conversations";
+import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
 import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
@@ -38,6 +39,10 @@ export function AgentChat() {
     pendingQueue,
     removeFromQueue,
   } = useConversations();
+
+  const agentStatuses = useAgentStatuses();
+  const activeAgentProcessing =
+    agentStatuses[activeAgentId.replaceAll("-", "_")]?.processing ?? false;
 
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
@@ -172,7 +177,7 @@ export function AgentChat() {
             </span>
           </div>
           <div className="flex-1 min-h-0">
-            <WorkflowPanel messages={messages} />
+            <WorkflowPanel messages={messages} processing={activeAgentProcessing} />
           </div>
         </aside>
       )}

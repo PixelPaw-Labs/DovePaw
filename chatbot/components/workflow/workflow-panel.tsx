@@ -100,9 +100,10 @@ function buildGraph(entries: WorkflowEntry[]): {
 
 interface WorkflowPanelProps {
   messages: ChatMessage[];
+  processing?: boolean;
 }
 
-export function WorkflowPanel({ messages }: WorkflowPanelProps) {
+export function WorkflowPanel({ messages, processing = false }: WorkflowPanelProps) {
   const activeMsg = React.useMemo(
     () =>
       messages
@@ -116,7 +117,7 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
     const base = activeMsg.agentProgress;
     const entries = activeMsg.isCancelled
       ? [...base, { message: "Stopped by user", artifacts: {}, isCancelled: true }]
-      : !activeMsg.isLoading
+      : !activeMsg.isLoading && !processing
         ? [...base, { message: "Completed", artifacts: {}, isCompleted: true }]
         : base;
     return buildGraph(entries);
