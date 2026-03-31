@@ -32,6 +32,14 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
 
   const messageContent = (
     <AnimatedMessage from={msg.role}>
+      {/* Live progress strip — tool-call events from downstream A2A agent */}
+      {msg.isLoading && msg.liveProgress ? (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-xs font-mono border border-border/30 max-w-sm">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+          <span className="truncate">{msg.liveProgress}</span>
+        </div>
+      ) : null}
+
       {/* Process block — collapsed by default, live preview in trigger while streaming */}
       {msg.processContent ? (
         <Reasoning isStreaming={!!msg.isProcessStreaming} defaultOpen={false}>

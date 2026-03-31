@@ -570,4 +570,89 @@ describe("makeAwaitTool", () => {
 
     expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-await-abort" });
   });
+
+  it("calls onProgress with text and name when a tool-call artifact arrives", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents({
+        kind: "artifact-update",
+        artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
+      }),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+
+    const onProgress = vi.fn();
+    const captured = captureTools(() => makeAwaitTool(AGENT, undefined, onProgress));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-123" });
+
+    expect(onProgress).toHaveBeenCalledWith("Bash", "tool-call");
+  });
+
+  it("does not call onProgress for stream artifacts", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents({
+        kind: "artifact-update",
+        artifact: { name: "stream", parts: [{ kind: "text", text: "output text" }] },
+      }),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+
+    const onProgress = vi.fn();
+    const captured = captureTools(() => makeAwaitTool(AGENT, undefined, onProgress));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-123" });
+
+    expect(onProgress).not.toHaveBeenCalled();
+  });
+
+  it("works without onProgress (backward compat — no error thrown)", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents({
+        kind: "artifact-update",
+        artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
+      }),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+
+    // No onProgress passed — must not throw
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await expect(h({ taskId: "task-123" })).resolves.toBeDefined();
+  });
 });

@@ -409,6 +409,63 @@ describe("useAgentChat", () => {
     expect(assistant?.isLoading).toBe(false);
   });
 
+  // ─── progress event → liveProgress ──────────────────────────────────────────
+
+  it("progress event with tool-call artifactName sets liveProgress on assistant message", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeSseResponse([
+        { type: "progress", content: "Bash", artifactName: "tool-call" },
+        { type: "text", content: "done" },
+        { type: "done" },
+      ]),
+    );
+
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.sendMessage("run it");
+    });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    // liveProgress is cleared to null on done
+    expect(assistant?.liveProgress).toBeNull();
+  });
+
+  it("progress event with non-tool-call artifactName does not update liveProgress", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeSseResponse([
+        { type: "progress", content: "some text", artifactName: "stream" },
+        { type: "text", content: "response" },
+        { type: "done" },
+      ]),
+    );
+
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.sendMessage("run it");
+    });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    // stream artifacts are ignored — liveProgress stays null (cleared by done, never set)
+    expect(assistant?.liveProgress).toBeNull();
+  });
+
+  it("done event clears liveProgress", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      makeSseResponse([
+        { type: "progress", content: "Read", artifactName: "tool-call" },
+        { type: "done" },
+      ]),
+    );
+
+    const { result } = renderHook(() => useAgentChat());
+    await act(async () => {
+      await result.current.sendMessage("go");
+    });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    expect(assistant?.liveProgress).toBeNull();
+  });
+
   // ─── fetch / network errors ───────────────────────────────────────────────────
 
   it("handles fetch network error gracefully", async () => {

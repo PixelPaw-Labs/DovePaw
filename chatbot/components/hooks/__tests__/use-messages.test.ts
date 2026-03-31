@@ -113,6 +113,24 @@ describe("useMessages", () => {
     });
   });
 
+  describe("setLiveProgress", () => {
+    it("sets liveProgress on the targeted message", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(textMsg("a", "hi"), textMsg("b", "other")));
+      act(() => result.current.setLiveProgress("a", "Bash"));
+      expect(result.current.messages.find((m) => m.id === "a")?.liveProgress).toBe("Bash");
+      expect(result.current.messages.find((m) => m.id === "b")?.liveProgress).toBeUndefined();
+    });
+
+    it("clears liveProgress when set to null", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(textMsg("a", "hi")));
+      act(() => result.current.setLiveProgress("a", "Bash"));
+      act(() => result.current.setLiveProgress("a", null));
+      expect(result.current.messages[0].liveProgress).toBeNull();
+    });
+  });
+
   describe("patchWhere", () => {
     it("applies update when predicate is true", () => {
       const { result } = renderHook(() => useMessages());

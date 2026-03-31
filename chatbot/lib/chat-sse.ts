@@ -29,6 +29,9 @@ export type ChatSseError = { type: "error"; content: string };
 /** Terminal event — stream is done */
 export type ChatSseDone = { type: "done" };
 
+/** Live progress from a downstream A2A artifact — emitted during await_* polling */
+export type ChatSseProgress = { type: "progress"; content: string; artifactName: string };
+
 export type ChatSseEvent =
   | ChatSseSession
   | ChatSseText
@@ -37,4 +40,5 @@ export type ChatSseEvent =
   | ChatSseToolInput
   | ChatSseResult
   | ChatSseError
+  | ChatSseProgress
   | ChatSseDone;

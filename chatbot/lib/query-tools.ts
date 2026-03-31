@@ -319,7 +319,11 @@ const AWAIT_POLL_TIMEOUT_MS = 30_000;
  * { status: "still_running", taskId } payload if it does not — so Dove
  * can call await_* again with the same taskId instead of starting a new task.
  */
-export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal) {
+export function makeAwaitTool(
+  agent: AgentDef,
+  signal?: AbortSignal,
+  onProgress?: (text: string, artifactName: string) => void,
+) {
   return tool(
     doveAwaitToolName(agent),
     `Await a previously started ${agent.displayName} task. Returns the final result when complete, or { status: "still_running", taskId } if still in progress.`,
@@ -376,8 +380,12 @@ export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal) {
           collectStreamResult(
             client.resubscribeTask({ id: taskId }, { signal: abortController.signal }),
             (text, name) => {
-              if (name === "tool-call") lastToolCall = text;
-              else if (name === "stream") streamBuffer += text;
+              if (name === "tool-call") {
+                lastToolCall = text;
+                onProgress?.(text, name);
+              } else if (name === "stream") {
+                streamBuffer += text;
+              }
             },
           ).finally(() => clearTimeout(timer)),
           new Promise<typeof timeoutResult>((resolve) =>
