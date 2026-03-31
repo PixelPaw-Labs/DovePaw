@@ -9,12 +9,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 // ─── Hoisted mocks (must be before vi.mock calls) ────────────────────────────
 // vi.hoisted creates variables that are accessible inside vi.mock factory closures.
 
-const mockSendMessage = vi.hoisted(() => vi.fn());
-const mockResubscribeTask = vi.hoisted(() => vi.fn());
+const mockSendMessageStream = vi.hoisted(() => vi.fn());
+const mockCancelTask = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const mockCreateFromUrl = vi.hoisted(() =>
   vi.fn().mockResolvedValue({
-    sendMessage: mockSendMessage,
-    resubscribeTask: mockResubscribeTask,
+    sendMessageStream: mockSendMessageStream,
+    cancelTask: mockCancelTask,
   }),
 );
 
@@ -104,11 +104,10 @@ function makeStream(artifacts: Array<{ name: string; text: string }> = []) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockSendMessage.mockResolvedValue({ kind: "task", id: "task-123" });
-  mockResubscribeTask.mockReturnValue(makeStream());
+  mockSendMessageStream.mockReturnValue(makeStream());
   mockCreateFromUrl.mockResolvedValue({
-    sendMessage: mockSendMessage,
-    resubscribeTask: mockResubscribeTask,
+    sendMessageStream: mockSendMessageStream,
+    cancelTask: mockCancelTask,
   });
 });
 
@@ -164,7 +163,7 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
   });
 
   it("maps stream artifact to text SSE event", async () => {
-    mockResubscribeTask.mockReturnValue(makeStream([{ name: "stream", text: "hello world" }]));
+    mockSendMessageStream.mockReturnValue(makeStream([{ name: "stream", text: "hello world" }]));
 
     const { request, params } = makeRequest("test-agent");
     const response = await POST(request, { params });
@@ -176,7 +175,7 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
   });
 
   it("maps thinking artifact to thinking SSE event", async () => {
-    mockResubscribeTask.mockReturnValue(makeStream([{ name: "thinking", text: "let me think" }]));
+    mockSendMessageStream.mockReturnValue(makeStream([{ name: "thinking", text: "let me think" }]));
 
     const { request, params } = makeRequest("test-agent");
     const response = await POST(request, { params });
@@ -188,7 +187,7 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
   });
 
   it("maps tool-call artifact to tool_call SSE event", async () => {
-    mockResubscribeTask.mockReturnValue(makeStream([{ name: "tool-call", text: "Read" }]));
+    mockSendMessageStream.mockReturnValue(makeStream([{ name: "tool-call", text: "Read" }]));
 
     const { request, params } = makeRequest("test-agent");
     const response = await POST(request, { params });
@@ -200,7 +199,7 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
   });
 
   it("maps tool-input artifact to tool_input SSE event", async () => {
-    mockResubscribeTask.mockReturnValue(
+    mockSendMessageStream.mockReturnValue(
       makeStream([{ name: "tool-input", text: '{"file":"/foo"}' }]),
     );
 
@@ -214,7 +213,9 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
   });
 
   it("maps final-output artifact to result SSE event", async () => {
-    mockResubscribeTask.mockReturnValue(makeStream([{ name: "final-output", text: "task done" }]));
+    mockSendMessageStream.mockReturnValue(
+      makeStream([{ name: "final-output", text: "task done" }]),
+    );
 
     const { request, params } = makeRequest("test-agent");
     const response = await POST(request, { params });

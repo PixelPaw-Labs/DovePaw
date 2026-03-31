@@ -132,15 +132,19 @@ export function useMessages() {
           for (const entry of incoming) {
             const lastIdx = merged.length - 1;
             const last = merged[lastIdx];
-            const lastHasNoArtifacts = last && Object.keys(last.artifacts).length === 0;
             const incomingArtifactStr = JSON.stringify(entry.artifacts);
             const isDuplicate = merged.some(
               (e) =>
                 e.message === entry.message && JSON.stringify(e.artifacts) === incomingArtifactStr,
             );
             if (isDuplicate) continue;
-            if (lastIdx >= 0 && last.message === entry.message && lastHasNoArtifacts) {
-              merged[lastIdx] = { ...last, artifacts: entry.artifacts };
+            // Merge into last entry if same message and incoming artifacts are a superset
+            const isSupersetUpdate =
+              lastIdx >= 0 &&
+              last.message === entry.message &&
+              Object.entries(last.artifacts).every(([k, v]) => entry.artifacts[k] === v);
+            if (isSupersetUpdate) {
+              merged[lastIdx] = { ...last, artifacts: { ...last.artifacts, ...entry.artifacts } };
             } else {
               merged.push(entry);
             }

@@ -680,13 +680,10 @@ describe("makeAwaitTool", () => {
     const h = captured[doveAwaitToolName(AGENT)];
     await h({ taskId: "task-123" });
 
+    // stream artifacts are excluded from workflow nodes (transient chat-only)
     expect(onProgress).toHaveBeenCalledWith(
       expect.objectContaining({
-        progress: expect.arrayContaining([
-          expect.objectContaining({
-            artifacts: expect.objectContaining({ stream: "output text" }),
-          }),
-        ]),
+        progress: expect.arrayContaining([expect.objectContaining({ message: "output text" })]),
       }),
     );
   });

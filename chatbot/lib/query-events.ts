@@ -48,9 +48,7 @@ export async function consumeQueryEvents(
     } else if (event.type === "stream_event") {
       const partial = event.event;
 
-      if (partial.type === "message_start") {
-        dispatcher.onNewTurn();
-      } else if (partial.type === "content_block_start") {
+      if (partial.type === "content_block_start") {
         if (partial.content_block.type === "tool_use") {
           dispatcher.onToolCall(partial.content_block.name);
           toolInputBuf = "";
@@ -76,8 +74,6 @@ export async function consumeQueryEvents(
           toolInputBuf = "";
           inToolBlock = false;
         }
-      } else if (partial.type === "message_stop") {
-        dispatcher.onTurnEnd();
       }
     } else if (event.type === "result" && event.subtype === "success") {
       dispatcher.onResult(event.result);

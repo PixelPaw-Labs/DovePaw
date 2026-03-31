@@ -19,6 +19,7 @@ import type {
 } from "@a2a-js/sdk";
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import type { PortsManifest } from "@/a2a/lib/base-server";
+import { TRANSIENT_ARTIFACT_NAMES } from "@/lib/query-dispatcher";
 /** A progress message with any artifacts published alongside it. */
 export type ProgressEntry = {
   message: string;
@@ -90,6 +91,7 @@ function accumulate(target: Record<string, string>, name: string, text: string):
 export async function collectStreamResult(
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
   onSnapshot?: (result: StreamedResult) => void,
+  onArtifact?: (name: string, text: string) => void,
 ): Promise<{ taskId?: string; result: StreamedResult }> {
   let taskId: string | undefined;
   const progress: ProgressEntry[] = [];
@@ -112,10 +114,12 @@ export async function collectStreamResult(
     } else if (event.kind === "artifact-update") {
       const name = event.artifact.name ?? "";
       for (const p of event.artifact.parts) {
-        if (p.kind === "text" && pendingEntry) {
-          accumulate(pendingEntry.artifacts, name, p.text);
-          onSnapshot?.(snapshot());
-        } else if (p.kind === "text") {
+        if (p.kind === "text") {
+          onArtifact?.(name, p.text);
+          if (pendingEntry && !(TRANSIENT_ARTIFACT_NAMES as Set<string>).has(name)) {
+            accumulate(pendingEntry.artifacts, name, p.text);
+            onSnapshot?.(snapshot());
+          }
         }
       }
     } else if (event.kind === "status-update") {

@@ -13,12 +13,11 @@ async function* events(...items: object[]): AsyncGenerator<SDKMessage> {
 function mockDispatcher(): QueryResponseDispatcher {
   return {
     onSession: vi.fn(),
-    onNewTurn: vi.fn(),
     onTextDelta: vi.fn(),
     onThinking: vi.fn(),
     onToolCall: vi.fn(),
     onToolInput: vi.fn(),
-    onTurnEnd: vi.fn(),
+    onArtifact: vi.fn(),
     onResult: vi.fn(),
   };
 }
@@ -39,37 +38,6 @@ describe("onSession", () => {
     const d = mockDispatcher();
     await consumeQueryEvents(events({ type: "stream_event", event: { type: "message_start" } }), d);
     expect(d.onSession).not.toHaveBeenCalled();
-  });
-});
-
-// ─── onNewTurn / onTurnEnd ────────────────────────────────────────────────────
-
-describe("onNewTurn / onTurnEnd", () => {
-  it("fires onNewTurn at message_start", async () => {
-    const d = mockDispatcher();
-    await consumeQueryEvents(events({ type: "stream_event", event: { type: "message_start" } }), d);
-    expect(d.onNewTurn).toHaveBeenCalledOnce();
-  });
-
-  it("fires onTurnEnd at message_stop", async () => {
-    const d = mockDispatcher();
-    await consumeQueryEvents(events({ type: "stream_event", event: { type: "message_stop" } }), d);
-    expect(d.onTurnEnd).toHaveBeenCalledOnce();
-  });
-
-  it("fires onNewTurn and onTurnEnd once per turn across two turns", async () => {
-    const d = mockDispatcher();
-    await consumeQueryEvents(
-      events(
-        { type: "stream_event", event: { type: "message_start" } },
-        { type: "stream_event", event: { type: "message_stop" } },
-        { type: "stream_event", event: { type: "message_start" } },
-        { type: "stream_event", event: { type: "message_stop" } },
-      ),
-      d,
-    );
-    expect(d.onNewTurn).toHaveBeenCalledTimes(2);
-    expect(d.onTurnEnd).toHaveBeenCalledTimes(2);
   });
 });
 

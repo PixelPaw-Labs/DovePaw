@@ -64,7 +64,7 @@ export class ExecutorPublisher {
     }
   }
 
-  private publishArtifact(text: string, name: string): void {
+  publishArtifact(text: string, name: string): void {
     this.eventBus.publish({
       kind: "artifact-update",
       taskId: this.taskId,

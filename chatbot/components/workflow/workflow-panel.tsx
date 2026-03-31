@@ -22,15 +22,22 @@ function estimateNodeHeight(entry: { artifacts: Record<string, string> }): numbe
   return headerHeight + contentHeight + footerHeight;
 }
 
-function CircleNode({ data }: { data: { variant: "start" | "stopped" } }) {
+type CircleVariant = "start" | "stopped" | "completed";
+
+interface CircleNodeData {
+  variant: CircleVariant;
+}
+
+function CircleNode({ data }: { data: CircleNodeData }) {
   const styles = {
-    start: "!bg-primary !border-primary/60",
-    stopped: "!bg-amber-500 !border-amber-400/60",
+    start: "bg-primary! border-primary/60!",
+    stopped: "bg-amber-500! border-amber-400/60!",
+    completed: "bg-emerald-500! border-emerald-400/60!",
   };
   return (
     <Node
       handles={{ target: data.variant !== "start", source: data.variant === "start" }}
-      className={`!w-8 !h-8 !min-w-0 !rounded-full !p-0 ${styles[data.variant]}`}
+      className={`w-8! h-8! min-w-0! rounded-full! p-0! ${styles[data.variant]}`}
     />
   );
 }
@@ -41,9 +48,14 @@ const edgeTypes = {
   temporary: WorkflowEdge.Temporary,
 };
 
-function buildGraph(
-  entries: { message: string; artifacts: Record<string, string>; isCancelled?: boolean }[],
-): {
+interface WorkflowEntry {
+  message: string;
+  artifacts: Record<string, string>;
+  isCancelled?: boolean;
+  isCompleted?: boolean;
+}
+
+function buildGraph(entries: WorkflowEntry[]): {
   nodes: FlowNode[];
   edges: Edge[];
 } {
@@ -51,13 +63,18 @@ function buildGraph(
 
   const nodes: FlowNode[] = entries.map((entry, i) => {
     const isFirst = i === 0;
-    const isCircle = isFirst || !!entry.isCancelled;
+    const isCircle = isFirst || !!entry.isCancelled || !!entry.isCompleted;
+    const circleVariant: CircleVariant = isFirst
+      ? "start"
+      : entry.isCompleted
+        ? "completed"
+        : "stopped";
     const node: FlowNode = {
       id: `node-${i}`,
       type: isCircle ? "circle" : "progress",
       position: { x: isCircle ? CIRCLE_X : 0, y },
       data: isCircle
-        ? { variant: isFirst ? "start" : "stopped" }
+        ? ({ variant: circleVariant } satisfies CircleNodeData)
         : ({
             message: entry.message,
             artifacts: entry.artifacts,
@@ -96,14 +113,25 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
 
   const { nodes, edges } = React.useMemo(() => {
     if (!activeMsg?.agentProgress) return { nodes: [], edges: [] };
+    const base = activeMsg.agentProgress;
     const entries = activeMsg.isCancelled
-      ? [
-          ...activeMsg.agentProgress,
-          { message: "Stopped by user", artifacts: {}, isCancelled: true },
-        ]
-      : activeMsg.agentProgress;
+      ? [...base, { message: "Stopped by user", artifacts: {}, isCancelled: true }]
+      : !activeMsg.isLoading
+        ? [...base, { message: "Completed", artifacts: {}, isCompleted: true }]
+        : base;
     return buildGraph(entries);
   }, [activeMsg]);
+
+  const [renderedNodes, setRenderedNodes] = React.useState(nodes);
+  const [renderedEdges, setRenderedEdges] = React.useState(edges);
+
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      setRenderedNodes(nodes);
+      setRenderedEdges(edges);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [nodes, edges]);
 
   if (!activeMsg || nodes.length === 0) {
     return (
@@ -124,10 +152,10 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
           <span className="text-xs text-amber-600 font-medium">Stopped by user</span>
         </div>
       )}
-      <div className="flex-1 min-h-0">
+      <div className="relative flex-1 min-h-0">
         <Canvas
-          nodes={nodes}
-          edges={edges}
+          nodes={renderedNodes}
+          edges={renderedEdges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView

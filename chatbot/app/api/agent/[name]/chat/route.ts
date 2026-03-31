@@ -1,30 +1,21 @@
 /**
  * Direct subagent chat route — POST → SSE
  *
- * Resolves the agent's dynamic port from ~/.dovepaw/.ports.json,
- * creates a task on the A2A server, and streams artifact-update events
- * back to the client using the same ChatSseEvent schema as /api/chat.
+ * Uses sendMessageStream + collectStreamResult (same as makeStartTool / main route)
+ * so workspace/setup events are captured from the very start.
  *
- * Artifact name → SSE event type mapping (mirrors A2AQueryDispatcher):
- *   "stream"       → { type: "text",      content }
- *   "thinking"     → { type: "thinking",  content }
- *   "tool-call"    → { type: "tool_call", name }
- *   "tool-input"   → { type: "tool_input", content }
- *   "final-output" → { type: "result",    content }
+ * collectStreamResult handles:
+ *   onSnapshot  → workflow progress SSE (delta tracking)
+ *   onArtifact  → chat SSE (text/thinking/tool_call/result)
  */
 
 import { randomUUID } from "node:crypto";
-import { ClientFactory } from "@a2a-js/sdk/client";
-import type { TaskArtifactUpdateEvent, TaskStatusUpdateEvent, Task, Message } from "@a2a-js/sdk";
-import type { TextPart } from "@a2a-js/sdk";
 import { AGENTS } from "@@/lib/agents";
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import type { ChatSseEvent } from "@/lib/chat-sse";
+import { createAgentClient, collectStreamResult, type StreamedResult } from "@/lib/a2a-client";
+import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { z } from "zod";
-
-type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
-
-const TERMINAL_STATES = new Set(["completed", "canceled", "failed", "rejected"]);
 
 const chatRequestSchema = z.object({
   message: z.string(),
@@ -72,77 +63,87 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
 
+      // Delta tracker — same pattern as makeProgressSender in route.ts
+      let lastSentCount = 0;
+      let lastSentArtifactCount = 0;
+      const onSnapshot = (result: StreamedResult) => {
+        const newEntries = result.progress.slice(lastSentCount);
+        const lastEntry = result.progress.at(-1);
+        const artifactCount = lastEntry ? Object.keys(lastEntry.artifacts).length : 0;
+        if (newEntries.length > 0) {
+          lastSentCount = result.progress.length;
+          lastSentArtifactCount = artifactCount;
+          send({ type: "progress", result: { output: result.output, progress: newEntries } });
+        } else if (lastEntry && artifactCount > lastSentArtifactCount) {
+          lastSentArtifactCount = artifactCount;
+          send({ type: "progress", result: { output: result.output, progress: [lastEntry] } });
+        }
+      };
+
+      const dispatcher = new SseQueryDispatcher(send);
+      const onArtifact = (artifactName: string, text: string) =>
+        dispatcher.onArtifact(artifactName, text);
+
       try {
-        const factory = new ClientFactory();
-        const client = await factory.createFromUrl(`http://localhost:${portValue}`);
+        const client = await createAgentClient(portValue);
 
-        // Start a new task on the A2A server (non-blocking — we stream separately)
-        const result = await client.sendMessage({
-          message: {
-            kind: "message",
-            messageId: randomUUID(),
-            role: "user",
-            parts: [{ kind: "text", text: message }],
+        const stream = client.sendMessageStream(
+          {
+            message: {
+              kind: "message",
+              messageId: randomUUID(),
+              role: "user",
+              parts: [{ kind: "text", text: message }],
+            },
           },
-          configuration: { blocking: false },
-        });
+          { signal: abortController.signal },
+        );
 
-        if (result.kind !== "task") {
+        const firstEvent = await stream[Symbol.asyncIterator]().next();
+        if (firstEvent.done || firstEvent.value.kind !== "task") {
           send({ type: "error", content: "Failed to start agent task" });
           send({ type: "done" });
           return;
         }
+        const taskId = firstEvent.value.id;
 
-        // Emit task ID as the session ID so the client can track it
-        send({ type: "session", sessionId: result.id });
+        abortController.signal.addEventListener(
+          "abort",
+          () => void client.cancelTask({ id: taskId }).catch(() => {}),
+          { once: true },
+        );
 
-        // Stream artifact-update events from the task
-        const stream = client.resubscribeTask(
-          { id: result.id },
-          { signal: abortController.signal },
-        ) as AsyncIterable<A2AStreamEvent>;
+        send({ type: "session", sessionId: taskId });
 
-        for await (const event of stream) {
-          if (event.kind === "artifact-update") {
-            const texts = event.artifact.parts
-              .filter((p): p is TextPart => p.kind === "text")
-              .map((p) => p.text);
-            const artifactName = event.artifact.name ?? "";
+        await collectStreamResult(stream, onSnapshot, onArtifact);
 
-            for (const text of texts) {
-              if (artifactName === "stream") {
-                send({ type: "text", content: text });
-              } else if (artifactName === "thinking") {
-                send({ type: "thinking", content: text });
-              } else if (artifactName === "tool-call") {
-                send({ type: "tool_call", name: text });
-              } else if (artifactName === "tool-input") {
-                send({ type: "tool_input", content: text });
-              } else if (artifactName === "final-output") {
-                send({ type: "result", content: text });
-              }
-            }
-          } else if (event.kind === "status-update") {
-            if (TERMINAL_STATES.has(event.status.state)) break;
-          }
+        if (abortController.signal.aborted) {
+          send({ type: "cancelled" });
+        } else {
+          send({ type: "done" });
         }
-
-        send({ type: "done" });
       } catch (err: unknown) {
-        if (abortController.signal.aborted) return;
+        if (abortController.signal.aborted) {
+          try {
+            send({ type: "cancelled" });
+          } catch {
+            /* stream closed */
+          }
+          return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         try {
           send({ type: "error", content: msg });
           send({ type: "done" });
         } catch {
-          // Stream already closed
+          /* stream already closed */
         }
       } finally {
         abortController.abort();
         try {
           controller.close();
         } catch {
-          // Already closed
+          /* already closed */
         }
       }
     },

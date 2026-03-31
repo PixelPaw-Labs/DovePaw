@@ -14,37 +14,47 @@ import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
 
 export interface QueryResponseDispatcher {
   onSession(sessionId: string): void;
-  onNewTurn(): void;
   onTextDelta(text: string): void;
   onThinking(text: string): void;
   onToolCall(name: string): void;
   onToolInput(content: string): void;
-  onTurnEnd(): void;
   onResult(result: string): void;
+  onArtifact(name: string, text: string): void;
 }
+
+/** Artifact name constants — single source of truth for all A2A artifact names. */
+export const ARTIFACT = {
+  STREAM: "stream",
+  THINKING: "thinking",
+  TOOL_CALL: "tool-call",
+  TOOL_INPUT: "tool-input",
+  FINAL_OUTPUT: "final-output",
+} as const;
+
+/**
+ * Artifact names that are transient chat-only signals — published via publishArtifact
+ * without an accompanying status-update. These must NOT be accumulated into workflow
+ * ProgressEntry nodes in collectStreamResult.
+ */
+export const TRANSIENT_ARTIFACT_NAMES = new Set([
+  ARTIFACT.STREAM,
+  ARTIFACT.THINKING,
+  ARTIFACT.TOOL_INPUT,
+]);
 
 // ─── SSE implementation ───────────────────────────────────────────────────────
 
 /**
  * Forwards query() events as SSE events to the chat client.
- * Tracks turn count internally to inject \n\n separators between turns.
  */
 export class SseQueryDispatcher implements QueryResponseDispatcher {
-  private textTurnCount = 0;
-
   constructor(private readonly send: (event: ChatSseEvent) => void) {}
 
   onSession(sessionId: string): void {
     this.send({ type: "session", sessionId });
   }
 
-  onNewTurn(): void {
-    // Inject turn separator: "meow.Here's how..." → "meow.\n\nHere's how..."
-    if (this.textTurnCount > 0) this.send({ type: "text", content: "\n\n" });
-  }
-
   onTextDelta(text: string): void {
-    if (this.textTurnCount === 0) this.textTurnCount = 1;
     this.send({ type: "text", content: text });
   }
 
@@ -60,12 +70,17 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
     this.send({ type: "tool_input", content });
   }
 
-  onTurnEnd(): void {
-    if (this.textTurnCount > 0) this.textTurnCount++;
-  }
-
   onResult(result: string): void {
     if (result) this.send({ type: "result", content: result });
+  }
+
+  /** Maps an A2A artifact name to the appropriate SSE method. */
+  onArtifact(name: string, text: string): void {
+    if (name === ARTIFACT.STREAM) this.onTextDelta(text);
+    else if (name === ARTIFACT.THINKING) this.onThinking(text);
+    else if (name === ARTIFACT.TOOL_CALL) this.onToolCall(text);
+    else if (name === ARTIFACT.TOOL_INPUT) this.onToolInput(text);
+    else if (name === ARTIFACT.FINAL_OUTPUT) this.onResult(text);
   }
 }
 
@@ -73,28 +88,35 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
 
 /**
  * Forwards query() events as A2A artifact-update events via the execution event bus.
- * Session and turn boundary events are no-ops (A2A manages its own task lifecycle).
+ * Session events are no-ops (A2A manages its own task lifecycle).
  */
 export class A2AQueryDispatcher implements QueryResponseDispatcher {
   constructor(private readonly publisher: ExecutorPublisher) {}
 
   onSession(_sessionId: string): void {} // no-op: session IDs are for SSE clients
 
-  onNewTurn(): void {} // no-op: A2A task state is managed by the executor
+  onTextDelta(text: string): void {
+    // Publish as artifact-only — no status-update, so no workflow node is created.
+    this.publisher.publishArtifact(text, ARTIFACT.STREAM);
+  }
 
-  onTurnEnd(): void {} // no-op
-
-  onTextDelta(_text: string): void {} // no-op: text deltas flood the workflow panel
-
-  onThinking(_text: string): void {} // no-op: thinking tokens are not meaningful workflow steps
+  onThinking(text: string): void {
+    this.publisher.publishArtifact(text, ARTIFACT.THINKING);
+  }
 
   onToolCall(name: string): void {
-    this.publisher.publishStatus(name, { "tool-call": name });
+    this.publisher.publishStatus(name, { [ARTIFACT.TOOL_CALL]: name });
   }
 
-  onToolInput(_content: string): void {} // no-op: tool input JSON is not a workflow step
+  onToolInput(content: string): void {
+    this.publisher.publishArtifact(content, ARTIFACT.TOOL_INPUT);
+  }
 
   onResult(result: string): void {
-    if (result) this.publisher.publishStatus(result, { "final-output": result });
+    // Publish as artifact-only so the result flows to the chatbot without
+    // creating a workflow progress node for it.
+    if (result) this.publisher.publishArtifact(result, ARTIFACT.FINAL_OUTPUT);
   }
+
+  onArtifact(_name: string, _text: string): void {} // no-op: A2A publishes directly via publisher
 }

@@ -8,6 +8,7 @@ import {
   NodeHeader,
   NodeTitle,
 } from "@/components/ai-elements/node";
+import { ARTIFACT } from "@/lib/query-dispatcher";
 
 export interface ProgressNodeData {
   message: string;
@@ -18,10 +19,10 @@ export interface ProgressNodeData {
 }
 
 const ARTIFACT_LABEL: Record<string, string> = {
-  stream: "Output",
-  "tool-call": "Tool",
-  "final-output": "Result",
-  thinking: "Thinking",
+  [ARTIFACT.STREAM]: "Output",
+  [ARTIFACT.TOOL_CALL]: "Tool",
+  [ARTIFACT.FINAL_OUTPUT]: "Result",
+  [ARTIFACT.THINKING]: "Thinking",
   error: "Error",
   repo: "Repo",
   workspace: "Workspace",
