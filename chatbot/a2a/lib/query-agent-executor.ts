@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
@@ -23,6 +22,7 @@ import { extractInstruction, type AgentConfig } from "./spawn";
 import { buildSubAgentHooks } from "@/lib/hooks";
 import { createAgentWorkspace, agentSourceDirFromEntry } from "./workspace";
 import { markProcessing, markIdle } from "./processing-registry";
+import { ExecutorPublisher } from "./executor-publisher";
 
 /**
  * A2A executor that runs a query() sub-agent instead of spawning a script directly.
@@ -78,29 +78,18 @@ export class QueryAgentExecutor implements AgentExecutor {
     // the finally block always runs cleanup regardless of where a failure occurs.
     let workspace: Awaited<ReturnType<typeof createAgentWorkspace>> | null = null;
     let exitHandler: (() => void) | null = null;
+    const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
 
     try {
       // Create an isolated workspace for this entire execution — used as cwd for
       // both the query() sub-agent and the agent script spawned by run_script.
-      const publishStream = (text: string) =>
-        eventBus.publish({
-          kind: "artifact-update",
-          taskId,
-          contextId,
-          artifact: {
-            artifactId: randomUUID(),
-            name: "stream",
-            parts: [{ kind: "text", text: `${text}\n` }],
-          },
-        });
-
       workspace = createAgentWorkspace(
         this.def.name,
         this.def.alias,
         agentSourceDirFromEntry(this.def.entryPath),
         undefined,
         taskId,
-        publishStream,
+        (text) => publisher.publishStatus(text),
       );
 
       // Guard against process.exit() bypassing the finally block — each executor
@@ -135,7 +124,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentConfig,
             repoSlugs,
             this.abortController.signal,
-            publishStream,
+            (text) => publisher.publishArtifact(text, "progress"),
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
@@ -196,16 +185,7 @@ export class QueryAgentExecutor implements AgentExecutor {
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
-            eventBus.publish({
-              kind: "artifact-update",
-              taskId,
-              contextId,
-              artifact: {
-                artifactId: randomUUID(),
-                name: "error",
-                parts: [{ kind: "text", text: `Error: ${msg}` }],
-              },
-            });
+            publisher.publishArtifact(`Error: ${msg}`, "error");
             eventBus.publish({
               kind: "status-update",
               taskId,
