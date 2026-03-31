@@ -6,17 +6,19 @@ type TaskState = "working" | "completed" | "canceled" | "failed";
 /**
  * Typed publish helpers for QueryAgentExecutor.
  *
- *   publishTask    → kind:"task"  state:"submitted"
+ *   publishTask     → kind:"task"  state:"submitted"
  *     Must be the first event so ResultManager registers the task in the TaskStore.
  *
- *   publishStatus  → kind:"status-update"
- *     Default state is "working" (non-final). Pass a terminal state
- *     ("completed" | "canceled" | "failed") to emit a final status event.
- *     Pass artifact key/value pairs to emit accompanying artifact-update events.
+ *   publishStatusToUI   → kind:"status-update"  (optionally + artifact-update events)
+ *     Creates a workflow ProgressEntry node visible in the UI's workflow view.
+ *     Use for structural milestones: tool calls, completion, errors.
+ *     Default state is "working"; pass a terminal state to close the task.
+ *     Optional artifacts map emits accompanying artifact-update events.
  *
- *   publishArtifact → kind:"artifact-update"
- *     Use for content that should be surfaced as a named artifact (script progress
- *     messages, error text, final output fragments).
+ *   send            → kind:"artifact-update"  (no status-update)
+ *     Does NOT create a workflow node — use for transient streaming content
+ *     (text deltas, thinking, tool input) that should only appear in the chat
+ *     bubble, not as a step in the workflow view.
  */
 export class ExecutorPublisher {
   constructor(
@@ -35,7 +37,7 @@ export class ExecutorPublisher {
     });
   }
 
-  publishStatus(
+  publishStatusToUI(
     text: string,
     artifacts?: Record<string, string>,
     state: TaskState = "working",
@@ -60,11 +62,11 @@ export class ExecutorPublisher {
       final: isFinal,
     });
     for (const [name, artifactText] of Object.entries(artifacts ?? {})) {
-      this.publishArtifact(artifactText, name);
+      this.send(artifactText, name);
     }
   }
 
-  publishArtifact(text: string, name: string): void {
+  send(text: string, name: string): void {
     this.eventBus.publish({
       kind: "artifact-update",
       taskId: this.taskId,

@@ -96,62 +96,62 @@ describe("A2AQueryDispatcher", () => {
   function makePublisher(): ExecutorPublisher {
     return {
       publishTask: vi.fn(),
-      publishStatus: vi.fn(),
-      publishArtifact: vi.fn(),
+      publishStatusToUI: vi.fn(),
+      send: vi.fn(),
     } as unknown as ExecutorPublisher;
   }
 
   it("onTextDelta publishes stream artifact (no workflow node)", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onTextDelta("output");
-    expect(pub.publishArtifact).toHaveBeenCalledWith("output", ARTIFACT.STREAM);
-    expect(pub.publishStatus).not.toHaveBeenCalled();
+    expect(pub.send).toHaveBeenCalledWith("output", ARTIFACT.STREAM);
+    expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
   it("onThinking publishes thinking artifact (no workflow node)", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onThinking("reasoning");
-    expect(pub.publishArtifact).toHaveBeenCalledWith("reasoning", ARTIFACT.THINKING);
-    expect(pub.publishStatus).not.toHaveBeenCalled();
+    expect(pub.send).toHaveBeenCalledWith("reasoning", ARTIFACT.THINKING);
+    expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
   it("onToolCall publishes status with tool-call artifact", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onToolCall("Bash");
-    expect(pub.publishStatus).toHaveBeenCalledWith("Bash", { [ARTIFACT.TOOL_CALL]: "Bash" });
+    expect(pub.publishStatusToUI).toHaveBeenCalledWith("Bash", { [ARTIFACT.TOOL_CALL]: "Bash" });
   });
 
   it("onToolInput publishes tool-input artifact (no workflow node)", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onToolInput('{"cmd":"ls"}');
-    expect(pub.publishArtifact).toHaveBeenCalledWith('{"cmd":"ls"}', ARTIFACT.TOOL_INPUT);
-    expect(pub.publishStatus).not.toHaveBeenCalled();
+    expect(pub.send).toHaveBeenCalledWith('{"cmd":"ls"}', ARTIFACT.TOOL_INPUT);
+    expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
   it("onResult publishes final-output artifact (no workflow node)", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onResult("task complete");
-    expect(pub.publishArtifact).toHaveBeenCalledWith("task complete", ARTIFACT.FINAL_OUTPUT);
-    expect(pub.publishStatus).not.toHaveBeenCalled();
+    expect(pub.send).toHaveBeenCalledWith("task complete", ARTIFACT.FINAL_OUTPUT);
+    expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
   it("onResult skips empty string", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onResult("");
-    expect(pub.publishArtifact).not.toHaveBeenCalled();
+    expect(pub.send).not.toHaveBeenCalled();
   });
 
   it("onSession is a no-op", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onSession("sess-1");
-    expect(pub.publishStatus).not.toHaveBeenCalled();
-    expect(pub.publishArtifact).not.toHaveBeenCalled();
+    expect(pub.publishStatusToUI).not.toHaveBeenCalled();
+    expect(pub.send).not.toHaveBeenCalled();
   });
 
   it("onArtifact is a no-op", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onArtifact("stream", "text");
-    expect(pub.publishStatus).not.toHaveBeenCalled();
-    expect(pub.publishArtifact).not.toHaveBeenCalled();
+    expect(pub.publishStatusToUI).not.toHaveBeenCalled();
+    expect(pub.send).not.toHaveBeenCalled();
   });
 });

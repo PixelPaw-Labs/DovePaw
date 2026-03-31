@@ -20,7 +20,7 @@ export const ARTIFACT_PREFIX = "__ARTIFACT__:";
  *
  * Accumulates `__ARTIFACT__` lines internally and bundles them with the next
  * `__PROGRESS__` line so the status message and its artifacts always arrive
- * together — all the way through to publishStatus and the UI.
+ * together — all the way through to publishStatusToUI and the UI.
  *
  *   process(line) → { message, artifacts } — progress with correlated artifacts
  *   process(line) → null                   — regular output, pushed to lines[]

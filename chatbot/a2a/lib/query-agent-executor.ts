@@ -53,7 +53,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     // ResultManager.currentTask is only set when it sees a kind:"task" event.
     publisher.publishTask();
 
-    publisher.publishStatus("Starting…");
+    publisher.publishStatusToUI("Starting…");
 
     // Resolve env vars fresh on each execution so settings changes take effect
     const agentSettings = readAgentSettings(this.def.name);
@@ -78,7 +78,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         agentSourceDirFromEntry(this.def.entryPath),
         undefined,
         taskId,
-        (text, artifacts) => publisher.publishStatus(text, artifacts),
+        (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
       );
 
       // Guard against process.exit() bypassing the finally block — each executor
@@ -113,7 +113,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentConfig,
             repoSlugs,
             this.abortController.signal,
-            (message, artifacts) => publisher.publishStatus(message, artifacts),
+            (message, artifacts) => publisher.publishStatusToUI(message, artifacts),
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
@@ -153,16 +153,16 @@ export class QueryAgentExecutor implements AgentExecutor {
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
-          publisher.publishStatus("", undefined, "completed");
+          publisher.publishStatusToUI("", undefined, "completed");
         },
         (err, isAbort) => {
           if (isAbort) {
             consola.info(`${this.def.displayName} sub-agent cancelled`);
-            publisher.publishStatus("", undefined, "canceled");
+            publisher.publishStatusToUI("", undefined, "canceled");
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
-            publisher.publishStatus("", { error: msg }, "failed");
+            publisher.publishStatusToUI("", { error: msg }, "failed");
           }
         },
       );
