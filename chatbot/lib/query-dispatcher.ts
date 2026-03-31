@@ -7,9 +7,8 @@
  *   - A2AQueryDispatcher  → A2A artifact-update via eventBus (used by QueryAgentExecutor)
  */
 
-import { randomUUID } from "node:crypto";
-import type { ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { ChatSseEvent } from "@/lib/chat-sse";
+import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -77,11 +76,7 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
  * Session and turn boundary events are no-ops (A2A manages its own task lifecycle).
  */
 export class A2AQueryDispatcher implements QueryResponseDispatcher {
-  constructor(
-    private readonly eventBus: ExecutionEventBus,
-    private readonly taskId: string,
-    private readonly contextId: string,
-  ) {}
+  constructor(private readonly publisher: ExecutorPublisher) {}
 
   onSession(_sessionId: string): void {} // no-op: session IDs are for SSE clients
 
@@ -90,35 +85,22 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
   onTurnEnd(): void {} // no-op
 
   onTextDelta(text: string): void {
-    this.publish("stream", text);
+    this.publisher.publishStatus(text, { stream: text });
   }
 
   onThinking(text: string): void {
-    this.publish("thinking", text);
+    this.publisher.publishStatus(text, { thinking: text });
   }
 
   onToolCall(name: string): void {
-    this.publish("tool-call", name);
+    this.publisher.publishStatus(name, { "tool-call": name });
   }
 
   onToolInput(content: string): void {
-    this.publish("tool-input", content);
+    this.publisher.publishStatus(content, { "tool-input": content });
   }
 
   onResult(result: string): void {
-    if (result) this.publish("final-output", result);
-  }
-
-  private publish(name: string, text: string): void {
-    this.eventBus.publish({
-      kind: "artifact-update",
-      taskId: this.taskId,
-      contextId: this.contextId,
-      artifact: {
-        artifactId: randomUUID(),
-        name,
-        parts: [{ kind: "text", text }],
-      },
-    });
+    if (result) this.publisher.publishStatus(result, { "final-output": result });
   }
 }

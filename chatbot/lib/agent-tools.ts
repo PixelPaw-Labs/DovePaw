@@ -149,7 +149,7 @@ export function makeStartScriptTool(
   config: AgentConfig,
   repoSlugs: string[],
   signal?: AbortSignal,
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ) {
   return tool(
     START_SCRIPT_TOOL,
@@ -166,7 +166,7 @@ export function makeStartScriptTool(
         config.workspacePath,
         repoSlugs,
         undefined,
-        onProgress ? (slug) => onProgress(`Cloning ${slug}…`) : undefined,
+        onProgress ? (slug) => onProgress(`Cloning ${slug}…`, { repo: slug }) : undefined,
       );
 
       const finalEnv: Record<string, string> = { ...config.extraEnv };

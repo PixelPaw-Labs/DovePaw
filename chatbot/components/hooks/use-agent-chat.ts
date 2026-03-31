@@ -96,9 +96,8 @@ export function useAgentChat(agentId = "dove") {
               if (event.type === "session") {
                 sessionIdRef.current = event.sessionId;
               } else if (event.type === "progress") {
-                if (event.artifactName === "tool-call") {
-                  setLiveProgress(assistantId, event.content);
-                }
+                const lastToolCall = event.result.progress.at(-1)?.artifacts["tool-call"];
+                if (lastToolCall) setLiveProgress(assistantId, lastToolCall);
               } else if (event.type === "thinking" && event.content) {
                 appendToProcess(assistantId, event.content);
               } else if (event.type === "tool_call") {

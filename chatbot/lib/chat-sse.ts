@@ -5,6 +5,8 @@
  * not the SDK's internal types, which are for query() consumption only.
  */
 
+import type { StreamedResult } from "./query-tools";
+
 /** session_id emitted on the first turn so the hook can resume later */
 export type ChatSseSession = { type: "session"; sessionId: string };
 
@@ -29,8 +31,8 @@ export type ChatSseError = { type: "error"; content: string };
 /** Terminal event — stream is done */
 export type ChatSseDone = { type: "done" };
 
-/** Live progress from a downstream A2A artifact — emitted during await_* polling */
-export type ChatSseProgress = { type: "progress"; content: string; artifactName: string };
+/** Live progress from a downstream A2A task — emitted during await_* polling */
+export type ChatSseProgress = { type: "progress"; result: StreamedResult };
 
 export type ChatSseEvent =
   | ChatSseSession

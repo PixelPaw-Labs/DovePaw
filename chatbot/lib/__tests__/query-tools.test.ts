@@ -375,7 +375,7 @@ describe("makeAwaitTool", () => {
       };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(result.content[0].text).toBe("done output");
+    expect(JSON.parse(result.content[0].text).output).toBe("done output");
     expect(mockResubscribe).not.toHaveBeenCalled();
   });
 
@@ -391,7 +391,7 @@ describe("makeAwaitTool", () => {
       return { createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(result.content[0].text).toBe("Agent completed.");
+    expect(JSON.parse(result.content[0].text).output).toBe("Agent completed.");
   });
 
   it("resubscribes and collects chunks when task is still working", async () => {
@@ -401,14 +401,26 @@ describe("makeAwaitTool", () => {
       kind: "task",
       status: { state: "working" },
     });
-    const mockResubscribe = vi
-      .fn()
-      .mockReturnValue(
-        asyncEvents(
-          { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "partial" }] } },
-          { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "result" }] } },
-        ),
-      );
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "working" }],
+            },
+          },
+          final: false,
+        },
+        { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "partial" }] } },
+        { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "result" }] } },
+      ),
+    );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi
@@ -418,7 +430,7 @@ describe("makeAwaitTool", () => {
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
-    expect(result.content[0].text).toBe("partial\nresult");
+    expect(JSON.parse(result.content[0].text).output).toBe("partial\nresult");
   });
 
   it("handles all terminal states without resubscribing", async () => {
@@ -579,10 +591,26 @@ describe("makeAwaitTool", () => {
       status: { state: "working" },
     });
     const mockResubscribe = vi.fn().mockReturnValue(
-      asyncEvents({
-        kind: "artifact-update",
-        artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
-      }),
+      asyncEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "Bash" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
+        },
+      ),
     );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
@@ -597,7 +625,13 @@ describe("makeAwaitTool", () => {
     const h = captured[doveAwaitToolName(AGENT)];
     await h({ taskId: "task-123" });
 
-    expect(onProgress).toHaveBeenCalledWith("Bash", "tool-call");
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progress: expect.arrayContaining([
+          expect.objectContaining({ artifacts: expect.objectContaining({ "tool-call": "Bash" }) }),
+        ]),
+      }),
+    );
   });
 
   it("calls onProgress for stream artifacts", async () => {
@@ -608,9 +642,71 @@ describe("makeAwaitTool", () => {
       status: { state: "working" },
     });
     const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "output text" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "stream", parts: [{ kind: "text", text: "output text" }] },
+        },
+      ),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+
+    const onProgress = vi.fn();
+    const captured = captureTools(() => makeAwaitTool(AGENT, undefined, onProgress));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-123" });
+
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progress: expect.arrayContaining([
+          expect.objectContaining({
+            artifacts: expect.objectContaining({ stream: "output text" }),
+          }),
+        ]),
+      }),
+    );
+  });
+
+  it("calls onProgress for status-update events with a message", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    const mockResubscribe = vi.fn().mockReturnValue(
       asyncEvents({
-        kind: "artifact-update",
-        artifact: { name: "stream", parts: [{ kind: "text", text: "output text" }] },
+        kind: "status-update",
+        final: false,
+        status: {
+          state: "working",
+          message: {
+            kind: "message",
+            messageId: "msg-1",
+            role: "agent",
+            parts: [{ kind: "text", text: "Fetching tickets…" }],
+          },
+        },
       }),
     );
     vi.mocked(ClientFactory).mockImplementation(function () {
@@ -626,7 +722,62 @@ describe("makeAwaitTool", () => {
     const h = captured[doveAwaitToolName(AGENT)];
     await h({ taskId: "task-123" });
 
-    expect(onProgress).toHaveBeenCalledWith("output text", "stream");
+    expect(onProgress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        progress: expect.arrayContaining([
+          expect.objectContaining({ message: "Fetching tickets…" }),
+        ]),
+      }),
+    );
+  });
+
+  it("does not include status-update text in the collected result", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockGetTask = vi.fn().mockResolvedValue({
+      id: "task-123",
+      kind: "task",
+      status: { state: "working" },
+    });
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents(
+        {
+          kind: "status-update",
+          final: false,
+          status: {
+            state: "working",
+            message: {
+              kind: "message",
+              messageId: "msg-1",
+              role: "agent",
+              parts: [{ kind: "text", text: "progress noise" }],
+            },
+          },
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "actual result" }] },
+        },
+      ),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    const result = await h({ taskId: "task-123" });
+
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.output).toContain("actual result");
+    expect(parsed.output).not.toContain("progress noise");
+    // progress messages are separated into their own array as ProgressEntry objects
+    expect(parsed.progress).toEqual(
+      expect.arrayContaining([expect.objectContaining({ message: "progress noise" })]),
+    );
   });
 
   it("works without onProgress (backward compat — no error thrown)", async () => {

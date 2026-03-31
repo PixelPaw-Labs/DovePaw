@@ -46,24 +46,14 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     consola.start(`Running ${this.def.displayName} sub-agent…`);
 
+    const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
+
     // Publish the Task object first so ResultManager registers it in the TaskStore.
     // Without this, every subsequent event triggers a "unknown task" warning because
     // ResultManager.currentTask is only set when it sees a kind:"task" event.
-    eventBus.publish({
-      kind: "task",
-      id: taskId,
-      contextId,
-      status: { state: "submitted", timestamp: new Date().toISOString() },
-      history: [],
-    });
+    publisher.publishTask();
 
-    eventBus.publish({
-      kind: "status-update",
-      taskId,
-      contextId,
-      status: { state: "working", timestamp: new Date().toISOString() },
-      final: false,
-    });
+    publisher.publishStatus("Starting…");
 
     // Resolve env vars fresh on each execution so settings changes take effect
     const agentSettings = readAgentSettings(this.def.name);
@@ -78,7 +68,6 @@ export class QueryAgentExecutor implements AgentExecutor {
     // the finally block always runs cleanup regardless of where a failure occurs.
     let workspace: Awaited<ReturnType<typeof createAgentWorkspace>> | null = null;
     let exitHandler: (() => void) | null = null;
-    const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
 
     try {
       // Create an isolated workspace for this entire execution — used as cwd for
@@ -89,7 +78,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         agentSourceDirFromEntry(this.def.entryPath),
         undefined,
         taskId,
-        (text) => publisher.publishStatus(text),
+        (text, artifacts) => publisher.publishStatus(text, artifacts),
       );
 
       // Guard against process.exit() bypassing the finally block — each executor
@@ -124,7 +113,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentConfig,
             repoSlugs,
             this.abortController.signal,
-            (text) => publisher.publishArtifact(text, "progress"),
+            (message, artifacts) => publisher.publishStatus(message, artifacts),
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
@@ -160,39 +149,20 @@ export class QueryAgentExecutor implements AgentExecutor {
                 settingSources: ["project", "user"],
               },
             }),
-            new A2AQueryDispatcher(eventBus, taskId, contextId),
+            new A2AQueryDispatcher(publisher),
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
-          eventBus.publish({
-            kind: "status-update",
-            taskId,
-            contextId,
-            status: { state: "completed", timestamp: new Date().toISOString() },
-            final: true,
-          });
+          publisher.publishStatus("", undefined, "completed");
         },
         (err, isAbort) => {
           if (isAbort) {
             consola.info(`${this.def.displayName} sub-agent cancelled`);
-            eventBus.publish({
-              kind: "status-update",
-              taskId,
-              contextId,
-              status: { state: "canceled", timestamp: new Date().toISOString() },
-              final: true,
-            });
+            publisher.publishStatus("", undefined, "canceled");
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
-            publisher.publishArtifact(`Error: ${msg}`, "error");
-            eventBus.publish({
-              kind: "status-update",
-              taskId,
-              contextId,
-              status: { state: "failed", timestamp: new Date().toISOString() },
-              final: true,
-            });
+            publisher.publishStatus("", { error: msg }, "failed");
           }
         },
       );

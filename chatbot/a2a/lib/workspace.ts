@@ -29,7 +29,7 @@ export function createAgentWorkspace(
   agentSourceDir: string,
   workspaceRoot?: string,
   taskId?: string,
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ): AgentWorkspace {
   const root = workspaceRoot ?? agentWorkspaceDir(agentName);
   const shortId = taskId
@@ -38,9 +38,9 @@ export function createAgentWorkspace(
   const workspacePath = join(root, `${alias}-${shortId}`);
 
   mkdirSync(workspacePath, { recursive: true });
-  onProgress?.(`Creating workspace at ${workspacePath}`);
+  onProgress?.(`Creating workspace`, { workspace: workspacePath });
   symlinkSync(agentSourceDir, join(workspacePath, `source_${alias}`));
-  onProgress?.(`Linked source → ${agentSourceDir}`);
+  onProgress?.(`Linked source`, { source: agentSourceDir });
 
   return {
     path: workspacePath,

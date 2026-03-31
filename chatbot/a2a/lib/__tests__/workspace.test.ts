@@ -85,8 +85,8 @@ describe("createAgentWorkspace", () => {
     const onProgress = vi.fn();
     const ws = createAgentWorkspace("my-agent", "ma", sourceDir, undefined, undefined, onProgress);
 
-    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining(ws.path));
-    expect(onProgress).toHaveBeenCalledWith(expect.stringContaining(sourceDir));
+    expect(onProgress).toHaveBeenCalledWith("Creating workspace", { workspace: ws.path });
+    expect(onProgress).toHaveBeenCalledWith("Linked source", { source: sourceDir });
   });
 
   it("each call produces a unique workspace path", () => {

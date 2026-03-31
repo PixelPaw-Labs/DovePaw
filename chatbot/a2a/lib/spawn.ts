@@ -10,24 +10,44 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN } from "@/lib/paths";
 
-/** Sentinel prefix written by agent scripts via emitProgress(). */
+/** Sentinel for transient progress messages written by emitProgress(). */
 export const PROGRESS_PREFIX = "__PROGRESS__:";
+/** Sentinel for named artifact content written alongside emitProgress(). */
+export const ARTIFACT_PREFIX = "__ARTIFACT__:";
 
 /**
- * Route a single stdout line: progress sentinels go to onProgress and are
- * excluded from the collected output; all other lines go to lines[] and onLine.
+ * Stateful processor for a stream of stdout lines.
+ *
+ * Accumulates `__ARTIFACT__` lines internally and bundles them with the next
+ * `__PROGRESS__` line so the status message and its artifacts always arrive
+ * together — all the way through to publishStatus and the UI.
+ *
+ *   process(line) → { message, artifacts } — progress with correlated artifacts
+ *   process(line) → null                   — regular output, pushed to lines[]
  */
-export function processOutputLine(
-  line: string,
-  lines: string[],
-  onLine?: (line: string) => void,
-  onProgress?: (message: string) => void,
-): void {
-  if (line.startsWith(PROGRESS_PREFIX)) {
-    onProgress?.(line.slice(PROGRESS_PREFIX.length));
-  } else {
+export class OutputLineProcessor {
+  private pendingArtifacts: Record<string, string> = {};
+
+  process(
+    line: string,
+    lines: string[],
+    onLine?: (line: string) => void,
+  ): { message: string; artifacts: Record<string, string> } | null {
+    if (line.startsWith(PROGRESS_PREFIX)) {
+      const message = line.slice(PROGRESS_PREFIX.length);
+      const artifacts = this.pendingArtifacts;
+      this.pendingArtifacts = {};
+      return { message, artifacts };
+    }
+    if (line.startsWith(ARTIFACT_PREFIX)) {
+      const rest = line.slice(ARTIFACT_PREFIX.length);
+      const sep = rest.indexOf(":");
+      if (sep !== -1) this.pendingArtifacts[rest.slice(0, sep)] = rest.slice(sep + 1);
+      return null;
+    }
     lines.push(line);
     onLine?.(line);
+    return null;
   }
 }
 
@@ -117,20 +137,23 @@ export function getPendingRunIds(): string[] {
  * Spawns the agent tsx script and collects all stdout/stderr into a single string.
  * Used by the run_script MCP tool inside QueryAgentExecutor.
  *
- * @param onLine Optional callback invoked for each line as it arrives (stdout + stderr).
- *   Used by startScript to maintain a live latestLines snapshot for progress reporting.
- * @param onProgress Optional callback invoked when a `__PROGRESS__:<message>` sentinel
- *   line is detected. Progress lines are stripped from the collected output.
+ * Returns { promise, lines } so the caller can use lines[] as a live buffer
+ * without needing a per-line callback.
+ *
+ * @param onProgress Optional callback invoked for each `__PROGRESS__` sentinel,
+ *   carrying the message and any `__ARTIFACT__` lines that preceded it.
+ *   Sentinel lines are stripped from the collected output.
  */
-export async function spawnAndCollect(
+export function spawnAndCollect(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
-  onLine?: (line: string) => void,
-  onProgress?: (message: string) => void,
-): Promise<string> {
+  onProgress?: (message: string, artifacts: Record<string, string>) => void,
+): { promise: Promise<string>; lines: string[] } {
+  const lines: string[] = [];
+
   if (!existsSync(config.scriptPath)) {
-    return `Script not found: ${config.scriptPath}`;
+    return { promise: Promise.resolve(`Script not found: ${config.scriptPath}`), lines };
   }
 
   const tsxBin = existsSync(TSX_BIN) ? TSX_BIN : "tsx";
@@ -156,15 +179,18 @@ export async function spawnAndCollect(
     signal?.addEventListener("abort", killProc, { once: true });
   }
 
-  const lines: string[] = [];
+  const processor = new OutputLineProcessor();
 
-  return new Promise<string>((resolve) => {
+  const promise = new Promise<string>((resolve) => {
     let stdoutBuf = "";
     proc.stdout?.on("data", (chunk: Buffer) => {
       stdoutBuf += chunk.toString();
       const parts = stdoutBuf.split("\n");
       stdoutBuf = parts.pop() ?? "";
-      parts.filter((l) => l.trim()).forEach((l) => processOutputLine(l, lines, onLine, onProgress));
+      for (const l of parts.filter((line) => line.trim())) {
+        const result = processor.process(l, lines);
+        if (result) onProgress?.(result.message, result.artifacts);
+      }
     });
 
     let stderrBuf = "";
@@ -172,13 +198,7 @@ export async function spawnAndCollect(
       stderrBuf += chunk.toString();
       const parts = stderrBuf.split("\n");
       stderrBuf = parts.pop() ?? "";
-      parts
-        .filter((l) => l.trim())
-        .forEach((l) => {
-          const prefixed = `[stderr] ${l}`;
-          lines.push(prefixed);
-          onLine?.(prefixed);
-        });
+      parts.filter((l) => l.trim()).forEach((l) => lines.push(`[stderr] ${l}`));
     });
 
     proc.on("close", (code) => {
@@ -195,6 +215,8 @@ export async function spawnAndCollect(
       resolve(`Spawn error: ${err.message}`);
     });
   });
+
+  return { promise, lines };
 }
 
 // ─── startScript / awaitScript ────────────────────────────────────────────────
@@ -207,23 +229,10 @@ export function startScript(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ): { runId: string } {
   const runId = randomUUID();
-  const latestLines: string[] = [];
-
-  // Spawn with a line callback so latestLines stays fresh during the run.
-  const promise = spawnAndCollect(
-    config,
-    instruction,
-    signal,
-    (line) => {
-      latestLines.push(line);
-      // Keep only the last 20 lines to bound memory.
-      if (latestLines.length > 20) latestLines.shift();
-    },
-    onProgress,
-  );
+  const { promise, lines: latestLines } = spawnAndCollect(config, instruction, signal, onProgress);
 
   runningScripts.set(runId, { phase: "running", promise, latestLines });
   // Cache the output when the process exits so awaitScript can collect it

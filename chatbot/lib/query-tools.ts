@@ -12,7 +12,6 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { ClientFactory, TaskNotFoundError } from "@a2a-js/sdk/client";
 import type {
-  TextPart,
   Artifact,
   Task,
   Message,
@@ -45,11 +44,29 @@ export type TaskStartedWithKeyContent = TaskStartedContent & {
   manifestKey: string;
 };
 
+/**
+ * Structured result collected from a completed A2A task stream.
+ * Separates content by type so the UI can render each category appropriately.
+ */
+/** A progress message with any artifacts published alongside it. */
+export type ProgressEntry = {
+  message: string;
+  /** Artifacts linked to this progress message — name → text. */
+  artifacts: Record<string, string>;
+};
+
+export type StreamedResult = {
+  /** Primary text output (from artifact-update events), joined for readability. */
+  output: string;
+  /** Progress messages, each carrying its linked artifacts inline. */
+  progress: ProgressEntry[];
+};
+
 /** Returned by await_* when the agent task has reached a terminal state. */
 export type TaskCompletedContent = {
   status: "completed" | "canceled" | "failed" | "rejected";
   taskId: string;
-  result: string;
+  result: StreamedResult;
 };
 
 /** Returned by await_* when the poll window expired before the task finished. */
@@ -104,39 +121,73 @@ export const doveAwaitToolName = (agent: AgentDef) => `await_${agent.manifestKey
  * Consume a stream, collecting artifact text and the taskId (if emitted).
  * Used by both makeAskTool (sendMessageStream) and makeAwaitTool (resubscribeTask).
  *
- * @param onChunk Optional callback invoked for each text chunk as it arrives.
- *   Receives the text and the artifact name (e.g. "stream", "tool-call", "final-output").
- *   Used by makeAwaitTool to track live progress for still_running responses.
+ * @param onSnapshot Optional callback invoked after each event with the current
+ *   accumulated StreamedResult snapshot. Used by makeAwaitTool to stream live
+ *   progress to the UI as the task runs.
  */
+function accumulate(target: Record<string, string>, name: string, text: string): void {
+  target[name] = target[name] ? `${target[name]}\n${text}` : text;
+}
+
 async function collectStreamResult(
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
-  onChunk?: (text: string, artifactName: string) => void,
-): Promise<{ taskId?: string; text: string }> {
+  onSnapshot?: (result: StreamedResult) => void,
+): Promise<{ taskId?: string; result: StreamedResult }> {
   let taskId: string | undefined;
-  const chunks: string[] = [];
+  const progress: ProgressEntry[] = [];
+  // Points to the last progress entry while consecutive artifact-updates arrive —
+  // artifacts are always linked to the status-update that preceded them.
+  let pendingEntry: ProgressEntry | undefined;
+
+  const snapshot = (): StreamedResult => {
+    const output = progress
+      .flatMap((e) => Object.values(e.artifacts))
+      .join("\n")
+      .trim();
+    return {
+      output: output || "Agent completed.",
+      progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),
+    };
+  };
+
   for await (const event of stream) {
     if (event.kind === "task") {
       taskId = event.id;
     } else if (event.kind === "artifact-update") {
-      const texts = event.artifact.parts
-        .filter((p): p is TextPart => p.kind === "text")
-        .map((p) => p.text);
-      chunks.push(...texts);
-      if (onChunk) {
-        for (const text of texts) onChunk(text, event.artifact.name ?? "");
+      const name = event.artifact.name ?? "";
+      for (const p of event.artifact.parts) {
+        if (p.kind === "text" && pendingEntry) {
+          accumulate(pendingEntry.artifacts, name, p.text);
+          onSnapshot?.(snapshot());
+        }
+      }
+    } else if (event.kind === "status-update" && event.status.message) {
+      for (const p of event.status.message.parts) {
+        if (p.kind === "text") {
+          const entry: ProgressEntry = { message: p.text, artifacts: {} };
+          progress.push(entry);
+          pendingEntry = entry;
+          onSnapshot?.(snapshot());
+        }
       }
     }
   }
-  return { taskId, text: chunks.join("\n").trim() || "Agent completed." };
+
+  return { taskId, result: snapshot() };
 }
 
-/** Extract text from terminal task artifacts (no stream needed). */
-function extractArtifactText(artifacts: Artifact[] | undefined): string {
-  if (!artifacts?.length) return "";
-  return artifacts
-    .flatMap((a) => a.parts.filter((p): p is TextPart => p.kind === "text").map((p) => p.text))
-    .join("\n")
-    .trim();
+/** Build a StreamedResult from terminal task artifacts (no stream needed). */
+function extractArtifactResult(rawArtifacts: Artifact[] | undefined): StreamedResult {
+  const artifacts: Record<string, string> = {};
+  for (const a of rawArtifacts ?? []) {
+    const name = a.name ?? "";
+    for (const p of a.parts) {
+      if (p.kind === "text")
+        artifacts[name] = artifacts[name] ? `${artifacts[name]}\n${p.text}` : p.text;
+    }
+  }
+  const output = Object.values(artifacts).join("\n").trim() || "Agent completed.";
+  return { output, progress: [] };
 }
 
 function noServersMessage() {
@@ -322,7 +373,7 @@ const AWAIT_POLL_TIMEOUT_MS = 30_000;
 export function makeAwaitTool(
   agent: AgentDef,
   signal?: AbortSignal,
-  onProgress?: (text: string, artifactName: string) => void,
+  onProgress?: (result: StreamedResult) => void,
 ) {
   return tool(
     doveAwaitToolName(agent),
@@ -346,14 +397,13 @@ export function makeAwaitTool(
 
         if (isTerminalState(task.status.state)) {
           markTaskResolved(taskId);
-          const text = extractArtifactText(task.artifacts);
           const completed: TaskCompletedContent = {
             status: task.status.state,
             taskId,
-            result: text || "Agent completed.",
+            result: extractArtifactResult(task.artifacts),
           };
           return {
-            content: [{ type: "text" as const, text: completed.result }],
+            content: [{ type: "text" as const, text: JSON.stringify(completed.result) }],
             structuredContent: completed,
           };
         }
@@ -361,8 +411,7 @@ export function makeAwaitTool(
         // Task still running — collect output for up to AWAIT_POLL_TIMEOUT_MS,
         // then return still_running so Dove retries instead of spawning a new task.
         // Track live progress so the still_running response is informative.
-        let lastToolCall = "";
-        let streamBuffer = "";
+        let latestSnapshot: StreamedResult | undefined;
 
         const abortController = new AbortController();
         // Cancel the A2A task and abort the stream if the route aborts (user pressed STOP).
@@ -379,10 +428,9 @@ export function makeAwaitTool(
         const result = await Promise.race([
           collectStreamResult(
             client.resubscribeTask({ id: taskId }, { signal: abortController.signal }),
-            (text, name) => {
-              if (name === "tool-call") lastToolCall = text;
-              if (name === "stream") streamBuffer += text;
-              onProgress?.(text, name);
+            (snapshot) => {
+              latestSnapshot = snapshot;
+              onProgress?.(snapshot);
             },
           ).finally(() => clearTimeout(timer)),
           new Promise<typeof timeoutResult>((resolve) =>
@@ -395,6 +443,9 @@ export function makeAwaitTool(
         if (result === timeoutResult) {
           markTaskPending(taskId);
           const progressLines: string[] = ["Agent is still working..."];
+          const lastArtifacts = latestSnapshot?.progress.at(-1)?.artifacts ?? {};
+          const lastToolCall = lastArtifacts["tool-call"];
+          const streamBuffer = lastArtifacts["stream"] ?? "";
           if (lastToolCall) progressLines.push(`  Running: ${lastToolCall}`);
           if (streamBuffer) {
             const tail = streamBuffer.trim().slice(-200);
@@ -411,10 +462,10 @@ export function makeAwaitTool(
         const completed: TaskCompletedContent = {
           status: "completed",
           taskId: result.taskId ?? taskId,
-          result: result.text,
+          result: result.result,
         };
         return {
-          content: [{ type: "text" as const, text: completed.result }],
+          content: [{ type: "text" as const, text: JSON.stringify(completed.result) }],
           structuredContent: completed,
         };
       } catch (err: unknown) {

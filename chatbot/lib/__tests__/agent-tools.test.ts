@@ -84,7 +84,7 @@ function captureToolHandler(
   config: AgentConfig,
   slugs: string[],
   signal?: AbortSignal,
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ): (args: { instruction?: string }) => Promise<unknown> {
   vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
   return makeStartScriptTool(agentWithRepos, config, slugs, signal, onProgress) as any;
@@ -232,7 +232,7 @@ describe("makeStartScriptTool", () => {
       slug: string,
     ) => void;
     cloneCallback("org/my-app");
-    expect(onProgress).toHaveBeenCalledWith("Cloning org/my-app…");
+    expect(onProgress).toHaveBeenCalledWith("Cloning org/my-app…", { repo: "org/my-app" });
   });
 
   it("passes undefined clone callback to recloneReposIntoWorkspace when no onProgress", async () => {

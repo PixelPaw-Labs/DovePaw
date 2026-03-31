@@ -137,8 +137,8 @@ export async function POST(request: Request) {
       const tools = AGENTS.flatMap((agent) => [
         makeAskTool(agent, abortController.signal),
         makeStartTool(agent, abortController.signal),
-        makeAwaitTool(agent, abortController.signal, (text, artifactName) => {
-          send({ type: "progress", content: text, artifactName });
+        makeAwaitTool(agent, abortController.signal, (result) => {
+          send({ type: "progress", result });
         }),
       ]);
 

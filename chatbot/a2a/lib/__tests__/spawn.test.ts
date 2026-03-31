@@ -48,8 +48,9 @@ import {
   awaitScript,
   hasPendingScripts,
   getPendingRunIds,
-  processOutputLine,
+  OutputLineProcessor,
   PROGRESS_PREFIX,
+  ARTIFACT_PREFIX,
 } from "../spawn.js";
 
 const BASE_CONFIG = {
@@ -155,7 +156,7 @@ describe("spawnAndCollect", () => {
 
   it("does not kill the process when no signal is provided", async () => {
     const proc = makeProc();
-    const promise = spawnAndCollect(BASE_CONFIG, "run");
+    const { promise } = spawnAndCollect(BASE_CONFIG, "run");
     proc.emit("close", 0);
     await promise;
     expect(proc.kill).not.toHaveBeenCalled();
@@ -164,27 +165,19 @@ describe("spawnAndCollect", () => {
   it("does not kill the process when the signal is not aborted", async () => {
     const proc = makeProc();
     const controller = new AbortController();
-    const promise = spawnAndCollect(BASE_CONFIG, "run", controller.signal);
+    const { promise } = spawnAndCollect(BASE_CONFIG, "run", controller.signal);
     proc.emit("close", 0);
     await promise;
     expect(proc.kill).not.toHaveBeenCalled();
   });
 
-  it("accepts an onLine callback without throwing", async () => {
+  it("resolves to a string and exposes lines[]", async () => {
     const proc = makeProc();
-    const received: string[] = [];
-    const promise = spawnAndCollect(BASE_CONFIG, "run", undefined, (l) => received.push(l));
-    proc.emit("close", 0);
-    await promise;
-    // No assertions needed — test passes if no exception is thrown
-  });
-
-  it("works correctly when onLine is undefined", async () => {
-    const proc = makeProc();
-    const promise = spawnAndCollect(BASE_CONFIG, "run");
+    const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run");
     proc.emit("close", 0);
     const output = await promise;
     expect(typeof output).toBe("string");
+    expect(Array.isArray(lines)).toBe(true);
   });
 });
 
@@ -228,47 +221,57 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
   });
 });
 
-describe("processOutputLine", () => {
-  it("pushes normal lines to the lines array and calls onLine", () => {
+describe("OutputLineProcessor", () => {
+  it("returns null and pushes to lines[] for normal output", () => {
+    const processor = new OutputLineProcessor();
     const lines: string[] = [];
     const onLine = vi.fn();
-    processOutputLine("hello world", lines, onLine);
+    const result = processor.process("hello world", lines, onLine);
+    expect(result).toBeNull();
     expect(lines).toEqual(["hello world"]);
     expect(onLine).toHaveBeenCalledWith("hello world");
   });
 
-  it("strips __PROGRESS__ lines from lines array and calls onProgress", () => {
+  it("returns progress with empty artifacts when no __ARTIFACT__ lines preceded it", () => {
+    const processor = new OutputLineProcessor();
     const lines: string[] = [];
-    const onProgress = vi.fn();
-    processOutputLine(`${PROGRESS_PREFIX}Fetching tickets`, lines, undefined, onProgress);
+    const result = processor.process(`${PROGRESS_PREFIX}Fetching tickets`, lines);
+    expect(result).toEqual({ message: "Fetching tickets", artifacts: {} });
     expect(lines).toHaveLength(0);
-    expect(onProgress).toHaveBeenCalledWith("Fetching tickets");
   });
 
   it("does not call onLine for __PROGRESS__ lines", () => {
-    const lines: string[] = [];
+    const processor = new OutputLineProcessor();
     const onLine = vi.fn();
-    processOutputLine(`${PROGRESS_PREFIX}skip me`, lines, onLine);
+    processor.process(`${PROGRESS_PREFIX}skip me`, [], onLine);
     expect(onLine).not.toHaveBeenCalled();
   });
 
-  it("works with no callbacks", () => {
-    const lines: string[] = [];
-    expect(() => processOutputLine("normal", lines)).not.toThrow();
-    expect(() => processOutputLine(`${PROGRESS_PREFIX}msg`, lines)).not.toThrow();
+  it("bundles preceding __ARTIFACT__ lines with the next __PROGRESS__ line", () => {
+    const processor = new OutputLineProcessor();
+    processor.process(`${ARTIFACT_PREFIX}summary:Found 3 tickets`, []);
+    processor.process(`${ARTIFACT_PREFIX}output:key:value:pair`, []);
+    const result = processor.process(`${PROGRESS_PREFIX}Done`, []);
+    expect(result).toEqual({
+      message: "Done",
+      artifacts: { summary: "Found 3 tickets", output: "key:value:pair" },
+    });
   });
 
-  it("mixes normal and progress lines correctly across multiple calls", () => {
+  it("resets artifact buffer after each __PROGRESS__ flush", () => {
+    const processor = new OutputLineProcessor();
+    processor.process(`${ARTIFACT_PREFIX}a:first`, []);
+    processor.process(`${PROGRESS_PREFIX}Step 1`, []);
+    const result = processor.process(`${PROGRESS_PREFIX}Step 2`, []);
+    expect(result).toEqual({ message: "Step 2", artifacts: {} });
+  });
+
+  it("returns null for normal lines even when no onLine provided", () => {
+    const processor = new OutputLineProcessor();
     const lines: string[] = [];
-    const onLine = vi.fn();
-    const onProgress = vi.fn();
-    processOutputLine("line 1", lines, onLine, onProgress);
-    processOutputLine(`${PROGRESS_PREFIX}step 2`, lines, onLine, onProgress);
-    processOutputLine("line 3", lines, onLine, onProgress);
-    expect(lines).toEqual(["line 1", "line 3"]);
-    expect(onLine).toHaveBeenCalledTimes(2);
-    expect(onProgress).toHaveBeenCalledTimes(1);
-    expect(onProgress).toHaveBeenCalledWith("step 2");
+    const result = processor.process("normal", lines);
+    expect(result).toBeNull();
+    expect(lines).toEqual(["normal"]);
   });
 });
 
