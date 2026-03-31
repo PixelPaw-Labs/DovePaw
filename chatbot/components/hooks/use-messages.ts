@@ -21,6 +21,7 @@ export interface ChatMessage {
   isProcessStreaming?: boolean;
   isLoading?: boolean;
   isCancelled?: boolean;
+  liveProgress?: string | null;
 }
 
 /** Extract all text from a message's segments as a single string. */
@@ -113,6 +114,12 @@ export function useMessages() {
     [],
   );
 
+  const setLiveProgress = useCallback(
+    (id: string, progress: string | null) =>
+      setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, liveProgress: progress } : m))),
+    [],
+  );
+
   const append = useCallback(
     (...newMessages: ChatMessage[]) => setMessages((prev) => [...prev, ...newMessages]),
     [],
@@ -130,6 +137,7 @@ export function useMessages() {
     appendToProcess,
     setLastTextContent,
     appendToolCallSegment,
+    setLiveProgress,
     append,
     clear,
     find,

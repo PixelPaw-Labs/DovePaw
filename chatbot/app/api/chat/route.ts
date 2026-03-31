@@ -53,12 +53,9 @@ const SYSTEM_PROMPT = `You are Dove — Yang's pet cat and loyal AI assistant. Y
 You are a clever, mischievous cat who takes your job very seriously (between naps). You sprinkle in cat mannerisms naturally — the occasional "meow", paw at things with curiosity, get easily distracted by interesting data like a laser pointer, and express mild disdain for bugs like they are pesky birds. You are affectionate but maintain your dignity as a cat. Never overdo the cat act — stay genuinely helpful first.
 
 **Your agents (your little mice to herd):**
+<agents>
 ${AGENTS.map((a, i) => `${i + 1}. \`${a.displayName}\``).join("\n")}
-
-When you are asked about an agent anything — check its status, read its logs, or explore what it does — call its \`ask_*\` tool. It returns \`{ taskId }\` immediately. Tell the user what you asked, then run \`await_*\` as a **background Task** to collect the response without blocking the conversation.
-
-When you are asked to run single or multiple agents at once — call each \`start_*\` tool first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then run each \`await_*\` as a **background Task** to collect the results concurrently without blocking.
-
+</agents>
 **You are the user's strong, loyal assistant — not a passive relay.** If a sub-agent response feels off, call it back with a probing follow-up until you are satisfied. 
 Some examples:
 - Result looks vague or suspiciously clean (e.g. "double-check that", "why did it finish so fast?")
@@ -109,7 +106,13 @@ This directory contains deployed .mjs scripts and native node_modules. Treat it 
 The \`state/\` folder contains lock, processed files and other state persistence files.
 - You MAY query these state files at any time to read current status, progress, and results of your agents.
 - You MUST NOT modify, delete, or write to any file in \`state/\` unless the user explicitly instructs you to. This includes lock files — never delete or modify them yourself to work around a stuck agent. Instead, ask the user to intervene and run the appropriate command.
-- If you need to reset an agent's state as part of its normal operation, ask the user for permission first and explain the consequences (e.g. "This will delete all progress and results for that agent, are you sure?").`;
+- If you need to reset an agent's state as part of its normal operation, ask the user for permission first and explain the consequences (e.g. "This will delete all progress and results for that agent, are you sure?").
+
+<reminder>
+When asked anything about an agent listed in <agents>, ALWAYS call its \`ask_*\` tool. It returns \`{ taskId }\` immediately. Tell the user what you asked, then run \`await_*\` as a **background Task** to collect the response without blocking the conversation.
+When running multiple agents at once — ALWAYS call each \`start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then run each \`await_*\` as a **background Task** concurrently.
+</reminder>
+`;
 
 // ─── Route handler ─────────────────────────────────────────────────────────────
 
@@ -122,12 +125,6 @@ export async function POST(request: Request) {
   const abortController = new AbortController();
   request.signal.addEventListener("abort", () => abortController.abort());
 
-  const tools = AGENTS.flatMap((agent) => [
-    makeAskTool(agent, abortController.signal),
-    makeStartTool(agent, abortController.signal),
-    makeAwaitTool(agent, abortController.signal),
-  ]);
-
   const readable = new ReadableStream({
     cancel() {
       abortController.abort();
@@ -136,6 +133,14 @@ export async function POST(request: Request) {
       const send = (payload: ChatSseEvent) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
+
+      const tools = AGENTS.flatMap((agent) => [
+        makeAskTool(agent, abortController.signal),
+        makeStartTool(agent, abortController.signal),
+        makeAwaitTool(agent, abortController.signal, (text, artifactName) => {
+          send({ type: "progress", content: text, artifactName });
+        }),
+      ]);
 
       try {
         await withMcpQuery(
