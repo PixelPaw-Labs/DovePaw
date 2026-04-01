@@ -17,6 +17,7 @@ The skill routing list is **built dynamically at runtime** by scanning the `skil
 Follow the `zendesk-triager/main.ts` pattern with one addition: a `loadAvailableSkills()` helper that dynamically enumerates skills.
 
 **Config:**
+
 ```typescript
 const REPOS = parseRepos("REPO_LIST");
 const TICKET_KEY = process.argv[2] || "";
@@ -24,30 +25,36 @@ const SKILLS_DIR = join(dirname(fileURLToPath(import.meta.url)), "../../skills")
 ```
 
 **Dynamic skill loader** — pure Node, no extra deps. Scans `skills/*/SKILL.md` in parallel and parses `name` + `description` from YAML frontmatter:
+
 ```typescript
 async function loadAvailableSkills(): Promise<{ name: string; description: string }[]> {
   const dirs = await readdir(SKILLS_DIR, { withFileTypes: true });
   const results = await Promise.all(
-    dirs.filter((d) => d.isDirectory()).map(async (dir) => {
-      const skillMdPath = join(SKILLS_DIR, dir.name, "SKILL.md");
-      try {
-        const content = await readFile(skillMdPath, "utf8");
-        const match = content.match(/^---\n([\s\S]*?)\n---/);
-        if (!match) return null;
-        const fm = match[1];
-        const nameMatch = fm.match(/^name:\s*(.+)$/m);
-        const descMatch = fm.match(/^description:\s*["']?(.*?)["']?\s*$/m);
-        if (nameMatch && descMatch)
-          return { name: nameMatch[1].trim(), description: descMatch[1].trim() };
-      } catch { /* skip */ }
-      return null;
-    }),
+    dirs
+      .filter((d) => d.isDirectory())
+      .map(async (dir) => {
+        const skillMdPath = join(SKILLS_DIR, dir.name, "SKILL.md");
+        try {
+          const content = await readFile(skillMdPath, "utf8");
+          const match = content.match(/^---\n([\s\S]*?)\n---/);
+          if (!match) return null;
+          const fm = match[1];
+          const nameMatch = fm.match(/^name:\s*(.+)$/m);
+          const descMatch = fm.match(/^description:\s*["']?(.*?)["']?\s*$/m);
+          if (nameMatch && descMatch)
+            return { name: nameMatch[1].trim(), description: descMatch[1].trim() };
+        } catch {
+          /* skip */
+        }
+        return null;
+      }),
   );
   return results.filter((s): s is { name: string; description: string } => s !== null);
 }
 ```
 
 **Prompt builder:**
+
 ```typescript
 function buildPrompt(skills: { name: string; description: string }[]): string {
   return [
@@ -71,15 +78,20 @@ function buildPrompt(skills: { name: string; description: string }[]): string {
     ...skills.map((s) => `- **${s.name}**: ${s.description}`),
     "",
     "3. Report which skill(s) you chose, the reasoning, and a brief outcome summary.",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 ```
 
 **Main:**
+
 ```typescript
 async function main() {
   if (!TICKET_KEY) {
-    log("ERROR: No ticket key provided. Pass a JIRA ticket key as the first argument (e.g., EC-123).");
+    log(
+      "ERROR: No ticket key provided. Pass a JIRA ticket key as the first argument (e.g., EC-123).",
+    );
     process.exit(1);
   }
   log("=== JIRA Ticket Runner started ===");
@@ -107,7 +119,16 @@ async function main() {
 Add `Ticket` to the lucide-react import and append a new entry to `AGENTS`:
 
 ```typescript
-import { Brain, Zap, Radar, FlaskConical, BellRing, LifeBuoy, GitMerge, Ticket } from "lucide-react";
+import {
+  Brain,
+  Zap,
+  Radar,
+  FlaskConical,
+  BellRing,
+  LifeBuoy,
+  GitMerge,
+  Ticket,
+} from "lucide-react";
 ```
 
 ```typescript
@@ -145,7 +166,7 @@ const SAMPLE_PORTS = {
   memory_distiller: 51004,
   oncall_analyzer: 51005,
   zendesk_triager: 51006,
-  jira_ticket_runner: 51007,  // ← add
+  jira_ticket_runner: 51007, // ← add
   dependabot_merger: 51008,
 };
 ```
@@ -154,20 +175,20 @@ const SAMPLE_PORTS = {
 
 ## Critical Files
 
-| File | Action |
-|------|--------|
-| `agents/jira-ticket-runner/main.ts` | **Create** |
-| `lib/agents.ts` | **Modify** — add `Ticket` icon import + agent entry |
+| File                                            | Action                                                |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| `agents/jira-ticket-runner/main.ts`             | **Create**                                            |
+| `lib/agents.ts`                                 | **Modify** — add `Ticket` icon import + agent entry   |
 | `chatbot/a2a/lib/__tests__/base-server.test.ts` | **Modify** — add `jira_ticket_runner` port to fixture |
 
 ### Referenced Utilities (reuse, do not recreate)
 
-| Utility | File |
-|---------|------|
-| `spawnClaudeWithSignals`, `AUTONOMY_PREFIX` | `agents/lib/claude.ts` |
+| Utility                                           | File                   |
+| ------------------------------------------------- | ---------------------- |
+| `spawnClaudeWithSignals`, `AUTONOMY_PREFIX`       | `agents/lib/claude.ts` |
 | `createLogger`, `makeTimestamp`, `cleanupOldLogs` | `agents/lib/logger.ts` |
-| `parseRepos` | `agents/lib/repos.ts` |
-| `agentPersistentLogDir` | `lib/paths.ts` |
+| `parseRepos`                                      | `agents/lib/repos.ts`  |
+| `agentPersistentLogDir`                           | `lib/paths.ts`         |
 
 ---
 
