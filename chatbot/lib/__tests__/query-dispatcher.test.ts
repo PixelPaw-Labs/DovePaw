@@ -27,10 +27,17 @@ describe("SseQueryDispatcher", () => {
     expect(send).toHaveBeenCalledWith({ type: "thinking", content: "hmm" });
   });
 
-  it("onToolCall sends tool_call event", () => {
+  it("onToolCall sends tool_call event and a progress event for the workflow panel", () => {
     const send = makeSend();
     new SseQueryDispatcher(send).onToolCall("Bash");
     expect(send).toHaveBeenCalledWith({ type: "tool_call", name: "Bash" });
+    expect(send).toHaveBeenCalledWith({
+      type: "progress",
+      result: {
+        output: "",
+        progress: [{ message: "Bash", artifacts: { [ARTIFACT.TOOL_CALL]: "Bash" } }],
+      },
+    });
   });
 
   it("onToolInput sends tool_input event", () => {
@@ -64,10 +71,17 @@ describe("SseQueryDispatcher", () => {
       expect(send).toHaveBeenCalledWith({ type: "thinking", content: "hmm" });
     });
 
-    it("maps tool-call artifact to tool_call event", () => {
+    it("maps tool-call artifact to tool_call event and progress event", () => {
       const send = makeSend();
       new SseQueryDispatcher(send).onArtifact(ARTIFACT.TOOL_CALL, "Read");
       expect(send).toHaveBeenCalledWith({ type: "tool_call", name: "Read" });
+      expect(send).toHaveBeenCalledWith({
+        type: "progress",
+        result: {
+          output: "",
+          progress: [{ message: "Read", artifacts: { [ARTIFACT.TOOL_CALL]: "Read" } }],
+        },
+      });
     });
 
     it("maps tool-input artifact to tool_input event", () => {

@@ -72,6 +72,13 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
 
   onToolCall(name: string): void {
     this.send({ type: "tool_call", name });
+    this.send({
+      type: "progress",
+      result: {
+        output: "",
+        progress: [{ message: name, artifacts: { [ARTIFACT.TOOL_CALL]: name } }],
+      },
+    });
   }
 
   onToolInput(content: string): void {
