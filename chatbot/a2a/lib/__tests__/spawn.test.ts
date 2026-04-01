@@ -258,6 +258,14 @@ describe("OutputLineProcessor", () => {
     });
   });
 
+  it("skips __ARTIFACT__ lines whose content is empty after trim", () => {
+    const processor = new OutputLineProcessor();
+    processor.process(ARTIFACT_PREFIX, []);
+    processor.process(`${ARTIFACT_PREFIX}   `, []);
+    const result = processor.process(`${PROGRESS_PREFIX}Done`, []);
+    expect(result).toEqual({ message: "Done", artifacts: {} });
+  });
+
   it("resets artifact buffer after each __PROGRESS__ flush", () => {
     const processor = new OutputLineProcessor();
     processor.process(`${ARTIFACT_PREFIX}a:first`, []);

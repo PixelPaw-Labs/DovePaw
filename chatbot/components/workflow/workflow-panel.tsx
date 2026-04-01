@@ -1,8 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Dagre, { type GraphLabel, type NodeLabel, type EdgeLabel } from "@dagrejs/dagre";
-import { Graph as DagreGraph } from "@dagrejs/graphlib";
 import type { Edge, Node as FlowNode } from "@xyflow/react";
 import { Canvas } from "@/components/ai-elements/canvas";
 import { Edge as WorkflowEdge } from "@/components/ai-elements/edge";
@@ -12,8 +10,9 @@ import { GitBranchPlus, OctagonX } from "lucide-react";
 import type { ChatMessage } from "@/components/hooks/use-messages";
 const NODE_WIDTH = 256; // w-64
 const CIRCLE_SIZE = 32;
-const NODE_SEP = 40; // horizontal gap between nodes on the same rank
-const RANK_SEP = 60; // vertical gap between ranks
+const NODE_SEP = 40; // horizontal gap between nodes in the same row
+const ROW_GAP = 60; // vertical gap between rows
+const PADDING = 40; // canvas inset on all sides
 
 function estimateNodeHeight(entry: { artifacts: Record<string, string> }): number {
   const headerHeight = 60;
@@ -64,7 +63,10 @@ function progressNodeKey(message: string, artifacts: Record<string, string>): st
   return `${message}\x02${artifactPart}`;
 }
 
-export function buildGraph(entries: WorkflowEntry[]): {
+export function buildGraph(
+  entries: WorkflowEntry[],
+  canvasWidth = 800,
+): {
   nodes: FlowNode[];
   edges: Edge[];
 } {
@@ -129,7 +131,7 @@ export function buildGraph(entries: WorkflowEntry[]): {
     nodes.push({
       id: nodeId,
       type: isCircle ? "circle" : "progress",
-      position: { x: 0, y: 0 }, // dagre will set final positions below
+      position: { x: 0, y: 0 }, // layout pass below sets final positions
       data: isCircle
         ? ({ variant: circleVariant } satisfies CircleNodeData)
         : ({
@@ -143,30 +145,44 @@ export function buildGraph(entries: WorkflowEntry[]): {
     });
   }
 
-  // Use dagre to compute a proper DAG layout (handles branches, merges, parallel paths)
-  const g = new DagreGraph<GraphLabel, NodeLabel, EdgeLabel>();
-  g.setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "TB", nodesep: NODE_SEP, ranksep: RANK_SEP });
+  // Two-pass wrapping layout: nodes flow left→right and wrap into new rows when
+  // the next node would exceed the available canvas width.
+
+  // Pass 1 — assign each node a row index and x offset, accumulate row heights.
+  const available = Math.max(canvasWidth - PADDING * 2, NODE_WIDTH);
+  type LayoutItem = { node: FlowNode; row: number; x: number; h: number };
+  const items: LayoutItem[] = [];
+  const rowHeights: number[] = [];
+  let row = 0;
+  let curX = PADDING;
+  let rowMaxH = 0;
 
   for (const node of nodes) {
     const w = node.type === "circle" ? CIRCLE_SIZE : NODE_WIDTH;
     const h = nodeHeights.get(node.id) ?? CIRCLE_SIZE;
-    g.setNode(node.id, { width: w, height: h });
+
+    if (curX > PADDING && curX + w > PADDING + available) {
+      rowHeights.push(rowMaxH);
+      row++;
+      curX = PADDING;
+      rowMaxH = 0;
+    }
+
+    items.push({ node, row, x: curX, h });
+    curX += w + NODE_SEP;
+    rowMaxH = Math.max(rowMaxH, h);
+  }
+  rowHeights.push(rowMaxH); // last row
+
+  // Pass 2 — compute each row's top-Y offset, then set final positions.
+  // Nodes shorter than their row are vertically centred within it.
+  const rowY: number[] = [PADDING];
+  for (let i = 1; i < rowHeights.length; i++) {
+    rowY.push(rowY[i - 1] + rowHeights[i - 1] + ROW_GAP);
   }
 
-  for (const edge of edges) {
-    g.setEdge(edge.source, edge.target);
-  }
-
-  Dagre.layout(g);
-
-  // Dagre returns center-based coordinates; ReactFlow uses top-left
-  for (const node of nodes) {
-    const pos = g.node(node.id);
-    if (pos.x === undefined || pos.y === undefined) continue;
-    const w = node.type === "circle" ? CIRCLE_SIZE : NODE_WIDTH;
-    const h = nodeHeights.get(node.id) ?? CIRCLE_SIZE;
-    node.position = { x: pos.x - w / 2, y: pos.y - h / 2 };
+  for (const { node, row: r, x, h } of items) {
+    node.position = { x, y: rowY[r] + (rowHeights[r] - h) / 2 };
   }
 
   return { nodes, edges };
@@ -196,6 +212,19 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
     [messages],
   );
 
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [canvasWidth, setCanvasWidth] = React.useState(800);
+
+  React.useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      setCanvasWidth(entry.contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const { nodes, edges } = React.useMemo(() => {
     if (!activeMsg?.agentProgress) return { nodes: [], edges: [] };
     const entries = buildEntries(
@@ -203,8 +232,8 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
       activeMsg.isLoading ?? false,
       activeMsg.isCancelled ?? false,
     );
-    return buildGraph(entries);
-  }, [activeMsg]);
+    return buildGraph(entries, canvasWidth);
+  }, [activeMsg, canvasWidth]);
 
   const [renderedNodes, setRenderedNodes] = React.useState(nodes);
   const [renderedEdges, setRenderedEdges] = React.useState(edges);
@@ -236,7 +265,7 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
           <span className="text-xs text-amber-600 font-medium">Stopped by user</span>
         </div>
       )}
-      <div className="relative flex-1 min-h-0">
+      <div ref={containerRef} className="relative flex-1 min-h-0">
         <Canvas
           nodes={renderedNodes}
           edges={renderedEdges}

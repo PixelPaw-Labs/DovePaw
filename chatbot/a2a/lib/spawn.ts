@@ -40,7 +40,8 @@ export class OutputLineProcessor {
       return { message, artifacts };
     }
     if (line.startsWith(ARTIFACT_PREFIX)) {
-      const rest = line.slice(ARTIFACT_PREFIX.length);
+      const rest = line.slice(ARTIFACT_PREFIX.length).trim();
+      if (!rest) return null;
       const sep = rest.indexOf(":");
       if (sep !== -1) this.pendingArtifacts[rest.slice(0, sep)] = rest.slice(sep + 1);
       return null;
