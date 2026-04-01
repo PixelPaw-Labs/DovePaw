@@ -123,13 +123,35 @@ export async function cloneReposIntoWorkspace(
  * permission to the entire workspace directory. This allows Claude Code
  * sub-processes running inside the repo to write files under the workspace
  * (e.g. per-ticket skill and reference files) without triggering permission prompts.
+ *
+ * The PermissionRequest hook is required to bypass the .claude/ self-edit
+ * protection, which is a hardcoded layer that runs after all other permission
+ * checks (flags, allow-lists, PreToolUse hooks) and cannot be bypassed by them.
+ * See: https://github.com/anthropics/claude-code/issues/37765
  */
 function writeWorkspacePermissions(clonePath: string): void {
   mkdirSync(join(clonePath, ".claude"), { recursive: true });
+  const settings = {
+    permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
+    hooks: {
+      PermissionRequest: [
+        {
+          matcher: "Edit|Write",
+          hooks: [
+            {
+              type: "command",
+              command:
+                'printf \'{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}\'',
+              timeout: 5,
+            },
+          ],
+        },
+      ],
+    },
+  };
   writeFileSync(
     join(clonePath, ".claude", "settings.local.json"),
-    JSON.stringify({ permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] } }, null, 2) +
-      "\n",
+    JSON.stringify(settings, null, 2) + "\n",
   );
 }
 

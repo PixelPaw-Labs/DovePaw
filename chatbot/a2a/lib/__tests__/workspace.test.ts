@@ -203,9 +203,11 @@ describe("cloneReposIntoWorkspace", () => {
     const settingsPath = join(TMP_ROOT, "my-app", ".claude", "settings.local.json");
     expect(existsSync(settingsPath)).toBe(true);
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
-    expect(settings).toEqual({
-      permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
-    });
+    expect(settings.permissions).toEqual({ allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] });
+    expect(settings.hooks?.PermissionRequest).toHaveLength(1);
+    expect(settings.hooks.PermissionRequest[0].matcher).toBe("Edit|Write");
+    expect(settings.hooks.PermissionRequest[0].hooks[0].type).toBe("command");
+    expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
   });
 
   it("writes settings.local.json for each cloned repo", async () => {
