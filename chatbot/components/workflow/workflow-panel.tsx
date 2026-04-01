@@ -48,7 +48,7 @@ const edgeTypes = {
   temporary: WorkflowEdge.Temporary,
 };
 
-interface WorkflowEntry {
+export interface WorkflowEntry {
   message: string;
   artifacts: Record<string, string>;
   isCancelled?: boolean;
@@ -145,10 +145,20 @@ export function buildGraph(entries: WorkflowEntry[]): {
 
 interface WorkflowPanelProps {
   messages: ChatMessage[];
-  processing?: boolean;
 }
 
-export function WorkflowPanel({ messages, processing = false }: WorkflowPanelProps) {
+export function buildEntries(
+  base: WorkflowEntry[],
+  isLoading: boolean,
+  isCancelled: boolean,
+): WorkflowEntry[] {
+  if (isCancelled)
+    return [...base, { message: "Stopped by user", artifacts: {}, isCancelled: true }];
+  if (!isLoading) return [...base, { message: "Completed", artifacts: {}, isCompleted: true }];
+  return base;
+}
+
+export function WorkflowPanel({ messages }: WorkflowPanelProps) {
   const activeMsg = React.useMemo(
     () =>
       messages
@@ -159,12 +169,11 @@ export function WorkflowPanel({ messages, processing = false }: WorkflowPanelPro
 
   const { nodes, edges } = React.useMemo(() => {
     if (!activeMsg?.agentProgress) return { nodes: [], edges: [] };
-    const base = activeMsg.agentProgress;
-    const entries = activeMsg.isCancelled
-      ? [...base, { message: "Stopped by user", artifacts: {}, isCancelled: true }]
-      : !activeMsg.isLoading && !processing
-        ? [...base, { message: "Completed", artifacts: {}, isCompleted: true }]
-        : base;
+    const entries = buildEntries(
+      activeMsg.agentProgress,
+      activeMsg.isLoading ?? false,
+      activeMsg.isCancelled ?? false,
+    );
     return buildGraph(entries);
   }, [activeMsg]);
 
