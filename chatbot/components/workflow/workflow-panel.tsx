@@ -55,22 +55,65 @@ interface WorkflowEntry {
   isCompleted?: boolean;
 }
 
-function buildGraph(entries: WorkflowEntry[]): {
+export function buildGraph(entries: WorkflowEntry[]): {
   nodes: FlowNode[];
   edges: Edge[];
 } {
   let y = 0;
+  const nodes: FlowNode[] = [];
+  const edges: Edge[] = [];
+  const seenMessages = new Map<string, string>(); // message -> nodeId
+  const seenEdges = new Set<string>(); // "sourceId->targetId"
+  let prevNodeId: string | null = null;
 
-  const nodes: FlowNode[] = entries.map((entry, i) => {
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
     const isFirst = i === 0;
     const isCircle = isFirst || !!entry.isCancelled || !!entry.isCompleted;
+    const isLast = i === entries.length - 1;
+
+    // Check for existing progress node with same message
+    const existingNodeId = !isCircle ? seenMessages.get(entry.message) : undefined;
+    const nodeId = existingNodeId ?? `node-${i}`;
+
+    // Add edge from previous node, skipping self-loops and duplicate source->target pairs
+    if (prevNodeId !== null && prevNodeId !== nodeId) {
+      const edgeKey = `${prevNodeId}->${nodeId}`;
+      if (!seenEdges.has(edgeKey)) {
+        seenEdges.add(edgeKey);
+        edges.push({
+          id: `edge-${edgeKey}`,
+          source: prevNodeId,
+          target: nodeId,
+          type: "animated",
+        });
+      }
+    }
+
+    prevNodeId = nodeId;
+
+    if (existingNodeId !== undefined) {
+      // Node already exists — update isLast if needed so source handle is correct
+      if (isLast) {
+        const existing = nodes.find((n) => n.id === existingNodeId);
+        if (existing) {
+          existing.data = { ...existing.data, isLast: true };
+        }
+      }
+      continue;
+    }
+
+    // New node
+    if (!isCircle) seenMessages.set(entry.message, nodeId);
+
     const circleVariant: CircleVariant = isFirst
       ? "start"
       : entry.isCompleted
         ? "completed"
         : "stopped";
-    const node: FlowNode = {
-      id: `node-${i}`,
+
+    nodes.push({
+      id: nodeId,
       type: isCircle ? "circle" : "progress",
       position: { x: isCircle ? CIRCLE_X : 0, y },
       data: isCircle
@@ -79,21 +122,13 @@ function buildGraph(entries: WorkflowEntry[]): {
             message: entry.message,
             artifacts: entry.artifacts,
             index: i,
-            isLast: i === entries.length - 1,
+            isLast,
           } satisfies ProgressNodeData),
       draggable: false,
       selectable: false,
-    };
+    });
     y += (isCircle ? CIRCLE_SIZE : estimateNodeHeight(entry)) + NODE_GAP_Y;
-    return node;
-  });
-
-  const edges: Edge[] = entries.slice(1).map((_, i) => ({
-    id: `edge-${i}`,
-    source: `node-${i}`,
-    target: `node-${i + 1}`,
-    type: "animated",
-  }));
+  }
 
   return { nodes, edges };
 }
