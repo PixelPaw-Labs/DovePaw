@@ -54,7 +54,7 @@ export function AgentChat() {
       const onMove = (ev: MouseEvent) => {
         if (!isResizing.current) return;
         const delta = startX - ev.clientX;
-        setPanelWidth(Math.max(260, Math.min(700, startWidth + delta)));
+        setPanelWidth(Math.max(260, startWidth + delta));
       };
       const onUp = () => {
         isResizing.current = false;

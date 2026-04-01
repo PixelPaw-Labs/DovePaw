@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Dagre, { type GraphLabel, type NodeLabel, type EdgeLabel } from "@dagrejs/dagre";
+import { Graph as DagreGraph } from "@dagrejs/graphlib";
 import type { Edge, Node as FlowNode } from "@xyflow/react";
 import { Canvas } from "@/components/ai-elements/canvas";
 import { Edge as WorkflowEdge } from "@/components/ai-elements/edge";
@@ -8,11 +10,10 @@ import { Node } from "@/components/ai-elements/node";
 import { ProgressNode, type ProgressNodeData } from "./progress-node";
 import { GitBranchPlus, OctagonX } from "lucide-react";
 import type { ChatMessage } from "@/components/hooks/use-messages";
-
-const NODE_GAP_Y = 40;
 const NODE_WIDTH = 256; // w-64
 const CIRCLE_SIZE = 32;
-const CIRCLE_X = (NODE_WIDTH - CIRCLE_SIZE) / 2;
+const NODE_SEP = 40; // horizontal gap between nodes on the same rank
+const RANK_SEP = 60; // vertical gap between ranks
 
 function estimateNodeHeight(entry: { artifacts: Record<string, string> }): number {
   const headerHeight = 60;
@@ -67,11 +68,11 @@ export function buildGraph(entries: WorkflowEntry[]): {
   nodes: FlowNode[];
   edges: Edge[];
 } {
-  let y = 0;
   const nodes: FlowNode[] = [];
   const edges: Edge[] = [];
   const seenNodes = new Map<string, string>(); // progressNodeKey -> nodeId
   const seenEdges = new Set<string>(); // "sourceId->targetId"
+  const nodeHeights = new Map<string, number>(); // nodeId -> height for dagre
   let prevNodeId: string | null = null;
 
   for (let i = 0; i < entries.length; i++) {
@@ -122,10 +123,13 @@ export function buildGraph(entries: WorkflowEntry[]): {
         ? "completed"
         : "stopped";
 
+    const h = isCircle ? CIRCLE_SIZE : estimateNodeHeight(entry);
+    nodeHeights.set(nodeId, h);
+
     nodes.push({
       id: nodeId,
       type: isCircle ? "circle" : "progress",
-      position: { x: isCircle ? CIRCLE_X : 0, y },
+      position: { x: 0, y: 0 }, // dagre will set final positions below
       data: isCircle
         ? ({ variant: circleVariant } satisfies CircleNodeData)
         : ({
@@ -137,7 +141,32 @@ export function buildGraph(entries: WorkflowEntry[]): {
       draggable: false,
       selectable: false,
     });
-    y += (isCircle ? CIRCLE_SIZE : estimateNodeHeight(entry)) + NODE_GAP_Y;
+  }
+
+  // Use dagre to compute a proper DAG layout (handles branches, merges, parallel paths)
+  const g = new DagreGraph<GraphLabel, NodeLabel, EdgeLabel>();
+  g.setDefaultEdgeLabel(() => ({}));
+  g.setGraph({ rankdir: "TB", nodesep: NODE_SEP, ranksep: RANK_SEP });
+
+  for (const node of nodes) {
+    const w = node.type === "circle" ? CIRCLE_SIZE : NODE_WIDTH;
+    const h = nodeHeights.get(node.id) ?? CIRCLE_SIZE;
+    g.setNode(node.id, { width: w, height: h });
+  }
+
+  for (const edge of edges) {
+    g.setEdge(edge.source, edge.target);
+  }
+
+  Dagre.layout(g);
+
+  // Dagre returns center-based coordinates; ReactFlow uses top-left
+  for (const node of nodes) {
+    const pos = g.node(node.id);
+    if (pos.x === undefined || pos.y === undefined) continue;
+    const w = node.type === "circle" ? CIRCLE_SIZE : NODE_WIDTH;
+    const h = nodeHeights.get(node.id) ?? CIRCLE_SIZE;
+    node.position = { x: pos.x - w / 2, y: pos.y - h / 2 };
   }
 
   return { nodes, edges };

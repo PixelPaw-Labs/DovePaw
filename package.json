@@ -26,6 +26,7 @@
     "@a2a-js/sdk": "latest",
     "@anthropic-ai/claude-agent-sdk": "latest",
     "@codemirror/lang-json": "^6.0.2",
+    "@dagrejs/dagre": "^3.0.0",
     "@ladybugdb/core": "latest",
     "@napi-rs/keyring": "^1.2.0",
     "@radix-ui/react-collapsible": "^1.1.12",
