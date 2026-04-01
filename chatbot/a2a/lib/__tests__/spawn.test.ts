@@ -273,6 +273,30 @@ describe("OutputLineProcessor", () => {
     expect(result).toBeNull();
     expect(lines).toEqual(["normal"]);
   });
+
+  it("truncates artifact value at the first newline if value contains newlines (documents the breakage)", () => {
+    // If emitProgress wrote a multi-line artifact value (e.g. formatted JSON),
+    // stdout is split line-by-line so only the first line is seen as an ARTIFACT
+    // sentinel — the rest fall through as regular output. This test documents why
+    // emitProgress must strip newlines from artifact values before writing.
+    const processor = new OutputLineProcessor();
+    const lines: string[] = [];
+
+    // Simulate what stdout would look like if emitProgress did NOT strip newlines:
+    //   __ARTIFACT__:plan:{
+    //     "layers": []
+    //   }
+    //   __PROGRESS__:Prioritized layers
+    processor.process(`${ARTIFACT_PREFIX}plan:{`, lines);
+    processor.process(`  "layers": []`, lines); // continuation line → falls to lines[]
+    processor.process(`}`, lines); // closing brace → falls to lines[]
+    const result = processor.process(`${PROGRESS_PREFIX}Prioritized layers`, lines);
+
+    // Artifact is truncated — only the first line was captured
+    expect(result).toEqual({ message: "Prioritized layers", artifacts: { plan: "{" } });
+    // The JSON continuation lines were misrouted as regular output
+    expect(lines).toEqual(['  "layers": []', "}"]);
+  });
 });
 
 describe("AbortSignal pre-abort semantics (justifies signal.aborted pre-check in spawnAndCollect)", () => {
