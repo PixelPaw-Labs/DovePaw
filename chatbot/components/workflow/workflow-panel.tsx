@@ -55,6 +55,14 @@ interface WorkflowEntry {
   isCompleted?: boolean;
 }
 
+function progressNodeKey(message: string, artifacts: Record<string, string>): string {
+  const artifactPart = Object.entries(artifacts)
+    .toSorted(([a], [b]) => a.localeCompare(b))
+    .map(([k, v]) => `${k}\x00${v}`)
+    .join("\x01");
+  return `${message}\x02${artifactPart}`;
+}
+
 export function buildGraph(entries: WorkflowEntry[]): {
   nodes: FlowNode[];
   edges: Edge[];
@@ -62,7 +70,7 @@ export function buildGraph(entries: WorkflowEntry[]): {
   let y = 0;
   const nodes: FlowNode[] = [];
   const edges: Edge[] = [];
-  const seenMessages = new Map<string, string>(); // message -> nodeId
+  const seenNodes = new Map<string, string>(); // progressNodeKey -> nodeId
   const seenEdges = new Set<string>(); // "sourceId->targetId"
   let prevNodeId: string | null = null;
 
@@ -72,8 +80,10 @@ export function buildGraph(entries: WorkflowEntry[]): {
     const isCircle = isFirst || !!entry.isCancelled || !!entry.isCompleted;
     const isLast = i === entries.length - 1;
 
-    // Check for existing progress node with same message
-    const existingNodeId = !isCircle ? seenMessages.get(entry.message) : undefined;
+    // Check for existing progress node with same message + artifacts
+    const existingNodeId = !isCircle
+      ? seenNodes.get(progressNodeKey(entry.message, entry.artifacts))
+      : undefined;
     const nodeId = existingNodeId ?? `node-${i}`;
 
     // Add edge from previous node, skipping self-loops and duplicate source->target pairs
@@ -104,7 +114,7 @@ export function buildGraph(entries: WorkflowEntry[]): {
     }
 
     // New node
-    if (!isCircle) seenMessages.set(entry.message, nodeId);
+    if (!isCircle) seenNodes.set(progressNodeKey(entry.message, entry.artifacts), nodeId);
 
     const circleVariant: CircleVariant = isFirst
       ? "start"

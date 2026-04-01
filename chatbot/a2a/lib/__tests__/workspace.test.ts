@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readlinkSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, lstatSync, readlinkSync, readFileSync, rmSync, mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -193,6 +193,34 @@ describe("cloneReposIntoWorkspace", () => {
     await expect(cloneReposIntoWorkspace(TMP_ROOT, ["org/missing"], ghClone)).rejects.toThrow(
       "gh: repository not found",
     );
+  });
+
+  it("writes .claude/settings.local.json granting Write permission to workspacePath", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    const settingsPath = join(TMP_ROOT, "my-app", ".claude", "settings.local.json");
+    expect(existsSync(settingsPath)).toBe(true);
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings).toEqual({
+      permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
+    });
+  });
+
+  it("writes settings.local.json for each cloned repo", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/repo-a", "org/repo-b"], ghClone);
+
+    for (const name of ["repo-a", "repo-b"]) {
+      const settingsPath = join(TMP_ROOT, name, ".claude", "settings.local.json");
+      expect(existsSync(settingsPath)).toBe(true);
+      const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+      expect(settings.permissions.allow).toContain("Write(/**)");
+      expect(settings.permissions.allow).toContain("Edit(/**)");
+      expect(settings.permissions.allow).toContain("Bash(*)");
+    }
   });
 });
 

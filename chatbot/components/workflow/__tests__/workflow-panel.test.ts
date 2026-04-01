@@ -83,6 +83,28 @@ describe("buildGraph", () => {
     expect((stepA!.data as { isLast: boolean }).isLast).toBe(true);
   });
 
+  it("treats same message with different artifacts as distinct nodes", () => {
+    const entries = [
+      { message: "Starting", artifacts: {} as Record<string, string> },
+      { message: "Step A", artifacts: { file: "foo.ts" } },
+      { message: "Step A", artifacts: { file: "bar.ts" } }, // different artifacts — not a duplicate
+    ];
+    const { nodes, edges } = buildGraph(entries);
+    expect(nodes).toHaveLength(3); // start + Step A (foo) + Step A (bar)
+    expect(edges).toHaveLength(2);
+  });
+
+  it("treats same message with identical artifacts as a duplicate node", () => {
+    const entries = [
+      { message: "Starting", artifacts: {} as Record<string, string> },
+      { message: "Step A", artifacts: { file: "foo.ts" } },
+      { message: "Step A", artifacts: { file: "foo.ts" } }, // same message + same artifacts
+    ];
+    const { nodes, edges } = buildGraph(entries);
+    expect(nodes).toHaveLength(2); // start + Step A (deduplicated)
+    expect(edges).toHaveLength(1);
+  });
+
   it("does not mark existing node isLast when duplicate is not the final entry", () => {
     const entries = [
       { message: "Starting", artifacts: {} },

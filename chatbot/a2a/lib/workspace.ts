@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, rmdirSync, rmSync, symlinkSync, existsSync } from "node:fs";
+import { mkdirSync, rmdirSync, rmSync, symlinkSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AGENTS_ROOT, agentWorkspaceDir } from "@@/lib/paths";
@@ -112,8 +112,24 @@ export async function cloneReposIntoWorkspace(
       const clonePath = join(workspacePath, repoName);
       onProgress?.(slug);
       await ghClone(slug, clonePath);
+      writeWorkspacePermissions(clonePath);
       return clonePath;
     }),
+  );
+}
+
+/**
+ * Write .claude/settings.local.json inside a cloned repo to grant Write
+ * permission to the entire workspace directory. This allows Claude Code
+ * sub-processes running inside the repo to write files under the workspace
+ * (e.g. per-ticket skill and reference files) without triggering permission prompts.
+ */
+function writeWorkspacePermissions(clonePath: string): void {
+  mkdirSync(join(clonePath, ".claude"), { recursive: true });
+  writeFileSync(
+    join(clonePath, ".claude", "settings.local.json"),
+    JSON.stringify({ permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] } }, null, 2) +
+      "\n",
   );
 }
 
