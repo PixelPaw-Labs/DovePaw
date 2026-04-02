@@ -326,8 +326,8 @@ export const AGENTS: AgentDef[] = [
       "Requires PROJECTS env var listing ≥2 project names.",
     requiredEnvVars: ["PROJECTS"],
     icon: FlaskConical,
-    scheduleDisplay: "Sun 01:00",
-    schedule: { type: "calendar", hour: 1, minute: 0, weekday: 0 },
+    scheduleDisplay: "Daily 01:00",
+    schedule: { type: "calendar", hour: 1, minute: 0 },
     doveCard: {
       icon: FlaskConical,
       iconBg: "bg-purple-100 group-hover:bg-primary",
