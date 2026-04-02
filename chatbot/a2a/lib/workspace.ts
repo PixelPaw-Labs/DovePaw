@@ -1,5 +1,13 @@
 import { execFile } from "node:child_process";
-import { mkdirSync, rmdirSync, rmSync, symlinkSync, existsSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  rmdirSync,
+  rmSync,
+  symlinkSync,
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AGENTS_ROOT, agentWorkspaceDir } from "@@/lib/paths";
@@ -129,6 +137,8 @@ export async function cloneReposIntoWorkspace(
  * checks (flags, allow-lists, PreToolUse hooks) and cannot be bypassed by them.
  * See: https://github.com/anthropics/claude-code/issues/37765
  */
+const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/", ".gsd/"];
+
 function writeWorkspacePermissions(clonePath: string): void {
   mkdirSync(join(clonePath, ".claude"), { recursive: true });
   const settings = {
@@ -153,6 +163,22 @@ function writeWorkspacePermissions(clonePath: string): void {
     join(clonePath, ".claude", "settings.local.json"),
     JSON.stringify(settings, null, 2) + "\n",
   );
+
+  // Ensure .gitignore excludes generated agent/skill files
+  const gitignorePath = join(clonePath, ".gitignore");
+  const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
+  const toAdd = WORKTREE_INCLUDE_PATTERNS.filter(
+    (p) => !existing.split("\n").some((line) => line.trim() === p),
+  );
+  if (toAdd.length > 0) {
+    writeFileSync(
+      gitignorePath,
+      existing + (existing.endsWith("\n") || existing === "" ? "" : "\n") + toAdd.join("\n") + "\n",
+    );
+  }
+
+  // Write .worktreeinclude so claude -w copies these gitignored files into the worktree
+  writeFileSync(join(clonePath, ".worktreeinclude"), WORKTREE_INCLUDE_PATTERNS.join("\n") + "\n");
 }
 
 /**

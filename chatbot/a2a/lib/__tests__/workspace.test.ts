@@ -210,6 +210,45 @@ describe("cloneReposIntoWorkspace", () => {
     expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
   });
 
+  it("writes .worktreeinclude with .claude/agents and .claude/skills patterns", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    const worktreeIncludePath = join(TMP_ROOT, "my-app", ".worktreeinclude");
+    expect(existsSync(worktreeIncludePath)).toBe(true);
+    const content = readFileSync(worktreeIncludePath, "utf8");
+    expect(content).toContain(".claude/agents/");
+    expect(content).toContain(".claude/skills/");
+    expect(content).toContain(".gsd/");
+  });
+
+  it("appends .claude/agents and .claude/skills to .gitignore", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    const gitignorePath = join(TMP_ROOT, "my-app", ".gitignore");
+    expect(existsSync(gitignorePath)).toBe(true);
+    const content = readFileSync(gitignorePath, "utf8");
+    expect(content).toContain(".claude/agents/");
+    expect(content).toContain(".claude/skills/");
+    expect(content).toContain(".gsd/");
+  });
+
+  it("does not duplicate .gitignore entries on re-clone", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+    // Simulate a second write (e.g. reclone)
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    const gitignorePath = join(TMP_ROOT, "my-app", ".gitignore");
+    const content = readFileSync(gitignorePath, "utf8");
+    const agentLines = content.split("\n").filter((l) => l.trim() === ".claude/agents/");
+    expect(agentLines).toHaveLength(1);
+  });
+
   it("writes settings.local.json for each cloned repo", async () => {
     const ghClone = vi.fn().mockResolvedValue(undefined);
 
