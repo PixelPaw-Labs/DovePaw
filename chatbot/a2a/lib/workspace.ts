@@ -137,7 +137,7 @@ export async function cloneReposIntoWorkspace(
  * checks (flags, allow-lists, PreToolUse hooks) and cannot be bypassed by them.
  * See: https://github.com/anthropics/claude-code/issues/37765
  */
-const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/", ".gsd/"];
+const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/"];
 
 function writeWorkspacePermissions(clonePath: string): void {
   mkdirSync(join(clonePath, ".claude"), { recursive: true });
@@ -164,21 +164,25 @@ function writeWorkspacePermissions(clonePath: string): void {
     JSON.stringify(settings, null, 2) + "\n",
   );
 
-  // Ensure .gitignore excludes generated agent/skill files
-  const gitignorePath = join(clonePath, ".gitignore");
-  const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
-  const toAdd = WORKTREE_INCLUDE_PATTERNS.filter(
-    (p) => !existing.split("\n").some((line) => line.trim() === p),
-  );
-  if (toAdd.length > 0) {
-    writeFileSync(
-      gitignorePath,
-      existing + (existing.endsWith("\n") || existing === "" ? "" : "\n") + toAdd.join("\n") + "\n",
-    );
-  }
+  // Append patterns to .gitignore so .claude/agents/ and .claude/skills/ are not
+  // committed by the forging Claude subprocess (they are workspace-only artifacts).
+  appendGitignorePatterns(clonePath, WORKTREE_INCLUDE_PATTERNS);
 
-  // Write .worktreeinclude so claude -w copies these gitignored files into the worktree
+  // .worktreeinclude always matches the GSD managed block
   writeFileSync(join(clonePath, ".worktreeinclude"), WORKTREE_INCLUDE_PATTERNS.join("\n") + "\n");
+}
+
+/**
+ * Append patterns to a repo's .gitignore, skipping any that already exist.
+ */
+function appendGitignorePatterns(repoPath: string, patterns: string[]): void {
+  const gitignorePath = join(repoPath, ".gitignore");
+  const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
+  const lines = new Set(existing.split("\n").map((l) => l.trim()));
+  const toAdd = patterns.filter((p) => !lines.has(p));
+  if (toAdd.length === 0) return;
+  const separator = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+  writeFileSync(gitignorePath, existing + separator + toAdd.join("\n") + "\n");
 }
 
 /**

@@ -220,7 +220,7 @@ describe("cloneReposIntoWorkspace", () => {
     const content = readFileSync(worktreeIncludePath, "utf8");
     expect(content).toContain(".claude/agents/");
     expect(content).toContain(".claude/skills/");
-    expect(content).toContain(".gsd/");
+    expect(content).not.toContain(".gsd/");
   });
 
   it("appends .claude/agents and .claude/skills to .gitignore", async () => {
@@ -233,14 +233,13 @@ describe("cloneReposIntoWorkspace", () => {
     const content = readFileSync(gitignorePath, "utf8");
     expect(content).toContain(".claude/agents/");
     expect(content).toContain(".claude/skills/");
-    expect(content).toContain(".gsd/");
+    expect(content).not.toContain(".gsd/");
   });
 
   it("does not duplicate .gitignore entries on re-clone", async () => {
     const ghClone = vi.fn().mockResolvedValue(undefined);
 
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
-    // Simulate a second write (e.g. reclone)
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
     const gitignorePath = join(TMP_ROOT, "my-app", ".gitignore");
