@@ -210,6 +210,106 @@ describe("useMessages", () => {
     });
   });
 
+  describe("appendAgentProgress", () => {
+    it("adds a first entry", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(msg({ id: "a" })));
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forging", artifacts: { ticket: "EC-1" } },
+        ]),
+      );
+      expect(result.current.messages[0].agentProgress).toEqual([
+        { message: "Forging", artifacts: { ticket: "EC-1" } },
+      ]);
+    });
+
+    it("updates in-place when incoming adds artifact keys to a matching entry (streaming artifact arrival)", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(msg({ id: "a" })));
+      act(() => result.current.appendAgentProgress("a", [{ message: "Forging", artifacts: {} }]));
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forging", artifacts: { ticket: "EC-1" } },
+        ]),
+      );
+      expect(result.current.messages[0].agentProgress).toHaveLength(1);
+      expect(result.current.messages[0].agentProgress![0].artifacts).toEqual({ ticket: "EC-1" });
+    });
+
+    it("skips exact duplicate", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(msg({ id: "a" })));
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forging", artifacts: { ticket: "EC-1" } },
+        ]),
+      );
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forging", artifacts: { ticket: "EC-1" } },
+        ]),
+      );
+      expect(result.current.messages[0].agentProgress).toHaveLength(1);
+    });
+
+    it("skips stale re-subscription replay (empty artifacts for an entry that already has artifacts)", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(msg({ id: "a" })));
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forged", artifacts: { "EC-1": "success" } },
+        ]),
+      );
+      // re-subscription replays the status-update without artifacts
+      act(() => result.current.appendAgentProgress("a", [{ message: "Forged", artifacts: {} }]));
+      expect(result.current.messages[0].agentProgress).toHaveLength(1);
+      expect(result.current.messages[0].agentProgress![0].artifacts).toEqual({ "EC-1": "success" });
+    });
+
+    it("appends a genuinely new entry when artifact keys differ (two parallel tickets, same label)", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(msg({ id: "a" })));
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forged", artifacts: { "EC-1": "success" } },
+        ]),
+      );
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forged", artifacts: { "EC-2": "success" } },
+        ]),
+      );
+      expect(result.current.messages[0].agentProgress).toHaveLength(2);
+    });
+
+    it("update finds the correct non-last entry when a later entry has a different label", () => {
+      const { result } = renderHook(() => useMessages());
+      act(() => result.current.append(msg({ id: "a" })));
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Forged", artifacts: { "EC-1": "success" } },
+        ]),
+      );
+      act(() =>
+        result.current.appendAgentProgress("a", [
+          { message: "Committing", artifacts: { group: "EC-1" } },
+        ]),
+      );
+      // replay of "Forged" with no artifacts — last entry is "Committing", but match is at index 0
+      act(() => result.current.appendAgentProgress("a", [{ message: "Forged", artifacts: {} }]));
+      expect(result.current.messages[0].agentProgress).toHaveLength(2);
+      expect(result.current.messages[0].agentProgress![0]).toEqual({
+        message: "Forged",
+        artifacts: { "EC-1": "success" },
+      });
+      expect(result.current.messages[0].agentProgress![1]).toEqual({
+        message: "Committing",
+        artifacts: { group: "EC-1" },
+      });
+    });
+  });
+
   describe("clear", () => {
     it("removes all messages", () => {
       const { result } = renderHook(() => useMessages());

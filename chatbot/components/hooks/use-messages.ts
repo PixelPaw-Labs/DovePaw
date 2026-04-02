@@ -130,24 +130,35 @@ export function useMessages() {
           const existing = m.agentProgress ?? [];
           const merged = [...existing];
           for (const entry of incoming) {
-            const lastIdx = merged.length - 1;
-            const last = merged[lastIdx];
             const incomingArtifactStr = JSON.stringify(entry.artifacts);
-            const isDuplicate = merged.some(
-              (e) =>
-                e.message === entry.message && JSON.stringify(e.artifacts) === incomingArtifactStr,
-            );
-            if (isDuplicate) continue;
-            // Merge into last entry if same message and incoming artifacts are a superset
-            const isSupersetUpdate =
-              lastIdx >= 0 &&
-              last.message === entry.message &&
-              Object.entries(last.artifacts).every(([k, v]) => entry.artifacts[k] === v);
-            if (isSupersetUpdate) {
-              merged[lastIdx] = { ...last, artifacts: { ...last.artifacts, ...entry.artifacts } };
-            } else {
-              merged.push(entry);
+
+            // Find the last existing entry with the same message label.
+            let matchIdx = -1;
+            for (let i = merged.length - 1; i >= 0; i--) {
+              if (merged[i].message === entry.message) {
+                matchIdx = i;
+                break;
+              }
             }
+
+            if (matchIdx >= 0) {
+              const match = merged[matchIdx];
+              // Exact duplicate → skip
+              if (JSON.stringify(match.artifacts) === incomingArtifactStr) continue;
+              // Incoming is a subset of existing (stale replay or pre-artifact snapshot) → skip
+              if (Object.entries(entry.artifacts).every(([k, v]) => match.artifacts[k] === v))
+                continue;
+              // Existing is a subset of incoming (incoming adds new artifact keys) → update in place
+              if (Object.entries(match.artifacts).every(([k, v]) => entry.artifacts[k] === v)) {
+                merged[matchIdx] = {
+                  ...match,
+                  artifacts: { ...match.artifacts, ...entry.artifacts },
+                };
+                continue;
+              }
+            }
+            // No match, or genuinely new entry with different artifact keys → append
+            merged.push(entry);
           }
           return { ...m, agentProgress: merged };
         }),
