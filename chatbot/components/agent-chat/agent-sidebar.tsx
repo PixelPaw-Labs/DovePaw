@@ -24,12 +24,12 @@ export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSid
   const anyOnline = onlineCount > 0;
 
   return (
-    <aside className="h-screen w-72 shrink-0 flex flex-col bg-background border-r border-border/30">
+    <aside className="h-screen w-64 shrink-0 flex flex-col bg-background border-r border-border/30">
       {/* Logo header */}
-      <div className="px-6 py-8">
+      <div className="px-5 py-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
-            <PawPrint className="w-5 h-5" />
+          <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
+            <PawPrint className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-muted-foreground">
@@ -121,8 +121,8 @@ export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSid
       </div>
 
       {/* Bottom branding */}
-      <div className="p-6">
-        <div className="p-4 rounded-xl bg-muted border border-border/40">
+      <div className="p-4">
+        <div className="p-3 rounded-xl bg-muted border border-border/40">
           <p className="text-[11px] font-bold text-primary tracking-tight mb-1">DovePaw</p>
           <div className="flex items-center gap-1.5">
             <span

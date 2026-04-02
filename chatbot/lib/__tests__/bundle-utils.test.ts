@@ -52,14 +52,14 @@ describe("externalPackagesInBundle (synthetic metafile)", () => {
     writeFileSync(
       metafilePath,
       JSON.stringify(
-        makeMetafile("experience-reflector", [
+        makeMetafile("memory-dream", [
           { path: "fs", external: true },
           { path: "path", external: true },
           { path: "node:util", external: true },
         ]),
       ),
     );
-    const result = externalPackagesInBundle("experience-reflector", { metafilePath, agentsRoot });
+    const result = externalPackagesInBundle("memory-dream", { metafilePath, agentsRoot });
     expect(result).toEqual([]);
   });
 
@@ -156,8 +156,8 @@ describe("externalPackagesInBundle (real metafile — all agents)", () => {
     },
   );
 
-  it.skipIf(!existsSync(metafilePath))("experience-reflector → no native packages", () => {
-    expect(externalPackagesInBundle("experience-reflector", opts)).not.toContain("@ladybugdb/core");
+  it.skipIf(!existsSync(metafilePath))("memory-dream → no native packages", () => {
+    expect(externalPackagesInBundle("memory-dream", opts)).not.toContain("@ladybugdb/core");
   });
 
   it.skipIf(!existsSync(metafilePath))("oncall-analyzer → no native packages", () => {

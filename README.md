@@ -27,7 +27,7 @@ flowchart TD
         end
 
         subgraph tools["MCP Tools  (one per agent)"]
-            T1["run_experience_reflector"]
+            T1["run_memory_dream"]
             T2["run_get_shit_done"]
             T3["run_release_log_sentinel"]
             T4["run_memory_distiller"]
@@ -41,7 +41,7 @@ flowchart TD
         PM[("a2a/.ports.json\ndynamic port manifest")]
 
         subgraph servers["Express + @a2a-js/sdk  (one process)"]
-            S1["Experience Reflector\n:dyn"]
+            S1["Memory Dream\n:dyn"]
             S2["Get Shit Done\n:dyn"]
             S3["Release Log Sentinel\n:dyn"]
             S4["Memory Distiller\n:dyn"]
@@ -51,7 +51,7 @@ flowchart TD
 
     subgraph src["agents/src/  —  Agent Scripts"]
         direction TB
-        A1["experience-reflector.ts\nlaunchd · daily 00:00"]
+        A1["memory-dream.ts\nlaunchd · daily 00:00"]
         A2["get-shit-done.ts\nlaunchd · every 5 min"]
         A3["release-log-sentinel.ts\nlaunchd · Sun 10:00"]
         A4["memory-distiller.ts\nlaunchd · Sun 01:00"]
@@ -151,7 +151,7 @@ Five TypeScript agents in `src/`, each managed as a launchd daemon:
 
 | Agent                    | File                               | Schedule         | Purpose                                                                                                                                                                          |
 | ------------------------ | ---------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Experience Reflector** | `src/experience-reflector/main.ts` | Daily 00:00      | Scans Claude Code checkpoint sessions, extracts domain knowledge into project `MEMORY.md` files                                                                                  |
+| **Memory Dream**         | `src/memory-dream/main.ts`         | Daily 00:00      | Scans Claude Code checkpoint sessions, extracts domain knowledge into project `MEMORY.md` files                                                                                  |
 | **Get Shit Done**        | `src/get-shit-done/main.ts`        | Every 5 min      | Discovers JIRA sprint tickets, prioritises by dependency DAG, forges implementations in parallel git worktrees, creates PRs                                                      |
 | **Release Log Sentinel** | `src/release-log-sentinel/main.ts` | Weekly Sun 10:00 | Monitors Claude Code releases for JSONL format changes that could break [claude-code-trace](https://github.com/delexw/claude-code-trace); creates GitHub issues for new findings |
 | **Memory Distiller**     | `src/memory-distiller/main.ts`     | Weekly Sun 01:00 | Promotes patterns that appear across 2+ project `MEMORY.md` files into the global `~/.claude/CLAUDE.md`                                                                          |
@@ -213,7 +213,7 @@ const port = await getAvailablePort();
 
 ```json
 {
-  "experience_reflector": 52341,
+  "memory_dream": 52341,
   "get_shit_done": 52342,
   "release_log_sentinel": 52343,
   "memory_distiller": 52344,
@@ -245,7 +245,7 @@ Custom hook `components/hooks/use-agent-chat.ts` drives the SSE connection to `/
 ```
 agents/
 ├── src/                          # Agent scripts (run as launchd daemons)
-│   ├── experience-reflector.ts
+│   ├── memory-dream.ts
 │   ├── get-shit-done.ts
 │   ├── release-log-sentinel.ts
 │   ├── memory-distiller.ts
@@ -256,7 +256,7 @@ agents/
 │   │   ├── lib/
 │   │   │   └── base-server.ts    # getAvailablePort(), ScriptAgentExecutor, createAgentServer()
 │   │   ├── servers/              # One A2A server per agent
-│   │   │   ├── experience-reflector.ts   → export startServer(port)
+│   │   │   ├── memory-dream.ts   → export startServer(port)
 │   │   │   ├── get-shit-done.ts
 │   │   │   ├── release-log-sentinel.ts
 │   │   │   ├── memory-distiller.ts
@@ -345,7 +345,7 @@ npm run chatbot:dev:all
 
 ## Environment variables
 
-### Experience Reflector
+### Memory Dream
 
 | Variable    | Example                         | Description                                |
 | ----------- | ------------------------------- | ------------------------------------------ |

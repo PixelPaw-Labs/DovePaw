@@ -57,7 +57,7 @@ describe("getAvailablePort", () => {
 // ─── writePortsManifest / readPortsManifest ───────────────────────────────────
 
 const SAMPLE_PORTS = {
-  experience_reflector: 51001,
+  memory_dream: 51001,
   get_shit_done: 51002,
   release_log_sentinel: 51003,
   memory_distiller: 51004,
@@ -75,7 +75,7 @@ describe("readPortsManifest", () => {
     writePortsManifest(SAMPLE_PORTS);
     const result = readPortsManifest();
     expect(result).not.toBeNull();
-    expect(result?.experience_reflector).toBe(51001);
+    expect(result?.memory_dream).toBe(51001);
     expect(result?.oncall_analyzer).toBe(51005);
   });
 
@@ -98,7 +98,7 @@ describe("writePortsManifest", () => {
 
   it("overwrites an existing manifest", () => {
     writePortsManifest(SAMPLE_PORTS);
-    writePortsManifest({ ...SAMPLE_PORTS, experience_reflector: 99999 });
-    expect(readPortsManifest()?.experience_reflector).toBe(99999);
+    writePortsManifest({ ...SAMPLE_PORTS, memory_dream: 99999 });
+    expect(readPortsManifest()?.memory_dream).toBe(99999);
   });
 });

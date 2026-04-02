@@ -160,7 +160,7 @@ Add `jira_ticket_runner` to `SAMPLE_PORTS`. The manifest schema validates all ag
 
 ```typescript
 const SAMPLE_PORTS = {
-  experience_reflector: 51001,
+  memory_dream: 51001,
   get_shit_done: 51002,
   release_log_sentinel: 51003,
   memory_distiller: 51004,

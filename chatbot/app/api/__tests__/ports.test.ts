@@ -9,7 +9,7 @@ import { readPortsManifest } from "@/a2a/lib/base-server";
 import { GET } from "../ports/route";
 
 const SAMPLE_MANIFEST = {
-  experience_reflector: 51001,
+  memory_dream: 51001,
   get_shit_done: 51002,
   release_log_sentinel: 51003,
   memory_distiller: 51004,
@@ -47,7 +47,7 @@ describe("GET /api/ports", () => {
     const body = await response.json();
 
     for (const key of [
-      "experience_reflector",
+      "memory_dream",
       "get_shit_done",
       "release_log_sentinel",
       "memory_distiller",

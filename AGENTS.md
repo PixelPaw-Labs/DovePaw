@@ -67,7 +67,7 @@ Agent Scripts (agents/*/main.ts)
 
 | Agent                  | Schedule    | Purpose                                                                          |
 | ---------------------- | ----------- | -------------------------------------------------------------------------------- |
-| `experience-reflector` | Daily 00:00 | Scan Claude Code checkpoints → extract domain knowledge into project `MEMORY.md` |
+| `memory-dream`         | Daily 00:00 | Scan Claude Code checkpoints → extract domain knowledge into project `MEMORY.md` |
 | `get-shit-done`        | Every 5 min | Discover JIRA tickets → prioritize by DAG → forge in parallel → create PRs       |
 | `release-log-sentinel` | Sun 10:00   | Monitor Claude Code releases for JSONL breaking changes                          |
 | `memory-distiller`     | Sun 01:00   | Promote cross-project patterns → global `~/.claude/CLAUDE.md`                    |

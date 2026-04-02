@@ -94,15 +94,15 @@ function defineAgent(input: AgentInput): AgentDef {
 
 export const AGENTS: AgentDef[] = [
   defineAgent({
-    name: "experience-reflector",
-    alias: "er",
-    displayName: "Experience Reflector",
+    name: "memory-dream",
+    alias: "mdr",
+    displayName: "Memory Dream",
     description:
-      "Reflect on and learn from past Claude Code sessions: fetches the last 24 hours of sessions " +
+      "Dream and consolidate memories from past Claude Code sessions: fetches the last 24 hours of sessions " +
       "via the local session API, extracts domain knowledge and user preferences, and writes " +
       "learnings into project MEMORY.md files. " +
       "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
-      "or when asked to 'learn from sessions', 'rewind and learn', or 'reflect on past Claude Code work'. " +
+      "or when asked to 'learn from sessions', 'dream through memories', 'rewind and learn', or 'reflect on past Claude Code work'. " +
       "Requires PROJECTS env var.",
     requiredEnvVars: ["PROJECTS"],
     icon: Brain,
@@ -112,9 +112,9 @@ export const AGENTS: AgentDef[] = [
       icon: Brain,
       iconBg: "bg-accent group-hover:bg-primary",
       iconColor: "text-accent-foreground group-hover:text-primary-foreground",
-      title: "Experience Reflector",
-      description: "What does the Experience Reflector do?",
-      prompt: "What does the Experience Reflector do?",
+      title: "Memory Dream",
+      description: "What does Memory Dream do?",
+      prompt: "What does Memory Dream do?",
     },
     suggestions: [
       {
@@ -122,16 +122,16 @@ export const AGENTS: AgentDef[] = [
         iconBg: "bg-accent group-hover:bg-primary",
         iconColor: "text-accent-foreground group-hover:text-primary-foreground",
         title: "What does it do?",
-        description: "What does Experience Reflector do?",
-        prompt: "What does Experience Reflector do?",
+        description: "What does Memory Dream do?",
+        prompt: "What does Memory Dream do?",
       },
       {
         icon: Play,
         iconBg: "bg-green-100 group-hover:bg-primary",
         iconColor: "text-green-700 group-hover:text-primary-foreground",
         title: "Run now",
-        description: "Run Experience Reflector now",
-        prompt: "Run Experience Reflector now",
+        description: "Run Memory Dream now",
+        prompt: "Run Memory Dream now",
       },
       {
         icon: BookOpen,
@@ -146,16 +146,16 @@ export const AGENTS: AgentDef[] = [
         iconBg: "bg-slate-100 group-hover:bg-primary",
         iconColor: "text-slate-600 group-hover:text-primary-foreground",
         title: "Last run logs",
-        description: "Show Experience Reflector logs",
-        prompt: "Show Experience Reflector logs",
+        description: "Show Memory Dream logs",
+        prompt: "Show Memory Dream logs",
       },
       {
         icon: Info,
         iconBg: "bg-purple-100 group-hover:bg-primary",
         iconColor: "text-purple-700 group-hover:text-primary-foreground",
         title: "Current status",
-        description: "What is Experience Reflector currently doing?",
-        prompt: "What is Experience Reflector currently doing?",
+        description: "What is Memory Dream currently doing?",
+        prompt: "What is Memory Dream currently doing?",
       },
       {
         icon: TrendingUp,

@@ -18,7 +18,7 @@ const MESSAGE_RESPONSE_SPACING =
 
 function AssistantAvatar() {
   return (
-    <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
+    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
       <img src={DOVE_AVATAR} alt="Dove" className="w-full h-full object-cover" />
     </div>
   );
@@ -96,7 +96,7 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
     const hasContent = hasSegmentContent || (!msg.isLoading && msg.role === "assistant");
 
     return (
-      <div className="flex items-end gap-2.5 w-full">
+      <div className="flex items-end gap-2 w-full">
         {hasContent && <AssistantAvatar />}
         {messageContent}
       </div>

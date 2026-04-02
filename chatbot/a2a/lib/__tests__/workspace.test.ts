@@ -319,7 +319,7 @@ describe("agentSourceDirFromEntry", () => {
   });
 
   it("handles nested paths", () => {
-    const result = agentSourceDirFromEntry("agents/experience-reflector/main.ts");
-    expect(result).toBe(join(TMP_ROOT, "agents", "experience-reflector"));
+    const result = agentSourceDirFromEntry("agents/memory-dream/main.ts");
+    expect(result).toBe(join(TMP_ROOT, "agents", "memory-dream"));
   });
 });

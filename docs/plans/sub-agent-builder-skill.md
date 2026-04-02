@@ -145,7 +145,7 @@ main().catch((err: unknown) => {
 
 ### `references/template-skill-based.md`
 
-Complete Type 2 template based on `agents/experience-reflector/main.ts` and `agents/memory-distiller/main.ts`:
+Complete Type 2 template based on `agents/memory-dream/main.ts` and `agents/memory-distiller/main.ts`:
 
 - Same base imports + `writeFileSync`, `mkdirSync`, `rmSync`, `randomBytes` from `node:crypto`
 - Source discovery phase (customizable per agent)

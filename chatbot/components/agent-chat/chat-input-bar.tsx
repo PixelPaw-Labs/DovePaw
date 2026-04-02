@@ -79,34 +79,34 @@ export function ChatInputBar({
           {/* Attach — absolute left */}
           <button
             type="button"
-            className="absolute left-4 w-10 h-10 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all z-10"
+            className="absolute left-3 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all z-10"
             title="Attach file"
           >
-            <Paperclip className="w-5 h-5" />
+            <Paperclip className="w-4 h-4" />
           </button>
 
           {/* Textarea — full width, padded for buttons */}
           <PromptInputTextarea
-            className="py-5 pl-16 pr-44 text-sm placeholder:text-muted-foreground/50 resize-none"
+            className="py-3 pl-13 pr-40 text-sm placeholder:text-muted-foreground/50 resize-none"
             placeholder="Meow… what do you need, Yang?"
           />
 
           {/* Stop + Send — absolute right, always both visible when loading */}
-          <div className="absolute right-4 flex items-center gap-2 z-10">
+          <div className="absolute right-3 flex items-center gap-2 z-10">
             {isLoading && (
               <button
                 type="button"
                 onClick={onCancel}
-                className="h-10 px-4 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold text-sm flex items-center gap-2 hover:bg-primary/20 transition-all active:scale-[0.98]"
+                className="h-8 px-3 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold text-xs flex items-center gap-1.5 hover:bg-primary/20 transition-all active:scale-[0.98]"
               >
-                STOP <Square className="w-3.5 h-3.5 fill-current" />
+                STOP <Square className="w-3 h-3 fill-current" />
               </button>
             )}
             <button
               type="submit"
-              className="h-10 px-4 bg-primary text-primary-foreground rounded-xl font-bold text-sm flex items-center gap-2 hover:shadow-lg hover:shadow-primary/30 transition-all active:scale-[0.98]"
+              className="h-8 px-3 bg-primary text-primary-foreground rounded-xl font-bold text-xs flex items-center gap-1.5 hover:shadow-lg hover:shadow-primary/30 transition-all active:scale-[0.98]"
             >
-              {isLoading ? "QUEUE" : "SEND"} <SendHorizonal className="w-4 h-4" />
+              {isLoading ? "QUEUE" : "SEND"} <SendHorizonal className="w-3.5 h-3.5" />
             </button>
           </div>
         </PromptInputBody>
