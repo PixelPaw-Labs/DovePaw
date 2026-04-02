@@ -27,7 +27,7 @@ export const NodeHeader = ({ className, ...props }: NodeHeaderProps) => (
 
 export type NodeTitleProps = ComponentProps<"p">;
 export const NodeTitle = ({ className, ...props }: NodeTitleProps) => (
-  <p className={cn("text-sm font-semibold leading-none", className)} {...props} />
+  <p className={cn("text-sm font-semibold leading-snug break-all", className)} {...props} />
 );
 
 export type NodeDescriptionProps = ComponentProps<"p">;
