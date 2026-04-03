@@ -51,12 +51,12 @@ export function AgentSidebar({
       </div>
 
       {/* Agent nav */}
-      <nav className="flex flex-col gap-1 flex-1 overflow-y-auto misty-scroll px-2">
+      <nav className="flex flex-col gap-1 flex-1 overflow-y-auto misty-scroll">
         {/* Dove — the orchestrator (always first) */}
         <button
           onClick={() => onSelectAgent?.("dove")}
           className={cn(
-            "mx-2 my-0.5 rounded-lg px-4 py-2.5 flex items-center gap-3 text-left transition-all w-[calc(100%-1rem)]",
+            "my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
             activeAgentId === "dove" && !isSettings
               ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -111,11 +111,11 @@ export function AgentSidebar({
       </nav>
 
       {/* Settings nav links */}
-      <div className="px-2 pb-2 flex flex-col gap-0.5">
+      <div className="pb-2 flex flex-col gap-0.5">
         <Link
           href="/settings"
           className={cn(
-            "mx-2 my-0.5 rounded-lg px-4 py-2.5 flex items-center gap-3 transition-all w-[calc(100%-1rem)]",
+            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
             isSettings
               ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -129,7 +129,7 @@ export function AgentSidebar({
         <Link
           href="/settings/subagents"
           className={cn(
-            "mx-2 my-0.5 rounded-lg px-4 py-2.5 flex items-center gap-3 transition-all w-[calc(100%-1rem)]",
+            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
             isSubagentsConfig
               ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",

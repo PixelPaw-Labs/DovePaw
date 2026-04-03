@@ -13,6 +13,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import type { AgentConfigEntry, AgentSchedule } from "@@/lib/agents-config-schemas";
+import { DEFAULT_ICON_STYLE } from "@@/lib/icon-registry";
+import { IconPicker } from "./icon-picker";
 
 type ScheduleType = "none" | "interval" | "calendar";
 const SCHEDULE_TYPES = ["none", "interval", "calendar"] as const;
@@ -24,6 +26,9 @@ interface FormState {
   alias: string;
   displayName: string;
   description: string;
+  iconName: string;
+  iconBg: string;
+  iconColor: string;
   scheduleDisplay: string;
   scheduleType: ScheduleType;
   intervalSeconds: string;
@@ -49,6 +54,9 @@ function entryToForm(entry: AgentConfigEntry): FormState {
     alias: entry.alias,
     displayName: entry.displayName,
     description: entry.description,
+    iconName: entry.iconName ?? "Bot",
+    iconBg: entry.iconBg ?? DEFAULT_ICON_STYLE.iconBg,
+    iconColor: entry.iconColor ?? DEFAULT_ICON_STYLE.iconColor,
     scheduleDisplay: entry.scheduleDisplay,
     scheduleType: schedType,
     intervalSeconds: entry.schedule?.type === "interval" ? String(entry.schedule.seconds) : "300",
@@ -88,6 +96,9 @@ function buildPatch(name: string, f: FormState): AgentConfigEntry {
     alias: f.alias.trim(),
     displayName: f.displayName.trim(),
     description: f.description.trim(),
+    iconName: f.iconName,
+    iconBg: f.iconBg,
+    iconColor: f.iconColor,
     scheduleDisplay: f.scheduleDisplay.trim(),
     ...(schedule ? { schedule } : {}),
     ...(f.runAtLoad ? { runAtLoad: true } : {}),
@@ -195,6 +206,18 @@ export function EditAgentDialog({ agent, onSave, onClose }: EditAgentDialogProps
                   value={form.description}
                   onChange={(e) => set("description", e.target.value)}
                   rows={3}
+                />
+              </Row>
+              <Row label="Icon">
+                <IconPicker
+                  iconName={form.iconName}
+                  iconBg={form.iconBg}
+                  iconColor={form.iconColor}
+                  onChange={(name, bg, color) => {
+                    set("iconName", name);
+                    set("iconBg", bg);
+                    set("iconColor", color);
+                  }}
                 />
               </Row>
             </Section>

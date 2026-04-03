@@ -15,6 +15,8 @@ const BASE: AgentDef = {
   scheduleDisplay: "daily 09:00",
   schedule: { type: "calendar", hour: 9, minute: 0 },
   icon: Brain,
+  iconBg: "",
+  iconColor: "",
   doveCard: {
     icon: Brain,
     iconBg: "",

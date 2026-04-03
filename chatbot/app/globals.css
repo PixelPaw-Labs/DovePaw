@@ -4,6 +4,8 @@
 
 @source "../node_modules/streamdown/dist/*.js";
 @source "../node_modules/@streamdown/code/dist/*.js";
+/* Safelist icon color preset classes (dynamic — not statically detectable by scanner) */
+@source inline("bg-yellow-100 bg-blue-100 bg-purple-100 bg-red-100 bg-green-100 bg-orange-100 bg-pink-100 bg-teal-100 bg-indigo-100 text-yellow-700 text-blue-700 text-purple-700 text-red-600 text-green-700 text-orange-700 text-pink-700 text-teal-700 text-indigo-700");
 
 /* ─── DovePaw — light-first theme ────────────────────────────────────────────
    Exact hex values from the DovePaw Stitch screen design (Material Design 3).

@@ -60,6 +60,8 @@ const AGENT: AgentDef = {
   description: "A test agent for unit tests",
   scheduleDisplay: "daily 00:00",
   icon: {} as any,
+  iconBg: "",
+  iconColor: "",
   doveCard: {
     icon: {} as any,
     iconBg: "",

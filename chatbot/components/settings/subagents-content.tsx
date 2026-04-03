@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Bot, Info, RefreshCw } from "lucide-react";
 import { AddAgentDialog } from "./add-agent-dialog";
 import { EditAgentDialog } from "./edit-agent-dialog";
@@ -18,6 +19,7 @@ interface SubagentsContentProps {
 }
 
 export function SubagentsContent({ initialAgents }: SubagentsContentProps) {
+  const router = useRouter();
   const [agents, setAgents] = React.useState<AgentConfigEntry[]>(initialAgents);
   const [editingAgent, setEditingAgent] = React.useState<AgentConfigEntry | null>(null);
   const [deletingName, setDeletingName] = React.useState<string | null>(null);
@@ -26,77 +28,80 @@ export function SubagentsContent({ initialAgents }: SubagentsContentProps) {
   const [pendingRestart, setPendingRestart] = React.useState(false);
   const [restarting, setRestarting] = React.useState(false);
 
-  async function handleAdd(entry: AgentConfigEntry) {
+  const abortRef = React.useRef<AbortController | null>(null);
+  React.useEffect(() => () => abortRef.current?.abort(), []);
+
+  async function mutate(
+    request: (signal: AbortSignal) => Promise<AgentConfigEntry[]>,
+    errorMsg: string,
+    onFinally?: () => void,
+  ) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setSaving(true);
     setError(null);
     try {
+      const updated = await request(controller.signal);
+      if (controller.signal.aborted) return;
+      setAgents(updated);
+      setPendingRestart(true);
+      router.refresh();
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      setError(e instanceof Error ? e.message : errorMsg);
+    } finally {
+      if (!controller.signal.aborted) {
+        setSaving(false);
+        onFinally?.();
+      }
+    }
+  }
+
+  async function handleAdd(entry: AgentConfigEntry) {
+    await mutate(async (signal) => {
       const res = await fetch("/api/settings/agents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
+        signal,
       });
       const json: unknown = await res.json();
-      if (!res.ok) {
-        const data = apiErrorSchema.parse(json);
-        throw new Error(data.error ?? "Failed to add agent");
-      }
-      const data = agentsResponseSchema.parse(json);
-      setAgents(data.agents);
-      setPendingRestart(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to add agent");
-    } finally {
-      setSaving(false);
-    }
+      if (!res.ok) throw new Error(apiErrorSchema.parse(json).error ?? "Failed to add agent");
+      return agentsResponseSchema.parse(json).agents;
+    }, "Failed to add agent");
   }
 
   async function handleEdit(entry: AgentConfigEntry) {
-    setSaving(true);
-    setError(null);
-    try {
+    await mutate(async (signal) => {
       const res = await fetch("/api/settings/agents", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: entry.name, patch: entry }),
+        signal,
       });
       const json: unknown = await res.json();
-      if (!res.ok) {
-        const data = apiErrorSchema.parse(json);
-        throw new Error(data.error ?? "Failed to update agent");
-      }
-      const data = agentsResponseSchema.parse(json);
-      setAgents(data.agents);
-      setPendingRestart(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update agent");
-    } finally {
-      setSaving(false);
-    }
+      if (!res.ok) throw new Error(apiErrorSchema.parse(json).error ?? "Failed to update agent");
+      return agentsResponseSchema.parse(json).agents;
+    }, "Failed to update agent");
   }
 
   async function handleDelete(name: string) {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/settings/agents", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const json: unknown = await res.json();
-      if (!res.ok) {
-        const data = apiErrorSchema.parse(json);
-        throw new Error(data.error ?? "Failed to delete agent");
-      }
-      const data = agentsResponseSchema.parse(json);
-      setAgents(data.agents);
-      setPendingRestart(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete agent");
-    } finally {
-      setSaving(false);
-      setDeletingName(null);
-    }
+    await mutate(
+      async (signal) => {
+        const res = await fetch("/api/settings/agents", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+          signal,
+        });
+        const json: unknown = await res.json();
+        if (!res.ok) throw new Error(apiErrorSchema.parse(json).error ?? "Failed to delete agent");
+        return agentsResponseSchema.parse(json).agents;
+      },
+      "Failed to delete agent",
+      () => setDeletingName(null),
+    );
   }
 
   async function handleRestart() {
@@ -221,7 +226,9 @@ function AgentCard({
     <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex flex-col gap-4 p-6 transition-all">
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${agent.iconBg} ${agent.iconColor}`}
+        >
           <Icon className="w-5 h-5" />
         </div>
         <div className="flex-1 min-w-0">

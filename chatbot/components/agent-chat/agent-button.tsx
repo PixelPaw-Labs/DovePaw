@@ -138,7 +138,7 @@ export function AgentButton({
       ref={root}
       onClick={onClick}
       className={cn(
-        "group mx-2 my-0.5 rounded-lg px-4 py-2.5 flex items-center gap-3 text-left transition-all w-[calc(100%-1rem)] relative overflow-hidden",
+        "group my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full relative overflow-hidden",
         isActive
           ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -152,7 +152,15 @@ export function AgentButton({
         />
       )}
 
-      <Icon className={cn("w-4 h-4 shrink-0 relative z-10", isActive ? "text-blue-700" : "")} />
+      <div
+        className={cn(
+          "w-6 h-6 rounded-md flex items-center justify-center shrink-0 relative z-10 transition-colors",
+          agent.iconBg,
+          agent.iconColor,
+        )}
+      >
+        <Icon className="w-3 h-3" />
+      </div>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5 relative z-10">
         <ShimmerLabel
           isActive={isRunning}

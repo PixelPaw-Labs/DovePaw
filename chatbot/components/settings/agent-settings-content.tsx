@@ -215,7 +215,9 @@ export function AgentSettingsContent({
       {/* Page header — same structure as AgentRepoSettings */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0 mt-0.5">
+          <div
+            className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${agent.iconBg} ${agent.iconColor}`}
+          >
             <Icon className="w-6 h-6" />
           </div>
           <div>

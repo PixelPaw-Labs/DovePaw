@@ -74,8 +74,10 @@ function AgentIntro({
       <div className="relative group">
         <div className="absolute -inset-0.5 bg-linear-to-r from-accent to-secondary rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000" />
         <div className="relative bg-card rounded-2xl p-5 flex gap-4 items-start shadow-sm">
-          <div className="w-12 h-12 rounded-2xl shrink-0 shadow-2xl ring-4 ring-white overflow-hidden bg-muted flex items-center justify-center">
-            <Icon className="w-6 h-6 text-muted-foreground" />
+          <div
+            className={`w-12 h-12 rounded-2xl shrink-0 shadow-2xl ring-4 ring-white overflow-hidden flex items-center justify-center ${agent.iconBg} ${agent.iconColor}`}
+          >
+            <Icon className="w-6 h-6" />
           </div>
           <div>
             <h2 className="text-xl font-bold tracking-tight text-foreground mb-1.5">

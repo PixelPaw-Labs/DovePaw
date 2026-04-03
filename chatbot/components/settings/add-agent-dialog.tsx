@@ -14,6 +14,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import { DEFAULT_ICON_STYLE } from "@@/lib/icon-registry";
+import { IconPicker } from "./icon-picker";
 
 type ScheduleType = "none" | "interval" | "calendar";
 const SCHEDULE_TYPES = ["none", "interval", "calendar"] as const;
@@ -26,6 +28,9 @@ interface FormState {
   alias: string;
   displayName: string;
   description: string;
+  iconName: string;
+  iconBg: string;
+  iconColor: string;
   scheduleDisplay: string;
   scheduleType: ScheduleType;
   intervalSeconds: string;
@@ -46,6 +51,9 @@ function emptyForm(): FormState {
     alias: "",
     displayName: "",
     description: "",
+    iconName: "Bot",
+    iconBg: DEFAULT_ICON_STYLE.iconBg,
+    iconColor: DEFAULT_ICON_STYLE.iconColor,
     scheduleDisplay: "on demand",
     scheduleType: "none",
     intervalSeconds: "300",
@@ -79,6 +87,9 @@ function buildEntry(f: FormState): AgentConfigEntry {
     alias: f.alias.trim(),
     displayName: f.displayName.trim(),
     description: f.description.trim(),
+    iconName: f.iconName,
+    iconBg: f.iconBg,
+    iconColor: f.iconColor,
     scheduleDisplay: f.scheduleDisplay.trim(),
     ...(schedule ? { schedule } : {}),
     ...(f.runAtLoad ? { runAtLoad: true } : {}),
@@ -202,6 +213,18 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
                 onChange={(e) => set("description", e.target.value)}
                 placeholder="What this agent does and when to use it…"
                 rows={3}
+              />
+            </Row>
+            <Row label="Icon">
+              <IconPicker
+                iconName={form.iconName}
+                iconBg={form.iconBg}
+                iconColor={form.iconColor}
+                onChange={(name, bg, color) => {
+                  set("iconName", name);
+                  set("iconBg", bg);
+                  set("iconColor", color);
+                }}
               />
             </Row>
           </Section>

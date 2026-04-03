@@ -28,6 +28,8 @@ export const agentSuggestionConfigSchema = z.object({
   title: z.string(),
   description: z.string(),
   prompt: z.string(),
+  /** Icon name from LUCIDE_ICON_REGISTRY. Inherits from the agent if absent. */
+  iconName: z.string().optional(),
 });
 
 export type AgentSuggestionConfig = z.infer<typeof agentSuggestionConfigSchema>;
@@ -53,6 +55,12 @@ export const agentConfigEntrySchema = z.object({
   envVars: z.record(z.string(), z.string()).optional(),
   /** When false, hidden from Scheduled Agents Management and A2A servers. Absent = true. */
   schedulingEnabled: z.boolean().optional(),
+  /** Icon name from LUCIDE_ICON_REGISTRY (e.g. "Brain", "Zap"). Defaults to "Bot" if absent. */
+  iconName: z.string().optional(),
+  /** Tailwind classes for the icon background circle (e.g. "bg-yellow-100 group-hover:bg-primary"). */
+  iconBg: z.string().optional(),
+  /** Tailwind classes for the icon color (e.g. "text-yellow-700 group-hover:text-primary-foreground"). */
+  iconColor: z.string().optional(),
   /** Card shown on the Dove intro suggestion grid */
   doveCard: agentSuggestionConfigSchema,
   /** Starter suggestion cards shown on the agent's empty chat screen */
