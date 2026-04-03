@@ -119,6 +119,7 @@ export function AgentSettingsContent({
   // ── env vars state ───────────────────────────────────────────────────────────
   const [agentEnvVars, setAgentEnvVars] = React.useState<EnvVar[]>(initialAgentEnvVars);
   const [editingEnvVar, setEditingEnvVar] = React.useState<EnvVar | null>(null);
+  const [deletingEnvVarId, setDeletingEnvVarId] = React.useState<string | null>(null);
   const [envSaving, setEnvSaving] = React.useState(false);
 
   React.useEffect(() => {
@@ -372,16 +373,13 @@ export function AgentSettingsContent({
                   description="Add an override or configure global variables in Settings"
                 />
               ) : (
-                <DataTable cols="grid-cols-[auto_1fr_2fr_2rem_2rem]">
+                <DataTable cols="grid-cols-[auto_1fr_2fr_5rem]">
                   <DataTableHeader>
                     <span className={headerCellClass}>Source</span>
                     <span className={headerCellClass}>Key</span>
                     <span className={headerCellClass}>Value</span>
                     <span className="invisible" aria-hidden="true">
-                      Edit
-                    </span>
-                    <span className="invisible" aria-hidden="true">
-                      Delete
+                      Actions
                     </span>
                   </DataTableHeader>
 
@@ -391,50 +389,79 @@ export function AgentSettingsContent({
                       key={envVar.id}
                       isLast={i === agentEnvVars.length - 1 && inheritedGlobals.length === 0}
                     >
-                      <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 leading-none shrink-0 self-center bg-primary/10 text-primary">
-                        override
-                      </span>
-                      <div className="flex items-center gap-2 min-w-0">
-                        {envVar.isSecret ? (
-                          <Lock className="w-4 h-4 text-primary shrink-0" />
-                        ) : (
-                          <KeyRound className="w-4 h-4 text-primary shrink-0" />
-                        )}
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="text-sm font-mono font-semibold text-on-surface truncate">
-                                {envVar.key}
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent>{envVar.key}</TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      </div>
-                      <MaskedValue
-                        value={envVar.value}
-                        isSecret={envVar.isSecret}
-                        keychainService={envVar.keychainService}
-                        keychainAccount={envVar.keychainAccount}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setEditingEnvVar(envVar)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
-                        title={`Edit ${envVar.key}`}
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveEnvVar(envVar.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
-                        title={`Remove override for ${envVar.key}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      {deletingEnvVarId === envVar.id ? (
+                        <div className="col-span-full flex items-center gap-3 py-1">
+                          <span className="text-xs text-destructive font-medium ml-auto">
+                            Delete &ldquo;{envVar.key}&rdquo;?
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              void handleRemoveEnvVar(envVar.id);
+                              setDeletingEnvVarId(null);
+                            }}
+                            className="rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide bg-destructive text-destructive-foreground hover:brightness-110"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingEnvVarId(null)}
+                            className="rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide bg-secondary border border-border text-foreground hover:brightness-95"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 leading-none shrink-0 self-center bg-primary/10 text-primary">
+                            override
+                          </span>
+                          <div className="flex items-center gap-2 min-w-0">
+                            {envVar.isSecret ? (
+                              <Lock className="w-4 h-4 text-primary shrink-0" />
+                            ) : (
+                              <KeyRound className="w-4 h-4 text-primary shrink-0" />
+                            )}
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-sm font-mono font-semibold text-on-surface truncate">
+                                    {envVar.key}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>{envVar.key}</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                          <MaskedValue
+                            value={envVar.value}
+                            isSecret={envVar.isSecret}
+                            keychainService={envVar.keychainService}
+                            keychainAccount={envVar.keychainAccount}
+                          />
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditingEnvVar(envVar)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                              title={`Edit ${envVar.key}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingEnvVarId(envVar.id)}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                              title={`Remove override for ${envVar.key}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
                     </DataTableRow>
                   ))}
 

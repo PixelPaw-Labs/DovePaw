@@ -43,6 +43,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
   const [nameError, setNameError] = React.useState<string | null>(null);
   const [jsonError, setJsonError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [deletingName, setDeletingName] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     void fetchFiles();
@@ -136,6 +137,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
       const data = configFilesResponseSchema.parse(await res.json());
       setFiles(data.files);
     }
+    setDeletingName(null);
   }
 
   return (
@@ -180,24 +182,48 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
                 </div>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openEdit(file)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
-                  title={`Edit ${file.name}`}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => void handleDelete(file.name)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
-                  title={`Delete ${file.name}`}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                {deletingName === file.name ? (
+                  <>
+                    <span className="text-xs text-destructive font-medium mr-1">Delete?</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => void handleDelete(file.name)}
+                      className="h-8 px-2 text-xs font-bold text-destructive-foreground bg-destructive hover:brightness-110"
+                    >
+                      Confirm
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeletingName(null)}
+                      className="h-8 px-2 text-xs font-bold bg-secondary border border-border text-foreground hover:brightness-95"
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEdit(file)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                      title={`Edit ${file.name}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDeletingName(file.name)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                      title={`Delete ${file.name}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           ))}

@@ -30,12 +30,14 @@ interface SettingsContentProps {
   initialSettings: GlobalSettings;
   initialAgentRepos: Record<string, string[]>;
   agentConfigs: AgentConfigEntry[];
+  scheduledAgentConfigs: AgentConfigEntry[];
 }
 
 export function SettingsContent({
   initialSettings,
   initialAgentRepos,
   agentConfigs,
+  scheduledAgentConfigs,
 }: SettingsContentProps) {
   const [tab, setTab] = React.useState<Tab>("repositories");
   const [repositories, setRepositories] = React.useState<Repository[]>(
@@ -240,7 +242,7 @@ export function SettingsContent({
         ) : tab === "env-vars" ? (
           <EnvVarTable envVars={envVars} onEdit={setEditingEnvVar} onRemove={handleRemoveEnvVar} />
         ) : (
-          <AgentManagementContent agents={agentConfigs.map(buildAgentDef)} />
+          <AgentManagementContent agents={scheduledAgentConfigs.map(buildAgentDef)} />
         )}
       </div>
 
