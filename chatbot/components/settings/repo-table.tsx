@@ -3,7 +3,8 @@ import Link from "next/link";
 import { Trash2, FolderGit2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import type { Repository } from "@@/lib/settings-schemas";
 import {
   DataTable,
@@ -14,13 +15,21 @@ import {
 } from "./data-table";
 
 interface RepoTableProps {
+  agentConfigs: AgentConfigEntry[];
   repositories: Repository[];
   agentRepos: Record<string, string[]>;
   onEdit: (repo: Repository) => void;
   onRemove: (id: string) => void;
 }
 
-export function RepoTable({ repositories, agentRepos, onEdit, onRemove }: RepoTableProps) {
+export function RepoTable({
+  agentConfigs,
+  repositories,
+  agentRepos,
+  onEdit,
+  onRemove,
+}: RepoTableProps) {
+  const agents = agentConfigs.map(buildAgentDef);
   if (repositories.length === 0) {
     return (
       <DataTableEmpty
@@ -46,7 +55,7 @@ export function RepoTable({ repositories, agentRepos, onEdit, onRemove }: RepoTa
       </DataTableHeader>
 
       {repositories.map((repo, i) => {
-        const enabledAgents = AGENTS.filter((a) => agentRepos[a.name]?.includes(repo.id) ?? false);
+        const enabledAgents = agents.filter((a) => agentRepos[a.name]?.includes(repo.id) ?? false);
 
         return (
           <DataTableRow key={repo.id} isLast={i === repositories.length - 1}>

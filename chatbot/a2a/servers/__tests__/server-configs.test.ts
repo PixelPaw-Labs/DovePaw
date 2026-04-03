@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { AGENTS_ROOT } from "@/lib/paths";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentConfigEntries } from "@@/lib/agents-config";
 
 vi.mock("express", () => {
   const app = {
@@ -36,9 +36,9 @@ import { createServerFromDef } from "@/a2a/lib/base-server";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe.each(AGENTS)("$name agent", ({ name: _name, entryPath }) => {
+describe.each(readAgentConfigEntries())("$name agent", ({ name }) => {
   it("script exists in agents/", () => {
-    expect(existsSync(resolve(AGENTS_ROOT, entryPath))).toBe(true);
+    expect(existsSync(resolve(AGENTS_ROOT, `agents/${name}/main.ts`))).toBe(true);
   });
 });
 

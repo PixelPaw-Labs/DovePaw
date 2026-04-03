@@ -1,9 +1,13 @@
 import { defineConfig } from "tsup";
-import { AGENTS } from "./lib/agents.js";
+import { readAgentConfigEntries } from "./lib/agents-config.js";
+
+const agentEntries = readAgentConfigEntries();
 
 export default defineConfig({
   entry: {
-    ...Object.fromEntries(AGENTS.map((a) => [a.name, a.entryPath])),
+    ...Object.fromEntries(
+      agentEntries.map((a) => [`agents/${a.name}`, `agents/${a.name}/main.ts`]),
+    ),
     "a2a-trigger": "agents/lib/a2a-trigger.ts",
   },
   format: "esm",

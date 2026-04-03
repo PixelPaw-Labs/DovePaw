@@ -16,7 +16,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AgentSidebar />
+      <AgentSidebar agentConfigs={allAgentEntries} />
 
       <main className="flex-1 flex flex-col bg-background relative min-w-0 overflow-y-auto">
         {/* Glass header */}

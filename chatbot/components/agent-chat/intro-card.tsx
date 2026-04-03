@@ -1,11 +1,13 @@
 "use client";
 
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { DOVE_AVATAR } from "@/lib/avatars";
 import { SuggestionChips } from "./suggestion-chips";
 import { AgentSuggestionChips } from "./agent-suggestion-chips";
 
 interface IntroCardProps {
+  agentConfigs: AgentConfigEntry[];
   onSelect: (text: string) => void;
   agentId?: string;
 }
@@ -21,7 +23,13 @@ function getDoveAge() {
   return `${fullYears} years ${remainingMonths} month${remainingMonths > 1 ? "s" : ""} old`;
 }
 
-function DoveIntro({ onSelect }: { onSelect: (text: string) => void }) {
+function DoveIntro({
+  agentConfigs,
+  onSelect,
+}: {
+  agentConfigs: AgentConfigEntry[];
+  onSelect: (text: string) => void;
+}) {
   const age = getDoveAge();
   return (
     <div className="flex flex-col gap-4 w-full max-w-3xl">
@@ -42,14 +50,23 @@ function DoveIntro({ onSelect }: { onSelect: (text: string) => void }) {
           </div>
         </div>
       </div>
-      <SuggestionChips onSelect={onSelect} />
+      <SuggestionChips agentConfigs={agentConfigs} onSelect={onSelect} />
     </div>
   );
 }
 
-function AgentIntro({ agentId, onSelect }: { agentId: string; onSelect: (text: string) => void }) {
-  const agent = AGENTS.find((a) => a.name === agentId);
-  if (!agent) return null;
+function AgentIntro({
+  agentConfigs,
+  agentId,
+  onSelect,
+}: {
+  agentConfigs: AgentConfigEntry[];
+  agentId: string;
+  onSelect: (text: string) => void;
+}) {
+  const entry = agentConfigs.find((a) => a.name === agentId);
+  if (!entry) return null;
+  const agent = buildAgentDef(entry);
   const Icon = agent.icon;
 
   return (
@@ -71,14 +88,14 @@ function AgentIntro({ agentId, onSelect }: { agentId: string; onSelect: (text: s
           </div>
         </div>
       </div>
-      <AgentSuggestionChips key={agentId} agentName={agentId} onSelect={onSelect} />
+      <AgentSuggestionChips key={agentId} suggestions={agent.suggestions} onSelect={onSelect} />
     </div>
   );
 }
 
-export function IntroCard({ onSelect, agentId = "dove" }: IntroCardProps) {
+export function IntroCard({ agentConfigs, onSelect, agentId = "dove" }: IntroCardProps) {
   if (agentId === "dove") {
-    return <DoveIntro onSelect={onSelect} />;
+    return <DoveIntro agentConfigs={agentConfigs} onSelect={onSelect} />;
   }
-  return <AgentIntro agentId={agentId} onSelect={onSelect} />;
+  return <AgentIntro agentConfigs={agentConfigs} agentId={agentId} onSelect={onSelect} />;
 }

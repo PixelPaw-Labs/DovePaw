@@ -4,17 +4,24 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Bot, PawPrint, Settings, Sliders } from "lucide-react";
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { cn } from "@/lib/utils";
 import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
 import { AgentButton } from "./agent-button";
 
 interface AgentSidebarProps {
+  agentConfigs: AgentConfigEntry[];
   activeAgentId?: string;
   onSelectAgent?: (agentId: string) => void;
 }
 
-export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSidebarProps) {
+export function AgentSidebar({
+  agentConfigs,
+  activeAgentId = "dove",
+  onSelectAgent,
+}: AgentSidebarProps) {
+  const agents = agentConfigs.map(buildAgentDef);
   const statuses = useAgentStatuses();
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
@@ -84,7 +91,7 @@ export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSid
           />
         </button>
 
-        {AGENTS.map((agent) => {
+        {agents.map((agent) => {
           const isAgentSettings =
             pathname === `/settings/agents/${agent.name}` ||
             pathname === `/settings/agents/${agent.name}/repos`;

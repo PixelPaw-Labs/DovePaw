@@ -16,7 +16,8 @@ import {
   headerCellClass,
 } from "./data-table";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { z } from "zod";
 import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings-schemas";
 
@@ -25,7 +26,7 @@ const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 type Tab = "repositories" | "env-vars" | "config-files";
 
 interface AgentSettingsContentProps {
-  agentName: string;
+  agentEntry: AgentConfigEntry;
   repositories: Repository[];
   initialEnabledRepoIds: string[];
   initialAgentEnvVars: EnvVar[];
@@ -70,13 +71,14 @@ function MaskedValue({
 }
 
 export function AgentSettingsContent({
-  agentName,
+  agentEntry,
   repositories,
   initialEnabledRepoIds,
   initialAgentEnvVars,
   globalEnvVars,
 }: AgentSettingsContentProps) {
-  const agent = AGENTS.find((a) => a.name === agentName)!;
+  const agent = buildAgentDef(agentEntry);
+  const agentName = agent.name;
   const Icon = agent.icon;
 
   const [tab, setTab] = React.useState<Tab>("repositories");

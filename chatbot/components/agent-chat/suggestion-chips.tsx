@@ -1,7 +1,8 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { SuggestionCard } from "./suggestion-card";
 import { useSuggestionAnimation } from "./use-suggestion-animation";
 
@@ -14,9 +15,15 @@ const ALL_AGENTS_CARD = {
   prompt: "What can all my agents help with?",
 };
 
-export function SuggestionChips({ onSelect }: { onSelect: (text: string) => void }) {
+export function SuggestionChips({
+  agentConfigs,
+  onSelect,
+}: {
+  agentConfigs: AgentConfigEntry[];
+  onSelect: (text: string) => void;
+}) {
   const containerRef = useSuggestionAnimation();
-  const cards = [...AGENTS.map((a) => a.doveCard), ALL_AGENTS_CARD];
+  const cards = [...agentConfigs.map((a) => buildAgentDef(a).doveCard), ALL_AGENTS_CARD];
 
   return (
     <div ref={containerRef} className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full">

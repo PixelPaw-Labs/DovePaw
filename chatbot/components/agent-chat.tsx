@@ -3,7 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Bell, Bot, GitBranch, Settings, Trash2 } from "lucide-react";
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
 import {
   Conversation,
@@ -18,14 +19,19 @@ import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
 import { WorkflowPanel } from "./workflow/workflow-panel";
 
-function useActiveAgentLabel(activeAgentId: string) {
+function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEntry[]) {
   if (activeAgentId === "dove") return { name: "Dove", Icon: Bot };
-  const agent = AGENTS.find((a) => a.name === activeAgentId);
-  if (!agent) return { name: activeAgentId, Icon: Bot };
-  return { name: agent.displayName, Icon: agent.icon };
+  const entry = agentConfigs.find((a) => a.name === activeAgentId);
+  if (!entry) return { name: activeAgentId, Icon: Bot };
+  const def = buildAgentDef(entry);
+  return { name: def.displayName, Icon: def.icon };
 }
 
-export function AgentChat() {
+interface AgentChatProps {
+  agentConfigs: AgentConfigEntry[];
+}
+
+export function AgentChat({ agentConfigs }: AgentChatProps) {
   const router = useRouter();
   const {
     activeAgentId,
@@ -39,7 +45,7 @@ export function AgentChat() {
     removeFromQueue,
   } = useConversations();
 
-  const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId);
+  const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId, agentConfigs);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
@@ -76,7 +82,11 @@ export function AgentChat() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AgentSidebar activeAgentId={activeAgentId} onSelectAgent={setActiveAgentId} />
+      <AgentSidebar
+        agentConfigs={agentConfigs}
+        activeAgentId={activeAgentId}
+        onSelectAgent={setActiveAgentId}
+      />
 
       <main className="flex-1 flex flex-col bg-background relative min-w-0">
         {/* Glass header */}
@@ -126,7 +136,12 @@ export function AgentChat() {
           <ConversationContent>
             {messages.length === 0 ? (
               <ConversationEmptyState className="justify-start pt-8">
-                <IntroCard key={activeAgentId} onSelect={sendMessage} agentId={activeAgentId} />
+                <IntroCard
+                  key={activeAgentId}
+                  agentConfigs={agentConfigs}
+                  onSelect={sendMessage}
+                  agentId={activeAgentId}
+                />
               </ConversationEmptyState>
             ) : (
               messages.map((msg) => <ChatMessageItem key={msg.id} msg={msg} />)

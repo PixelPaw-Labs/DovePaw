@@ -183,7 +183,11 @@ export function SettingsContent({
       </div>
 
       {/* Stats */}
-      <StatsCards repoCount={repositories.length} statuses={statuses} />
+      <StatsCards
+        repoCount={repositories.length}
+        agentCount={agentConfigs.length}
+        statuses={statuses}
+      />
 
       {/* Tabs */}
       <div className="flex flex-col gap-4">
@@ -227,6 +231,7 @@ export function SettingsContent({
 
         {tab === "repositories" ? (
           <RepoTable
+            agentConfigs={agentConfigs}
             repositories={repositories}
             agentRepos={initialAgentRepos}
             onEdit={setEditingRepo}

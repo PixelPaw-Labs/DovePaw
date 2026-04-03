@@ -4,21 +4,23 @@ import * as React from "react";
 import Link from "next/link";
 import { FolderGit2 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { AGENTS } from "@@/lib/agents";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import type { Repository } from "@@/lib/settings-schemas";
 
 interface AgentRepoSettingsProps {
-  agentName: string;
+  agentEntry: AgentConfigEntry;
   repositories: Repository[];
   initialEnabledRepoIds: string[];
 }
 
 export function AgentRepoSettings({
-  agentName,
+  agentEntry,
   repositories,
   initialEnabledRepoIds,
 }: AgentRepoSettingsProps) {
-  const agent = AGENTS.find((a) => a.name === agentName)!;
+  const agent = buildAgentDef(agentEntry);
+
   const Icon = agent.icon;
 
   const [enabledIds, setEnabledIds] = React.useState<Set<string>>(
@@ -33,7 +35,7 @@ export function AgentRepoSettings({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          agentName: agent.name,
+          agentName: agentEntry.name,
           enabledRepoIds: Array.from(next),
         }),
       });

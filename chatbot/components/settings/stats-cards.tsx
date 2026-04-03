@@ -1,11 +1,11 @@
 import * as React from "react";
 import { FolderGit2, Bot, Wifi, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { AGENTS } from "@@/lib/agents";
 import type { AgentStatus } from "@/a2a/heartbeat-types";
 
 interface StatsCardsProps {
   repoCount: number;
+  agentCount: number;
   statuses: Record<string, AgentStatus>;
 }
 
@@ -17,10 +17,10 @@ interface StatCard {
   accent?: boolean;
 }
 
-export function StatsCards({ repoCount, statuses }: StatsCardsProps) {
+export function StatsCards({ repoCount, agentCount, statuses }: StatsCardsProps) {
   const hasData = Object.keys(statuses).length > 0;
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
-  const totalAgents = AGENTS.length;
+  const totalAgents = agentCount;
   const isOptimal = hasData && onlineCount > 0;
 
   const cards: StatCard[] = [

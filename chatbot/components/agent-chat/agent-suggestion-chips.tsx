@@ -1,21 +1,17 @@
 "use client";
 
-import * as React from "react";
-import { AGENTS } from "@@/lib/agents";
+import type { AgentSuggestion } from "@@/lib/agents";
 import { SuggestionCard } from "./suggestion-card";
 import { useSuggestionAnimation } from "./use-suggestion-animation";
 
 export function AgentSuggestionChips({
-  agentName,
+  suggestions,
   onSelect,
 }: {
-  agentName: string;
+  suggestions: AgentSuggestion[];
   onSelect: (text: string) => void;
 }) {
   const containerRef = useSuggestionAnimation();
-
-  const agent = AGENTS.find((a) => a.name === agentName);
-  const suggestions = agent?.suggestions ?? [];
 
   if (suggestions.length === 0) return null;
 
