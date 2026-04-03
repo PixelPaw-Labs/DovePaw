@@ -182,21 +182,6 @@ export function AgentRepoSettings({
                 {enabledCount} / {totalCount}
               </span>
             </div>
-            {agent.requiredEnvVars.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-outline-variant/20">
-                <p className="text-[10px] font-bold uppercase tracking-tighter text-on-surface-variant mb-1">
-                  Required env vars
-                </p>
-                {agent.requiredEnvVars.map((v) => (
-                  <span
-                    key={v}
-                    className="inline-block text-[10px] font-mono bg-surface-container-high px-2 py-0.5 rounded mr-1 mb-1"
-                  >
-                    {v}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       </div>

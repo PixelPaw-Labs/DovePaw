@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, PawPrint, Settings } from "lucide-react";
+import { Bot, PawPrint, Settings, Sliders } from "lucide-react";
 import { AGENTS } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
 import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
@@ -18,6 +18,7 @@ export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSid
   const statuses = useAgentStatuses();
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
+  const isSubagentsConfig = pathname === "/settings/subagents";
 
   const hasData = Object.keys(statuses).length > 0;
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
@@ -102,8 +103,8 @@ export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSid
         })}
       </nav>
 
-      {/* Settings nav link */}
-      <div className="px-2 pb-2">
+      {/* Settings nav links */}
+      <div className="px-2 pb-2 flex flex-col gap-0.5">
         <Link
           href="/settings"
           className={cn(
@@ -116,6 +117,20 @@ export function AgentSidebar({ activeAgentId = "dove", onSelectAgent }: AgentSid
           <Settings className={cn("w-4 h-4 shrink-0", isSettings ? "text-blue-700" : "")} />
           <span className={cn("text-sm font-medium", !isSettings && "text-foreground/80")}>
             Settings
+          </span>
+        </Link>
+        <Link
+          href="/settings/subagents"
+          className={cn(
+            "mx-2 my-0.5 rounded-lg px-4 py-2.5 flex items-center gap-3 transition-all w-[calc(100%-1rem)]",
+            isSubagentsConfig
+              ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
+              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+          )}
+        >
+          <Sliders className={cn("w-4 h-4 shrink-0", isSubagentsConfig ? "text-blue-700" : "")} />
+          <span className={cn("text-sm font-medium", !isSubagentsConfig && "text-foreground/80")}>
+            Subagent Config
           </span>
         </Link>
       </div>

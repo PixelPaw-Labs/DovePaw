@@ -45,6 +45,12 @@ vi.mock("@@/lib/agents", () => ({
   AGENTS: [{ name: "test-agent", displayName: "Test Agent" }],
 }));
 
+vi.mock("@@/lib/agents-config", () => ({
+  readAgentsConfig: vi.fn(() => [
+    { name: "test-agent", displayName: "Test Agent", manifestKey: "test_agent" },
+  ]),
+}));
+
 vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch",
 }));
@@ -101,7 +107,7 @@ describe("POST /api/chat — settings env var wiring", () => {
     await drainStream(response);
 
     expect(readSettings).toHaveBeenCalledOnce();
-    expect(resolveSettingsEnv).toHaveBeenCalledWith(undefined, MOCK_SETTINGS, []);
+    expect(resolveSettingsEnv).toHaveBeenCalledWith(MOCK_SETTINGS);
   });
 
   it("merges settings env vars into query env after process.env", async () => {

@@ -11,6 +11,8 @@ import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { AgentManagementContent } from "./agent-management-content";
 import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { z } from "zod";
 import {
   type GlobalSettings,
@@ -27,9 +29,14 @@ type Tab = "repositories" | "env-vars" | "agent-management";
 interface SettingsContentProps {
   initialSettings: GlobalSettings;
   initialAgentRepos: Record<string, string[]>;
+  agentConfigs: AgentConfigEntry[];
 }
 
-export function SettingsContent({ initialSettings, initialAgentRepos }: SettingsContentProps) {
+export function SettingsContent({
+  initialSettings,
+  initialAgentRepos,
+  agentConfigs,
+}: SettingsContentProps) {
   const [tab, setTab] = React.useState<Tab>("repositories");
   const [repositories, setRepositories] = React.useState<Repository[]>(
     initialSettings.repositories,
@@ -228,7 +235,7 @@ export function SettingsContent({ initialSettings, initialAgentRepos }: Settings
         ) : tab === "env-vars" ? (
           <EnvVarTable envVars={envVars} onEdit={setEditingEnvVar} onRemove={handleRemoveEnvVar} />
         ) : (
-          <AgentManagementContent />
+          <AgentManagementContent agents={agentConfigs.map(buildAgentDef)} />
         )}
       </div>
 

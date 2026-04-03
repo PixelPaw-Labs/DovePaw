@@ -19,6 +19,8 @@ export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
 export const DOVEPAW_DIR = join(process.env.HOME!, ".dovepaw");
 /** ~/.dovepaw/settings.json — global settings (watched repositories, etc.) */
 export const SETTINGS_FILE = join(DOVEPAW_DIR, "settings.json");
+/** ~/.dovepaw/agents.json — agent definitions (overrides hardcoded AGENTS seed) */
+export const AGENTS_CONFIG_FILE = join(DOVEPAW_DIR, "agents.json");
 /** ~/.dovepaw/settings.agents/ — per-agent settings directory */
 export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
 /** ~/.dovepaw/settings.agents/<agentName>.json — per-agent settings file */
@@ -68,3 +70,5 @@ export const A2A_TRIGGER_SCRIPT = join(SCHEDULER_ROOT, "a2a-trigger.mjs");
 /** ~/.dovepaw/.ports.<port>.json — runtime port manifest for a specific Next.js port */
 export const portsFile = (port: string | number): string =>
   join(DOVEPAW_DIR, `.ports.${port}.json`);
+/** ~/.dovepaw/.a2a-servers.pid — PID of the running A2A servers process */
+export const A2A_SERVERS_PID_FILE = join(DOVEPAW_DIR, ".a2a-servers.pid");

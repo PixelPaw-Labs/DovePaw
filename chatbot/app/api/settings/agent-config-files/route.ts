@@ -16,7 +16,7 @@ import {
   writeFileSync,
   unlinkSync,
 } from "node:fs";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import { agentConfigDir, agentConfigFile } from "@@/lib/paths";
 import { parseBody } from "@/lib/env-var-routes";
 
@@ -42,7 +42,7 @@ export function GET(request: Request) {
     return Response.json({ error: "Missing agentName query parameter" }, { status: 400 });
   }
   const { agentName } = parsed.data;
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
   return Response.json({ files: listFiles(agentName) });
@@ -62,7 +62,7 @@ export async function PUT(request: Request) {
 
   const { agentName, filename, content } = parsed.data;
 
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -90,7 +90,7 @@ export async function DELETE(request: Request) {
 
   const { agentName, filename } = parsed.data;
 
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 

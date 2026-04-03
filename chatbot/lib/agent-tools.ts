@@ -161,25 +161,18 @@ export function makeStartScriptTool(
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "" }) => {
-      // Delete any existing clones then reclone so re-invocations always start from a clean state.
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,
         repoSlugs,
         undefined,
-        onProgress ? (slug) => onProgress(`Cloning`, { repo: slug }) : undefined,
+        onProgress ? (slug: string) => onProgress(`Cloning`, { repo: slug }) : undefined,
       );
-
-      const finalEnv: Record<string, string> = { ...config.extraEnv };
-      if (agent.reposEnvVar && clonedPaths.length > 0) {
-        finalEnv[agent.reposEnvVar] = clonedPaths.join(",");
-      }
-
-      const { runId } = startScript(
-        { ...config, extraEnv: finalEnv },
-        instruction,
-        signal,
-        onProgress,
-      );
+      // Overwrite REPO_LIST with local paths so the agent script can do file I/O
+      const finalConfig =
+        clonedPaths.length > 0
+          ? { ...config, extraEnv: { ...config.extraEnv, REPO_LIST: clonedPaths.join(",") } }
+          : config;
+      const { runId } = startScript(finalConfig, instruction, signal, onProgress);
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },
@@ -230,7 +223,7 @@ ${agent.description}
 
 **When asked about this agent, THOROUGHLY explore and explain:**
 - What it does
-- What env vars it needs (required: ${agent.requiredEnvVars.length ? agent.requiredEnvVars.join(", ") : "none"})
+- What env vars it needs
 - What inputs it requires
 - What the workflow is
 - When it normally runs: ${agent.scheduleDisplay}

@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { NextResponse } from "next/server";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import { plistLabel } from "@@/lib/plist-generate";
 import {
   agentPlistPath,
@@ -22,12 +22,13 @@ const launchdActionSchema = z.object({
 });
 
 export async function GET(request: Request) {
+  const agents = readAgentsConfig();
   const { searchParams } = new URL(request.url);
   const agentName = searchParams.get("agentName");
 
   // Single-agent mode
   if (agentName) {
-    const agent = AGENTS.find((a) => a.name === agentName);
+    const agent = agents.find((a) => a.name === agentName);
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -40,8 +41,8 @@ export async function GET(request: Request) {
   }
 
   // All-agents mode — single launchctl list call for all labels
-  const loadedMap = await areAgentsLoaded(AGENTS.map((a) => a.label));
-  const entries = AGENTS.map((agent) => {
+  const loadedMap = await areAgentsLoaded(agents.map((a) => a.label));
+  const entries = agents.map((agent) => {
     const plistPath = agentPlistPath(agent.name);
     return [
       agent.name,
@@ -52,10 +53,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const agents = readAgentsConfig();
   const body = launchdActionSchema.parse(await request.json());
   const { agentName, action } = body;
 
-  const agent = AGENTS.find((a) => a.name === agentName);
+  const agent = agents.find((a) => a.name === agentName);
   if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }

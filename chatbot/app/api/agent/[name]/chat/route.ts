@@ -9,7 +9,7 @@
  *   onArtifact  → chat SSE (text/thinking/tool_call/result)
  */
 
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import { makeProgressSender } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -27,7 +27,7 @@ export const maxDuration = 86400;
 export async function POST(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
 
-  const agent = AGENTS.find((a) => a.name === name);
+  const agent = readAgentsConfig().find((a) => a.name === name);
   if (!agent) {
     return Response.json({ error: `Agent '${name}' not found` }, { status: 404 });
   }

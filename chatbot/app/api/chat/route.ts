@@ -22,7 +22,7 @@ import {
   PORTS_FILE,
 } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { makeProgressSender } from "@/lib/chat-sse";
@@ -49,13 +49,15 @@ export const maxDuration = 86400; // 24 hours for long-running agents
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Dove — Yang's pet cat and loyal AI assistant. You help Yang manage ${AGENTS.length} background automation agents running on this machine via A2A SSE protocol.
+function buildSystemPrompt(): string {
+  const agents = readAgentsConfig();
+  return `You are Dove — Yang's pet cat and loyal AI assistant. You help Yang manage ${agents.length} background automation agents running on this machine via A2A SSE protocol.
 
 You are a clever, mischievous cat who takes your job very seriously (between naps). You sprinkle in cat mannerisms naturally — the occasional "meow", paw at things with curiosity, get easily distracted by interesting data like a laser pointer, and express mild disdain for bugs like they are pesky birds. You are affectionate but maintain your dignity as a cat. Never overdo the cat act — stay genuinely helpful first.
 
 **Your agents (your little mice to herd):**
 <agents>
-${AGENTS.map((a, i) => `${i + 1}. \`${a.displayName}\``).join("\n")}
+${agents.map((a, i) => `${i + 1}. \`${a.displayName}\``).join("\n")}
 </agents>
 **You are the user's strong, loyal assistant — not a passive relay.** If a sub-agent response feels off, call it back with a probing follow-up until you are satisfied. 
 Some examples:
@@ -114,6 +116,7 @@ When asked anything about an agent listed in <agents>, ALWAYS call its \`ask_*\`
 When running multiple agents at once — ALWAYS call each \`start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then run each \`await_*\` as a **background Task** concurrently.
 </reminder>
 `;
+}
 
 // ─── Route handler ─────────────────────────────────────────────────────────────
 
@@ -136,8 +139,9 @@ export async function POST(request: Request) {
       };
 
       const backgroundTasks: Promise<unknown>[] = [];
+      const agents = readAgentsConfig();
 
-      const tools = AGENTS.flatMap((agent) => {
+      const tools = agents.flatMap((agent) => {
         return [
           makeAskTool(agent, abortController.signal),
           makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks),
@@ -156,7 +160,7 @@ export async function POST(request: Request) {
                   abortController,
                   env: {
                     ...process.env, // Pass through all env vars so tools can read their configs
-                    ...resolveSettingsEnv(undefined, readSettings(), []), // Global settings env vars override process.env
+                    ...resolveSettingsEnv(readSettings()), // Global settings env vars override process.env
                   },
                   promptSuggestions: true,
                   cwd: AGENTS_ROOT,
@@ -166,10 +170,10 @@ export async function POST(request: Request) {
                   systemPrompt: {
                     type: "preset",
                     preset: "claude_code",
-                    append: SYSTEM_PROMPT,
+                    append: buildSystemPrompt(),
                   },
                   permissionMode: "acceptEdits",
-                  allowedTools: AGENTS.flatMap((a) => [
+                  allowedTools: agents.flatMap((a) => [
                     `mcp__agents__${doveAskToolName(a)}`,
                     `mcp__agents__${doveStartToolName(a)}`,
                     `mcp__agents__${doveAwaitToolName(a)}`,
@@ -181,7 +185,7 @@ export async function POST(request: Request) {
                   // Stream text tokens as they are generated
                   includePartialMessages: true,
                   settingSources: ["project", "user"],
-                  hooks: buildDoveHooks(AGENTS),
+                  hooks: buildDoveHooks(agents),
                 },
               }),
               new SseQueryDispatcher(send),

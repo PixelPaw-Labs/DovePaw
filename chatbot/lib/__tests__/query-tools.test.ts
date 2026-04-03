@@ -58,7 +58,6 @@ const AGENT: AgentDef = {
   manifestKey: "test_agent",
   toolName: "yolo_test_agent",
   description: "A test agent for unit tests",
-  requiredEnvVars: ["TEST_VAR"],
   scheduleDisplay: "daily 00:00",
   icon: {} as any,
   doveCard: {

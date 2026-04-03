@@ -4,7 +4,7 @@
  * and documents its required env vars.
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { AGENTS_ROOT } from "@/lib/paths";
@@ -36,16 +36,9 @@ import { createServerFromDef } from "@/a2a/lib/base-server";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe.each(AGENTS)("$name agent", ({ name: _name, entryPath, requiredEnvVars }) => {
+describe.each(AGENTS)("$name agent", ({ name: _name, entryPath }) => {
   it("script exists in agents/", () => {
     expect(existsSync(resolve(AGENTS_ROOT, entryPath))).toBe(true);
-  });
-
-  it("shared config documents required env vars", () => {
-    const src = readFileSync(resolve(AGENTS_ROOT, "lib/agents.ts"), "utf-8");
-    for (const v of requiredEnvVars) {
-      expect(src).toContain(v);
-    }
   });
 });
 

@@ -161,3 +161,5 @@ chatbot/next-env.d.ts
 # Electron build artifacts
 electron/.dist/
 electron/release/
+
+page-inspector-output/

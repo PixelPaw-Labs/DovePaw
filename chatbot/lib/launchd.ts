@@ -5,7 +5,7 @@
 
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import type { AgentDef } from "@@/lib/agents";
 import { AGENTS_ROOT, plistFilePath } from "@@/lib/paths";
 import { plistLabel } from "@@/lib/plist-generate";
@@ -32,7 +32,7 @@ const execAsync = promisify(exec);
 
 /** Resolves the ~/Library/LaunchAgents plist path for a given agent name. */
 export function agentPlistPath(agentName: string): string {
-  const agent = AGENTS.find((a) => a.name === agentName);
+  const agent = readAgentsConfig().find((a) => a.name === agentName);
   if (!agent) throw new Error(`Unknown agent: ${agentName}`);
   return plistFilePath(plistLabel(agent));
 }
@@ -91,8 +91,9 @@ export async function getLaunchdStatuses(): Promise<Record<string, LaunchdStatus
       const label = labelParts.join("\t").trim();
       if (label) loaded.set(label, pid !== "-");
     }
+    const agents = readAgentsConfig();
     return Object.fromEntries(
-      AGENTS.map((a) => {
+      agents.map((a) => {
         const running = loaded.get(a.label);
         return [
           a.manifestKey,
@@ -101,8 +102,9 @@ export async function getLaunchdStatuses(): Promise<Record<string, LaunchdStatus
       }),
     );
   } catch {
+    const agents = readAgentsConfig();
     return Object.fromEntries(
-      AGENTS.map((a) => [a.manifestKey, { loaded: false, running: false }]),
+      agents.map((a) => [a.manifestKey, { loaded: false, running: false }]),
     );
   }
 }

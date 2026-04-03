@@ -56,7 +56,6 @@ const AGENT: AgentDef = {
   manifestKey: "test_agent",
   toolName: "yolo_test_agent",
   description: "A test agent for unit tests",
-  requiredEnvVars: ["TEST_VAR"],
   scheduleDisplay: "daily 00:00",
   icon: {} as any,
   doveCard: {
@@ -125,24 +124,11 @@ describe("buildSubAgentPrompt", () => {
     const prompt = buildSubAgentPrompt(AGENT);
     expect(prompt).toContain(AGENT.label);
   });
-
-  it("includes required env vars", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain("TEST_VAR");
-  });
-
-  it("shows 'none' when no required env vars", () => {
-    const agentNoVars: AgentDef = { ...AGENT, requiredEnvVars: [] };
-    const prompt = buildSubAgentPrompt(agentNoVars);
-    expect(prompt).toMatch(/required:.*none/i);
-  });
 });
 
 // ─── makeStartScriptTool ──────────────────────────────────────────────────────
 
 describe("makeStartScriptTool", () => {
-  const AGENT_WITH_REPOS: AgentDef = { ...AGENT, reposEnvVar: "REPOS" };
-
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(startScript).mockReturnValue({ runId: "run-abc" } as any);
@@ -150,7 +136,7 @@ describe("makeStartScriptTool", () => {
 
   it("reclones repos into workspace before starting the script", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue(["/ws/ta-abc123/my-app"]);
-    const handler = captureToolHandler(AGENT_WITH_REPOS, BASE_CONFIG, ["org/my-app"]);
+    const handler = captureToolHandler(AGENT, BASE_CONFIG, ["org/my-app"]);
 
     await handler({});
 
@@ -162,24 +148,7 @@ describe("makeStartScriptTool", () => {
     );
   });
 
-  it("remaps reposEnvVar to cloned local paths in extraEnv passed to startScript", async () => {
-    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue(["/ws/ta-abc123/my-app"]);
-    const config = { ...BASE_CONFIG, extraEnv: { REPOS: "org/my-app", OTHER: "keep" } };
-    const handler = captureToolHandler(AGENT_WITH_REPOS, config, ["org/my-app"]);
-
-    await handler({ instruction: "go" });
-
-    expect(startScript).toHaveBeenCalledWith(
-      expect.objectContaining({
-        extraEnv: { REPOS: "/ws/ta-abc123/my-app", OTHER: "keep" },
-      }),
-      "go",
-      undefined,
-      undefined,
-    );
-  });
-
-  it("does not remap reposEnvVar when repoSlugs is empty", async () => {
+  it("passes config unchanged to startScript", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
     const config = { ...BASE_CONFIG, extraEnv: { OTHER: "keep" } };
     const handler = captureToolHandler(AGENT, config, []);
@@ -217,13 +186,7 @@ describe("makeStartScriptTool", () => {
   it("wraps onProgress as a clone callback that prefixes the slug", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue(["/ws/ta-abc123/my-app"]);
     const onProgress = vi.fn();
-    const handler = captureToolHandler(
-      AGENT_WITH_REPOS,
-      BASE_CONFIG,
-      ["org/my-app"],
-      undefined,
-      onProgress,
-    );
+    const handler = captureToolHandler(AGENT, BASE_CONFIG, ["org/my-app"], undefined, onProgress);
 
     await handler({});
 

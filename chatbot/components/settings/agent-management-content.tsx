@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { AGENTS } from "@@/lib/agents";
 import type { AgentDef } from "@@/lib/agents";
 import { z } from "zod";
 
@@ -34,7 +33,11 @@ async function callAction(agentName: string, action: Action): Promise<AgentLaunc
   return agentLaunchdStatusSchema.parse(await res.json());
 }
 
-export function AgentManagementContent() {
+interface AgentManagementContentProps {
+  agents: AgentDef[];
+}
+
+export function AgentManagementContent({ agents }: AgentManagementContentProps) {
   const [statuses, setStatuses] = React.useState<AllAgentsStatus | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null); // agentName currently acting
   const [installingAll, setInstallingAll] = React.useState(false);
@@ -64,7 +67,7 @@ export function AgentManagementContent() {
     setInstallingAll(true);
     setError(null);
     try {
-      for (const agent of AGENTS) {
+      for (const agent of agents) {
         setBusy(agent.name);
         // eslint-disable-next-line no-await-in-loop -- sequential install required; launchd plist ordering matters
         const updated = await callAction(agent.name, "install");
@@ -109,7 +112,7 @@ export function AgentManagementContent() {
 
       {/* Card grid — 2 columns */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {AGENTS.map((agent) => (
+        {agents.map((agent) => (
           <AgentCard
             key={agent.name}
             agent={agent}

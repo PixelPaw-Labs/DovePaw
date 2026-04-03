@@ -1,12 +1,9 @@
 /**
- * Resolves settings env vars and agent repo assignments into a plain
- * Record<string, string> ready to be merged into process.env before
- * spawning a sub-agent or child process.
+ * Resolves settings env vars into a plain Record<string, string> ready to be
+ * merged into process.env before spawning a sub-agent or child process.
  *
  * - Plain vars: use value directly (excluded when value is empty string).
  * - Secret vars: read from OS keychain; excluded when not found.
- * - Agent repos: agentRepos repo IDs resolved to comma-separated
- *   githubRepo slugs and set under the agent's reposEnvVar key (if defined).
  */
 
 import { getSecret, DOVEPAW_SERVICE } from "@/lib/keyring";
@@ -23,9 +20,7 @@ function resolveEnvVar(envVar: EnvVar): string | undefined {
 }
 
 export function resolveSettingsEnv(
-  reposEnvVar: string | undefined,
   settings: GlobalSettings,
-  agentRepos: string[],
   agentEnvVars: AgentSettings["envVars"] = [],
 ): Record<string, string> {
   const env: Record<string, string> = {};
@@ -38,17 +33,6 @@ export function resolveSettingsEnv(
   for (const envVar of agentEnvVars) {
     const value = resolveEnvVar(envVar);
     if (value !== undefined) env[envVar.key] = value;
-  }
-
-  if (reposEnvVar) {
-    const slugs = agentRepos
-      .map((id) => settings.repositories.find((r) => r.id === id))
-      .filter((r): r is NonNullable<typeof r> => r !== undefined)
-      .map((r) => r.githubRepo);
-
-    if (slugs.length > 0) {
-      env[reposEnvVar] = slugs.join(",");
-    }
   }
 
   return env;

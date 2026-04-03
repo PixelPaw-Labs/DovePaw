@@ -41,6 +41,10 @@ vi.mock("@@/lib/agents", () => ({
   AGENTS: [{ name: "zendesk-triager" }, { name: "dependabot-merger" }],
 }));
 
+vi.mock("@@/lib/agents-config", () => ({
+  readAgentsConfig: vi.fn(() => [{ name: "zendesk-triager" }, { name: "dependabot-merger" }]),
+}));
+
 // ─── Mock paths ───────────────────────────────────────────────────────────────
 
 vi.mock("@@/lib/paths", () => ({

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Brain,
+  Bot,
   Zap,
   Radar,
   FlaskConical,
@@ -22,6 +23,7 @@ import {
   Info,
   Hammer,
 } from "lucide-react";
+import type { AgentConfigEntry } from "./agents-config-schemas";
 
 const TOOL_PREFIX = "yolo";
 
@@ -53,14 +55,6 @@ export interface AgentDef {
   toolName: string;
   /** Short description for MCP tool and system prompt */
   description: string;
-  /** Required environment variables (checked at startup) */
-  requiredEnvVars: string[];
-  /**
-   * The env var key under which this agent's assigned repositories (from settings.agentRepos)
-   * will be injected as a comma-separated list of githubRepo slugs.
-   * When absent, no repos env var is set for this agent.
-   */
-  reposEnvVar?: string;
   /** Human-readable schedule string for UI display */
   scheduleDisplay: string;
   /** launchd schedule */
@@ -75,6 +69,8 @@ export interface AgentDef {
   suggestions: AgentSuggestion[];
   /** Whether to run immediately when loaded */
   runAtLoad?: boolean;
+  /** When false, hidden from Scheduled Agents Management and A2A servers. Defaults to true. */
+  schedulingEnabled?: boolean;
   /** Extra static env vars to embed in the launchd plist */
   envVars?: Record<string, string>;
 }
@@ -104,7 +100,7 @@ export const AGENTS: AgentDef[] = [
       "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'learn from sessions', 'dream through memories', 'rewind and learn', or 'reflect on past Claude Code work'. " +
       "Requires PROJECTS env var.",
-    requiredEnvVars: ["PROJECTS"],
+
     icon: Brain,
     scheduleDisplay: "daily 00:00",
     schedule: { type: "calendar", hour: 0, minute: 0 },
@@ -177,8 +173,7 @@ export const AGENTS: AgentDef[] = [
       "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'run GSD', 'process tickets', 'forge JIRA tickets', or 'start the pipeline'. " +
       "Requires REPO_LIST + JIRA_ASSIGNEE env vars.",
-    requiredEnvVars: ["REPO_LIST", "JIRA_ASSIGNEE"],
-    reposEnvVar: "REPO_LIST",
+
     icon: Zap,
     scheduleDisplay: "every 5 min",
     schedule: { type: "interval", seconds: 300 },
@@ -251,7 +246,7 @@ export const AGENTS: AgentDef[] = [
       "Use when asked anything about this agent not limited to — what it does, its status, recent runs, or logs — " +
       "or when asked to 'check Claude Code releases', 'scan release notes', or 'monitor for breaking changes'. " +
       "Requires gh CLI authentication.",
-    requiredEnvVars: [],
+
     icon: Radar,
     scheduleDisplay: "Sun 10:00",
     schedule: { type: "calendar", hour: 10, minute: 0, weekday: 0 },
@@ -324,7 +319,7 @@ export const AGENTS: AgentDef[] = [
       "or when asked to 'consolidate memories', 'promote patterns to global', 'summarize memories " +
       "to be generic', or 'extract common learnings across projects'. " +
       "Requires PROJECTS env var listing ≥2 project names.",
-    requiredEnvVars: ["PROJECTS"],
+
     icon: FlaskConical,
     scheduleDisplay: "Daily 01:00",
     schedule: { type: "calendar", hour: 1, minute: 0 },
@@ -399,8 +394,7 @@ export const AGENTS: AgentDef[] = [
       "'what went wrong on-call', or 'summarize recent incidents'. Covers the past 24 hours by default. " +
       "Pass the instruction directly, e.g. 'incidents today', 'P1AB1234', " +
       "or 'past 6 hours example.com:zone123'. Requires REPO_LIST env var.",
-    requiredEnvVars: ["REPO_LIST"],
-    reposEnvVar: "REPO_LIST",
+
     icon: BellRing,
     scheduleDisplay: "daily 09:00",
     schedule: { type: "calendar", hour: 9, minute: 0 },
@@ -475,8 +469,7 @@ export const AGENTS: AgentDef[] = [
       "or when asked to 'triage zendesk', 'investigate support issues', 'what are customers reporting', " +
       "or 'find root cause for support tickets'. Pass a time scope, e.g. 'last 7 days' or 'last 2 weeks'. " +
       "Requires REPO_LIST, SLACK_WORKSPACE, and ZENDESK_SLACK_CHANNELS env vars.",
-    requiredEnvVars: ["REPO_LIST", "SLACK_WORKSPACE", "ZENDESK_SLACK_CHANNELS"],
-    reposEnvVar: "REPO_LIST",
+
     icon: LifeBuoy,
     scheduleDisplay: "on demand",
     doveCard: {
@@ -550,8 +543,7 @@ export const AGENTS: AgentDef[] = [
       "or when asked to 'process dependabot PRs', 'merge dependabot', 'triage dependency PRs', " +
       "or 'review dependency updates'. Pass 'dry-run' to preview without merging. " +
       "Requires REPO_LIST (local repo paths).",
-    requiredEnvVars: ["REPO_LIST"],
-    reposEnvVar: "REPO_LIST",
+
     icon: GitMerge,
     scheduleDisplay: "daily 10:00",
     schedule: { type: "calendar", hour: 10, minute: 0 },
@@ -615,3 +607,95 @@ export const AGENTS: AgentDef[] = [
     ],
   }),
 ];
+
+// ─── Icon registry ─────────────────────────────────────────────────────────────
+// Maps agent name → primary LucideIcon. New agents not in this map get Bot as default.
+
+const AGENT_ICON_MAP: Record<string, LucideIcon> = {
+  "memory-dream": Brain,
+  "get-shit-done": Zap,
+  "release-log-sentinel": Radar,
+  "memory-distiller": FlaskConical,
+  "oncall-analyzer": BellRing,
+  "zendesk-triager": LifeBuoy,
+  "dependabot-merger": GitMerge,
+};
+
+// Maps agent name → default iconBg + iconColor used when a suggestion doesn't specify them.
+const AGENT_ICON_STYLE_MAP: Record<string, { iconBg: string; iconColor: string }> = {
+  "memory-dream": {
+    iconBg: "bg-accent group-hover:bg-primary",
+    iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+  },
+  "get-shit-done": {
+    iconBg: "bg-yellow-100 group-hover:bg-primary",
+    iconColor: "text-yellow-700 group-hover:text-primary-foreground",
+  },
+  "release-log-sentinel": {
+    iconBg: "bg-blue-100 group-hover:bg-primary",
+    iconColor: "text-blue-700 group-hover:text-primary-foreground",
+  },
+  "memory-distiller": {
+    iconBg: "bg-purple-100 group-hover:bg-primary",
+    iconColor: "text-purple-700 group-hover:text-primary-foreground",
+  },
+  "oncall-analyzer": {
+    iconBg: "bg-red-100 group-hover:bg-primary",
+    iconColor: "text-red-600 group-hover:text-primary-foreground",
+  },
+  "zendesk-triager": {
+    iconBg: "bg-blue-100 group-hover:bg-primary",
+    iconColor: "text-blue-700 group-hover:text-primary-foreground",
+  },
+  "dependabot-merger": {
+    iconBg: "bg-green-100 group-hover:bg-primary",
+    iconColor: "text-green-700 group-hover:text-primary-foreground",
+  },
+};
+
+const DEFAULT_ICON_STYLE = {
+  iconBg: "bg-accent group-hover:bg-primary",
+  iconColor: "text-accent-foreground group-hover:text-primary-foreground",
+};
+
+/** Build a full AgentDef (including icon and derived fields) from a serializable config entry. */
+export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
+  const manifestKey = entry.name.replaceAll("-", "_");
+  const icon = AGENT_ICON_MAP[entry.name] ?? Bot;
+  const style = AGENT_ICON_STYLE_MAP[entry.name] ?? DEFAULT_ICON_STYLE;
+
+  const doveCard: AgentSuggestion = {
+    icon,
+    ...style,
+    title: entry.doveCard.title,
+    description: entry.doveCard.description,
+    prompt: entry.doveCard.prompt,
+  };
+
+  const suggestions: AgentSuggestion[] = entry.suggestions.map((s) => ({
+    icon,
+    ...style,
+    title: s.title,
+    description: s.description,
+    prompt: s.prompt,
+  }));
+
+  return {
+    name: entry.name,
+    alias: entry.alias,
+    entryPath: `agents/${entry.name}/main.ts`,
+    displayName: entry.displayName,
+    label: `Claude Code Agent - ${entry.displayName}`,
+    manifestKey,
+    toolName: `${TOOL_PREFIX}_${manifestKey}`,
+    description: entry.description,
+    scheduleDisplay: entry.scheduleDisplay,
+    schedule: entry.schedule,
+    icon,
+    doveCard,
+    suggestions,
+    runAtLoad: entry.runAtLoad,
+    envVars: entry.envVars,
+    schedulingEnabled: entry.schedulingEnabled ?? true,
+  };
+}

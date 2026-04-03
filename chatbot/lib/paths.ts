@@ -18,6 +18,7 @@ export {
   agentPersistentStateDir,
   plistFilePath,
   portsFile,
+  A2A_SERVERS_PID_FILE,
 } from "@@/lib/paths";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

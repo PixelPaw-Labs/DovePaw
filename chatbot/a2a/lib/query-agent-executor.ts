@@ -56,13 +56,15 @@ export class QueryAgentExecutor implements AgentExecutor {
     publisher.publishStatusToUI("Starting…");
 
     // Resolve env vars fresh on each execution so settings changes take effect
+    const settings = readSettings();
     const agentSettings = readAgentSettings(this.def.name);
-    const extraEnv = resolveSettingsEnv(
-      this.def.reposEnvVar,
-      readSettings(),
-      agentSettings.repos,
-      agentSettings.envVars,
-    );
+    const extraEnv = resolveSettingsEnv(settings, agentSettings.envVars);
+
+    // Resolve selected repos to GitHub slugs for cloning and REPO_LIST injection
+    const repoSlugs = agentSettings.repos
+      .map((id) => settings.repositories.find((r) => r.id === id))
+      .filter((r): r is NonNullable<typeof r> => r !== undefined)
+      .map((r) => r.githubRepo);
 
     // Workspace, repo cloning, and query() are all inside the outer try so
     // the finally block always runs cleanup regardless of where a failure occurs.
@@ -86,16 +88,10 @@ export class QueryAgentExecutor implements AgentExecutor {
       exitHandler = () => workspace?.cleanup();
       process.once("exit", exitHandler);
 
-      // Repo cloning is deferred to makeStartScriptTool so simple ask_* queries
-      // don't block on slow gh repo clone. Slugs are passed to the tool; it
-      // deletes existing clones and reclones on every start_run_script call.
-      const repoSlugs = this.def.reposEnvVar
-        ? (extraEnv[this.def.reposEnvVar] ?? "").split(",").filter(Boolean)
-        : [];
-
       const workspaceEnv: Record<string, string> = {
         ...extraEnv,
         AGENT_WORKSPACE: workspace.path,
+        ...(repoSlugs.length > 0 ? { REPO_LIST: repoSlugs.join(",") } : {}),
       };
 
       const agentConfig: AgentConfig = {

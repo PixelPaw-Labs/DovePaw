@@ -1,15 +1,17 @@
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentConfigEntries, readScheduledAgentConfigEntries } from "@@/lib/agents-config";
 
 export const metadata = { title: "Settings — DovePaw" };
 
 export default function SettingsPage() {
   const settings = readSettings();
 
+  const allAgentEntries = readAgentConfigEntries();
+  const enabledAgentEntries = readScheduledAgentConfigEntries();
   const initialAgentRepos: Record<string, string[]> = Object.fromEntries(
-    AGENTS.map((a) => [a.name, readAgentSettings(a.name).repos]),
+    allAgentEntries.map((a) => [a.name, readAgentSettings(a.name).repos]),
   );
 
   return (
@@ -23,7 +25,11 @@ export default function SettingsPage() {
         </header>
 
         <div className="flex-1 px-8 py-8 max-w-5xl mx-auto w-full">
-          <SettingsContent initialSettings={settings} initialAgentRepos={initialAgentRepos} />
+          <SettingsContent
+            initialSettings={settings}
+            initialAgentRepos={initialAgentRepos}
+            agentConfigs={enabledAgentEntries}
+          />
         </div>
       </main>
     </div>

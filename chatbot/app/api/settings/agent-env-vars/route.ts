@@ -14,7 +14,7 @@ import {
 } from "@@/lib/settings";
 import type { EnvVar } from "@@/lib/settings-schemas";
 import { getSecret, setSecret, deleteSecret } from "@/lib/keyring";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import { envVarFields, parseBody, buildUpdatedEnvVar } from "@/lib/env-var-routes";
 
 function agentKeychainService(agentName: string) {
@@ -47,7 +47,7 @@ export function GET(request: Request) {
     return Response.json({ error: "Missing agentName query parameter" }, { status: 400 });
   }
   const { agentName } = parsed.data;
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
 
   const { agentName, key, value, isSecret, keychainService, keychainAccount } = parsed.data;
 
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -104,7 +104,7 @@ export async function PATCH(request: Request) {
 
   const { agentName, id, key, value, isSecret, keychainService, keychainAccount } = parsed.data;
 
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -153,7 +153,7 @@ export async function DELETE(request: Request) {
 
   const { agentName, id } = parsed.data;
 
-  if (!AGENTS.find((a) => a.name === agentName)) {
+  if (!readAgentsConfig().find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 

@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
 import { AgentSettingsContent } from "@/components/settings/agent-settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
-import { AGENTS } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 
 interface Props {
   params: Promise<{ agentName: string }>;
@@ -10,14 +10,14 @@ interface Props {
 
 export async function generateMetadata({ params }: Props) {
   const { agentName } = await params;
-  const agent = AGENTS.find((a) => a.name === agentName);
+  const agent = readAgentsConfig().find((a) => a.name === agentName);
   if (!agent) return { title: "Not Found — DovePaw" };
   return { title: `${agent.displayName} Settings — DovePaw` };
 }
 
 export default async function AgentSettingsPage({ params }: Props) {
   const { agentName } = await params;
-  const agent = AGENTS.find((a) => a.name === agentName);
+  const agent = readAgentsConfig().find((a) => a.name === agentName);
   if (!agent) notFound();
 
   const globalSettings = readSettings();

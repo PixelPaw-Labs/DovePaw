@@ -27,6 +27,13 @@ vi.mock("@@/lib/agents", () => ({
   ],
 }));
 
+vi.mock("@@/lib/agents-config", () => ({
+  readAgentsConfig: vi.fn(() => [
+    { name: "test-agent", manifestKey: "test_agent", displayName: "Test Agent" },
+    { name: "other-agent", manifestKey: "other_agent", displayName: "Other Agent" },
+  ]),
+}));
+
 vi.mock("@/a2a/lib/base-server", () => ({
   readPortsManifest: vi.fn(),
 }));

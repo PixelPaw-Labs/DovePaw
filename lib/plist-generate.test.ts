@@ -12,7 +12,6 @@ const BASE: AgentDef = {
   manifestKey: "test_agent",
   toolName: "run_test_agent",
   description: "A test agent",
-  requiredEnvVars: [],
   scheduleDisplay: "daily 09:00",
   schedule: { type: "calendar", hour: 9, minute: 0 },
   icon: Brain,
