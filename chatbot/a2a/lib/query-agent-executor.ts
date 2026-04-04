@@ -24,8 +24,9 @@ import {
   createAgentWorkspace,
   agentSourceDirFromEntry,
   ensureAgentSourceSymlink,
-  type AgentWorkspace,
 } from "./workspace";
+import type { AgentWorkspace } from "./workspace";
+import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -38,17 +39,18 @@ import { ExecutorPublisher } from "./executor-publisher";
  *
  * Settings (env vars, repo list) are resolved fresh on each execution.
  */
-interface SessionState {
-  claudeSessionId: string;
-  workspace: AgentWorkspace;
-}
+const LABEL_MAX_LEN = 60;
+
+export { SessionInfo };
 
 export class QueryAgentExecutor implements AgentExecutor {
   private abortController: AbortController | null = null;
-  private readonly sessionState = new Map<string, SessionState>();
   private currentContextId: string | null = null;
 
-  constructor(private readonly def: AgentDef) {}
+  constructor(
+    private readonly def: AgentDef,
+    private readonly sessionManager: SessionManager,
+  ) {}
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
     const { taskId, contextId } = requestContext;
@@ -81,7 +83,10 @@ export class QueryAgentExecutor implements AgentExecutor {
     // Workspace, repo cloning, and query() are all inside the outer try so
     // the finally block always runs cleanup regardless of where a failure occurs.
     this.currentContextId = contextId;
-    const existingState = this.sessionState.get(contextId);
+    const existingState = this.sessionManager.get(contextId);
+    const startedAt = existingState?.startedAt ?? new Date();
+    const label =
+      existingState?.label ?? (instruction ? instruction.slice(0, LABEL_MAX_LEN) : "Session");
     let workspace: AgentWorkspace | null = null;
 
     try {
@@ -167,7 +172,12 @@ export class QueryAgentExecutor implements AgentExecutor {
           );
 
           if (claudeSessionId) {
-            this.sessionState.set(contextId, { claudeSessionId, workspace: workspace! });
+            this.sessionManager.set(contextId, {
+              claudeSessionId,
+              workspace: workspace!,
+              startedAt,
+              label,
+            });
           }
 
           consola.success(`${this.def.displayName} sub-agent completed`);
@@ -194,15 +204,6 @@ export class QueryAgentExecutor implements AgentExecutor {
 
   async cancelTask(): Promise<void> {
     this.abortController?.abort();
-    this.clearSession(this.currentContextId);
-  }
-
-  clearSession(contextId: string | null): void {
-    if (!contextId) return;
-    const state = this.sessionState.get(contextId);
-    if (state) {
-      state.workspace.cleanup();
-      this.sessionState.delete(contextId);
-    }
+    if (this.currentContextId) this.sessionManager.delete(this.currentContextId);
   }
 }

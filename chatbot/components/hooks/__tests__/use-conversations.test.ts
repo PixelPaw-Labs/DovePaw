@@ -249,9 +249,9 @@ describe("useConversations", () => {
     vi.useRealTimers();
   });
 
-  // ─── clearMessages ────────────────────────────────────────────────────────────
+  // ─── newSession ────────────────────────────────────────────────────────────
 
-  it("clearMessages empties messages and resets sessionId", async () => {
+  it("newSession empties messages and resets sessionId", async () => {
     vi.mocked(fetch).mockResolvedValue(
       makeSseResponse([
         { type: "session", sessionId: "sess-clear" },
@@ -264,7 +264,7 @@ describe("useConversations", () => {
       await result.current.sendMessage("hello");
     });
     act(() => {
-      result.current.clearMessages();
+      result.current.newSession();
     });
     expect(result.current.messages).toEqual([]);
 
@@ -273,11 +273,11 @@ describe("useConversations", () => {
     await act(async () => {
       await result.current.sendMessage("after clear");
     });
-    const body = JSON.parse((vi.mocked(fetch).mock.calls[2][1] as RequestInit).body as string);
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[1][1] as RequestInit).body as string);
     expect(body.sessionId).toBeNull();
   });
 
-  it("clearMessages removes conversation from localStorage", async () => {
+  it("newSession removes conversation from localStorage", async () => {
     vi.mocked(fetch).mockResolvedValue(
       makeSseResponse([{ type: "result", content: "hi" }, { type: "done" }]),
     );
@@ -286,7 +286,7 @@ describe("useConversations", () => {
       await result.current.sendMessage("hello");
     });
     act(() => {
-      result.current.clearMessages();
+      result.current.newSession();
     });
     // clearPersistedConversation removes the key synchronously;
     // the debounced write hasn't fired yet so the key is still null

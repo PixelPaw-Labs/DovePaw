@@ -133,8 +133,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
   });
 }
 
-export async function DELETE(request: Request) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ name: string }> }) {
+  const { name } = await params;
   const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
+
+  // Abort in-flight session (if currently streaming)
   activeControllers.get(sessionId)?.abort();
+
+  // Explicitly clear completed session from executor state
+  const agent = (await readAgentsConfig()).find((a) => a.name === name);
+  const manifest = agent ? readPortsManifest() : null;
+  const portValue = manifest ? (manifest as Record<string, unknown>)[agent!.manifestKey] : null;
+  if (typeof portValue === "number") {
+    await fetch(`http://localhost:${portValue}/session/clear`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contextId: sessionId }),
+    }).catch(() => {});
+  }
+
   return Response.json({ ok: true });
 }

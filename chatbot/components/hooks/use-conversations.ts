@@ -12,7 +12,9 @@ import {
   writePersistedMessages,
   readPersistedSessionId,
   writePersistedSessionId,
-  clearPersistedConversation,
+  readSessionMessages,
+  writeSessionMessages,
+  clearSessionMessages,
 } from "./use-persisted-conversation";
 import { mergeProgressEntries } from "./use-messages";
 import type { ProgressEntry } from "@/lib/query-tools";
@@ -76,6 +78,7 @@ export function useConversations() {
 
   // ─── Per-request refs ─────────────────────────────────────────────────────────
   const sessionIdRef = useRef<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const assistantIdRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const pendingToolNameRef = useRef<string | null>(null);
@@ -90,7 +93,11 @@ export function useConversations() {
     (agentId: string, msgs: ChatMessage[], sessId: string | null) => {
       if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
       writeTimerRef.current = setTimeout(() => {
-        writePersistedMessages(agentId, msgs);
+        if (sessId) {
+          writeSessionMessages(sessId, msgs);
+        } else {
+          writePersistedMessages(agentId, msgs);
+        }
         writePersistedSessionId(agentId, sessId);
       }, WRITE_DEBOUNCE_MS);
     },
@@ -107,9 +114,13 @@ export function useConversations() {
       activeAgentIdRef.current = storedAgentId;
       setActiveAgentIdState(storedAgentId);
     }
-    const storedMessages = readPersistedMessages(storedAgentId);
+    const storedSessionId = readPersistedSessionId(storedAgentId);
+    const storedMessages =
+      (storedSessionId ? readSessionMessages(storedSessionId) : null) ??
+      readPersistedMessages(storedAgentId);
     if (storedMessages?.length) setMessages(storedMessages);
-    sessionIdRef.current = readPersistedSessionId(storedAgentId);
+    sessionIdRef.current = storedSessionId;
+    setCurrentSessionId(storedSessionId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run only once on mount
   }, []);
 
@@ -130,20 +141,29 @@ export function useConversations() {
 
       // Save current conversation to in-memory cache + localStorage
       const currentMessages = messagesRef.current;
-      const currentSessionId = sessionIdRef.current;
-      cacheRef.current.set(currentId, { messages: currentMessages, sessionId: currentSessionId });
-      writePersistedMessages(currentId, currentMessages);
-      writePersistedSessionId(currentId, currentSessionId);
+      const savedSessionId = sessionIdRef.current;
+      cacheRef.current.set(currentId, { messages: currentMessages, sessionId: savedSessionId });
+      if (savedSessionId) {
+        writeSessionMessages(savedSessionId, currentMessages);
+      } else {
+        writePersistedMessages(currentId, currentMessages);
+      }
+      writePersistedSessionId(currentId, savedSessionId);
 
       // Load conversation for the new agent (prefer in-memory cache, then localStorage)
       const cached = cacheRef.current.get(agentId);
-      const nextMessages = cached ? cached.messages : (readPersistedMessages(agentId) ?? []);
       const nextSessionId = cached ? cached.sessionId : readPersistedSessionId(agentId);
+      const nextMessages = cached
+        ? cached.messages
+        : ((nextSessionId ? readSessionMessages(nextSessionId) : null) ??
+          readPersistedMessages(agentId) ??
+          []);
 
       setMessages(nextMessages);
       setSessionProgress([]);
       setSessionCancelled(false);
       sessionIdRef.current = nextSessionId;
+      setCurrentSessionId(nextSessionId);
       pendingQueueRef.current = [];
       setPendingQueue([]);
       setIsLoading(false);
@@ -222,6 +242,7 @@ export function useConversations() {
 
               if (event.type === "session") {
                 sessionIdRef.current = event.sessionId;
+                setCurrentSessionId(event.sessionId);
               } else if (event.type === "progress") {
                 const lastToolCall = event.result.progress.at(-1)?.artifacts["tool-call"];
                 if (lastToolCall) setLiveProgress(assistantId, lastToolCall);
@@ -354,7 +375,8 @@ export function useConversations() {
     setIsLoading(false);
   }, [animation, patch]);
 
-  const clearMessages = useCallback(() => {
+  // Start a fresh conversation — current session stays alive on the server as history.
+  const newSession = useCallback(() => {
     abortRef.current?.abort();
     animation.reset();
     clear();
@@ -362,20 +384,41 @@ export function useConversations() {
     setSessionCancelled(false);
     setIsLoading(false);
     const agentId = activeAgentIdRef.current;
-    const currentSessionId = sessionIdRef.current;
-    if (currentSessionId) {
-      const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
-      void fetch(endpoint, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: currentSessionId }),
-      }).catch(() => {});
-    }
     sessionIdRef.current = null;
-    clearPersistedConversation(agentId);
-    // Also update the in-memory cache so switching back doesn't restore stale data
+    setCurrentSessionId(null);
+    writePersistedSessionId(agentId, null);
     cacheRef.current.set(agentId, { messages: [], sessionId: null });
   }, [animation, clear]);
+
+  // Abort + delete a session from the server and remove its local messages.
+  // If it was the active session, also resets the UI.
+  const deleteSession = useCallback(
+    async (contextId: string) => {
+      // Cancel any pending debounced write so it can't resurrect the key after we clear it.
+      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
+      const agentId = activeAgentIdRef.current;
+      const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
+      await fetch(endpoint, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: contextId }),
+      }).catch(() => {});
+      clearSessionMessages(contextId);
+      if (sessionIdRef.current === contextId) {
+        abortRef.current?.abort();
+        animation.reset();
+        clear();
+        setSessionProgress([]);
+        setSessionCancelled(false);
+        setIsLoading(false);
+        sessionIdRef.current = null;
+        setCurrentSessionId(null);
+        writePersistedSessionId(agentId, null);
+        cacheRef.current.set(agentId, { messages: [], sessionId: null });
+      }
+    },
+    [animation, clear],
+  );
 
   return {
     activeAgentId,
@@ -383,10 +426,22 @@ export function useConversations() {
     messages,
     sessionProgress,
     sessionCancelled,
+    currentSessionId,
+    setSessionId: useCallback((id: string | null) => {
+      sessionIdRef.current = id;
+      setCurrentSessionId(id);
+      writePersistedSessionId(activeAgentIdRef.current, id);
+      const msgs = id ? (readSessionMessages(id) ?? []) : [];
+      setMessages(msgs);
+      setSessionProgress([]);
+      setSessionCancelled(false);
+      if (id) cacheRef.current.set(activeAgentIdRef.current, { messages: msgs, sessionId: id });
+    }, []),
     isLoading,
     sendMessage,
     cancelMessage,
-    clearMessages,
+    newSession,
+    deleteSession,
     pendingQueue,
     removeFromQueue,
   };

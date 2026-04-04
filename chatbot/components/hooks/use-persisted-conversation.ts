@@ -9,6 +9,7 @@ const MAX_MESSAGES = 200;
 export const STORAGE_KEY_ACTIVE = "dovepaw:active";
 export const messagesKey = (agentId: string) => `dovepaw:conv:${agentId}:messages`;
 export const sessionKey = (agentId: string) => `dovepaw:conv:${agentId}:sessionId`;
+export const sessionMessagesKey = (contextId: string) => `dovepaw:session:${contextId}:messages`;
 
 // ─── Active agent ─────────────────────────────────────────────────────────────
 
@@ -45,6 +46,36 @@ export function writePersistedMessages(agentId: string, messages: ChatMessage[])
   try {
     const capped = messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages;
     localStorage.setItem(messagesKey(agentId), JSON.stringify(capped));
+  } catch {
+    // ignore storage quota / security errors
+  }
+}
+
+// ─── Session-scoped messages ──────────────────────────────────────────────────
+
+export function readSessionMessages(contextId: string): ChatMessage[] | null {
+  try {
+    const raw = localStorage.getItem(sessionMessagesKey(contextId));
+    if (raw === null) return null;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- trusted localStorage value we wrote ourselves
+    return JSON.parse(raw) as ChatMessage[];
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionMessages(contextId: string, messages: ChatMessage[]): void {
+  try {
+    const capped = messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages;
+    localStorage.setItem(sessionMessagesKey(contextId), JSON.stringify(capped));
+  } catch {
+    // ignore storage quota / security errors
+  }
+}
+
+export function clearSessionMessages(contextId: string): void {
+  try {
+    localStorage.removeItem(sessionMessagesKey(contextId));
   } catch {
     // ignore storage quota / security errors
   }

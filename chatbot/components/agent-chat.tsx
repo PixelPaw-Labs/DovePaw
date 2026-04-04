@@ -20,6 +20,8 @@ import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
 import { WorkflowPanel } from "./workflow/workflow-panel";
+import { SessionList } from "./agent-chat/session-list";
+import { useAgentSessions } from "@/components/hooks/use-agent-sessions";
 
 function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEntry[]) {
   if (activeAgentId === "dove") return { name: "Dove", Icon: Bot };
@@ -41,13 +43,37 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     messages,
     sessionProgress,
     sessionCancelled,
+    currentSessionId,
+    setSessionId,
     isLoading,
     sendMessage,
     cancelMessage,
-    clearMessages,
+    newSession,
+    deleteSession,
     pendingQueue,
     removeFromQueue,
   } = useConversations();
+
+  const { sessions, refresh: refreshSessions } = useAgentSessions(activeAgentId);
+
+  // Auto-resume the latest session when switching to an agent that has Dove-triggered sessions
+  const prevAgentIdRef = React.useRef(activeAgentId);
+  React.useEffect(() => {
+    if (prevAgentIdRef.current === activeAgentId) return;
+    prevAgentIdRef.current = activeAgentId;
+    if (sessions.length > 0 && messages.length === 0 && !currentSessionId) {
+      setSessionId(sessions[0].contextId);
+    }
+  }, [sessions, activeAgentId, messages.length, currentSessionId, setSessionId]);
+
+  // Refresh session list after each completed response (Dove may have created new sessions)
+  const prevIsLoadingRef = React.useRef(isLoading);
+  React.useEffect(() => {
+    if (prevIsLoadingRef.current && !isLoading && activeAgentId !== "dove") {
+      void refreshSessions(activeAgentId);
+    }
+    prevIsLoadingRef.current = isLoading;
+  }, [isLoading, activeAgentId, refreshSessions]);
 
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId, agentConfigs);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
@@ -119,7 +145,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
             <div className="flex items-center gap-2">
               {messages.length > 0 && (
                 <button
-                  onClick={clearMessages}
+                  onClick={newSession}
                   className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
                   title="Clear chat"
                 >
@@ -148,6 +174,20 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               </div>
             </div>
           </header>
+
+          {/* Session list — only for sub-agents with multiple sessions */}
+          {activeAgentId !== "dove" && sessions.length > 0 && (
+            <SessionList
+              sessions={sessions}
+              activeSessionId={currentSessionId}
+              onSelect={setSessionId}
+              onNew={newSession}
+              onDelete={async (contextId) => {
+                await deleteSession(contextId);
+                void refreshSessions(activeAgentId);
+              }}
+            />
+          )}
 
           {/* Chat area */}
           <Conversation className="flex-1 bg-background">

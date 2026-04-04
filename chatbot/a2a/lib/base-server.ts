@@ -33,6 +33,7 @@ import {
 import { PORTS_FILE } from "@/lib/paths";
 import { z } from "zod";
 import { QueryAgentExecutor } from "./query-agent-executor";
+import { SessionManager } from "@/lib/session-manager";
 
 // ─── Port utilities ───────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export function createAgentServer(
   agentCard: AgentCard,
   executor: AgentExecutor,
   port: number,
+  sessionManager?: SessionManager,
 ): void {
   const card: AgentCard = {
     ...agentCard,
@@ -109,6 +111,16 @@ export function createAgentServer(
     "/a2a/rest",
     restHandler({ requestHandler: handler, userBuilder: UserBuilder.noAuthentication }),
   );
+
+  if (sessionManager) {
+    app.use(express.json());
+    app.get("/sessions", (_req, res) => res.json(sessionManager.getSessions()));
+    app.post("/session/clear", (req, res) => {
+      const contextId = z.object({ contextId: z.string() }).parse(req.body).contextId;
+      sessionManager.delete(contextId);
+      res.json({ ok: true });
+    });
+  }
 
   app.listen(port, "127.0.0.1", () => {
     consola.success(`${card.name}  →  http://localhost:${port}`);
@@ -133,5 +145,7 @@ export function createServerFromDef(def: AgentDef, port: number): void {
     defaultOutputModes: ["text"],
   };
 
-  createAgentServer(agentCard, new QueryAgentExecutor(def), port);
+  const sessionManager = new SessionManager();
+  const executor = new QueryAgentExecutor(def, sessionManager);
+  createAgentServer(agentCard, executor, port, sessionManager);
 }

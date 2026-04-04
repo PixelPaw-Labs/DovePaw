@@ -7,10 +7,14 @@ import {
   readActiveAgentId,
   readPersistedMessages,
   readPersistedSessionId,
+  readSessionMessages,
   sessionKey,
+  sessionMessagesKey,
   writeActiveAgentId,
   writePersistedMessages,
   writePersistedSessionId,
+  writeSessionMessages,
+  clearSessionMessages,
 } from "../use-persisted-conversation";
 
 function makeMessage(id: string, content: string): ChatMessage {
@@ -25,6 +29,10 @@ describe("use-persisted-conversation — key helpers", () => {
 
   it("sessionKey returns correct localStorage key", () => {
     expect(sessionKey("dove")).toBe("dovepaw:conv:dove:sessionId");
+  });
+
+  it("sessionMessagesKey returns correct localStorage key", () => {
+    expect(sessionMessagesKey("ctx-abc")).toBe("dovepaw:session:ctx-abc:messages");
   });
 
   it("STORAGE_KEY_ACTIVE is the active-agent key", () => {
@@ -143,5 +151,40 @@ describe("use-persisted-conversation — clearPersistedConversation", () => {
     writePersistedMessages("get-shit-done", [makeMessage("2", "gsd")]);
     clearPersistedConversation("dove");
     expect(readPersistedMessages("get-shit-done")).toEqual([makeMessage("2", "gsd")]);
+  });
+});
+
+describe("use-persisted-conversation — session-scoped messages", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("readSessionMessages returns null when nothing stored", () => {
+    expect(readSessionMessages("ctx-1")).toBeNull();
+  });
+
+  it("writeSessionMessages + readSessionMessages round-trips value", () => {
+    const msgs = [makeMessage("a", "hello")];
+    writeSessionMessages("ctx-1", msgs);
+    expect(readSessionMessages("ctx-1")).toEqual(msgs);
+  });
+
+  it("stores messages under the contextId key, not the agent key", () => {
+    writeSessionMessages("ctx-1", [makeMessage("a", "hi")]);
+    expect(localStorage.getItem(sessionMessagesKey("ctx-1"))).not.toBeNull();
+    expect(localStorage.getItem(messagesKey("ctx-1"))).toBeNull();
+  });
+
+  it("clearSessionMessages removes the entry", () => {
+    writeSessionMessages("ctx-2", [makeMessage("b", "bye")]);
+    clearSessionMessages("ctx-2");
+    expect(readSessionMessages("ctx-2")).toBeNull();
+  });
+
+  it("sessions are isolated by contextId", () => {
+    writeSessionMessages("ctx-a", [makeMessage("1", "a")]);
+    writeSessionMessages("ctx-b", [makeMessage("2", "b")]);
+    clearSessionMessages("ctx-a");
+    expect(readSessionMessages("ctx-b")).toEqual([makeMessage("2", "b")]);
   });
 });
