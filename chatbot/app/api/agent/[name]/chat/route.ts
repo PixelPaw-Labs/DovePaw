@@ -19,10 +19,12 @@ import { z } from "zod";
 
 const chatRequestSchema = z.object({
   message: z.string(),
-  sessionId: z.string().nullable(),
+  sessionId: z.string().nullable(), // contextId from a previous response; null on first message
 });
 
 export const maxDuration = 86400;
+
+const activeControllers = new Map<string, AbortController>();
 
 export async function POST(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
@@ -48,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
     );
   }
 
-  const { message } = chatRequestSchema.parse(await request.json());
+  const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
   const encoder = new TextEncoder();
   const abortController = new AbortController();
@@ -69,16 +71,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       const onArtifact = (artifactName: string, text: string) =>
         dispatcher.onArtifact(artifactName, text);
 
+      let handle: Awaited<ReturnType<typeof startAgentStream>> = null;
       try {
-        const handle = await startAgentStream(portValue, message, abortController.signal);
+        handle = await startAgentStream(
+          portValue,
+          message,
+          abortController.signal,
+          sessionId ?? undefined,
+        );
         if (!handle) {
           send({ type: "error", content: "Failed to start agent task" });
           send({ type: "done" });
           return;
         }
-        const { taskId, stream } = handle;
+        const { stream, contextId: resolvedContextId } = handle;
 
-        send({ type: "session", sessionId: taskId });
+        activeControllers.set(resolvedContextId, abortController);
+        send({ type: "session", sessionId: resolvedContextId });
 
         await collectStreamResult(stream, onSnapshot, onArtifact);
 
@@ -104,6 +113,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
           /* stream already closed */
         }
       } finally {
+        if (handle) activeControllers.delete(handle.contextId);
         abortController.abort();
         try {
           controller.close();
@@ -121,4 +131,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       Connection: "keep-alive",
     },
   });
+}
+
+export async function DELETE(request: Request) {
+  const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
+  activeControllers.get(sessionId)?.abort();
+  return Response.json({ ok: true });
 }

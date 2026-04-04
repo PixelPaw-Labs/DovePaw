@@ -14,6 +14,8 @@ import {
   writePersistedSessionId,
   clearPersistedConversation,
 } from "./use-persisted-conversation";
+import { mergeProgressEntries } from "./use-messages";
+import type { ProgressEntry } from "@/lib/query-tools";
 
 export type { MessageRole, ChatMessage } from "./use-messages";
 
@@ -48,10 +50,13 @@ export function useConversations() {
     setLastTextContent,
     appendToolCallSegment,
     setLiveProgress,
-    appendAgentProgress,
     append,
     clear,
   } = useMessages();
+
+  // ─── Session-level workflow progress ─────────────────────────────────────────
+  const [sessionProgress, setSessionProgress] = useState<ProgressEntry[]>([]);
+  const [sessionCancelled, setSessionCancelled] = useState(false);
 
   // Track current messages in a ref so setActiveAgentId can read them synchronously
   const messagesRef = useRef<ChatMessage[]>(messages);
@@ -136,6 +141,8 @@ export function useConversations() {
       const nextSessionId = cached ? cached.sessionId : readPersistedSessionId(agentId);
 
       setMessages(nextMessages);
+      setSessionProgress([]);
+      setSessionCancelled(false);
       sessionIdRef.current = nextSessionId;
       pendingQueueRef.current = [];
       setPendingQueue([]);
@@ -162,6 +169,7 @@ export function useConversations() {
 
       abortRef.current?.abort();
       animation.reset();
+      setSessionCancelled(false);
       const abort = new AbortController();
       abortRef.current = abort;
 
@@ -217,7 +225,7 @@ export function useConversations() {
               } else if (event.type === "progress") {
                 const lastToolCall = event.result.progress.at(-1)?.artifacts["tool-call"];
                 if (lastToolCall) setLiveProgress(assistantId, lastToolCall);
-                appendAgentProgress(assistantId, event.result.progress);
+                setSessionProgress((prev) => mergeProgressEntries(prev, event.result.progress));
               } else if (event.type === "thinking" && event.content) {
                 appendToProcess(assistantId, event.content);
               } else if (event.type === "tool_call") {
@@ -263,6 +271,7 @@ export function useConversations() {
               } else if (event.type === "cancelled") {
                 animation.flush(assistantId);
                 setLiveProgress(assistantId, null);
+                setSessionCancelled(true);
                 patch(assistantId, {
                   isLoading: false,
                   isProcessStreaming: false,
@@ -339,6 +348,7 @@ export function useConversations() {
     animation.reset();
     if (assistantIdRef.current) {
       patch(assistantIdRef.current, { isLoading: false, isCancelled: true });
+      setSessionCancelled(true);
       assistantIdRef.current = null;
     }
     setIsLoading(false);
@@ -348,17 +358,31 @@ export function useConversations() {
     abortRef.current?.abort();
     animation.reset();
     clear();
+    setSessionProgress([]);
+    setSessionCancelled(false);
     setIsLoading(false);
+    const agentId = activeAgentIdRef.current;
+    const currentSessionId = sessionIdRef.current;
+    if (currentSessionId) {
+      const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
+      void fetch(endpoint, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: currentSessionId }),
+      }).catch(() => {});
+    }
     sessionIdRef.current = null;
-    clearPersistedConversation(activeAgentIdRef.current);
+    clearPersistedConversation(agentId);
     // Also update the in-memory cache so switching back doesn't restore stale data
-    cacheRef.current.set(activeAgentIdRef.current, { messages: [], sessionId: null });
+    cacheRef.current.set(agentId, { messages: [], sessionId: null });
   }, [animation, clear]);
 
   return {
     activeAgentId,
     setActiveAgentId,
     messages,
+    sessionProgress,
+    sessionCancelled,
     isLoading,
     sendMessage,
     cancelMessage,

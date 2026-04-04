@@ -40,6 +40,7 @@ export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifa
 export type AgentStreamHandle = {
   client: Client;
   taskId: string;
+  contextId: string;
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>;
 };
 
@@ -70,6 +71,7 @@ export async function startAgentStream(
   port: number,
   message: string,
   signal?: AbortSignal,
+  contextId?: string,
 ): Promise<AgentStreamHandle | null> {
   const client = await createAgentClient(port);
   const ac = new AbortController();
@@ -82,6 +84,7 @@ export async function startAgentStream(
         messageId: randomUUID(),
         role: "user",
         parts: [{ kind: "text", text: message }],
+        ...(contextId ? { contextId } : {}),
       },
     },
     { signal: ac.signal },
@@ -92,12 +95,13 @@ export async function startAgentStream(
     return null;
   }
   const taskId = firstEvent.value.id;
+  const resolvedContextId = firstEvent.value.contextId ?? taskId;
 
   signal?.addEventListener("abort", () => void client.cancelTask({ id: taskId }).catch(() => {}), {
     once: true,
   });
 
-  return { client, taskId, stream };
+  return { client, taskId, contextId: resolvedContextId, stream };
 }
 
 /**

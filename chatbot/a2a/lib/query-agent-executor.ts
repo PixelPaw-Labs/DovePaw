@@ -24,6 +24,7 @@ import {
   createAgentWorkspace,
   agentSourceDirFromEntry,
   ensureAgentSourceSymlink,
+  type AgentWorkspace,
 } from "./workspace";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
@@ -37,8 +38,15 @@ import { ExecutorPublisher } from "./executor-publisher";
  *
  * Settings (env vars, repo list) are resolved fresh on each execution.
  */
+interface SessionState {
+  claudeSessionId: string;
+  workspace: AgentWorkspace;
+}
+
 export class QueryAgentExecutor implements AgentExecutor {
   private abortController: AbortController | null = null;
+  private readonly sessionState = new Map<string, SessionState>();
+  private currentContextId: string | null = null;
 
   constructor(private readonly def: AgentDef) {}
 
@@ -72,29 +80,29 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     // Workspace, repo cloning, and query() are all inside the outer try so
     // the finally block always runs cleanup regardless of where a failure occurs.
-    let workspace: Awaited<ReturnType<typeof createAgentWorkspace>> | null = null;
-    let exitHandler: (() => void) | null = null;
+    this.currentContextId = contextId;
+    const existingState = this.sessionState.get(contextId);
+    let workspace: AgentWorkspace | null = null;
 
     try {
-      // Create an isolated workspace for this entire execution — used as cwd for
-      // both the query() sub-agent and the agent script spawned by run_script.
-      ensureAgentSourceSymlink(
-        this.def.name,
-        agentSourceDirFromEntry(this.def.entryPath),
-        (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
-      );
-      workspace = createAgentWorkspace(
-        this.def.name,
-        this.def.alias,
-        undefined,
-        taskId,
-        (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
-      );
-
-      // Guard against process.exit() bypassing the finally block — each executor
-      // is only responsible for its own workspace, not others.
-      exitHandler = () => workspace?.cleanup();
-      process.once("exit", exitHandler);
+      if (existingState) {
+        // Resume existing session — reuse workspace and Claude session.
+        workspace = existingState.workspace;
+      } else {
+        // First message in this context — create a fresh workspace.
+        ensureAgentSourceSymlink(
+          this.def.name,
+          agentSourceDirFromEntry(this.def.entryPath),
+          (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
+        );
+        workspace = createAgentWorkspace(
+          this.def.name,
+          this.def.alias,
+          undefined,
+          taskId,
+          (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
+        );
+      }
 
       const workspaceEnv: Record<string, string> = {
         ...extraEnv,
@@ -123,13 +131,14 @@ export class QueryAgentExecutor implements AgentExecutor {
           ...makeAgentMgmtTools(this.def),
         ],
         async (innerMcpServer) => {
-          await consumeQueryEvents(
+          const claudeSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || START_SCRIPT_TOOL,
               options: {
                 cwd: workspace!.path,
                 env: { ...process.env, ...agentConfig.extraEnv },
                 agent: this.def.displayName,
+                ...(existingState ? { resume: existingState.claudeSessionId } : {}),
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
@@ -157,6 +166,10 @@ export class QueryAgentExecutor implements AgentExecutor {
             new A2AQueryDispatcher(publisher),
           );
 
+          if (claudeSessionId) {
+            this.sessionState.set(contextId, { claudeSessionId, workspace: workspace! });
+          }
+
           consola.success(`${this.def.displayName} sub-agent completed`);
           publisher.publishStatusToUI("", undefined, "completed");
         },
@@ -173,9 +186,6 @@ export class QueryAgentExecutor implements AgentExecutor {
       );
     } finally {
       this.abortController?.abort();
-      // Remove the exit handler before calling cleanup() to avoid firing twice.
-      if (exitHandler) process.off("exit", exitHandler);
-      workspace?.cleanup();
       this.abortController = null;
       markIdle(this.def.manifestKey);
       eventBus.finished();
@@ -184,5 +194,15 @@ export class QueryAgentExecutor implements AgentExecutor {
 
   async cancelTask(): Promise<void> {
     this.abortController?.abort();
+    this.clearSession(this.currentContextId);
+  }
+
+  clearSession(contextId: string | null): void {
+    if (!contextId) return;
+    const state = this.sessionState.get(contextId);
+    if (state) {
+      state.workspace.cleanup();
+      this.sessionState.delete(contextId);
+    }
   }
 }

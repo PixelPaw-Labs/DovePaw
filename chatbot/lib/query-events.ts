@@ -38,12 +38,14 @@ export async function withMcpQuery(
 export async function consumeQueryEvents(
   events: AsyncIterable<SDKMessage>,
   dispatcher: QueryResponseDispatcher,
-): Promise<void> {
+): Promise<string | null> {
+  let sessionId: string | null = null;
   let toolInputBuf = "";
   let inToolBlock = false;
 
   for await (const event of events) {
     if (event.type === "system") {
+      sessionId = event.session_id;
       dispatcher.onSession(event.session_id);
     } else if (event.type === "stream_event") {
       const partial = event.event;
@@ -79,4 +81,5 @@ export async function consumeQueryEvents(
       dispatcher.onResult(event.result);
     }
   }
+  return sessionId;
 }

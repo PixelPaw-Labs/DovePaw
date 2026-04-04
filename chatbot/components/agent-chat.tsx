@@ -39,6 +39,8 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     activeAgentId,
     setActiveAgentId,
     messages,
+    sessionProgress,
+    sessionCancelled,
     isLoading,
     sendMessage,
     cancelMessage,
@@ -51,7 +53,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
-  const hasProgress = messages.some((m) => m.role === "assistant" && m.agentProgress?.length);
+  const hasProgress = sessionProgress.length > 0;
   const lastAssistantHasContent = React.useMemo(() => {
     const last = messages.findLast((m) => m.role === "assistant");
     return (
@@ -204,7 +206,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               </span>
             </div>
             <div className="flex-1 min-h-0">
-              <WorkflowPanel messages={messages} />
+              <WorkflowPanel progress={sessionProgress} isCancelled={sessionCancelled} />
             </div>
           </aside>
         )}

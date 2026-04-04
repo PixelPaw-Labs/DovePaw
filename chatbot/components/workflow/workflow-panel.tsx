@@ -9,7 +9,7 @@ import { Edge as WorkflowEdge } from "@/components/ai-elements/edge";
 import { Node } from "@/components/ai-elements/node";
 import { ProgressNode, type ProgressNodeData } from "./progress-node";
 import { GitBranchPlus, OctagonX } from "lucide-react";
-import type { ChatMessage } from "@/components/hooks/use-messages";
+import type { ProgressEntry } from "@/lib/query-tools";
 import { useConversationContext } from "@/components/hooks/use-conversation-context";
 
 const NODE_WIDTH = 256; // w-64
@@ -169,7 +169,8 @@ export function buildGraph(entries: WorkflowEntry[]): { nodes: FlowNode[]; edges
 }
 
 interface WorkflowPanelProps {
-  messages: ChatMessage[];
+  progress: ProgressEntry[];
+  isCancelled: boolean;
 }
 
 export function buildEntries(
@@ -183,25 +184,14 @@ export function buildEntries(
   return base;
 }
 
-export function WorkflowPanel({ messages }: WorkflowPanelProps) {
+export function WorkflowPanel({ progress, isCancelled }: WorkflowPanelProps) {
   const { isLoading } = useConversationContext();
-  const activeMsg = React.useMemo(
-    () =>
-      messages
-        .toReversed()
-        .find((m) => m.role === "assistant" && m.agentProgress && m.agentProgress.length > 0),
-    [messages],
-  );
 
   const { nodes, edges } = React.useMemo(() => {
-    if (!activeMsg?.agentProgress) return { nodes: [], edges: [] };
-    const entries = buildEntries(
-      activeMsg.agentProgress,
-      isLoading,
-      activeMsg.isCancelled ?? false,
-    );
+    if (progress.length === 0) return { nodes: [], edges: [] };
+    const entries = buildEntries(progress, isLoading, isCancelled);
     return buildGraph(entries);
-  }, [activeMsg, isLoading]);
+  }, [progress, isLoading, isCancelled]);
 
   const [renderedNodes, setRenderedNodes] = React.useState(nodes);
   const [renderedEdges, setRenderedEdges] = React.useState(edges);
@@ -214,7 +204,7 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
     return () => clearTimeout(t);
   }, [nodes, edges]);
 
-  if (!activeMsg || nodes.length === 0) {
+  if (progress.length === 0 || nodes.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground/40 px-6">
         <GitBranchPlus size={48} />
@@ -227,7 +217,7 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      {activeMsg.isCancelled && (
+      {isCancelled && (
         <div className="flex items-center gap-2 px-4 py-2 bg-amber-500/10 border-b border-amber-500/20 shrink-0">
           <OctagonX className="w-3.5 h-3.5 text-amber-500 shrink-0" />
           <span className="text-xs text-amber-600 font-medium">Stopped by user</span>

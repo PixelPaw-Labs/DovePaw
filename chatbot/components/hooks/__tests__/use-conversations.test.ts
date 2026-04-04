@@ -273,7 +273,7 @@ describe("useConversations", () => {
     await act(async () => {
       await result.current.sendMessage("after clear");
     });
-    const body = JSON.parse((vi.mocked(fetch).mock.calls[1][1] as RequestInit).body as string);
+    const body = JSON.parse((vi.mocked(fetch).mock.calls[2][1] as RequestInit).body as string);
     expect(body.sessionId).toBeNull();
   });
 

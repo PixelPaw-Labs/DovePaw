@@ -47,6 +47,9 @@ const chatRequestSchema = z.object({
 
 export const maxDuration = 86400; // 24 hours for long-running agents
 
+// Module-level map so DELETE can abort an in-flight query by session ID.
+const activeControllers = new Map<string, AbortController>();
+
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
 async function buildSystemPrompt(): Promise<string> {
@@ -149,6 +152,7 @@ export async function POST(request: Request) {
         ];
       });
 
+      if (sessionId) activeControllers.set(sessionId, abortController);
       try {
         await withMcpQuery(
           tools,
@@ -211,6 +215,7 @@ export async function POST(request: Request) {
           },
         );
       } finally {
+        if (sessionId) activeControllers.delete(sessionId);
         // Wait for all background start_* subscriptions to finish streaming
         // before closing the SSE controller — otherwise their progress events
         // arrive after the controller is closed and are silently dropped.
@@ -232,4 +237,10 @@ export async function POST(request: Request) {
       Connection: "keep-alive",
     },
   });
+}
+
+export async function DELETE(request: Request) {
+  const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
+  activeControllers.get(sessionId)?.abort();
+  return Response.json({ ok: true });
 }
