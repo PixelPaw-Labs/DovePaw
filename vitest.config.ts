@@ -21,6 +21,8 @@ export default defineConfig({
     alias: {
       "@": chatbot,
       "@@": root,
+      // server-only throws at runtime in non-server environments; alias to a no-op for tests
+      "server-only": resolve(root, "chatbot/lib/__tests__/__mocks__/server-only.ts"),
     },
   },
 });

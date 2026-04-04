@@ -38,6 +38,9 @@ import {
 import { buildDoveHooks } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
+import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
+import type { SessionMessage } from "@/lib/message-types";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 const chatRequestSchema = z.object({
@@ -153,11 +156,12 @@ export async function POST(request: Request) {
       });
 
       if (sessionId) activeControllers.set(sessionId, abortController);
+      const dispatcher = new SseQueryDispatcher(send);
       try {
         await withMcpQuery(
           tools,
           async (mcpServer) => {
-            await consumeQueryEvents(
+            const resolvedSessionId = await consumeQueryEvents(
               query({
                 prompt: message,
                 options: {
@@ -192,8 +196,28 @@ export async function POST(request: Request) {
                   hooks: buildDoveHooks(agents),
                 },
               }),
-              new SseQueryDispatcher(send),
+              dispatcher,
             );
+            if (resolvedSessionId && !abortController.signal.aborted) {
+              setActiveSession("dove", resolvedSessionId);
+              const assistantMsg = dispatcher.buildAssistantMessage(randomUUID());
+              const msgs: SessionMessage[] = [
+                {
+                  id: randomUUID(),
+                  role: "user",
+                  segments: [{ type: "text", content: message }],
+                },
+                assistantMsg,
+              ];
+              upsertSession({
+                contextId: resolvedSessionId,
+                agentId: "dove",
+                startedAt: new Date().toISOString(),
+                label: message.slice(0, 60) || "Session",
+                messages: msgs,
+                progress: [],
+              });
+            }
             send({ type: "done" });
           },
           (_err, isAbort) => {
@@ -242,5 +266,6 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
   activeControllers.get(sessionId)?.abort();
+  deleteSession(sessionId);
   return Response.json({ ok: true });
 }

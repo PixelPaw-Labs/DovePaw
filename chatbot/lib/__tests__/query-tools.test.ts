@@ -29,6 +29,12 @@ vi.mock("@/lib/paths", () => ({
 
 vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch-agents",
+  DOVEPAW_DIR: "/mock/dovepaw",
+}));
+
+vi.mock("@/lib/db", () => ({
+  upsertSession: vi.fn(),
+  setActiveSession: vi.fn(),
 }));
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────

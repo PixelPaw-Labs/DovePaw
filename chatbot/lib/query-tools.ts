@@ -24,6 +24,8 @@ import {
   extractArtifactResult,
 } from "@/lib/a2a-client";
 import type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
+import { upsertSession, setActiveSession } from "@/lib/db";
+import type { SessionMessage } from "@/lib/message-types";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -207,11 +209,33 @@ export function makeStartTool(
             ],
           };
         }
-        const { taskId, stream } = handle;
+        const { taskId, contextId: handleContextId, stream } = handle;
+        setActiveSession(agent.name, handleContextId);
 
         // Continue consuming the stream in the background, forwarding events via onProgress.
         if (onProgress) {
-          const task = collectStreamResult(stream, onProgress).catch(() => {});
+          const task = collectStreamResult(stream, onProgress, undefined, (finalResult) => {
+            const msgs: SessionMessage[] = [
+              {
+                id: randomUUID(),
+                role: "user",
+                segments: [{ type: "text", content: instruction || "" }],
+              },
+              {
+                id: randomUUID(),
+                role: "assistant",
+                segments: [{ type: "text", content: finalResult.output }],
+              },
+            ];
+            upsertSession({
+              contextId: handleContextId,
+              agentId: agent.name,
+              startedAt: new Date().toISOString(),
+              label: (instruction || "Session").slice(0, 60),
+              messages: msgs,
+              progress: finalResult.progress,
+            });
+          }).catch(() => {});
           backgroundTasks?.push(task);
         }
 

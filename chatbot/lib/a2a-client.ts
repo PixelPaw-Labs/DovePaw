@@ -142,6 +142,7 @@ export async function collectStreamResult(
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
   onSnapshot?: (result: StreamedResult) => void,
   onArtifact?: (name: string, text: string) => void,
+  onComplete?: (result: StreamedResult) => void,
 ): Promise<{ taskId?: string; result: StreamedResult }> {
   let taskId: string | undefined;
   const progress: ProgressEntry[] = [];
@@ -186,6 +187,7 @@ export async function collectStreamResult(
     }
   }
 
+  onComplete?.(snapshot());
   return { taskId, result: snapshot() };
 }
 

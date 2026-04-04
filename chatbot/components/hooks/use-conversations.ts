@@ -5,19 +5,17 @@ import type { ChatSseEvent } from "@/lib/chat-sse";
 import { useMessages } from "./use-messages";
 import { useTextAnimation } from "./use-text-animation";
 import type { ChatMessage } from "./use-messages";
-import {
-  readActiveAgentId,
-  writeActiveAgentId,
-  readPersistedMessages,
-  writePersistedMessages,
-  readPersistedSessionId,
-  writePersistedSessionId,
-  readSessionMessages,
-  writeSessionMessages,
-  clearSessionMessages,
-} from "./use-persisted-conversation";
+import { writeActiveAgentId } from "./use-persisted-conversation";
 import { mergeProgressEntries } from "./use-messages";
 import type { ProgressEntry } from "@/lib/query-tools";
+import { z } from "zod";
+import { sessionMessageSchema } from "@/lib/message-types";
+
+const activeSessionResponseSchema = z.object({ contextId: z.string().nullable() });
+const sessionDetailResponseSchema = z.object({
+  messages: z.array(sessionMessageSchema),
+  progress: z.array(z.object({ message: z.string(), artifacts: z.record(z.string(), z.string()) })),
+});
 
 export type { MessageRole, ChatMessage } from "./use-messages";
 
@@ -28,19 +26,13 @@ interface CachedConversation {
   sessionId: string | null;
 }
 
-const WRITE_DEBOUNCE_MS = 300;
-
 // ─── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useConversations() {
   // ─── Active agent ─────────────────────────────────────────────────────────────
-  // "dove" is the SSR-safe default; localStorage is read after mount to avoid hydration mismatch
+  // "dove" is the SSR-safe default; API is read after mount to avoid hydration mismatch
   const [activeAgentId, setActiveAgentIdState] = useState<string>("dove");
   const activeAgentIdRef = useRef<string>("dove");
-
-  useEffect(() => {
-    activeAgentIdRef.current = activeAgentId;
-  }, [activeAgentId]);
 
   // ─── Messages (for the currently-active conversation) ─────────────────────────
   const {
@@ -86,48 +78,27 @@ export function useConversations() {
   // ─── In-memory conversation cache ─────────────────────────────────────────────
   const cacheRef = useRef<Map<string, CachedConversation>>(new Map());
 
-  // ─── Debounced localStorage write ─────────────────────────────────────────────
-  const writeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const scheduleWrite = useCallback(
-    (agentId: string, msgs: ChatMessage[], sessId: string | null) => {
-      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
-      writeTimerRef.current = setTimeout(() => {
-        if (sessId) {
-          writeSessionMessages(sessId, msgs);
-        } else {
-          writePersistedMessages(agentId, msgs);
-        }
-        writePersistedSessionId(agentId, sessId);
-      }, WRITE_DEBOUNCE_MS);
-    },
-    [],
-  );
-
-  // ─── Hydrate from localStorage on mount ───────────────────────────────────────
+  // ─── Hydrate from API on mount ────────────────────────────────────────────────
   const hydratedRef = useRef(false);
   useEffect(() => {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
-    const storedAgentId = readActiveAgentId();
-    if (storedAgentId !== "dove") {
-      activeAgentIdRef.current = storedAgentId;
-      setActiveAgentIdState(storedAgentId);
-    }
-    const storedSessionId = readPersistedSessionId(storedAgentId);
-    const storedMessages =
-      (storedSessionId ? readSessionMessages(storedSessionId) : null) ??
-      readPersistedMessages(storedAgentId);
-    if (storedMessages?.length) setMessages(storedMessages);
-    sessionIdRef.current = storedSessionId;
-    setCurrentSessionId(storedSessionId);
+    void fetch("/api/chat/active-session")
+      .then((r) => r.json().then((d) => activeSessionResponseSchema.parse(d)))
+      .then(({ contextId }) => {
+        if (!contextId) return;
+        sessionIdRef.current = contextId;
+        setCurrentSessionId(contextId);
+        return fetch(`/api/chat/session/${contextId}`)
+          .then((r) => r.json().then((d) => sessionDetailResponseSchema.parse(d)))
+          .then(({ messages: msgs, progress }) => {
+            setMessages(msgs ?? []);
+            setSessionProgress(progress ?? []);
+          });
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run only once on mount
   }, []);
-
-  // ─── Persist messages whenever they change ────────────────────────────────────
-  useEffect(() => {
-    scheduleWrite(activeAgentId, messages, sessionIdRef.current);
-  }, [messages, activeAgentId, scheduleWrite]);
 
   // ─── Switch active agent ──────────────────────────────────────────────────────
   const setActiveAgentId = useCallback(
@@ -139,37 +110,60 @@ export function useConversations() {
       abortRef.current?.abort();
       animation.reset();
 
-      // Save current conversation to in-memory cache + localStorage
+      // Save current conversation to in-memory cache
       const currentMessages = messagesRef.current;
       const savedSessionId = sessionIdRef.current;
       cacheRef.current.set(currentId, { messages: currentMessages, sessionId: savedSessionId });
-      if (savedSessionId) {
-        writeSessionMessages(savedSessionId, currentMessages);
-      } else {
-        writePersistedMessages(currentId, currentMessages);
-      }
-      writePersistedSessionId(currentId, savedSessionId);
 
-      // Load conversation for the new agent (prefer in-memory cache, then localStorage)
+      // Load conversation for the new agent (prefer in-memory cache, then fetch from API)
       const cached = cacheRef.current.get(agentId);
-      const nextSessionId = cached ? cached.sessionId : readPersistedSessionId(agentId);
-      const nextMessages = cached
-        ? cached.messages
-        : ((nextSessionId ? readSessionMessages(nextSessionId) : null) ??
-          readPersistedMessages(agentId) ??
-          []);
-
-      setMessages(nextMessages);
-      setSessionProgress([]);
-      setSessionCancelled(false);
-      sessionIdRef.current = nextSessionId;
-      setCurrentSessionId(nextSessionId);
-      pendingQueueRef.current = [];
-      setPendingQueue([]);
-      setIsLoading(false);
-
-      writeActiveAgentId(agentId);
-      setActiveAgentIdState(agentId);
+      if (cached) {
+        setMessages(cached.messages);
+        setSessionProgress([]);
+        setSessionCancelled(false);
+        sessionIdRef.current = cached.sessionId;
+        setCurrentSessionId(cached.sessionId);
+        pendingQueueRef.current = [];
+        setPendingQueue([]);
+        setIsLoading(false);
+        writeActiveAgentId(agentId);
+        activeAgentIdRef.current = agentId;
+        setActiveAgentIdState(agentId);
+      } else {
+        setMessages([]);
+        setSessionProgress([]);
+        setSessionCancelled(false);
+        sessionIdRef.current = null;
+        setCurrentSessionId(null);
+        pendingQueueRef.current = [];
+        setPendingQueue([]);
+        setIsLoading(false);
+        writeActiveAgentId(agentId);
+        activeAgentIdRef.current = agentId;
+        setActiveAgentIdState(agentId);
+        // Fetch active session for new agent from API
+        const url =
+          agentId === "dove" ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
+        void fetch(url)
+          .then((r) => r.json().then((d) => activeSessionResponseSchema.parse(d)))
+          .then(({ contextId }) => {
+            if (!contextId) return;
+            sessionIdRef.current = contextId;
+            setCurrentSessionId(contextId);
+            const detailUrl =
+              agentId === "dove"
+                ? `/api/chat/session/${contextId}`
+                : `/api/agent/${agentId}/session/${contextId}`;
+            return fetch(detailUrl)
+              .then((r) => r.json().then((d) => sessionDetailResponseSchema.parse(d)))
+              .then(({ messages: msgs, progress }) => {
+                setMessages(msgs ?? []);
+                setSessionProgress(progress ?? []);
+                cacheRef.current.set(agentId, { messages: msgs ?? [], sessionId: contextId });
+              });
+          })
+          .catch(() => {});
+      }
     },
     [animation, setMessages],
   );
@@ -386,16 +380,20 @@ export function useConversations() {
     const agentId = activeAgentIdRef.current;
     sessionIdRef.current = null;
     setCurrentSessionId(null);
-    writePersistedSessionId(agentId, null);
     cacheRef.current.set(agentId, { messages: [], sessionId: null });
+    const url =
+      agentId === "dove" ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
+    void fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contextId: null }),
+    }).catch(() => {});
   }, [animation, clear]);
 
   // Abort + delete a session from the server and remove its local messages.
   // If it was the active session, also resets the UI.
   const deleteSession = useCallback(
     async (contextId: string) => {
-      // Cancel any pending debounced write so it can't resurrect the key after we clear it.
-      if (writeTimerRef.current) clearTimeout(writeTimerRef.current);
       const agentId = activeAgentIdRef.current;
       const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
       await fetch(endpoint, {
@@ -403,7 +401,6 @@ export function useConversations() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: contextId }),
       }).catch(() => {});
-      clearSessionMessages(contextId);
       if (sessionIdRef.current === contextId) {
         abortRef.current?.abort();
         animation.reset();
@@ -413,7 +410,6 @@ export function useConversations() {
         setIsLoading(false);
         sessionIdRef.current = null;
         setCurrentSessionId(null);
-        writePersistedSessionId(agentId, null);
         cacheRef.current.set(agentId, { messages: [], sessionId: null });
       }
     },
@@ -427,16 +423,38 @@ export function useConversations() {
     sessionProgress,
     sessionCancelled,
     currentSessionId,
-    setSessionId: useCallback((id: string | null) => {
-      sessionIdRef.current = id;
-      setCurrentSessionId(id);
-      writePersistedSessionId(activeAgentIdRef.current, id);
-      const msgs = id ? (readSessionMessages(id) ?? []) : [];
-      setMessages(msgs);
-      setSessionProgress([]);
-      setSessionCancelled(false);
-      if (id) cacheRef.current.set(activeAgentIdRef.current, { messages: msgs, sessionId: id });
-    }, []),
+    setSessionId: useCallback(
+      (id: string | null) => {
+        sessionIdRef.current = id;
+        setCurrentSessionId(id);
+        setSessionCancelled(false);
+        const agentId = activeAgentIdRef.current;
+        // Update active session on server
+        const activeUrl =
+          agentId === "dove" ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
+        void fetch(activeUrl, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contextId: id }),
+        }).catch(() => {});
+        if (!id) {
+          setMessages([]);
+          setSessionProgress([]);
+          return;
+        }
+        const detailUrl =
+          agentId === "dove" ? `/api/chat/session/${id}` : `/api/agent/${agentId}/session/${id}`;
+        void fetch(detailUrl)
+          .then((r) => r.json().then((d) => sessionDetailResponseSchema.parse(d)))
+          .then(({ messages: msgs, progress }) => {
+            setMessages(msgs ?? []);
+            setSessionProgress(progress ?? []);
+            cacheRef.current.set(agentId, { messages: msgs ?? [], sessionId: id });
+          })
+          .catch(() => {});
+      },
+      [setMessages],
+    ),
     isLoading,
     sendMessage,
     cancelMessage,

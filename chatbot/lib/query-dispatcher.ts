@@ -16,6 +16,8 @@
 
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
+import { z } from "zod";
+import type { MessageSegment, SessionMessage } from "@/lib/message-types";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -56,21 +58,44 @@ export const TRANSIENT_ARTIFACT_NAMES = new Set([
  * Forwards query() events as SSE events to the chat client.
  */
 export class SseQueryDispatcher implements QueryResponseDispatcher {
+  private _segments: MessageSegment[] = [];
+  private _textBuffer = "";
+  private _thinkingBuffer = "";
+  private _pendingToolName: string | null = null;
+
   constructor(private readonly send: (event: ChatSseEvent) => void) {}
+
+  buildAssistantMessage(id: string): SessionMessage {
+    const segments: MessageSegment[] = [...this._segments];
+    if (this._textBuffer) segments.push({ type: "text", content: this._textBuffer });
+    return {
+      id,
+      role: "assistant",
+      segments,
+      processContent: this._thinkingBuffer || undefined,
+    };
+  }
 
   onSession(sessionId: string): void {
     this.send({ type: "session", sessionId });
   }
 
   onTextDelta(text: string): void {
+    this._textBuffer += text;
     this.send({ type: "text", content: text });
   }
 
   onThinking(text: string): void {
+    this._thinkingBuffer += text;
     this.send({ type: "thinking", content: text });
   }
 
   onToolCall(name: string): void {
+    if (this._textBuffer) {
+      this._segments.push({ type: "text", content: this._textBuffer });
+      this._textBuffer = "";
+    }
+    this._pendingToolName = name;
     this.send({ type: "tool_call", name });
     this.send({
       type: "progress",
@@ -82,6 +107,18 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
   }
 
   onToolInput(content: string): void {
+    if (this._pendingToolName) {
+      try {
+        const input = z.record(z.string(), z.unknown()).parse(JSON.parse(content));
+        this._segments.push({ type: "tool_call", tool: { name: this._pendingToolName, input } });
+      } catch {
+        this._segments.push({
+          type: "tool_call",
+          tool: { name: this._pendingToolName, input: { raw: content } },
+        });
+      }
+      this._pendingToolName = null;
+    }
     this.send({ type: "tool_input", content });
   }
 

@@ -3,16 +3,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { ProgressEntry } from "@/lib/query-tools";
 
+export type { ToolCall, MessageSegment, SessionMessage } from "@/lib/message-types";
+import type { MessageSegment, ToolCall } from "@/lib/message-types";
+
 export type MessageRole = "user" | "assistant";
-
-export interface ToolCall {
-  name: string;
-  input: Record<string, unknown>;
-}
-
-export type MessageSegment =
-  | { type: "text"; content: string }
-  | { type: "tool_call"; tool: ToolCall };
 
 export interface ChatMessage {
   id: string;

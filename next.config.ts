@@ -21,6 +21,7 @@ const nextConfig: NextConfig = {
     "@a2a-js/sdk",
     "express",
     "@napi-rs/keyring",
+    "better-sqlite3",
   ],
   turbopack: {
     resolveAlias: {

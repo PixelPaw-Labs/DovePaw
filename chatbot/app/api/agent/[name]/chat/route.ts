@@ -15,6 +15,9 @@ import { makeProgressSender } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { startAgentStream, collectStreamResult } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
+import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
+import type { SessionMessage } from "@/lib/message-types";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 const chatRequestSchema = z.object({
@@ -87,9 +90,32 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         const { stream, contextId: resolvedContextId } = handle;
 
         activeControllers.set(resolvedContextId, abortController);
+        setActiveSession(agent.name, resolvedContextId);
         send({ type: "session", sessionId: resolvedContextId });
 
-        await collectStreamResult(stream, onSnapshot, onArtifact);
+        await collectStreamResult(stream, onSnapshot, onArtifact, (finalResult) => {
+          if (abortController.signal.aborted) return;
+          const msgs: SessionMessage[] = [
+            {
+              id: randomUUID(),
+              role: "user",
+              segments: [{ type: "text", content: message }],
+            },
+            {
+              id: randomUUID(),
+              role: "assistant",
+              segments: [{ type: "text", content: finalResult.output }],
+            },
+          ];
+          upsertSession({
+            contextId: resolvedContextId,
+            agentId: agent.name,
+            startedAt: new Date().toISOString(),
+            label: message.slice(0, 60) || "Session",
+            messages: msgs,
+            progress: finalResult.progress,
+          });
+        });
 
         if (abortController.signal.aborted) {
           send({ type: "cancelled" });
@@ -151,6 +177,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
       body: JSON.stringify({ contextId: sessionId }),
     }).catch(() => {});
   }
+  deleteSession(sessionId);
 
   return Response.json({ ok: true });
 }

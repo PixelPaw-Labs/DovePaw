@@ -1,115 +1,34 @@
 "use client";
 
 import type { ChatMessage } from "./use-messages";
-
-const MAX_MESSAGES = 200;
-
-// ─── Storage keys ─────────────────────────────────────────────────────────────
+import type { ProgressEntry } from "@/lib/query-tools";
 
 export const STORAGE_KEY_ACTIVE = "dovepaw:active";
 export const messagesKey = (agentId: string) => `dovepaw:conv:${agentId}:messages`;
 export const sessionKey = (agentId: string) => `dovepaw:conv:${agentId}:sessionId`;
 export const sessionMessagesKey = (contextId: string) => `dovepaw:session:${contextId}:messages`;
-
-// ─── Active agent ─────────────────────────────────────────────────────────────
+export const sessionProgressKey = (contextId: string) => `dovepaw:session:${contextId}:progress`;
 
 export function readActiveAgentId(): string {
-  try {
-    return localStorage.getItem(STORAGE_KEY_ACTIVE) || "dove";
-  } catch {
-    return "dove";
-  }
+  return "dove";
 }
-
-export function writeActiveAgentId(agentId: string): void {
-  try {
-    localStorage.setItem(STORAGE_KEY_ACTIVE, agentId);
-  } catch {
-    // ignore storage quota / security errors
-  }
+export function writeActiveAgentId(_id: string): void {}
+export function readPersistedMessages(_agentId: string): ChatMessage[] | null {
+  return null;
 }
-
-// ─── Messages ─────────────────────────────────────────────────────────────────
-
-export function readPersistedMessages(agentId: string): ChatMessage[] | null {
-  try {
-    const raw = localStorage.getItem(messagesKey(agentId));
-    if (raw === null) return null;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- trusted localStorage value we wrote ourselves
-    return JSON.parse(raw) as ChatMessage[];
-  } catch {
-    return null;
-  }
+export function writePersistedMessages(_agentId: string, _messages: ChatMessage[]): void {}
+export function readSessionMessages(_contextId: string): ChatMessage[] | null {
+  return null;
 }
-
-export function writePersistedMessages(agentId: string, messages: ChatMessage[]): void {
-  try {
-    const capped = messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages;
-    localStorage.setItem(messagesKey(agentId), JSON.stringify(capped));
-  } catch {
-    // ignore storage quota / security errors
-  }
+export function writeSessionMessages(_contextId: string, _messages: ChatMessage[]): void {}
+export function clearSessionMessages(_contextId: string): void {}
+export function readSessionProgress(_contextId: string): ProgressEntry[] | null {
+  return null;
 }
-
-// ─── Session-scoped messages ──────────────────────────────────────────────────
-
-export function readSessionMessages(contextId: string): ChatMessage[] | null {
-  try {
-    const raw = localStorage.getItem(sessionMessagesKey(contextId));
-    if (raw === null) return null;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- trusted localStorage value we wrote ourselves
-    return JSON.parse(raw) as ChatMessage[];
-  } catch {
-    return null;
-  }
+export function writeSessionProgress(_contextId: string, _progress: ProgressEntry[]): void {}
+export function clearSessionProgress(_contextId: string): void {}
+export function readPersistedSessionId(_agentId: string): string | null {
+  return null;
 }
-
-export function writeSessionMessages(contextId: string, messages: ChatMessage[]): void {
-  try {
-    const capped = messages.length > MAX_MESSAGES ? messages.slice(-MAX_MESSAGES) : messages;
-    localStorage.setItem(sessionMessagesKey(contextId), JSON.stringify(capped));
-  } catch {
-    // ignore storage quota / security errors
-  }
-}
-
-export function clearSessionMessages(contextId: string): void {
-  try {
-    localStorage.removeItem(sessionMessagesKey(contextId));
-  } catch {
-    // ignore storage quota / security errors
-  }
-}
-
-// ─── Session ID ───────────────────────────────────────────────────────────────
-
-export function readPersistedSessionId(agentId: string): string | null {
-  try {
-    return localStorage.getItem(sessionKey(agentId));
-  } catch {
-    return null;
-  }
-}
-
-export function writePersistedSessionId(agentId: string, sessionId: string | null): void {
-  try {
-    if (sessionId) {
-      localStorage.setItem(sessionKey(agentId), sessionId);
-    } else {
-      localStorage.removeItem(sessionKey(agentId));
-    }
-  } catch {
-    // ignore storage quota / security errors
-  }
-}
-
-// ─── Clear ────────────────────────────────────────────────────────────────────
-
-export function clearPersistedConversation(agentId: string): void {
-  try {
-    localStorage.removeItem(messagesKey(agentId));
-    localStorage.removeItem(sessionKey(agentId));
-  } catch {
-    // ignore storage quota / security errors
-  }
-}
+export function writePersistedSessionId(_agentId: string, _sessionId: string | null): void {}
+export function clearPersistedConversation(_agentId: string): void {}
