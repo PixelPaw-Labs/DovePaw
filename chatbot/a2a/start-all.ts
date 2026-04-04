@@ -57,3 +57,12 @@ process.on("SIGTERM", () => {
   cleanupPid();
   process.exit(0);
 });
+
+// The Claude Agent SDK's handleControlRequest calls write() to the claude CLI stdin
+// after the process is killed on task cancellation. The rejected promise escapes
+// uncaught — swallow it silently since it's expected on abort.
+process.on("unhandledRejection", (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  if (msg === "Operation aborted") return;
+  consola.error("A2A servers — unhandledRejection:", reason);
+});

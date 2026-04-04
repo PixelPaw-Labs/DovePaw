@@ -13,6 +13,7 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import { ChatInputBar } from "./agent-chat/chat-input-bar";
+import { ProcessingBar } from "./agent-chat/processing-bar";
 import { useConversations } from "@/components/hooks/use-conversations";
 import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
@@ -50,6 +51,12 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
   const hasProgress = messages.some((m) => m.role === "assistant" && m.agentProgress?.length);
+  const lastAssistantHasContent = React.useMemo(() => {
+    const last = messages.findLast((m) => m.role === "assistant");
+    return (
+      !!last && (last.segments.some((s) => s.type === "text" && s.content) || !!last.processContent)
+    );
+  }, [messages]);
 
   const onResizeStart = React.useCallback(
     (e: React.MouseEvent) => {
@@ -94,9 +101,16 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           <div className="flex items-center gap-3">
             <AgentIcon className="w-4 h-4 text-primary" />
             <h1 className="text-base font-bold text-foreground tracking-tight">{agentName}</h1>
-            <span className="px-2.5 py-0.5 rounded-full bg-accent text-[10px] font-bold text-accent-foreground tracking-wider uppercase">
-              Active Session
-            </span>
+            {isLoading ? (
+              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-bold text-primary tracking-wider uppercase">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                Processing
+              </span>
+            ) : (
+              <span className="px-2.5 py-0.5 rounded-full bg-accent text-[10px] font-bold text-accent-foreground tracking-wider uppercase">
+                Active Session
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {messages.length > 0 && (
@@ -146,6 +160,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
             ) : (
               messages.map((msg) => <ChatMessageItem key={msg.id} msg={msg} />)
             )}
+            {isLoading && lastAssistantHasContent && <ProcessingBar />}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
@@ -187,7 +202,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
             </span>
           </div>
           <div className="flex-1 min-h-0">
-            <WorkflowPanel messages={messages} />
+            <WorkflowPanel messages={messages} isLoading={isLoading} />
           </div>
         </aside>
       )}

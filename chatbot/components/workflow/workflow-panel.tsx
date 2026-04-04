@@ -169,6 +169,7 @@ export function buildGraph(entries: WorkflowEntry[]): { nodes: FlowNode[]; edges
 
 interface WorkflowPanelProps {
   messages: ChatMessage[];
+  isLoading: boolean;
 }
 
 export function buildEntries(
@@ -182,7 +183,7 @@ export function buildEntries(
   return base;
 }
 
-export function WorkflowPanel({ messages }: WorkflowPanelProps) {
+export function WorkflowPanel({ messages, isLoading }: WorkflowPanelProps) {
   const activeMsg = React.useMemo(
     () =>
       messages
@@ -195,11 +196,11 @@ export function WorkflowPanel({ messages }: WorkflowPanelProps) {
     if (!activeMsg?.agentProgress) return { nodes: [], edges: [] };
     const entries = buildEntries(
       activeMsg.agentProgress,
-      activeMsg.isLoading ?? false,
+      isLoading,
       activeMsg.isCancelled ?? false,
     );
     return buildGraph(entries);
-  }, [activeMsg]);
+  }, [activeMsg, isLoading]);
 
   const [renderedNodes, setRenderedNodes] = React.useState(nodes);
   const [renderedEdges, setRenderedEdges] = React.useState(edges);

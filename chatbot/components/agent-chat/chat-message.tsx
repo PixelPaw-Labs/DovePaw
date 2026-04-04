@@ -10,7 +10,7 @@ import type { ChatMessage } from "@/components/hooks/use-messages";
 import { messageText } from "@/components/hooks/use-messages";
 import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";
-import { ThinkingDots } from "./thinking-dots";
+import { ProcessingBar } from "./processing-bar";
 import { EditDiffList, ToolCallItem } from "./tool-call-badge";
 
 const MESSAGE_RESPONSE_SPACING =
@@ -90,7 +90,7 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
   if (msg.role === "assistant") {
     // Pure loading state — no avatar, just dots
     if (msg.isLoading && !hasSegmentContent && !msg.processContent) {
-      return <ThinkingDots />;
+      return <ProcessingBar count={3} align="left" />;
     }
 
     const hasContent = hasSegmentContent || (!msg.isLoading && msg.role === "assistant");

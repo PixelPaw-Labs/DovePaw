@@ -142,7 +142,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",
                 includePartialMessages: true,
-                settingSources: ["project", "user"],
+                settingSources: ["project", "user", "local"],
               },
             }),
             new A2AQueryDispatcher(publisher),

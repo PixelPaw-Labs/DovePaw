@@ -184,7 +184,7 @@ export async function POST(request: Request) {
                   ...(sessionId ? { resume: sessionId } : {}),
                   // Stream text tokens as they are generated
                   includePartialMessages: true,
-                  settingSources: ["project", "user"],
+                  settingSources: ["project", "user", "local"],
                   hooks: buildDoveHooks(agents),
                 },
               }),
