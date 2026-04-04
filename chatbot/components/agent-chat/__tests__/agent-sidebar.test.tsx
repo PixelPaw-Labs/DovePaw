@@ -48,7 +48,22 @@ vi.mock("../agent-button", () => ({
   ),
 }));
 
+const agentConfig = {
+  name: "get-shit-done",
+  displayName: "Get Shit Done",
+  scheduleDisplay: "every 5 min",
+  doveCard: { title: "", description: "", prompt: "" },
+  suggestions: [],
+} as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0];
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
+
+describe("AgentSidebar — without ConversationProvider", () => {
+  it("renders without throwing when outside a ConversationProvider", () => {
+    render(<AgentSidebar agentConfigs={[agentConfig]} />);
+    expect(screen.getByText("Dove")).toBeTruthy();
+  });
+});
 
 describe("AgentSidebar", () => {
   beforeEach(() => {

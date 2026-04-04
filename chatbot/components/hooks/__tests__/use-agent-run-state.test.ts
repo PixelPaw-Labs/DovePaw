@@ -21,6 +21,22 @@ function wrapper(isLoading: boolean, activeAgentId: string) {
     React.createElement(ConversationProvider, { isLoading, activeAgentId, children });
 }
 
+describe("useAgentRunState — without ConversationProvider", () => {
+  it("isRunning=false when no provider and no heartbeat", () => {
+    const { result } = renderHook(() => useAgentRunState(false, makeStatus()));
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.processingTrigger).toBeNull();
+  });
+
+  it("isRunning=true for scheduled run even when no provider", () => {
+    const { result } = renderHook(() =>
+      useAgentRunState(false, makeStatus({ processing: true, processingTrigger: "scheduled" })),
+    );
+    expect(result.current.isRunning).toBe(true);
+    expect(result.current.processingTrigger).toBe("scheduled");
+  });
+});
+
 describe("useAgentRunState", () => {
   it("isRunning=false when idle and no heartbeat", () => {
     const { result } = renderHook(() => useAgentRunState(true, makeStatus()), {

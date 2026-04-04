@@ -18,8 +18,8 @@ export function ConversationProvider({
   return <ConversationContext value={value}>{children}</ConversationContext>;
 }
 
+const DEFAULT: ConversationContextValue = { isLoading: false, activeAgentId: "" };
+
 export function useConversationContext(): ConversationContextValue {
-  const ctx = React.useContext(ConversationContext);
-  if (!ctx) throw new Error("useConversationContext must be used inside ConversationProvider");
-  return ctx;
+  return React.useContext(ConversationContext) ?? DEFAULT;
 }
