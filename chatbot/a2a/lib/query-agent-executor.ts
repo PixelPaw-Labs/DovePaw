@@ -6,7 +6,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import { AGENTS_ROOT, agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
-import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
+import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import {
@@ -20,7 +20,11 @@ import {
 } from "@/lib/agent-tools";
 import { extractInstruction, type AgentConfig } from "./spawn";
 import { buildSubAgentHooks } from "@/lib/hooks";
-import { createAgentWorkspace, agentSourceDirFromEntry } from "./workspace";
+import {
+  createAgentWorkspace,
+  agentSourceDirFromEntry,
+  ensureAgentSourceSymlink,
+} from "./workspace";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -74,10 +78,14 @@ export class QueryAgentExecutor implements AgentExecutor {
     try {
       // Create an isolated workspace for this entire execution — used as cwd for
       // both the query() sub-agent and the agent script spawned by run_script.
+      ensureAgentSourceSymlink(
+        this.def.name,
+        agentSourceDirFromEntry(this.def.entryPath),
+        (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
+      );
       workspace = createAgentWorkspace(
         this.def.name,
         this.def.alias,
-        agentSourceDirFromEntry(this.def.entryPath),
         undefined,
         taskId,
         (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
@@ -131,6 +139,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                   LAUNCH_AGENTS_DIR,
                   agentPersistentLogDir(this.def.name),
                   agentPersistentStateDir(this.def.name),
+                  agentConfigDir(this.def.name),
                 ],
                 allowedTools: [
                   `mcp__agents__${START_SCRIPT_TOOL}`,

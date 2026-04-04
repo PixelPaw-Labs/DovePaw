@@ -9,10 +9,12 @@ vi.mock("@@/lib/paths", () => ({
   DOVEPAW_DIR: join(TMP_ROOT, ".dovepaw"),
   WORKSPACES_DIR: join(TMP_ROOT, ".dovepaw", "workspaces"),
   agentWorkspaceDir: (alias: string) => join(TMP_ROOT, ".dovepaw", "workspaces", `.${alias}`),
+  agentConfigDir: (agentName: string) => join(TMP_ROOT, ".dovepaw", "settings.agents", agentName),
 }));
 
 const {
   createAgentWorkspace,
+  ensureAgentSourceSymlink,
   agentSourceDirFromEntry,
   cloneReposIntoWorkspace,
   recloneReposIntoWorkspace,
@@ -25,31 +27,22 @@ describe("createAgentWorkspace", () => {
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
   it("parent dir uses full agent name", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+    const ws = createAgentWorkspace("my-agent", "ma");
 
     expect(existsSync(ws.path)).toBe(true);
     expect(ws.path.startsWith(join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent"))).toBe(true);
   });
 
   it("workspace folder name is {alias}-{shortId}", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+    const ws = createAgentWorkspace("my-agent", "ma");
     const folderName = basename(ws.path);
 
     expect(folderName).toMatch(/^ma-[0-9a-f]{8}$/);
   });
 
   it("uses first 8 chars of taskId (dashes stripped) as shortId when provided", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
     const taskId = "abc123de-f456-7890-abcd-ef1234567890";
-    const ws = createAgentWorkspace("my-agent", "ma", sourceDir, undefined, taskId);
+    const ws = createAgentWorkspace("my-agent", "ma", undefined, taskId);
     const folderName = basename(ws.path);
 
     expect(folderName).toBe("ma-abc123de");
@@ -57,44 +50,23 @@ describe("createAgentWorkspace", () => {
 
   it("uses a custom workspaceRoot when provided", () => {
     const customRoot = join(TMP_ROOT, "custom-workspaces");
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
 
-    const ws = createAgentWorkspace("my-agent", "ma", sourceDir, customRoot);
+    const ws = createAgentWorkspace("my-agent", "ma", customRoot);
 
     expect(ws.path.startsWith(customRoot)).toBe(true);
     expect(existsSync(ws.path)).toBe(true);
   });
 
-  it("creates a symlink named source_{alias} pointing to agentSourceDir", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
-    const symlinkPath = join(ws.path, "source_ma");
-
-    expect(existsSync(symlinkPath)).toBe(true);
-    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(symlinkPath)).toBe(sourceDir);
-  });
-
-  it("calls onProgress for workspace creation and symlink steps", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
+  it("calls onProgress for workspace creation", () => {
     const onProgress = vi.fn();
-    const ws = createAgentWorkspace("my-agent", "ma", sourceDir, undefined, undefined, onProgress);
+    const ws = createAgentWorkspace("my-agent", "ma", undefined, undefined, onProgress);
 
     expect(onProgress).toHaveBeenCalledWith("Creating workspace", { workspace: ws.path });
-    expect(onProgress).toHaveBeenCalledWith("Linked source", { source: sourceDir });
   });
 
   it("each call produces a unique workspace path", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    const ws1 = createAgentWorkspace("my-agent", "ma", sourceDir);
-    const ws2 = createAgentWorkspace("my-agent", "ma", sourceDir);
+    const ws1 = createAgentWorkspace("my-agent", "ma");
+    const ws2 = createAgentWorkspace("my-agent", "ma");
 
     expect(ws1.path).not.toBe(ws2.path);
 
@@ -104,10 +76,7 @@ describe("createAgentWorkspace", () => {
 
   describe("cleanup()", () => {
     it("removes the workspace directory", () => {
-      const sourceDir = join(TMP_ROOT, "src", "my-agent");
-      mkdirSync(sourceDir, { recursive: true });
-
-      const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const ws = createAgentWorkspace("my-agent", "ma");
       expect(existsSync(ws.path)).toBe(true);
 
       ws.cleanup();
@@ -116,19 +85,13 @@ describe("createAgentWorkspace", () => {
     });
 
     it("does not throw if called twice", () => {
-      const sourceDir = join(TMP_ROOT, "src", "my-agent");
-      mkdirSync(sourceDir, { recursive: true });
-
-      const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const ws = createAgentWorkspace("my-agent", "ma");
       ws.cleanup();
       expect(() => ws.cleanup()).not.toThrow();
     });
 
     it("removes the empty parent dir when it is the last workspace", () => {
-      const sourceDir = join(TMP_ROOT, "src", "my-agent");
-      mkdirSync(sourceDir, { recursive: true });
-
-      const ws = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const ws = createAgentWorkspace("my-agent", "ma");
       const parentDir = join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent");
 
       ws.cleanup();
@@ -138,11 +101,8 @@ describe("createAgentWorkspace", () => {
     });
 
     it("leaves the parent dir when sibling workspaces still exist", () => {
-      const sourceDir = join(TMP_ROOT, "src", "my-agent");
-      mkdirSync(sourceDir, { recursive: true });
-
-      const ws1 = createAgentWorkspace("my-agent", "ma", sourceDir);
-      const ws2 = createAgentWorkspace("my-agent", "ma", sourceDir);
+      const ws1 = createAgentWorkspace("my-agent", "ma");
+      const ws2 = createAgentWorkspace("my-agent", "ma");
       const parentDir = join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent");
 
       ws1.cleanup();
@@ -152,6 +112,57 @@ describe("createAgentWorkspace", () => {
 
       ws2.cleanup();
     });
+  });
+});
+
+// ─── ensureAgentSourceSymlink ─────────────────────────────────────────────────
+
+describe("ensureAgentSourceSymlink", () => {
+  beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
+  afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
+
+  it("creates source_{alias} symlink inside agentConfigDir", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    ensureAgentSourceSymlink("my-agent", sourceDir);
+
+    const symlinkPath = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent", "source");
+    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(symlinkPath)).toBe(sourceDir);
+  });
+
+  it("creates agentConfigDir if it does not exist", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    ensureAgentSourceSymlink("my-agent", sourceDir);
+
+    const configDir = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent");
+    expect(existsSync(configDir)).toBe(true);
+  });
+
+  it("recreates the symlink if it points to a stale target", () => {
+    const oldSourceDir = join(TMP_ROOT, "src", "old-location");
+    const newSourceDir = join(TMP_ROOT, "src", "new-location");
+    mkdirSync(oldSourceDir, { recursive: true });
+    mkdirSync(newSourceDir, { recursive: true });
+
+    ensureAgentSourceSymlink("my-agent", oldSourceDir);
+    ensureAgentSourceSymlink("my-agent", newSourceDir);
+
+    const symlinkPath = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent", "source");
+    expect(readlinkSync(symlinkPath)).toBe(newSourceDir);
+  });
+
+  it("is idempotent when called with the same target", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    expect(() => {
+      ensureAgentSourceSymlink("my-agent", sourceDir);
+      ensureAgentSourceSymlink("my-agent", sourceDir);
+    }).not.toThrow();
   });
 });
 
