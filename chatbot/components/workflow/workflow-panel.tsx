@@ -10,6 +10,7 @@ import { Node } from "@/components/ai-elements/node";
 import { ProgressNode, type ProgressNodeData } from "./progress-node";
 import { GitBranchPlus, OctagonX } from "lucide-react";
 import type { ChatMessage } from "@/components/hooks/use-messages";
+import { useConversationContext } from "@/components/hooks/use-conversation-context";
 
 const NODE_WIDTH = 256; // w-64
 const CIRCLE_SIZE = 32;
@@ -169,7 +170,6 @@ export function buildGraph(entries: WorkflowEntry[]): { nodes: FlowNode[]; edges
 
 interface WorkflowPanelProps {
   messages: ChatMessage[];
-  isLoading: boolean;
 }
 
 export function buildEntries(
@@ -183,7 +183,8 @@ export function buildEntries(
   return base;
 }
 
-export function WorkflowPanel({ messages, isLoading }: WorkflowPanelProps) {
+export function WorkflowPanel({ messages }: WorkflowPanelProps) {
+  const { isLoading } = useConversationContext();
   const activeMsg = React.useMemo(
     () =>
       messages

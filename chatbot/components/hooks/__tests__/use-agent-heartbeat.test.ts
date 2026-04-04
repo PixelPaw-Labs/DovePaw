@@ -1,6 +1,6 @@
 import { renderHook, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useAgentStatuses } from "../use-agent-statuses";
+import { useAgentHeartbeat } from "../use-agent-heartbeat";
 
 // ─── WebSocket class mock ─────────────────────────────────────────────────────
 // Must be a real class so `new WebSocket(url)` works.
@@ -72,16 +72,16 @@ async function flushAsync() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe("useAgentStatuses", () => {
+describe("useAgentHeartbeat", () => {
   it("returns empty statuses initially", async () => {
     mockPortsError();
-    const { result } = renderHook(() => useAgentStatuses());
+    const { result } = renderHook(() => useAgentHeartbeat());
     expect(result.current).toEqual({});
   });
 
   it("connects to WebSocket once ws_port is fetched from /api/ports", async () => {
     mockPortsResponse(9876);
-    renderHook(() => useAgentStatuses());
+    renderHook(() => useAgentHeartbeat());
 
     await flushAsync();
 
@@ -91,7 +91,7 @@ describe("useAgentStatuses", () => {
 
   it("updates statuses when a valid status message arrives", async () => {
     mockPortsResponse(9876);
-    const { result } = renderHook(() => useAgentStatuses());
+    const { result } = renderHook(() => useAgentHeartbeat());
     await flushAsync();
 
     const payload = {
@@ -120,7 +120,7 @@ describe("useAgentStatuses", () => {
 
   it("ignores malformed WebSocket messages", async () => {
     mockPortsResponse(9876);
-    const { result } = renderHook(() => useAgentStatuses());
+    const { result } = renderHook(() => useAgentHeartbeat());
     await flushAsync();
 
     act(() => {
@@ -132,7 +132,7 @@ describe("useAgentStatuses", () => {
 
   it("does not connect when /api/ports returns an error", async () => {
     mockPortsError();
-    renderHook(() => useAgentStatuses());
+    renderHook(() => useAgentHeartbeat());
 
     await flushAsync();
 
@@ -142,7 +142,7 @@ describe("useAgentStatuses", () => {
   it("reconnects after WebSocket close", async () => {
     vi.useFakeTimers();
     mockPortsResponse(9876);
-    renderHook(() => useAgentStatuses());
+    renderHook(() => useAgentHeartbeat());
 
     await act(async () => {
       await Promise.resolve();
@@ -165,7 +165,7 @@ describe("useAgentStatuses", () => {
 
   it("closes WebSocket on unmount", async () => {
     mockPortsResponse(9876);
-    const { unmount } = renderHook(() => useAgentStatuses());
+    const { unmount } = renderHook(() => useAgentHeartbeat());
     await flushAsync();
 
     const ws = MockWebSocket.last!;

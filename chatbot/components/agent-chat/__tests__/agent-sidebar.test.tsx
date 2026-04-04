@@ -1,11 +1,20 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { AgentSidebar } from "../agent-sidebar";
+import { ConversationProvider } from "@/components/hooks/use-conversation-context";
+
+function wrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <ConversationProvider isLoading={false} activeAgentId="dove">
+      {children}
+    </ConversationProvider>
+  );
+}
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-vi.mock("@/components/hooks/use-agent-statuses", () => ({
-  useAgentStatuses: () => ({}),
+vi.mock("@/components/hooks/use-agent-heartbeat", () => ({
+  useAgentHeartbeat: () => ({}),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -59,6 +68,7 @@ describe("AgentSidebar", () => {
           } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0],
         ]}
       />,
+      { wrapper },
     );
     expect(screen.getByText("Dove")).toBeTruthy();
   });
@@ -78,6 +88,7 @@ describe("AgentSidebar", () => {
         activeAgentId="dove"
         onSelectAgent={vi.fn()}
       />,
+      { wrapper },
     );
     const doveBtn = screen.getByText("Dove").closest("button")!;
     expect(doveBtn.className).toContain("bg-blue-100");
@@ -99,6 +110,7 @@ describe("AgentSidebar", () => {
         activeAgentId="get-shit-done"
         onSelectAgent={onSelect}
       />,
+      { wrapper },
     );
     fireEvent.click(screen.getByText("Dove").closest("button")!);
     expect(onSelect).toHaveBeenCalledWith("dove");
@@ -119,6 +131,7 @@ describe("AgentSidebar", () => {
         activeAgentId="get-shit-done"
         onSelectAgent={vi.fn()}
       />,
+      { wrapper },
     );
     expect(screen.getByTestId("agent-btn-get-shit-done").dataset.active).toBe("true");
   });
@@ -139,6 +152,7 @@ describe("AgentSidebar", () => {
         activeAgentId="dove"
         onSelectAgent={onSelect}
       />,
+      { wrapper },
     );
     fireEvent.click(screen.getByTestId("agent-btn-get-shit-done"));
     expect(onSelect).toHaveBeenCalledWith("get-shit-done");

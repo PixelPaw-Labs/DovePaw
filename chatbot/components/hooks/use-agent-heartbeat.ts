@@ -40,7 +40,7 @@ function useWsPort(): number | null {
   return wsPort;
 }
 
-export function useAgentStatuses(): Record<string, AgentStatus> {
+export function useAgentHeartbeat(): Record<string, AgentStatus> {
   const [statuses, setStatuses] = React.useState<Record<string, AgentStatus>>({});
   const wsPort = useWsPort();
 

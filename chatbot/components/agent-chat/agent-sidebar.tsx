@@ -7,8 +7,10 @@ import { Bot, PawPrint, Settings, Sliders } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { cn } from "@/lib/utils";
-import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
+import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
+import { useConversationContext } from "@/components/hooks/use-conversation-context";
 import { AgentButton } from "./agent-button";
+import { ShimmerLabel } from "./shimmer-label";
 
 interface AgentSidebarProps {
   agentConfigs: AgentConfigEntry[];
@@ -21,8 +23,9 @@ export function AgentSidebar({
   activeAgentId = "dove",
   onSelectAgent,
 }: AgentSidebarProps) {
+  const { isLoading } = useConversationContext();
   const agents = agentConfigs.map(buildAgentDef);
-  const statuses = useAgentStatuses();
+  const statuses = useAgentHeartbeat();
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   const isSubagentsConfig = pathname === "/settings/subagents";
@@ -30,6 +33,8 @@ export function AgentSidebar({
   const hasData = Object.keys(statuses).length > 0;
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
   const anyOnline = onlineCount > 0;
+
+  const isDoveLoading = !!isLoading && activeAgentId === "dove";
 
   return (
     <aside className="h-screen w-64 shrink-0 flex flex-col bg-background border-r border-border/30">
@@ -69,14 +74,15 @@ export function AgentSidebar({
             )}
           />
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <span
+            <ShimmerLabel
+              isActive={isDoveLoading}
               className={cn(
                 "text-sm font-medium",
                 activeAgentId !== "dove" && "text-foreground/80",
               )}
             >
               Dove
-            </span>
+            </ShimmerLabel>
             <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
               Orchestrator
             </span>

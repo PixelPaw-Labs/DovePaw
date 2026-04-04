@@ -3,9 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { Settings } from "lucide-react";
-import { createScope, animate } from "animejs";
-import { HeartbeatLine } from "./heartbeat-line";
 import { ShimmerLabel } from "./shimmer-label";
+import { useAgentRunState } from "@/components/hooks/use-agent-run-state";
 import type { AgentDef } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
 import type { AgentStatus, LaunchdStatus } from "@/a2a/heartbeat-types";
@@ -67,8 +66,7 @@ function LaunchdBadge({
 }) {
   if (processing)
     return (
-      <span className="text-[9px] text-blue-500/80 uppercase tracking-wide flex items-center gap-1.5">
-        <HeartbeatLine />
+      <span className="text-[9px] text-blue-500/80 uppercase tracking-wide">
         processing{processingTrigger ? ` · ${processingTrigger}` : ""}
       </span>
     );
@@ -107,61 +105,30 @@ export function AgentButton({
   settingsHref?: string;
   isAgentSettings?: boolean;
 }) {
-  const root = React.useRef<HTMLButtonElement>(null);
-  const scope = React.useRef<ReturnType<typeof createScope> | null>(null);
   const Icon = agent.icon;
   const isOnline = status?.online ?? false;
-  const isRunning = status?.processing ?? false;
-
-  React.useEffect(() => {
-    if (!isRunning) {
-      scope.current?.revert();
-      scope.current = null;
-      return;
-    }
-    scope.current = createScope({ root: root.current! }).add(() => {
-      animate(".shimmer-sweep", {
-        translateX: ["-100%", "100%"],
-        duration: 2000,
-        ease: "linear",
-        loop: true,
-      });
-    });
-    return () => {
-      scope.current?.revert();
-      scope.current = null;
-    };
-  }, [isRunning]);
+  const { isRunning, processingTrigger } = useAgentRunState(isActive, status);
 
   return (
     <button
-      ref={root}
       onClick={onClick}
       className={cn(
-        "group my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full relative overflow-hidden",
+        "group my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
         isActive
           ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
       )}
     >
-      {/* Shimmer sweep — visible only when launchd is running */}
-      {isRunning && (
-        <div
-          className="shimmer-sweep absolute top-0 left-0 h-full z-0 pointer-events-none bg-gradient-to-r from-transparent via-blue-500/20 to-transparent"
-          style={{ width: "200%" }}
-        />
-      )}
-
       <div
         className={cn(
-          "w-6 h-6 rounded-md flex items-center justify-center shrink-0 relative z-10 transition-colors",
+          "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
           agent.iconBg,
           agent.iconColor,
         )}
       >
         <Icon className="w-3 h-3" />
       </div>
-      <div className="flex-1 min-w-0 flex flex-col gap-0.5 relative z-10">
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         <ShimmerLabel
           isActive={isRunning}
           className={cn("text-sm font-medium", !isActive && "text-foreground/80")}
@@ -170,8 +137,8 @@ export function AgentButton({
         </ShimmerLabel>
         <LaunchdBadge
           launchd={status?.launchd ?? null}
-          processing={status?.processing ?? false}
-          processingTrigger={status?.processingTrigger ?? null}
+          processing={isRunning}
+          processingTrigger={processingTrigger}
           schedule={agent.schedule}
         />
       </div>
@@ -192,7 +159,7 @@ export function AgentButton({
       )}
       <span
         className={cn(
-          "w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500 relative z-10",
+          "w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500",
           isActive
             ? "bg-blue-500"
             : isOnline

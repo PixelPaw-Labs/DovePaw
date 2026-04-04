@@ -10,7 +10,7 @@ import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { AgentManagementContent } from "./agent-management-content";
-import { useAgentStatuses } from "@/components/hooks/use-agent-statuses";
+import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { z } from "zod";
@@ -48,7 +48,7 @@ export function SettingsContent({
   const [envVars, setEnvVars] = React.useState<EnvVar[]>(initialSettings.envVars);
   const [editingEnvVar, setEditingEnvVar] = React.useState<EnvVar | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const statuses = useAgentStatuses();
+  const statuses = useAgentHeartbeat();
 
   React.useEffect(() => {
     fetch("/api/settings/env-vars")
