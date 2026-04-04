@@ -12,7 +12,7 @@ export {
   SCHEDULER_ROOT,
   SETTINGS_FILE,
   AGENT_SETTINGS_DIR,
-  agentSettingsFile,
+  agentDefinitionFile,
   agentEntryPath,
   agentPersistentLogDir,
   agentPersistentStateDir,

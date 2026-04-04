@@ -57,7 +57,7 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     // Resolve env vars fresh on each execution so settings changes take effect
     const settings = readSettings();
-    const agentSettings = readAgentSettings(this.def.name);
+    const agentSettings = await readAgentSettings(this.def.name);
     const extraEnv = resolveSettingsEnv(settings, agentSettings.envVars);
 
     // Resolve selected repos to GitHub slugs for cloning and REPO_LIST injection

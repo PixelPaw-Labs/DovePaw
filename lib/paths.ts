@@ -19,13 +19,8 @@ export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
 export const DOVEPAW_DIR = join(process.env.HOME!, ".dovepaw");
 /** ~/.dovepaw/settings.json — global settings (watched repositories, etc.) */
 export const SETTINGS_FILE = join(DOVEPAW_DIR, "settings.json");
-/** ~/.dovepaw/agents.json — agent definitions (overrides hardcoded AGENTS seed) */
-export const AGENTS_CONFIG_FILE = join(DOVEPAW_DIR, "agents.json");
 /** ~/.dovepaw/settings.agents/ — per-agent settings directory */
 export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
-/** ~/.dovepaw/settings.agents/<agentName>.json — per-agent settings file */
-export const agentSettingsFile = (agentName: string) =>
-  join(AGENT_SETTINGS_DIR, `${agentName}.json`);
 /** ~/.dovepaw/workspaces/ — isolated execution workspace roots for all agents */
 export const WORKSPACES_DIR = join(DOVEPAW_DIR, "workspaces");
 /** ~/.dovepaw/workspaces/.{agentName}/ — per-agent workspace root */
@@ -42,6 +37,9 @@ export const agentPersistentLogDir = (agentName: string) =>
   join(DOVEPAW_AGENT_LOGS, `.${agentName}`);
 /** ~/.dovepaw/settings.agents/<agentName>/ — per-agent config files directory */
 export const agentConfigDir = (agentName: string) => join(AGENT_SETTINGS_DIR, agentName);
+/** ~/.dovepaw/settings.agents/<agentName>/agent.json — combined definition + runtime settings */
+export const agentDefinitionFile = (agentName: string) =>
+  join(agentConfigDir(agentName), "agent.json");
 /** ~/.dovepaw/settings.agents/<agentName>/<filename> — a specific agent config file */
 export const agentConfigFile = (agentName: string, filename: string) =>
   join(agentConfigDir(agentName), filename);

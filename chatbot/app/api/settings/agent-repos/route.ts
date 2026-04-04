@@ -11,13 +11,13 @@
 import { z } from "zod";
 import { readAgentSettings, writeAgentSettings } from "@@/lib/settings";
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
   const url = new URL(request.url);
   const agentName = url.searchParams.get("agent");
   if (!agentName) {
     return Response.json({ error: "Missing agent query param" }, { status: 400 });
   }
-  const agentSettings = readAgentSettings(agentName);
+  const agentSettings = await readAgentSettings(agentName);
   return Response.json({ enabledRepoIds: agentSettings.repos });
 }
 
@@ -43,7 +43,7 @@ export async function PUT(request: Request) {
   }
 
   const { agentName, enabledRepoIds } = parsed.data;
-  const existing = readAgentSettings(agentName);
-  writeAgentSettings(agentName, { ...existing, repos: enabledRepoIds });
+  const existing = await readAgentSettings(agentName);
+  await writeAgentSettings(agentName, { ...existing, repos: enabledRepoIds });
   return Response.json({ enabledRepoIds });
 }

@@ -1,17 +1,23 @@
 /**
  * GET    /api/settings/agents       — List all agent config entries
  * POST   /api/settings/agents       — Add a new agent
- * PATCH  /api/settings/agents       — Update an agent by name
+ * PATCH  /api/settings/agents       — Update an agent's definition (partial patch)
  * DELETE /api/settings/agents       — Remove an agent by name
  */
 
 import { z } from "zod";
-import { readAgentConfigEntries, writeAgentsConfig } from "@@/lib/agents-config";
+import {
+  readAgentConfigEntries,
+  readAgentFile,
+  createAgentFile,
+  patchAgentDefinition,
+  deleteAgentDefinition,
+} from "@@/lib/agents-config";
 import { agentConfigEntrySchema } from "@@/lib/agents-config-schemas";
 import { parseBody } from "@/lib/env-var-routes";
 
-export function GET() {
-  const agents = readAgentConfigEntries();
+export async function GET() {
+  const agents = await readAgentConfigEntries();
   return Response.json({ agents });
 }
 
@@ -19,15 +25,12 @@ export async function POST(request: Request) {
   const parsed = await parseBody(request, agentConfigEntrySchema);
   if (!parsed.ok) return parsed.response;
 
-  const entries = readAgentConfigEntries();
-
-  if (entries.some((a) => a.name === parsed.data.name)) {
+  if (await readAgentFile(parsed.data.name)) {
     return Response.json({ error: `Agent "${parsed.data.name}" already exists` }, { status: 409 });
   }
 
-  const updated = [...entries, parsed.data];
-  writeAgentsConfig(updated);
-  return Response.json({ agents: updated }, { status: 201 });
+  await createAgentFile(parsed.data);
+  return Response.json({ agents: await readAgentConfigEntries() }, { status: 201 });
 }
 
 const patchBodySchema = z.object({
@@ -40,16 +43,13 @@ export async function PATCH(request: Request) {
   if (!parsed.ok) return parsed.response;
 
   const { name, patch } = parsed.data;
-  const entries = readAgentConfigEntries();
-  const idx = entries.findIndex((a) => a.name === name);
 
-  if (idx === -1) {
+  if (!(await readAgentFile(name))) {
     return Response.json({ error: `Agent "${name}" not found` }, { status: 404 });
   }
 
-  const updated = entries.map((a, i) => (i === idx ? Object.assign({}, a, patch) : a));
-  writeAgentsConfig(updated);
-  return Response.json({ agents: updated });
+  await patchAgentDefinition(name, patch);
+  return Response.json({ agents: await readAgentConfigEntries() });
 }
 
 const deleteBodySchema = z.object({ name: z.string() });
@@ -58,12 +58,19 @@ export async function DELETE(request: Request) {
   const parsed = await parseBody(request, deleteBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const entries = readAgentConfigEntries();
-  if (!entries.some((a) => a.name === parsed.data.name)) {
-    return Response.json({ error: `Agent "${parsed.data.name}" not found` }, { status: 404 });
+  const { name } = parsed.data;
+
+  const file = await readAgentFile(name);
+  if (!file) {
+    return Response.json({ error: `Agent "${name}" not found` }, { status: 404 });
+  }
+  if (file.locked) {
+    return Response.json(
+      { error: `Agent "${name}" is locked — unlock it before deleting` },
+      { status: 403 },
+    );
   }
 
-  const updated = entries.filter((a) => a.name !== parsed.data.name);
-  writeAgentsConfig(updated);
-  return Response.json({ agents: updated });
+  await deleteAgentDefinition(name);
+  return Response.json({ agents: await readAgentConfigEntries() });
 }

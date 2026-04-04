@@ -1,14 +1,14 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { z } from "zod";
-import { DOVEPAW_DIR, SETTINGS_FILE, AGENT_SETTINGS_DIR, agentSettingsFile } from "./paths";
+import { DOVEPAW_DIR, SETTINGS_FILE } from "./paths";
 import {
   globalSettingsSchema,
-  agentSettingsSchema,
   type GlobalSettings,
   type AgentSettings,
   type Repository,
   type EnvVar,
 } from "./settings-schemas";
+import { readAgentFile, patchAgentFile } from "./agents-config";
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
@@ -34,10 +34,6 @@ function tryParse<T>(schema: z.ZodType<T>, file: string): T | null {
 
 function hasContent(s: GlobalSettings): boolean {
   return s.repositories.length > 0 || s.envVars.length > 0;
-}
-
-function hasAgentContent(s: AgentSettings): boolean {
-  return s.repos.length > 0 || s.envVars.length > 0;
 }
 
 // ─── Global Read / Write ──────────────────────────────────────────────────────
@@ -73,31 +69,24 @@ export function writeSettings(settings: GlobalSettings): void {
 
 // ─── Per-Agent Read / Write ───────────────────────────────────────────────────
 
-export function readAgentSettings(agentName: string): AgentSettings {
-  const file = agentSettingsFile(agentName);
-  const bak = `${file}.bak`;
-  const primary = tryParse(agentSettingsSchema, file);
-
-  if (!primary) {
-    const backup = tryParse(agentSettingsSchema, bak);
-    if (backup) restoreFromBak(bak, file);
-    return backup ?? defaultAgentSettings();
-  }
-  if (!hasAgentContent(primary)) {
-    const backup = tryParse(agentSettingsSchema, bak);
-    if (backup && hasAgentContent(backup)) {
-      restoreFromBak(bak, file);
-      return backup;
-    }
-  }
-  return primary;
+/**
+ * Read per-agent runtime settings (repos + envVars) from the agent's definition file.
+ * Returns defaults when the agent file is absent.
+ */
+export async function readAgentSettings(agentName: string): Promise<AgentSettings> {
+  const file = await readAgentFile(agentName);
+  return { repos: file?.repos ?? [], envVars: file?.envVars ?? [] };
 }
 
-export function writeAgentSettings(agentName: string, settings: AgentSettings): void {
-  mkdirSync(AGENT_SETTINGS_DIR, { recursive: true });
-  const file = agentSettingsFile(agentName);
-  writeFileSync(file, JSON.stringify(settings, null, 2) + "\n", "utf-8");
-  copyFileSync(file, `${file}.bak`);
+/**
+ * Patch only the runtime settings (repos/envVars) of an agent's definition file.
+ * All definition fields are preserved unchanged.
+ */
+export async function writeAgentSettings(
+  agentName: string,
+  settings: AgentSettings,
+): Promise<void> {
+  await patchAgentFile(agentName, settings);
 }
 
 // ─── Factory helpers ──────────────────────────────────────────────────────────

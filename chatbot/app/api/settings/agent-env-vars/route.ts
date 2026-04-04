@@ -40,18 +40,18 @@ const querySchema = z.object({
   agentName: z.string(),
 });
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const parsed = querySchema.safeParse({ agentName: searchParams.get("agentName") });
   if (!parsed.success) {
     return Response.json({ error: "Missing agentName query parameter" }, { status: 400 });
   }
   const { agentName } = parsed.data;
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const settings = readAgentSettings(agentName);
+  const settings = await readAgentSettings(agentName);
   return Response.json({ envVars: withSecretValues(settings.envVars, agentName) });
 }
 
@@ -66,11 +66,11 @@ export async function POST(request: Request) {
 
   const { agentName, key, value, isSecret, keychainService, keychainAccount } = parsed.data;
 
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const settings = readAgentSettings(agentName);
+  const settings = await readAgentSettings(agentName);
 
   if (settings.envVars.some((v) => v.key === key)) {
     return Response.json(
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     ...settings.envVars,
     makeEnvVar(key, value, isSecret, keychainService, keychainAccount),
   ];
-  writeAgentSettings(agentName, settings);
+  await writeAgentSettings(agentName, settings);
 
   return Response.json({ envVars: withSecretValues(settings.envVars, agentName) }, { status: 201 });
 }
@@ -104,11 +104,11 @@ export async function PATCH(request: Request) {
 
   const { agentName, id, key, value, isSecret, keychainService, keychainAccount } = parsed.data;
 
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const settings = readAgentSettings(agentName);
+  const settings = await readAgentSettings(agentName);
   const target = settings.envVars.find((v) => v.id === id);
 
   if (!target) {
@@ -137,7 +137,7 @@ export async function PATCH(request: Request) {
       ? buildUpdatedEnvVar(id, key, value, isSecret, keychainService, keychainAccount)
       : v,
   );
-  writeAgentSettings(agentName, settings);
+  await writeAgentSettings(agentName, settings);
 
   return Response.json({ envVars: withSecretValues(settings.envVars, agentName) });
 }
@@ -153,11 +153,11 @@ export async function DELETE(request: Request) {
 
   const { agentName, id } = parsed.data;
 
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const settings = readAgentSettings(agentName);
+  const settings = await readAgentSettings(agentName);
   const target = settings.envVars.find((v) => v.id === parsed.data.id);
 
   if (!target) {
@@ -170,7 +170,7 @@ export async function DELETE(request: Request) {
   }
 
   settings.envVars = settings.envVars.filter((v) => v.id !== id);
-  writeAgentSettings(agentName, settings);
+  await writeAgentSettings(agentName, settings);
 
   return Response.json({ envVars: withSecretValues(settings.envVars, agentName) });
 }

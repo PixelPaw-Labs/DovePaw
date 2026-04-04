@@ -22,7 +22,7 @@ const launchdActionSchema = z.object({
 });
 
 export async function GET(request: Request) {
-  const agents = readAgentsConfig();
+  const agents = await readAgentsConfig();
   const { searchParams } = new URL(request.url);
   const agentName = searchParams.get("agentName");
 
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
-    const plistPath = agentPlistPath(agent.name);
+    const plistPath = await agentPlistPath(agent.name);
     return NextResponse.json({
       plistExists: existsSync(plistPath),
       loaded: await isLoaded(agent.label),
@@ -42,18 +42,20 @@ export async function GET(request: Request) {
 
   // All-agents mode — single launchctl list call for all labels
   const loadedMap = await areAgentsLoaded(agents.map((a) => a.label));
-  const entries = agents.map((agent) => {
-    const plistPath = agentPlistPath(agent.name);
-    return [
-      agent.name,
-      { plistExists: existsSync(plistPath), loaded: loadedMap[agent.label] ?? false, plistPath },
-    ] as const;
-  });
+  const entries = await Promise.all(
+    agents.map(async (agent) => {
+      const plistPath = await agentPlistPath(agent.name);
+      return [
+        agent.name,
+        { plistExists: existsSync(plistPath), loaded: loadedMap[agent.label] ?? false, plistPath },
+      ] as const;
+    }),
+  );
   return NextResponse.json({ agents: Object.fromEntries(entries) });
 }
 
 export async function POST(request: Request) {
-  const agents = readAgentsConfig();
+  const agents = await readAgentsConfig();
   const body = launchdActionSchema.parse(await request.json());
   const { agentName, action } = body;
 

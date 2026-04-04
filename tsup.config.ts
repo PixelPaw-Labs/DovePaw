@@ -1,7 +1,7 @@
 import { defineConfig } from "tsup";
 import { readAgentConfigEntries } from "./lib/agents-config.js";
 
-const agentEntries = readAgentConfigEntries();
+const agentEntries = await readAgentConfigEntries();
 
 export default defineConfig({
   entry: {

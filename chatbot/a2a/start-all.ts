@@ -12,7 +12,7 @@ import { startHeartbeatServer } from "./heartbeat-server.js";
 import { PORTS_FILE, A2A_SERVERS_PID_FILE } from "@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
 
-const AGENTS = readAgentsConfig();
+const AGENTS = await readAgentsConfig();
 
 consola.box("🐱  Agent A2A Servers\nAllocating dynamic ports and starting up…");
 

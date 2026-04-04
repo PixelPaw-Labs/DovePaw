@@ -6,9 +6,10 @@
 
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { AGENTS_ROOT } from "@/lib/paths";
 import { readAgentConfigEntries } from "@@/lib/agents-config";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 
 vi.mock("express", () => {
   const app = {
@@ -36,9 +37,17 @@ import { createServerFromDef } from "@/a2a/lib/base-server";
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe.each(readAgentConfigEntries())("$name agent", ({ name }) => {
-  it("script exists in agents/", () => {
-    expect(existsSync(resolve(AGENTS_ROOT, `agents/${name}/main.ts`))).toBe(true);
+let cases: AgentConfigEntry[] = [];
+
+beforeAll(async () => {
+  cases = await readAgentConfigEntries();
+});
+
+describe("agent script existence", () => {
+  it("every agent has a script in agents/", () => {
+    for (const { name } of cases) {
+      expect(existsSync(resolve(AGENTS_ROOT, `agents/${name}/main.ts`))).toBe(true);
+    }
   });
 });
 

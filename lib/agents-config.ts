@@ -1,16 +1,34 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
-import { agentsConfigSchema, type AgentConfigEntry } from "./agents-config-schemas";
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  copyFile,
+  readdir,
+  rm,
+  access,
+  constants,
+} from "node:fs/promises";
+import { agentFileSchema, type AgentConfigEntry, type AgentFile } from "./agents-config-schemas";
 import { buildAgentDef } from "./agents";
-import { AGENTS_CONFIG_FILE, DOVEPAW_DIR } from "./paths";
+import { AGENT_SETTINGS_DIR, agentConfigDir, agentDefinitionFile } from "./paths";
 import type { AgentDef } from "./agents";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function tryParse(file: string): AgentConfigEntry[] | null {
-  if (!existsSync(file)) return null;
+async function fileExists(path: string): Promise<boolean> {
   try {
-    const result = agentsConfigSchema.safeParse(JSON.parse(readFileSync(file, "utf-8")));
-    return result.success ? result.data.agents : null;
+    await access(path, constants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function tryParseFile(file: string): Promise<AgentFile | null> {
+  if (!(await fileExists(file))) return null;
+  try {
+    const result = agentFileSchema.safeParse(JSON.parse(await readFile(file, "utf-8")));
+    return result.success ? result.data : null;
   } catch {
     return null;
   }
@@ -19,60 +37,123 @@ function tryParse(file: string): AgentConfigEntry[] | null {
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
 /**
- * Read agent config entries from ~/.dovepaw/agents.json.
- * Returns [] when the file is absent. Recovers from .bak on corruption.
+ * Read a single agent's combined definition+settings file.
+ * Returns null when the file is absent or corrupt (after bak recovery attempt).
  */
-export function readAgentConfigEntries(): AgentConfigEntry[] {
-  const bak = `${AGENTS_CONFIG_FILE}.bak`;
-  const primary = tryParse(AGENTS_CONFIG_FILE);
-
-  if (primary !== null) {
-    if (primary.length === 0) {
-      const backup = tryParse(bak);
-      if (backup && backup.length > 0) {
-        copyFileSync(bak, AGENTS_CONFIG_FILE);
-        return backup;
-      }
-    }
-    return primary;
-  }
-
-  const backup = tryParse(bak);
+export async function readAgentFile(agentName: string): Promise<AgentFile | null> {
+  const file = agentDefinitionFile(agentName);
+  const bak = `${file}.bak`;
+  const primary = await tryParseFile(file);
+  if (primary !== null) return primary;
+  const backup = await tryParseFile(bak);
   if (backup !== null) {
-    copyFileSync(bak, AGENTS_CONFIG_FILE);
+    await copyFile(bak, file);
     return backup;
   }
+  return null;
+}
 
-  return [];
+/** Scan all agent subdirectories and return their parsed agent.json files. */
+async function readAllAgentFiles(): Promise<AgentFile[]> {
+  if (!(await fileExists(AGENT_SETTINGS_DIR))) return [];
+  try {
+    const entries = await readdir(AGENT_SETTINGS_DIR, { withFileTypes: true });
+    const results = await Promise.all(
+      entries.filter((d) => d.isDirectory()).map((d) => readAgentFile(d.name)),
+    );
+    return results.filter((e): e is AgentFile => e !== null);
+  } catch {
+    return [];
+  }
 }
 
 /**
- * Read agents config and hydrate each entry into a full AgentDef (with icon, derived fields, etc.)
+ * Read agent config entries (definition fields only) from all agent dirs.
+ * Returns [] when settings.agents/ is absent.
  */
-export function readAgentsConfig(): AgentDef[] {
-  return readAgentConfigEntries().map(buildAgentDef);
+export async function readAgentConfigEntries(): Promise<AgentConfigEntry[]> {
+  const files = await readAllAgentFiles();
+  return files.map(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    ({ repos: _r, envVars: _e, version: _v, locked: _l, ...entry }) => entry,
+  );
 }
 
-/**
- * Read only agents with schedulingEnabled !== false.
- */
-export function readScheduledAgentConfigEntries(): ReturnType<typeof readAgentConfigEntries> {
-  return readAgentConfigEntries().filter((a) => a.schedulingEnabled !== false);
+/** Read agents config and hydrate each entry into a full AgentDef. */
+export async function readAgentsConfig(): Promise<AgentDef[]> {
+  return (await readAgentConfigEntries()).map(buildAgentDef);
 }
 
-/**
- * Read only scheduling-enabled agents as full AgentDef[].
- */
-export function readScheduledAgentsConfig(): AgentDef[] {
-  return readScheduledAgentConfigEntries().map(buildAgentDef);
+/** Read only agents with schedulingEnabled !== false. */
+export async function readScheduledAgentConfigEntries(): Promise<AgentConfigEntry[]> {
+  return (await readAgentConfigEntries()).filter((a) => a.schedulingEnabled !== false);
+}
+
+/** Read only scheduling-enabled agents as full AgentDef[]. */
+export async function readScheduledAgentsConfig(): Promise<AgentDef[]> {
+  return (await readScheduledAgentConfigEntries()).map(buildAgentDef);
 }
 
 // ─── Write ────────────────────────────────────────────────────────────────────
 
-/** Persist agent entries to ~/.dovepaw/agents.json (with .bak). */
-export function writeAgentsConfig(entries: AgentConfigEntry[]): void {
-  mkdirSync(DOVEPAW_DIR, { recursive: true });
-  const data = JSON.stringify({ version: 1, agents: entries }, null, 2) + "\n";
-  writeFileSync(AGENTS_CONFIG_FILE, data, "utf-8");
-  copyFileSync(AGENTS_CONFIG_FILE, `${AGENTS_CONFIG_FILE}.bak`);
+/** Persist a combined agent file to its directory (with .bak). */
+export async function writeAgentFile(agentName: string, file: AgentFile): Promise<void> {
+  await mkdir(agentConfigDir(agentName), { recursive: true });
+  const dest = agentDefinitionFile(agentName);
+  const data = JSON.stringify(file, null, 2) + "\n";
+  await writeFile(dest, data, "utf-8");
+  await copyFile(dest, `${dest}.bak`);
+}
+
+/** Create a new agent file with empty repos/envVars. */
+export async function createAgentFile(entry: AgentConfigEntry): Promise<void> {
+  await writeAgentFile(entry.name, { version: 1, ...entry, repos: [], envVars: [], locked: false });
+}
+
+/**
+ * Apply a partial patch to an agent file.
+ * Only the specified fields are updated — all other fields are preserved.
+ * If the file does not exist yet, a minimal skeleton is created first.
+ */
+export async function patchAgentFile(
+  agentName: string,
+  patch: Partial<AgentFile>,
+): Promise<AgentFile> {
+  const current: AgentFile = (await readAgentFile(agentName)) ?? {
+    version: 1,
+    name: agentName,
+    alias: agentName.slice(0, 3),
+    displayName: agentName,
+    description: "",
+    scheduleDisplay: "",
+    doveCard: { title: agentName, description: "", prompt: "" },
+    suggestions: [],
+    repos: [],
+    envVars: [],
+    locked: false,
+  };
+  const updated: AgentFile = {
+    ...current,
+    ...patch,
+    version: 1,
+    locked: patch.locked ?? current.locked,
+  };
+  await writeAgentFile(agentName, updated);
+  return updated;
+}
+
+/** Update only the definition fields of an agent (everything except repos/envVars/locked).
+ * envVars is omitted from defPatch because AgentConfigEntry.envVars (plist static vars) is
+ * a different type to AgentFile.envVars (user-configured runtime vars). */
+export async function patchAgentDefinition(
+  agentName: string,
+  defPatch: Partial<Omit<AgentConfigEntry, "envVars">>,
+): Promise<void> {
+  await patchAgentFile(agentName, defPatch);
+}
+
+/** Delete the agent's entire directory. */
+export async function deleteAgentDefinition(agentName: string): Promise<void> {
+  const dir = agentConfigDir(agentName);
+  if (await fileExists(dir)) await rm(dir, { recursive: true });
 }

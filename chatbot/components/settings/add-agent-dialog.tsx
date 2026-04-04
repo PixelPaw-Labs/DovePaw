@@ -16,12 +16,7 @@ import {
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { DEFAULT_ICON_STYLE } from "@@/lib/icon-registry";
 import { IconPicker } from "./icon-picker";
-
-type ScheduleType = "none" | "interval" | "calendar";
-const SCHEDULE_TYPES = ["none", "interval", "calendar"] as const;
-function isScheduleType(v: string): v is ScheduleType {
-  return (SCHEDULE_TYPES as readonly string[]).includes(v);
-}
+import { type ScheduleType, isScheduleType, Section, Row } from "./agent-form-helpers";
 
 interface FormState {
   name: string;
@@ -221,9 +216,8 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
                 iconBg={form.iconBg}
                 iconColor={form.iconColor}
                 onChange={(name, bg, color) => {
-                  set("iconName", name);
-                  set("iconBg", bg);
-                  set("iconColor", color);
+                  setForm((prev) => ({ ...prev, iconName: name, iconBg: bg, iconColor: color }));
+                  setError(null);
                 }}
               />
             </Row>
@@ -425,34 +419,5 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
         </form>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function Section({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{label}</h3>
-      {children}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[140px_1fr] items-start gap-3">
-      <div className="pt-2">
-        <label className="text-sm font-medium text-on-surface">{label}</label>
-        {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
-      </div>
-      {children}
-    </div>
   );
 }

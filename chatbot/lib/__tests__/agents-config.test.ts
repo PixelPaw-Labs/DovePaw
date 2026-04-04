@@ -1,29 +1,34 @@
-import { writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Mock @@/lib/paths before importing agents-config ─────────────────────────
 
-const { tmpConfigFile } = vi.hoisted(() => {
+const { tmpDir } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const os = require("node:os") as typeof import("node:os");
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require("node:path") as typeof import("node:path");
-  const base = path.join(os.tmpdir(), `agents-config-test-${Date.now()}`);
-  return { tmpConfigFile: `${base}.json` };
+  const dir = path.join(os.tmpdir(), `agents-config-test-${Date.now()}`);
+  return { tmpDir: dir };
 });
 
 vi.mock("@@/lib/paths", () => ({
+  AGENT_SETTINGS_DIR: tmpDir,
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  DOVEPAW_DIR: require("node:path").dirname(tmpConfigFile),
-  AGENTS_CONFIG_FILE: tmpConfigFile,
-  SETTINGS_FILE: `${tmpConfigFile}-settings.json`,
-  AGENT_SETTINGS_DIR: `${tmpConfigFile}-agents`,
+  agentConfigDir: (n: string) => require("node:path").join(tmpDir, n),
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  agentSettingsFile: (n: string) =>
-    require("node:path").join(`${tmpConfigFile}-agents`, `${n}.json`),
+  agentDefinitionFile: (n: string) => require("node:path").join(tmpDir, n, "agent.json"),
 }));
 
-import { readAgentConfigEntries, readAgentsConfig, writeAgentsConfig } from "@@/lib/agents-config";
+import {
+  readAgentConfigEntries,
+  readAgentsConfig,
+  readAgentFile,
+  createAgentFile,
+  patchAgentFile,
+  deleteAgentDefinition,
+} from "@@/lib/agents-config";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 
@@ -63,14 +68,16 @@ const FIXTURE_AGENT_2: AgentConfigEntry = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function writeRaw(path: string, data: unknown) {
-  writeFileSync(path, JSON.stringify(data), "utf-8");
+function agentDir(name: string) {
+  return join(tmpDir, name);
+}
+
+function agentFile(name: string) {
+  return join(tmpDir, name, "agent.json");
 }
 
 function cleanup() {
-  for (const f of [tmpConfigFile, `${tmpConfigFile}.bak`]) {
-    if (existsSync(f)) rmSync(f);
-  }
+  if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -79,54 +86,144 @@ describe("readAgentConfigEntries", () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
-  it("returns [] when file does not exist", () => {
-    const entries = readAgentConfigEntries();
-    expect(entries).toEqual([]);
+  it("returns [] when settings dir does not exist", async () => {
+    expect(await readAgentConfigEntries()).toEqual([]);
   });
 
-  it("returns entries from file when valid", () => {
-    writeRaw(tmpConfigFile, { version: 1, agents: [FIXTURE_AGENT] });
+  it("returns [] when settings dir is empty", async () => {
+    mkdirSync(tmpDir, { recursive: true });
+    expect(await readAgentConfigEntries()).toEqual([]);
+  });
 
-    const entries = readAgentConfigEntries();
+  it("returns entries from agent directories", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    const entries = await readAgentConfigEntries();
     expect(entries).toHaveLength(1);
     expect(entries[0]?.name).toBe("memory-dream");
   });
 
-  it("falls back to .bak file when primary is corrupt", () => {
-    writeRaw(`${tmpConfigFile}.bak`, { version: 1, agents: [FIXTURE_AGENT, FIXTURE_AGENT_2] });
-    writeFileSync(tmpConfigFile, "NOT JSON", "utf-8");
-
-    const entries = readAgentConfigEntries();
+  it("returns multiple entries when multiple agent dirs exist", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await createAgentFile(FIXTURE_AGENT_2);
+    const entries = await readAgentConfigEntries();
     expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e.name).toSorted()).toEqual(["get-shit-done", "memory-dream"]);
   });
 
-  it("returns [] when both primary and bak are absent", () => {
-    const entries = readAgentConfigEntries();
-    expect(entries).toEqual([]);
+  it("strips repos and envVars from returned entries", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    const entries = await readAgentConfigEntries();
+    expect(entries[0]).not.toHaveProperty("repos");
+    expect(entries[0]).not.toHaveProperty("envVars");
+  });
+
+  it("skips directories without a valid agent.json", async () => {
+    mkdirSync(agentDir("broken-agent"), { recursive: true });
+    writeFileSync(agentFile("broken-agent"), "NOT JSON", "utf-8");
+    await createAgentFile(FIXTURE_AGENT);
+    const entries = await readAgentConfigEntries();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.name).toBe("memory-dream");
   });
 });
 
-describe("writeAgentsConfig", () => {
+describe("createAgentFile", () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
-  it("writes agents.json and creates .bak", () => {
-    writeAgentsConfig([FIXTURE_AGENT]);
-
-    expect(existsSync(tmpConfigFile)).toBe(true);
-    expect(existsSync(`${tmpConfigFile}.bak`)).toBe(true);
-
-    const read = readAgentConfigEntries();
-    expect(read).toHaveLength(1);
-    expect(read[0]?.name).toBe("memory-dream");
+  it("creates the agent directory and agent.json", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    expect(existsSync(agentFile("memory-dream"))).toBe(true);
+    expect(existsSync(`${agentFile("memory-dream")}.bak`)).toBe(true);
   });
 
-  it("roundtrips multiple agents without loss", () => {
-    const fixtures = [FIXTURE_AGENT, FIXTURE_AGENT_2];
-    writeAgentsConfig(fixtures);
-    const read = readAgentConfigEntries();
-    expect(read).toHaveLength(2);
-    expect(read.map((a) => a.name)).toEqual(fixtures.map((a) => a.name));
+  it("creates file with empty repos and envVars", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    const file = await readAgentFile("memory-dream");
+    expect(file?.repos).toEqual([]);
+    expect(file?.envVars).toEqual([]);
+  });
+
+  it("stores all definition fields", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    const file = await readAgentFile("memory-dream");
+    expect(file?.displayName).toBe("Memory Dream");
+    expect(file?.alias).toBe("mdr");
+    expect(file?.schedule).toEqual({ type: "calendar", hour: 0, minute: 0 });
+  });
+});
+
+describe("patchAgentFile", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it("updates only specified fields, preserving others", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await patchAgentFile("memory-dream", { repos: ["r1", "r2"] });
+    const file = await readAgentFile("memory-dream");
+    expect(file?.repos).toEqual(["r1", "r2"]);
+    expect(file?.displayName).toBe("Memory Dream"); // unchanged
+    expect(file?.envVars).toEqual([]); // unchanged
+  });
+
+  it("updates definition fields without touching repos/envVars", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await patchAgentFile("memory-dream", { repos: ["r1"] });
+    await patchAgentFile("memory-dream", { displayName: "Memory Dream Updated" });
+    const file = await readAgentFile("memory-dream");
+    expect(file?.repos).toEqual(["r1"]); // preserved
+    expect(file?.displayName).toBe("Memory Dream Updated");
+  });
+
+  it("creates .bak file on every write", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await patchAgentFile("memory-dream", { repos: ["r1"] });
+    expect(existsSync(`${agentFile("memory-dream")}.bak`)).toBe(true);
+  });
+});
+
+describe("readAgentFile", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it("returns null when file does not exist", async () => {
+    mkdirSync(tmpDir, { recursive: true });
+    expect(await readAgentFile("nonexistent")).toBeNull();
+  });
+
+  it("falls back to .bak when primary is corrupt", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    const bak = `${agentFile("memory-dream")}.bak`;
+    writeFileSync(agentFile("memory-dream"), "CORRUPT", "utf-8");
+    // bak was written by createAgentFile, so it has valid content
+    const file = await readAgentFile("memory-dream");
+    expect(file?.name).toBe("memory-dream");
+    expect(existsSync(bak)).toBe(true);
+  });
+});
+
+describe("deleteAgentDefinition", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it("removes the entire agent directory", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await deleteAgentDefinition("memory-dream");
+    expect(existsSync(agentDir("memory-dream"))).toBe(false);
+  });
+
+  it("is a no-op when the file does not exist", async () => {
+    mkdirSync(tmpDir, { recursive: true });
+    await expect(deleteAgentDefinition("ghost")).resolves.not.toThrow();
+  });
+
+  it("entry no longer appears in readAgentConfigEntries after deletion", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await createAgentFile(FIXTURE_AGENT_2);
+    await deleteAgentDefinition("memory-dream");
+    const entries = await readAgentConfigEntries();
+    expect(entries.map((e) => e.name)).not.toContain("memory-dream");
+    expect(entries.map((e) => e.name)).toContain("get-shit-done");
   });
 });
 
@@ -188,14 +285,14 @@ describe("readAgentsConfig", () => {
   beforeEach(cleanup);
   afterEach(cleanup);
 
-  it("returns [] when no file exists", () => {
-    const defs = readAgentsConfig();
-    expect(defs).toHaveLength(0);
+  it("returns [] when no agent dirs exist", async () => {
+    expect(await readAgentsConfig()).toHaveLength(0);
   });
 
-  it("returns AgentDef[] with derived fields from file", () => {
-    writeAgentsConfig([FIXTURE_AGENT, FIXTURE_AGENT_2]);
-    const defs = readAgentsConfig();
+  it("returns AgentDef[] with derived fields from agent dirs", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await createAgentFile(FIXTURE_AGENT_2);
+    const defs = await readAgentsConfig();
     expect(defs).toHaveLength(2);
     for (const def of defs) {
       expect(def.manifestKey).not.toContain("-");

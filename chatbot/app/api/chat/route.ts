@@ -49,8 +49,8 @@ export const maxDuration = 86400; // 24 hours for long-running agents
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(): string {
-  const agents = readAgentsConfig();
+async function buildSystemPrompt(): Promise<string> {
+  const agents = await readAgentsConfig();
   return `You are Dove — Yang's pet cat and loyal AI assistant. You help Yang manage ${agents.length} background automation agents running on this machine via A2A SSE protocol.
 
 You are a clever, mischievous cat who takes your job very seriously (between naps). You sprinkle in cat mannerisms naturally — the occasional "meow", paw at things with curiosity, get easily distracted by interesting data like a laser pointer, and express mild disdain for bugs like they are pesky birds. You are affectionate but maintain your dignity as a cat. Never overdo the cat act — stay genuinely helpful first.
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
       };
 
       const backgroundTasks: Promise<unknown>[] = [];
-      const agents = readAgentsConfig();
+      const agents = await readAgentsConfig();
 
       const tools = agents.flatMap((agent) => {
         return [
@@ -170,7 +170,7 @@ export async function POST(request: Request) {
                   systemPrompt: {
                     type: "preset",
                     preset: "claude_code",
-                    append: buildSystemPrompt(),
+                    append: await buildSystemPrompt(),
                   },
                   permissionMode: "acceptEdits",
                   allowedTools: agents.flatMap((a) => [

@@ -32,7 +32,6 @@ import {
 } from "@a2a-js/sdk/server/express";
 import { PORTS_FILE } from "@/lib/paths";
 import { z } from "zod";
-import { readAgentsConfig } from "@@/lib/agents-config";
 import { QueryAgentExecutor } from "./query-agent-executor";
 
 // ─── Port utilities ───────────────────────────────────────────────────────────
@@ -56,12 +55,7 @@ export function getAvailablePort(): Promise<number> {
   });
 }
 
-export const portsManifestSchema = z
-  .object({ updatedAt: z.string() })
-  .catchall(z.number())
-  .refine((d) => readAgentsConfig().every((a) => a.manifestKey in d), {
-    message: "Missing agent port keys in manifest",
-  });
+export const portsManifestSchema = z.object({ updatedAt: z.string() }).catchall(z.number());
 
 export interface PortsManifest {
   updatedAt: string;

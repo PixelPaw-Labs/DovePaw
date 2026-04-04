@@ -1,5 +1,6 @@
-/** Zod schemas for ~/.dovepaw/agents.json. No Node.js imports — safe in client components. */
+/** Zod schemas for per-agent definition files. No Node.js imports — safe in client components. */
 import { z } from "zod";
+import { envVarSchema } from "./settings-schemas";
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
@@ -77,3 +78,30 @@ export const agentsConfigSchema = z.object({
 });
 
 export type AgentsConfig = z.infer<typeof agentsConfigSchema>;
+
+// ─── Combined per-agent file (definition + runtime settings) ─────────────────
+
+/**
+ * The shape of ~/.dovepaw/settings.agents/<name>/agent.json.
+ * Merges the full agent definition with per-agent runtime settings (repos + envVars).
+ * String fields are intentionally permissive (no min(1)) so skeletal files
+ * (created before the definition is fully filled in) still parse correctly.
+ * UI save paths use agentConfigEntrySchema to enforce completeness.
+ */
+export const agentFileSchema = agentConfigEntrySchema
+  .extend({
+    version: z.literal(1),
+    repos: z.array(z.string()).default([]),
+    envVars: z.array(envVarSchema).default([]),
+    /** When true, the agent cannot be deleted via the UI or API until unlocked. */
+    locked: z.boolean().optional().default(false),
+  })
+  .extend({
+    // Allow empty strings at rest — validated at save time via agentConfigEntrySchema
+    alias: z.string(),
+    displayName: z.string(),
+    description: z.string(),
+    scheduleDisplay: z.string(),
+  });
+
+export type AgentFile = z.infer<typeof agentFileSchema>;

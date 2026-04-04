@@ -35,14 +35,14 @@ function listFiles(agentName: string): Array<{ name: string; content: string }> 
 
 const querySchema = z.object({ agentName: z.string() });
 
-export function GET(request: Request) {
+export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const parsed = querySchema.safeParse({ agentName: searchParams.get("agentName") });
   if (!parsed.success) {
     return Response.json({ error: "Missing agentName query parameter" }, { status: 400 });
   }
   const { agentName } = parsed.data;
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
   return Response.json({ files: listFiles(agentName) });
@@ -62,7 +62,7 @@ export async function PUT(request: Request) {
 
   const { agentName, filename, content } = parsed.data;
 
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 
@@ -90,7 +90,7 @@ export async function DELETE(request: Request) {
 
   const { agentName, filename } = parsed.data;
 
-  if (!readAgentsConfig().find((a) => a.name === agentName)) {
+  if (!(await readAgentsConfig()).find((a) => a.name === agentName)) {
     return Response.json({ error: "Agent not found" }, { status: 404 });
   }
 

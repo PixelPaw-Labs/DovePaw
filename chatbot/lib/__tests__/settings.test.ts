@@ -24,8 +24,10 @@ vi.mock("@@/lib/paths", () => ({
   SETTINGS_FILE: tmpFile,
   AGENT_SETTINGS_DIR: tmpAgentSettingsDir,
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  agentSettingsFile: (agentName: string) =>
-    require("node:path").join(tmpAgentSettingsDir, `${agentName}.json`),
+  agentConfigDir: (agentName: string) => require("node:path").join(tmpAgentSettingsDir, agentName),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  agentDefinitionFile: (agentName: string) =>
+    require("node:path").join(tmpAgentSettingsDir, agentName, "agent.json"),
 }));
 
 import {
@@ -219,71 +221,55 @@ describe("writeSettings", () => {
 // ─── readAgentSettings ────────────────────────────────────────────────────────
 
 describe("readAgentSettings", () => {
-  it("returns default when file does not exist", () => {
-    expect(readAgentSettings("nonexistent-agent")).toEqual({ repos: [], envVars: [] });
+  it("returns default when agent dir does not exist", async () => {
+    expect(await readAgentSettings("nonexistent-agent")).toEqual({ repos: [], envVars: [] });
   });
 
-  it("reads saved agent settings", () => {
-    writeAgentSettings("my-agent", { repos: ["r1", "r2"], envVars: [] });
-    expect(readAgentSettings("my-agent")).toEqual({ repos: ["r1", "r2"], envVars: [] });
+  it("reads saved agent settings", async () => {
+    await writeAgentSettings("my-agent", { repos: ["r1", "r2"], envVars: [] });
+    expect(await readAgentSettings("my-agent")).toEqual({ repos: ["r1", "r2"], envVars: [] });
   });
 
-  // ── bak fallback ───────────────────────────────────────────────────────────
-
-  it("falls back to .bak when primary is missing", () => {
-    const agentFile = require("node:path").join(tmpAgentSettingsDir, "my-agent.json");
-    require("node:fs").mkdirSync(tmpAgentSettingsDir, { recursive: true });
-    writeRaw(`${agentFile}.bak`, { repos: ["r1"], envVars: [] });
-    expect(readAgentSettings("my-agent").repos).toEqual(["r1"]);
-  });
-
-  it("restores primary from .bak when primary is missing", () => {
-    const agentFile = require("node:path").join(tmpAgentSettingsDir, "my-agent.json");
-    require("node:fs").mkdirSync(tmpAgentSettingsDir, { recursive: true });
-    writeRaw(`${agentFile}.bak`, { repos: ["r1"], envVars: [] });
-    readAgentSettings("my-agent");
-    expect(existsSync(agentFile)).toBe(true);
-  });
-
-  it("falls back to .bak when primary has empty arrays", () => {
-    writeAgentSettings("my-agent", { repos: ["original"], envVars: [] });
-    // Overwrite primary with empty (simulating accidental clear)
-    const agentFile = require("node:path").join(tmpAgentSettingsDir, "my-agent.json");
-    writeRaw(agentFile, { repos: [], envVars: [] });
-    expect(readAgentSettings("my-agent").repos).toEqual(["original"]);
+  it("returns only repos and envVars (not definition fields)", async () => {
+    await writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
+    const settings = await readAgentSettings("my-agent");
+    expect(Object.keys(settings).toSorted()).toEqual(["envVars", "repos"]);
   });
 });
 
 // ─── writeAgentSettings ───────────────────────────────────────────────────────
 
 describe("writeAgentSettings", () => {
-  it("creates the agent settings directory if needed", () => {
-    writeAgentSettings("test-agent", { repos: ["r1"], envVars: [] });
-    expect(existsSync(tmpAgentSettingsDir)).toBe(true);
+  it("creates the agent directory if needed", async () => {
+    await writeAgentSettings("test-agent", { repos: ["r1"], envVars: [] });
+    const agentDir = require("node:path").join(tmpAgentSettingsDir, "test-agent");
+    expect(existsSync(agentDir)).toBe(true);
   });
 
-  it("writes and reads back", () => {
-    writeAgentSettings("my-agent", { repos: ["r1", "r2", "r3"], envVars: [] });
-    expect(readAgentSettings("my-agent")).toEqual({ repos: ["r1", "r2", "r3"], envVars: [] });
+  it("writes and reads back", async () => {
+    await writeAgentSettings("my-agent", { repos: ["r1", "r2", "r3"], envVars: [] });
+    expect(await readAgentSettings("my-agent")).toEqual({ repos: ["r1", "r2", "r3"], envVars: [] });
   });
 
-  it("creates a .bak file after write", () => {
-    writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
-    const agentFile = require("node:path").join(tmpAgentSettingsDir, "my-agent.json");
+  it("creates a .bak file after write", async () => {
+    await writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
+    const agentFile = require("node:path").join(tmpAgentSettingsDir, "my-agent", "agent.json");
     expect(existsSync(`${agentFile}.bak`)).toBe(true);
   });
 
-  it("overwrites existing settings", () => {
-    writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
-    writeAgentSettings("my-agent", { repos: ["r2", "r3"], envVars: [] });
-    expect(readAgentSettings("my-agent").repos).toEqual(["r2", "r3"]);
+  it("patches only repos/envVars, preserving other fields", async () => {
+    // First write creates the agent file with minimal skeleton
+    await writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
+    // Second write should update repos without losing other data
+    await writeAgentSettings("my-agent", { repos: ["r2", "r3"], envVars: [] });
+    expect((await readAgentSettings("my-agent")).repos).toEqual(["r2", "r3"]);
   });
 
-  it("keeps agent settings isolated per agent", () => {
-    writeAgentSettings("agent-a", { repos: ["r1"], envVars: [] });
-    writeAgentSettings("agent-b", { repos: ["r2", "r3"], envVars: [] });
-    expect(readAgentSettings("agent-a").repos).toEqual(["r1"]);
-    expect(readAgentSettings("agent-b").repos).toEqual(["r2", "r3"]);
+  it("keeps agent settings isolated per agent", async () => {
+    await writeAgentSettings("agent-a", { repos: ["r1"], envVars: [] });
+    await writeAgentSettings("agent-b", { repos: ["r2", "r3"], envVars: [] });
+    expect((await readAgentSettings("agent-a")).repos).toEqual(["r1"]);
+    expect((await readAgentSettings("agent-b")).repos).toEqual(["r2", "r3"]);
   });
 });
 

@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { FolderGit2, KeyRound, Lock, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FolderGit2, KeyRound, Lock, LockOpen, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { AgentConfigFilesTab } from "./agent-config-files-tab";
+import { AgentDefinitionTab } from "./agent-definition-tab";
 import {
   DataTable,
   DataTableHeader,
@@ -22,8 +24,9 @@ import { z } from "zod";
 import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings-schemas";
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
+const apiErrorSchema = z.object({ error: z.string().optional() });
 
-type Tab = "repositories" | "env-vars" | "config-files";
+type Tab = "definition" | "repositories" | "env-vars" | "config-files";
 
 interface AgentSettingsContentProps {
   agentEntry: AgentConfigEntry;
@@ -31,6 +34,8 @@ interface AgentSettingsContentProps {
   initialEnabledRepoIds: string[];
   initialAgentEnvVars: EnvVar[];
   globalEnvVars: EnvVar[];
+  initialTab?: Tab;
+  initialLocked?: boolean;
 }
 
 function MaskedValue({
@@ -71,17 +76,20 @@ function MaskedValue({
 }
 
 export function AgentSettingsContent({
-  agentEntry,
+  agentEntry: initialAgentEntry,
   repositories,
   initialEnabledRepoIds,
   initialAgentEnvVars,
   globalEnvVars,
+  initialTab = "definition",
+  initialLocked = false,
 }: AgentSettingsContentProps) {
+  const [agentEntry, setAgentEntry] = React.useState(initialAgentEntry);
   const agent = buildAgentDef(agentEntry);
   const agentName = agent.name;
   const Icon = agent.icon;
 
-  const [tab, setTab] = React.useState<Tab>("repositories");
+  const [tab, setTab] = React.useState<Tab>(initialTab);
 
   // ── repos state ──────────────────────────────────────────────────────────────
   const [enabledIds, setEnabledIds] = React.useState<Set<string>>(
@@ -207,13 +215,60 @@ export function AgentSettingsContent({
 
   const saving = repoSaving || envSaving;
 
+  // ── lock toggle ──────────────────────────────────────────────────────────────
+  const [locked, setLocked] = React.useState(initialLocked);
+  const [lockSaving, setLockSaving] = React.useState(false);
+
+  async function handleLockToggle() {
+    const next = !locked;
+    setLockSaving(true);
+    try {
+      const res = await fetch("/api/settings/agent-lock", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentName, locked: next }),
+      });
+      if (res.ok) setLocked(next);
+    } finally {
+      setLockSaving(false);
+    }
+  }
+
+  // ── delete agent ──────────────────────────────────────────────────────────────
+  const router = useRouter();
+  const [deleteConfirm, setDeleteConfirm] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  async function handleDeleteAgent() {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch("/api/settings/agents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: agentName }),
+      });
+      if (!res.ok) {
+        const data = apiErrorSchema.parse(await res.json());
+        setDeleteError(data.error ?? "Failed to delete agent");
+        return;
+      }
+      router.push("/settings");
+      router.refresh();
+    } catch {
+      setDeleteError("Failed to delete agent");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-8">
       <Breadcrumb
         items={[{ label: "Settings", href: "/settings" }, { label: agent.displayName }]}
       />
 
-      {/* Page header — same structure as AgentRepoSettings */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <div
@@ -223,27 +278,36 @@ export function AgentSettingsContent({
           </div>
           <div>
             <h1 className="text-3xl font-extrabold text-on-surface tracking-tight">
-              Repository settings for &lsquo;{agent.displayName}&rsquo;
+              {agent.displayName}
             </h1>
             <p className="text-sm text-on-surface-variant mt-1 max-w-2xl">
-              Enable or disable which repositories this agent monitors. Only enabled repositories
-              are considered during execution. Changes save automatically.
+              {agent.description.slice(0, 120)}
+              {agent.description.length > 120 ? "…" : ""}
               {saving && <span className="ml-2 text-primary">Saving…</span>}
             </p>
           </div>
         </div>
-        {/* Add Variable button only visible on env-vars tab */}
         {tab === "env-vars" && (
           <AddEnvVarDialog existingKeys={agentEnvVars.map((v) => v.key)} onAdd={handleAddEnvVar} />
         )}
       </div>
 
-      {/* Two-column layout — same as AgentRepoSettings */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
         {/* Left: tabs + tab content */}
         <div className="flex flex-col gap-4">
           {/* Tabs */}
           <div className="flex gap-1 border-b border-outline-variant/20">
+            <button
+              type="button"
+              onClick={() => setTab("definition")}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                tab === "definition"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              Definition
+            </button>
             <button
               type="button"
               onClick={() => setTab("repositories")}
@@ -286,6 +350,95 @@ export function AgentSettingsContent({
               Config Files
             </button>
           </div>
+
+          {/* Definition tab */}
+          {tab === "definition" && (
+            <>
+              <AgentDefinitionTab agentEntry={agentEntry} onSaved={setAgentEntry} />
+
+              {/* Danger zone */}
+              <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-5 flex flex-col gap-4">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-destructive/70">
+                  Danger Zone
+                </h3>
+
+                {/* Lock toggle */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    {locked ? (
+                      <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                    ) : (
+                      <LockOpen className="w-4 h-4 text-on-surface-variant shrink-0" />
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-on-surface">
+                        {locked ? "Agent is locked" : "Lock agent"}
+                      </p>
+                      <p className="text-xs text-on-surface-variant">
+                        {locked
+                          ? "Unlock to allow deletion."
+                          : "Prevent this agent from being deleted."}
+                      </p>
+                    </div>
+                  </div>
+                  <label className="inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={locked}
+                      disabled={lockSaving}
+                      onChange={() => void handleLockToggle()}
+                      aria-label={locked ? "Unlock agent" : "Lock agent"}
+                    />
+                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-500 peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                  </label>
+                </div>
+
+                <div className="h-px bg-destructive/15" />
+
+                {/* Delete */}
+                {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+                {deleteConfirm ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-destructive font-medium flex-1">
+                      Delete &ldquo;{agent.displayName}&rdquo;? This cannot be undone.
+                    </span>
+                    <button
+                      type="button"
+                      disabled={deleting}
+                      onClick={() => void handleDeleteAgent()}
+                      className="rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide bg-destructive text-destructive-foreground hover:brightness-110 disabled:opacity-40"
+                    >
+                      {deleting ? "Deleting…" : "Confirm"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirm(false)}
+                      className="rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide bg-secondary border border-border text-foreground hover:brightness-95"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-on-surface-variant">
+                      {locked
+                        ? "Unlock this agent before deleting."
+                        : "Permanently remove this agent and its configuration."}
+                    </p>
+                    <button
+                      type="button"
+                      disabled={locked}
+                      onClick={() => setDeleteConfirm(true)}
+                      className="rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide bg-destructive/10 border border-destructive/30 text-destructive hover:bg-destructive/20 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                    >
+                      Delete Agent
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
 
           {/* Repositories tab */}
           {tab === "repositories" && (
