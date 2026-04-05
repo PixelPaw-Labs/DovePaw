@@ -102,7 +102,9 @@ export function useConversations() {
         const { messages: msgs, progress } = sessionDetailResponseSchema.parse(
           await (await fetch(sessionDetailUrl("dove", contextId))).json(),
         );
-        setMessages(msgs);
+        setMessages(
+          msgs.map((m) => (m.role === "assistant" ? Object.assign({}, m, { agentId: "dove" }) : m)),
+        );
         setSessionProgress(progress);
       } catch {
         // ignore — no prior session
@@ -167,9 +169,12 @@ export function useConversations() {
             const { messages: msgs, progress } = sessionDetailResponseSchema.parse(
               await (await fetch(sessionDetailUrl(agentId, contextId))).json(),
             );
-            setMessages(msgs);
+            const stamped = msgs.map((m) =>
+              m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
+            );
+            setMessages(stamped);
             setSessionProgress(progress);
-            cacheRef.current.set(agentId, { messages: msgs, sessionId: contextId, progress });
+            cacheRef.current.set(agentId, { messages: stamped, sessionId: contextId, progress });
           } catch {
             // ignore — agent has no prior session
           }
@@ -207,6 +212,7 @@ export function useConversations() {
           role: "assistant",
           segments: [{ type: "text", content: "" }],
           isLoading: true,
+          agentId: activeAgentIdRef.current,
         },
       );
       setIsLoading(true);

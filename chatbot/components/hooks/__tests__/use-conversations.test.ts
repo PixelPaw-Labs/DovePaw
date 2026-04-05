@@ -388,6 +388,102 @@ describe("useConversations", () => {
     expect(body.contextId).toBeNull();
   });
 
+  // ─── agentId stamping ─────────────────────────────────────────────────────────
+
+  it("stamps agentId 'dove' on assistant message when active agent is dove", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeNoSessionResponse()) // mount
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "result", content: "hi" }, { type: "done" }]),
+      );
+
+    const { result } = renderHook(() => useConversations());
+    await act(async () => {
+      await result.current.sendMessage("ping");
+    });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    expect(assistant?.agentId).toBe("dove");
+  });
+
+  it("stamps the subagent name as agentId when active agent is not dove", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(makeNoSessionResponse()) // mount: dove active-session
+      .mockResolvedValueOnce(makeNoSessionResponse()) // switch: subagent active-session
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "result", content: "done" }, { type: "done" }]),
+      );
+
+    const { result } = renderHook(() => useConversations());
+    act(() => {
+      result.current.setActiveAgentId("zendesk-triager");
+    });
+    await act(async () => {
+      await result.current.sendMessage("triage");
+    });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    expect(assistant?.agentId).toBe("zendesk-triager");
+  });
+
+  it("stamps agentId 'dove' on restored dove session assistant messages", async () => {
+    const stored: ChatMessage[] = [
+      { id: "u1", role: "user", segments: [{ type: "text", content: "hello" }] },
+      { id: "a1", role: "assistant", segments: [{ type: "text", content: "hi" }] },
+    ];
+    vi.mocked(fetch).mockImplementation((url) => {
+      if (url === "/api/chat/active-session") {
+        return Promise.resolve(makeSessionResponse("sess-dove"));
+      }
+      if (typeof url === "string" && url.startsWith("/api/chat/session/")) {
+        return Promise.resolve(makeDetailResponse(stored));
+      }
+      return Promise.resolve(makeNoSessionResponse());
+    });
+
+    const { result } = renderHook(() => useConversations());
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.messages.length).toBe(2), { timeout: 3000 });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    expect(assistant?.agentId).toBe("dove");
+  });
+
+  it("stamps the subagent name as agentId on restored subagent session assistant messages", async () => {
+    const stored: ChatMessage[] = [
+      { id: "u1", role: "user", segments: [{ type: "text", content: "triage" }] },
+      { id: "a1", role: "assistant", segments: [{ type: "text", content: "done" }] },
+    ];
+    vi.mocked(fetch).mockImplementation((url) => {
+      if (url === "/api/chat/active-session") return Promise.resolve(makeNoSessionResponse());
+      if (url === "/api/agent/zendesk-triager/active-session") {
+        return Promise.resolve(makeSessionResponse("sess-zt"));
+      }
+      if (typeof url === "string" && url.startsWith("/api/agent/zendesk-triager/session/")) {
+        return Promise.resolve(makeDetailResponse(stored));
+      }
+      return Promise.resolve(makeNoSessionResponse());
+    });
+
+    const { result } = renderHook(() => useConversations());
+    act(() => {
+      result.current.setActiveAgentId("zendesk-triager");
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current.messages.length).toBe(2), { timeout: 3000 });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    expect(assistant?.agentId).toBe("zendesk-triager");
+  });
+
   // ─── Pending queue ────────────────────────────────────────────────────────────
 
   it("queues message sent while loading", async () => {

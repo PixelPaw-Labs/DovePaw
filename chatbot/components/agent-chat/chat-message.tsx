@@ -2,7 +2,10 @@
 
 import * as React from "react";
 import { Ban } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { DOVE_AVATAR } from "@/lib/avatars";
+import { buildAgentDef } from "@@/lib/agents";
+import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { MessageContent, MessageResponse, MessageToolbar } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -16,15 +19,46 @@ import { EditDiffList, ToolCallItem } from "./tool-call-badge";
 const MESSAGE_RESPONSE_SPACING =
   "[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:mt-4 [&_h2]:mb-1.5 [&_h3]:mt-3 [&_h3]:mb-1 [&_h4]:mt-2.5 [&_h4]:mb-1 [&_ul]:my-2 [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:pl-5 [&_li]:my-0.5 [&_pre]:my-2";
 
-function AssistantAvatar() {
+type AvatarInfo =
+  | { type: "dove" }
+  | { type: "agent"; icon: LucideIcon; iconBg: string; iconColor: string };
+
+export function resolveAvatar(
+  agentId: string | undefined,
+  agentConfigs: AgentConfigEntry[] | undefined,
+): AvatarInfo {
+  if (!agentId || agentId === "dove") return { type: "dove" };
+  const entry = agentConfigs?.find((a) => a.name === agentId);
+  if (!entry) return { type: "dove" };
+  const { icon, iconBg, iconColor } = buildAgentDef(entry);
+  return { type: "agent", icon, iconBg, iconColor };
+}
+
+function AssistantAvatar({ avatar }: { avatar: AvatarInfo }) {
+  if (avatar.type === "dove") {
+    return (
+      <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
+        <img src={DOVE_AVATAR} alt="Dove" className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+  const Icon = avatar.icon;
   return (
-    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
-      <img src={DOVE_AVATAR} alt="Dove" className="w-full h-full object-cover" />
+    <div
+      className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center shadow-sm mb-0.5 ${avatar.iconBg}`}
+    >
+      <Icon className={`w-4 h-4 ${avatar.iconColor}`} />
     </div>
   );
 }
 
-export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
+export function ChatMessageItem({
+  msg,
+  agentConfigs,
+}: {
+  msg: ChatMessage;
+  agentConfigs?: AgentConfigEntry[];
+}) {
   const hasSegmentContent = msg.segments.some(
     (s) => (s.type === "text" && s.content) || s.type === "tool_call",
   );
@@ -97,7 +131,7 @@ export function ChatMessageItem({ msg }: { msg: ChatMessage }) {
 
     return (
       <div className="flex items-end gap-2 w-full">
-        {hasContent && <AssistantAvatar />}
+        {hasContent && <AssistantAvatar avatar={resolveAvatar(msg.agentId, agentConfigs)} />}
         {messageContent}
       </div>
     );

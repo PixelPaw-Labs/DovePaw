@@ -231,7 +231,9 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
                   />
                 </ConversationEmptyState>
               ) : (
-                messages.map((msg) => <ChatMessageItem key={msg.id} msg={msg} />)
+                messages.map((msg) => (
+                  <ChatMessageItem key={msg.id} msg={msg} agentConfigs={agentConfigs} />
+                ))
               )}
               {isLoading && lastAssistantHasContent && <ProcessingBar />}
             </ConversationContent>

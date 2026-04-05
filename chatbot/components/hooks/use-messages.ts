@@ -18,6 +18,8 @@ export interface ChatMessage {
   isCancelled?: boolean;
   liveProgress?: string | null;
   agentProgress?: ProgressEntry[];
+  /** Which agent sent this message — "dove" or a subagent name */
+  agentId?: string;
 }
 
 /**
