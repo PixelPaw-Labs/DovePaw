@@ -1,6 +1,66 @@
 import { describe, expect, it, vi } from "vitest";
-import { SseQueryDispatcher, A2AQueryDispatcher, ARTIFACT } from "../query-dispatcher";
+import {
+  SseQueryDispatcher,
+  A2AQueryDispatcher,
+  MessageAccumulator,
+  ARTIFACT,
+} from "../query-dispatcher";
 import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
+
+// ─── MessageAccumulator ───────────────────────────────────────────────────────
+
+describe("MessageAccumulator.buildMessage", () => {
+  it("collects text deltas into a single text segment", () => {
+    const acc = new MessageAccumulator();
+    acc.onTextDelta("hello ");
+    acc.onTextDelta("world");
+    const msg = acc.buildMessage("id-1");
+    expect(msg.segments).toEqual([{ type: "text", content: "hello world" }]);
+    expect(msg.processContent).toBeUndefined();
+  });
+
+  it("moves tool_call segments into processContent, not segments", () => {
+    const acc = new MessageAccumulator();
+    acc.onTextDelta("before ");
+    acc.onToolCall("Bash");
+    acc.onToolInput('{"cmd":"ls"}');
+    acc.onTextDelta("after");
+    const msg = acc.buildMessage("id-2");
+    expect(msg.segments).toEqual([
+      { type: "text", content: "before " },
+      { type: "text", content: "after" },
+    ]);
+    expect(msg.processContent).toContain("Bash");
+  });
+
+  it("puts thinking into processContent", () => {
+    const acc = new MessageAccumulator();
+    acc.onThinking("reasoning...");
+    acc.onTextDelta("answer");
+    const msg = acc.buildMessage("id-3");
+    expect(msg.segments).toEqual([{ type: "text", content: "answer" }]);
+    expect(msg.processContent).toContain("reasoning...");
+  });
+
+  it("combines thinking and tool calls in processContent", () => {
+    const acc = new MessageAccumulator();
+    acc.onThinking("thought");
+    acc.onToolCall("Read");
+    acc.onToolInput('{"path":"/x"}');
+    acc.onTextDelta("result");
+    const msg = acc.buildMessage("id-4");
+    expect(msg.segments).toEqual([{ type: "text", content: "result" }]);
+    expect(msg.processContent).toContain("thought");
+    expect(msg.processContent).toContain("Read");
+  });
+
+  it("returns no processContent when no thinking or tool calls", () => {
+    const acc = new MessageAccumulator();
+    acc.onTextDelta("plain text");
+    const msg = acc.buildMessage("id-5");
+    expect(msg.processContent).toBeUndefined();
+  });
+});
 
 // ─── SseQueryDispatcher ───────────────────────────────────────────────────────
 

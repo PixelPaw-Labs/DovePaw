@@ -55,6 +55,13 @@ export const TRANSIENT_ARTIFACT_NAMES = new Set([
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
 /**
+ * Segment types that are rendered in the UI chat bubble.
+ * Any segment type NOT listed here is treated as process content (stored in processContent).
+ * When adding a new MessageSegment type, opt it in here only if it belongs in the message body.
+ */
+const MESSAGE_SEGMENT_TYPES = new Set<MessageSegment["type"]>(["text"]);
+
+/**
  * Owns the segment accumulation logic for building an assistant SessionMessage.
  * Extracted from SseQueryDispatcher so it can be composed and tested independently.
  */
@@ -96,13 +103,23 @@ export class MessageAccumulator {
   }
 
   buildMessage(id: string): SessionMessage {
-    const segments: MessageSegment[] = [...this._segments];
-    if (this._textBuffer) segments.push({ type: "text", content: this._textBuffer });
+    const allSegments: MessageSegment[] = [...this._segments];
+    if (this._textBuffer) allSegments.push({ type: "text", content: this._textBuffer });
+
+    const messageSegments = allSegments.filter((s) => MESSAGE_SEGMENT_TYPES.has(s.type));
+    const processSegments = allSegments.filter((s) => !MESSAGE_SEGMENT_TYPES.has(s.type));
+
+    const processParts: string[] = [];
+    if (this._thinkingBuffer) processParts.push(this._thinkingBuffer);
+    for (const s of processSegments) {
+      if (s.type === "tool_call") processParts.push(s.tool.name);
+    }
+
     return {
       id,
       role: "assistant",
-      segments,
-      processContent: this._thinkingBuffer || undefined,
+      segments: messageSegments,
+      processContent: processParts.length > 0 ? processParts.join("\n") : undefined,
     };
   }
 }
