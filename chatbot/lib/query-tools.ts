@@ -134,8 +134,14 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
   return tool(
     doveAskToolName(agent),
     agent.description,
-    { instruction: z.string().optional().describe("Optional instruction for the agent") },
-    async ({ instruction = "" }) => {
+    {
+      instruction: z
+        .string()
+        .describe(
+          "Instruction to pass to the agent, synthesized from conversation context. Must open with a self-introduction of the orchestrator, e.g. 'I am Dove, your orchestrator. ' followed by the task instruction.",
+        ),
+    },
+    async ({ instruction }) => {
       const port = resolveAgentPort(agent.manifestKey);
       if (!port) return noServersMessage();
       try {
@@ -191,8 +197,14 @@ export function makeStartTool(
   return tool(
     doveStartToolName(agent),
     `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
-    { instruction: z.string().optional().describe("Optional instruction for the agent") },
-    async ({ instruction = "" }) => {
+    {
+      instruction: z
+        .string()
+        .describe(
+          "Instruction to pass to the agent, synthesized from conversation context. Must open with a self-introduction of the orchestrator, e.g. 'I am Dove, your orchestrator. ' followed by the task instruction.",
+        ),
+    },
+    async ({ instruction }) => {
       const port = resolveAgentPort(agent.manifestKey);
       if (!port) return noServersMessage();
       try {
