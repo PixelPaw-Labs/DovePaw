@@ -62,7 +62,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     if (prevAgentIdRef.current === activeAgentId) return;
     prevAgentIdRef.current = activeAgentId;
     if (sessions.length > 0 && messages.length === 0 && !currentSessionId) {
-      setSessionId(sessions[0].contextId);
+      void setSessionId(sessions[0].contextId);
     }
   }, [sessions, activeAgentId, messages.length, currentSessionId, setSessionId]);
 

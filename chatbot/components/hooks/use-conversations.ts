@@ -5,16 +5,18 @@ import type { ChatSseEvent } from "@/lib/chat-sse";
 import { useMessages } from "./use-messages";
 import { useTextAnimation } from "./use-text-animation";
 import type { ChatMessage } from "./use-messages";
-import { writeActiveAgentId } from "./use-persisted-conversation";
 import { mergeProgressEntries } from "./use-messages";
 import type { ProgressEntry } from "@/lib/query-tools";
 import { z } from "zod";
 import { sessionMessageSchema } from "@/lib/message-types";
+import { activeSessionUrl, sessionDetailUrl, agentChatUrl } from "@/lib/agent-api-urls";
 
 const activeSessionResponseSchema = z.object({ contextId: z.string().nullable() });
 const sessionDetailResponseSchema = z.object({
-  messages: z.array(sessionMessageSchema),
-  progress: z.array(z.object({ message: z.string(), artifacts: z.record(z.string(), z.string()) })),
+  messages: z.array(sessionMessageSchema).default([]),
+  progress: z
+    .array(z.object({ message: z.string(), artifacts: z.record(z.string(), z.string()) }))
+    .default([]),
 });
 
 export type { MessageRole, ChatMessage } from "./use-messages";
@@ -83,20 +85,23 @@ export function useConversations() {
   useEffect(() => {
     if (hydratedRef.current) return;
     hydratedRef.current = true;
-    void fetch("/api/chat/active-session")
-      .then((r) => r.json().then((d) => activeSessionResponseSchema.parse(d)))
-      .then(({ contextId }) => {
+    void (async () => {
+      try {
+        const { contextId } = activeSessionResponseSchema.parse(
+          await (await fetch(activeSessionUrl("dove"))).json(),
+        );
         if (!contextId) return;
         sessionIdRef.current = contextId;
         setCurrentSessionId(contextId);
-        return fetch(`/api/chat/session/${contextId}`)
-          .then((r) => r.json().then((d) => sessionDetailResponseSchema.parse(d)))
-          .then(({ messages: msgs, progress }) => {
-            setMessages(msgs ?? []);
-            setSessionProgress(progress ?? []);
-          });
-      })
-      .catch(() => {});
+        const { messages: msgs, progress } = sessionDetailResponseSchema.parse(
+          await (await fetch(sessionDetailUrl("dove", contextId))).json(),
+        );
+        setMessages(msgs);
+        setSessionProgress(progress);
+      } catch {
+        // ignore — no prior session
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally run only once on mount
   }, []);
 
@@ -126,7 +131,6 @@ export function useConversations() {
         pendingQueueRef.current = [];
         setPendingQueue([]);
         setIsLoading(false);
-        writeActiveAgentId(agentId);
         activeAgentIdRef.current = agentId;
         setActiveAgentIdState(agentId);
       } else {
@@ -138,31 +142,27 @@ export function useConversations() {
         pendingQueueRef.current = [];
         setPendingQueue([]);
         setIsLoading(false);
-        writeActiveAgentId(agentId);
         activeAgentIdRef.current = agentId;
         setActiveAgentIdState(agentId);
         // Fetch active session for new agent from API
-        const url =
-          agentId === "dove" ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
-        void fetch(url)
-          .then((r) => r.json().then((d) => activeSessionResponseSchema.parse(d)))
-          .then(({ contextId }) => {
+        void (async () => {
+          try {
+            const { contextId } = activeSessionResponseSchema.parse(
+              await (await fetch(activeSessionUrl(agentId))).json(),
+            );
             if (!contextId) return;
             sessionIdRef.current = contextId;
             setCurrentSessionId(contextId);
-            const detailUrl =
-              agentId === "dove"
-                ? `/api/chat/session/${contextId}`
-                : `/api/agent/${agentId}/session/${contextId}`;
-            return fetch(detailUrl)
-              .then((r) => r.json().then((d) => sessionDetailResponseSchema.parse(d)))
-              .then(({ messages: msgs, progress }) => {
-                setMessages(msgs ?? []);
-                setSessionProgress(progress ?? []);
-                cacheRef.current.set(agentId, { messages: msgs ?? [], sessionId: contextId });
-              });
-          })
-          .catch(() => {});
+            const { messages: msgs, progress } = sessionDetailResponseSchema.parse(
+              await (await fetch(sessionDetailUrl(agentId, contextId))).json(),
+            );
+            setMessages(msgs);
+            setSessionProgress(progress);
+            cacheRef.current.set(agentId, { messages: msgs, sessionId: contextId });
+          } catch {
+            // ignore — agent has no prior session
+          }
+        })();
       }
     },
     [animation, setMessages],
@@ -201,7 +201,7 @@ export function useConversations() {
       setIsLoading(true);
 
       const agentId = activeAgentIdRef.current;
-      const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
+      const endpoint = agentChatUrl(agentId);
 
       try {
         const response = await fetch(endpoint, {
@@ -370,7 +370,7 @@ export function useConversations() {
   }, [animation, patch]);
 
   // Start a fresh conversation — current session stays alive on the server as history.
-  const newSession = useCallback(() => {
+  const newSession = useCallback(async () => {
     abortRef.current?.abort();
     animation.reset();
     clear();
@@ -381,13 +381,15 @@ export function useConversations() {
     sessionIdRef.current = null;
     setCurrentSessionId(null);
     cacheRef.current.set(agentId, { messages: [], sessionId: null });
-    const url =
-      agentId === "dove" ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
-    void fetch(url, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contextId: null }),
-    }).catch(() => {});
+    try {
+      await fetch(activeSessionUrl(agentId), {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contextId: null }),
+      });
+    } catch (err) {
+      console.warn("[newSession] Failed to clear active session on server:", err);
+    }
   }, [animation, clear]);
 
   // Abort + delete a session from the server and remove its local messages.
@@ -395,12 +397,15 @@ export function useConversations() {
   const deleteSession = useCallback(
     async (contextId: string) => {
       const agentId = activeAgentIdRef.current;
-      const endpoint = agentId === "dove" ? "/api/chat" : `/api/agent/${agentId}/chat`;
-      await fetch(endpoint, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: contextId }),
-      }).catch(() => {});
+      try {
+        await fetch(agentChatUrl(agentId), {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: contextId }),
+        });
+      } catch (err) {
+        console.warn("[deleteSession] Failed to delete session on server:", err);
+      }
       if (sessionIdRef.current === contextId) {
         abortRef.current?.abort();
         animation.reset();
@@ -424,34 +429,36 @@ export function useConversations() {
     sessionCancelled,
     currentSessionId,
     setSessionId: useCallback(
-      (id: string | null) => {
+      async (id: string | null) => {
         sessionIdRef.current = id;
         setCurrentSessionId(id);
         setSessionCancelled(false);
         const agentId = activeAgentIdRef.current;
-        // Update active session on server
-        const activeUrl =
-          agentId === "dove" ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
-        void fetch(activeUrl, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contextId: id }),
-        }).catch(() => {});
+        try {
+          await fetch(activeSessionUrl(agentId), {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contextId: id }),
+          });
+        } catch {
+          // best effort
+        }
         if (!id) {
           setMessages([]);
           setSessionProgress([]);
           return;
         }
-        const detailUrl =
-          agentId === "dove" ? `/api/chat/session/${id}` : `/api/agent/${agentId}/session/${id}`;
-        void fetch(detailUrl)
-          .then((r) => r.json().then((d) => sessionDetailResponseSchema.parse(d)))
-          .then(({ messages: msgs, progress }) => {
-            setMessages(msgs ?? []);
-            setSessionProgress(progress ?? []);
-            cacheRef.current.set(agentId, { messages: msgs ?? [], sessionId: id });
-          })
-          .catch(() => {});
+        const res = await fetch(sessionDetailUrl(agentId, id));
+        if (!res.ok) {
+          // session not found on server — clear UI
+          setMessages([]);
+          setSessionProgress([]);
+          return;
+        }
+        const { messages: msgs, progress } = sessionDetailResponseSchema.parse(await res.json());
+        setMessages(msgs);
+        setSessionProgress(progress);
+        cacheRef.current.set(agentId, { messages: msgs, sessionId: id });
       },
       [setMessages],
     ),

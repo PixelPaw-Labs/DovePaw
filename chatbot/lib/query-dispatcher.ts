@@ -52,42 +52,24 @@ export const TRANSIENT_ARTIFACT_NAMES = new Set([
   ARTIFACT.TOOL_INPUT,
 ]);
 
-// ─── SSE implementation ───────────────────────────────────────────────────────
+// ─── MessageAccumulator ───────────────────────────────────────────────────────
 
 /**
- * Forwards query() events as SSE events to the chat client.
+ * Owns the segment accumulation logic for building an assistant SessionMessage.
+ * Extracted from SseQueryDispatcher so it can be composed and tested independently.
  */
-export class SseQueryDispatcher implements QueryResponseDispatcher {
+export class MessageAccumulator {
   private _segments: MessageSegment[] = [];
   private _textBuffer = "";
   private _thinkingBuffer = "";
   private _pendingToolName: string | null = null;
 
-  constructor(private readonly send: (event: ChatSseEvent) => void) {}
-
-  buildAssistantMessage(id: string): SessionMessage {
-    const segments: MessageSegment[] = [...this._segments];
-    if (this._textBuffer) segments.push({ type: "text", content: this._textBuffer });
-    return {
-      id,
-      role: "assistant",
-      segments,
-      processContent: this._thinkingBuffer || undefined,
-    };
-  }
-
-  onSession(sessionId: string): void {
-    this.send({ type: "session", sessionId });
-  }
-
   onTextDelta(text: string): void {
     this._textBuffer += text;
-    this.send({ type: "text", content: text });
   }
 
   onThinking(text: string): void {
     this._thinkingBuffer += text;
-    this.send({ type: "thinking", content: text });
   }
 
   onToolCall(name: string): void {
@@ -96,14 +78,6 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
       this._textBuffer = "";
     }
     this._pendingToolName = name;
-    this.send({ type: "tool_call", name });
-    this.send({
-      type: "progress",
-      result: {
-        output: "",
-        progress: [{ message: name, artifacts: { [ARTIFACT.TOOL_CALL]: name } }],
-      },
-    });
   }
 
   onToolInput(content: string): void {
@@ -119,6 +93,62 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
       }
       this._pendingToolName = null;
     }
+  }
+
+  buildMessage(id: string): SessionMessage {
+    const segments: MessageSegment[] = [...this._segments];
+    if (this._textBuffer) segments.push({ type: "text", content: this._textBuffer });
+    return {
+      id,
+      role: "assistant",
+      segments,
+      processContent: this._thinkingBuffer || undefined,
+    };
+  }
+}
+
+// ─── SSE implementation ───────────────────────────────────────────────────────
+
+/**
+ * Forwards query() events as SSE events to the chat client.
+ */
+export class SseQueryDispatcher implements QueryResponseDispatcher {
+  private readonly accumulator = new MessageAccumulator();
+
+  constructor(private readonly send: (event: ChatSseEvent) => void) {}
+
+  buildAssistantMessage(id: string): SessionMessage {
+    return this.accumulator.buildMessage(id);
+  }
+
+  onSession(sessionId: string): void {
+    this.send({ type: "session", sessionId });
+  }
+
+  onTextDelta(text: string): void {
+    this.accumulator.onTextDelta(text);
+    this.send({ type: "text", content: text });
+  }
+
+  onThinking(text: string): void {
+    this.accumulator.onThinking(text);
+    this.send({ type: "thinking", content: text });
+  }
+
+  onToolCall(name: string): void {
+    this.accumulator.onToolCall(name);
+    this.send({ type: "tool_call", name });
+    this.send({
+      type: "progress",
+      result: {
+        output: "",
+        progress: [{ message: name, artifacts: { [ARTIFACT.TOOL_CALL]: name } }],
+      },
+    });
+  }
+
+  onToolInput(content: string): void {
+    this.accumulator.onToolInput(content);
     this.send({ type: "tool_input", content });
   }
 

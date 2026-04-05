@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 
 const TMP_DIR = join(tmpdir(), `dovepaw-db-test-${process.pid}`);
 
-vi.mock("server-only", () => ({}));
 vi.mock("@@/lib/paths", () => ({ DOVEPAW_DIR: TMP_DIR }));
 
 const {

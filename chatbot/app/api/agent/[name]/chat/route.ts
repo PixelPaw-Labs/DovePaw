@@ -13,10 +13,10 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import { makeProgressSender } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
-import { startAgentStream, collectStreamResult } from "@/lib/a2a-client";
+import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
-import type { SessionMessage } from "@/lib/message-types";
+import { buildSessionMessages } from "@/lib/session-builder";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -95,24 +95,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
 
         await collectStreamResult(stream, onSnapshot, onArtifact, (finalResult) => {
           if (abortController.signal.aborted) return;
-          const msgs: SessionMessage[] = [
-            {
-              id: randomUUID(),
-              role: "user",
-              segments: [{ type: "text", content: message }],
-            },
-            {
-              id: randomUUID(),
-              role: "assistant",
-              segments: [{ type: "text", content: finalResult.output }],
-            },
-          ];
+          const assistantMsg = {
+            id: randomUUID(),
+            role: "assistant" as const,
+            segments: [{ type: "text" as const, content: finalResult.output }],
+          };
           upsertSession({
             contextId: resolvedContextId,
             agentId: agent.name,
             startedAt: new Date().toISOString(),
             label: message.slice(0, 60) || "Session",
-            messages: msgs,
+            messages: buildSessionMessages(message, assistantMsg),
             progress: finalResult.progress,
           });
         });
@@ -168,14 +161,15 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
 
   // Explicitly clear completed session from executor state
   const agent = (await readAgentsConfig()).find((a) => a.name === name);
-  const manifest = agent ? readPortsManifest() : null;
-  const portValue = manifest ? (manifest as Record<string, unknown>)[agent!.manifestKey] : null;
-  if (typeof portValue === "number") {
-    await fetch(`http://localhost:${portValue}/session/clear`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contextId: sessionId }),
-    }).catch(() => {});
+  if (agent) {
+    const portValue = resolveAgentPort(agent.manifestKey);
+    if (portValue !== null) {
+      await fetch(`http://localhost:${portValue}/session/clear`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contextId: sessionId }),
+      }).catch(() => {});
+    }
   }
   deleteSession(sessionId);
 

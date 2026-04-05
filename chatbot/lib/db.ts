@@ -1,4 +1,3 @@
-import "server-only";
 import Database from "better-sqlite3";
 import { z } from "zod";
 import { mkdirSync } from "node:fs";
@@ -72,6 +71,23 @@ function getDb(): Database.Database {
   return _db;
 }
 
+function mergeMessages(existing: SessionMessage[], incoming: SessionMessage[]): SessionMessage[] {
+  return [...existing, ...incoming];
+}
+
+function mergeProgress(existing: ProgressEntry[], incoming: ProgressEntry[]): ProgressEntry[] {
+  const merged = [...existing];
+  for (const entry of incoming) {
+    const isDupe = merged.some(
+      (e) =>
+        e.message === entry.message &&
+        JSON.stringify(e.artifacts) === JSON.stringify(entry.artifacts),
+    );
+    if (!isDupe) merged.push(entry);
+  }
+  return merged;
+}
+
 export function upsertSession(args: UpsertSessionArgs): void {
   const db = getDb();
   const now = new Date().toISOString();
@@ -88,16 +104,8 @@ export function upsertSession(args: UpsertSessionArgs): void {
     ? progressEntryArraySchema.parse(JSON.parse(existing.progress))
     : [];
 
-  const mergedMsgs = [...existingMsgs, ...args.messages];
-  const mergedProgress = [...existingProgress];
-  for (const entry of args.progress) {
-    const isDupe = mergedProgress.some(
-      (e) =>
-        e.message === entry.message &&
-        JSON.stringify(e.artifacts) === JSON.stringify(entry.artifacts),
-    );
-    if (!isDupe) mergedProgress.push(entry);
-  }
+  const mergedMsgs = mergeMessages(existingMsgs, args.messages);
+  const mergedProgress = mergeProgress(existingProgress, args.progress);
 
   db.prepare(`
     INSERT INTO sessions (context_id, agent_id, started_at, label, messages, progress, updated_at)

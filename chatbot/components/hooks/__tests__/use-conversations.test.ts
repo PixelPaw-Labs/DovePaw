@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useConversations } from "../use-conversations";
 import { messageText } from "../use-messages";
 import type { ChatMessage } from "../use-messages";
-import { readActiveAgentId } from "../use-persisted-conversation";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -118,15 +117,6 @@ describe("useConversations", () => {
       result.current.setActiveAgentId("get-shit-done");
     });
     expect(result.current.activeAgentId).toBe("get-shit-done");
-  });
-
-  it("setActiveAgentId writes new activeAgentId via writeActiveAgentId (no-op stub)", () => {
-    const { result } = renderHook(() => useConversations());
-    act(() => {
-      result.current.setActiveAgentId("memory-distiller");
-    });
-    // writeActiveAgentId is a no-op stub — readActiveAgentId always returns 'dove'
-    expect(readActiveAgentId()).toBe("dove");
   });
 
   it("setActiveAgentId saves current messages to cache before switching", async () => {

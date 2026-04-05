@@ -39,7 +39,7 @@ import { buildDoveHooks } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
-import type { SessionMessage } from "@/lib/message-types";
+import { buildSessionMessages } from "@/lib/session-builder";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -150,7 +150,30 @@ export async function POST(request: Request) {
       const tools = agents.flatMap((agent) => {
         return [
           makeAskTool(agent, abortController.signal),
-          makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks),
+          makeStartTool(
+            agent,
+            abortController.signal,
+            makeProgressSender(send),
+            backgroundTasks,
+            (contextId, finalResult) => {
+              setActiveSession(agent.name, contextId);
+              upsertSession({
+                contextId,
+                agentId: agent.name,
+                startedAt: new Date().toISOString(),
+                label: "Session",
+                messages: [
+                  { id: randomUUID(), role: "user", segments: [] },
+                  {
+                    id: randomUUID(),
+                    role: "assistant",
+                    segments: [{ type: "text", content: finalResult.output }],
+                  },
+                ],
+                progress: finalResult.progress,
+              });
+            },
+          ),
           makeAwaitTool(agent, abortController.signal, makeProgressSender(send)),
         ];
       });
@@ -201,20 +224,12 @@ export async function POST(request: Request) {
             if (resolvedSessionId && !abortController.signal.aborted) {
               setActiveSession("dove", resolvedSessionId);
               const assistantMsg = dispatcher.buildAssistantMessage(randomUUID());
-              const msgs: SessionMessage[] = [
-                {
-                  id: randomUUID(),
-                  role: "user",
-                  segments: [{ type: "text", content: message }],
-                },
-                assistantMsg,
-              ];
               upsertSession({
                 contextId: resolvedSessionId,
                 agentId: "dove",
                 startedAt: new Date().toISOString(),
                 label: message.slice(0, 60) || "Session",
-                messages: msgs,
+                messages: buildSessionMessages(message, assistantMsg),
                 progress: [],
               });
             }
