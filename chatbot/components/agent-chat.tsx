@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Bot, GitBranch, Settings, Trash2 } from "lucide-react";
+import { Bell, Bot, Clock, GitBranch, Settings, Trash2 } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
@@ -21,7 +21,9 @@ import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
 import { WorkflowPanel } from "./workflow/workflow-panel";
 import { SessionList } from "./agent-chat/session-list";
+import { SessionHistoryPopup } from "./agent-chat/session-history-popup";
 import { useAgentSessions } from "@/components/hooks/use-agent-sessions";
+import { useDoveSessions } from "@/components/hooks/use-dove-sessions";
 
 function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEntry[]) {
   if (activeAgentId === "dove") return { name: "Dove", Icon: Bot };
@@ -55,6 +57,11 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   } = useConversations();
 
   const { sessions, refresh: refreshSessions } = useAgentSessions(activeAgentId);
+  const {
+    sessions: doveSessions,
+    refresh: refreshDoveSessions,
+    deleteDoveSession,
+  } = useDoveSessions(activeAgentId === "dove");
 
   // Auto-resume the latest session when switching to an agent that has Dove-triggered sessions
   const prevAgentIdRef = React.useRef(activeAgentId);
@@ -66,17 +73,20 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     }
   }, [sessions, activeAgentId, messages.length, currentSessionId, setSessionId]);
 
-  // Refresh session list after each completed response (Dove may have created new sessions)
+  // Refresh session list after each completed response
   const prevIsLoadingRef = React.useRef(isLoading);
   React.useEffect(() => {
-    if (prevIsLoadingRef.current && !isLoading && activeAgentId !== "dove") {
-      void refreshSessions(activeAgentId);
+    if (prevIsLoadingRef.current && !isLoading) {
+      if (activeAgentId === "dove") void refreshDoveSessions();
+      else void refreshSessions(activeAgentId);
     }
     prevIsLoadingRef.current = isLoading;
-  }, [isLoading, activeAgentId, refreshSessions]);
+  }, [isLoading, activeAgentId, refreshSessions, refreshDoveSessions]);
 
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId, agentConfigs);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const mainRef = React.useRef<HTMLElement>(null);
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
   const hasProgress = sessionProgress.length > 0;
@@ -125,7 +135,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           onSelectAgent={setActiveAgentId}
         />
 
-        <main className="flex-1 flex flex-col bg-background relative min-w-0">
+        <main ref={mainRef} className="flex-1 flex flex-col bg-background relative min-w-0">
           {/* Glass header */}
           <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex justify-between items-center w-full px-6 py-2.5 shrink-0">
             <div className="flex items-center gap-3">
@@ -143,6 +153,15 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {activeAgentId === "dove" && (
+                <button
+                  onClick={() => setHistoryOpen((v) => !v)}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${historyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+                  title="Session history"
+                >
+                  <Clock className="w-4 h-4" />
+                </button>
+              )}
               {messages.length > 0 && (
                 <button
                   onClick={newSession}
@@ -174,6 +193,20 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               </div>
             </div>
           </header>
+
+          {/* Dove session history popup — draggable, floats within main */}
+          {activeAgentId === "dove" && (
+            <SessionHistoryPopup
+              visible={historyOpen}
+              sessions={doveSessions}
+              activeSessionId={currentSessionId}
+              containerRef={mainRef}
+              onSelect={setSessionId}
+              onNew={() => { newSession(); setHistoryOpen(false); }}
+              onDelete={deleteDoveSession}
+              onClose={() => setHistoryOpen(false)}
+            />
+          )}
 
           {/* Session list — only for sub-agents with multiple sessions */}
           {activeAgentId !== "dove" && sessions.length > 0 && (

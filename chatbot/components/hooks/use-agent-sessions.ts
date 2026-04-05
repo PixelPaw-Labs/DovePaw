@@ -13,7 +13,7 @@ const sessionsResponseSchema = z.object({
   sessions: z.array(z.object({ contextId: z.string(), startedAt: z.string(), label: z.string() })),
 });
 
-async function parseSessions(res: Response): Promise<AgentSession[]> {
+export async function parseSessions(res: Response): Promise<AgentSession[]> {
   const parsed = sessionsResponseSchema.safeParse(await res.json());
   return parsed.success ? parsed.data.sessions : [];
 }
