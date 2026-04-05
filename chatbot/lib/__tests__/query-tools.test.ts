@@ -375,7 +375,9 @@ describe("makeAwaitTool", () => {
       id: "task-123",
       kind: "task",
       status: { state: "completed" },
-      artifacts: [{ artifactId: "a1", parts: [{ kind: "text", text: "done output" }] }],
+      artifacts: [
+        { artifactId: "a1", name: "final-output", parts: [{ kind: "text", text: "done output" }] },
+      ],
     });
     const mockResubscribe = vi.fn();
     vi.mocked(ClientFactory).mockImplementation(function () {
@@ -452,7 +454,13 @@ describe("makeAwaitTool", () => {
         id: "task-123",
         kind: "task",
         status: { state },
-        artifacts: [{ artifactId: "a1", parts: [{ kind: "text", text: `result:${state}` }] }],
+        artifacts: [
+          {
+            artifactId: "a1",
+            name: "final-output",
+            parts: [{ kind: "text", text: `result:${state}` }],
+          },
+        ],
       });
       const mockResubscribe = vi.fn();
       const captured = captureTools(() => makeAwaitTool(AGENT));

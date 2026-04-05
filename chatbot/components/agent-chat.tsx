@@ -20,7 +20,6 @@ import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
 import { WorkflowPanel } from "./workflow/workflow-panel";
-import { SessionList } from "./agent-chat/session-list";
 import { SessionHistoryPopup } from "./agent-chat/session-history-popup";
 import { useAgentSessions } from "@/components/hooks/use-agent-sessions";
 import { useDoveSessions } from "@/components/hooks/use-dove-sessions";
@@ -86,6 +85,11 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId, agentConfigs);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+
+  // Close history popup when switching agents
+  React.useEffect(() => {
+    setHistoryOpen(false);
+  }, [activeAgentId]);
   const mainRef = React.useRef<HTMLElement>(null);
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
@@ -153,15 +157,13 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               )}
             </div>
             <div className="flex items-center gap-2">
-              {activeAgentId === "dove" && (
-                <button
-                  onClick={() => setHistoryOpen((v) => !v)}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${historyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-                  title="Session history"
-                >
-                  <Clock className="w-4 h-4" />
-                </button>
-              )}
+              <button
+                onClick={() => setHistoryOpen((v) => !v)}
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${historyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+                title="Session history"
+              >
+                <Clock className="w-4 h-4" />
+              </button>
               {messages.length > 0 && (
                 <button
                   onClick={newSession}
@@ -194,36 +196,27 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
             </div>
           </header>
 
-          {/* Dove session history popup — draggable, floats within main */}
-          {activeAgentId === "dove" && (
-            <SessionHistoryPopup
-              visible={historyOpen}
-              sessions={doveSessions}
-              activeSessionId={currentSessionId}
-              containerRef={mainRef}
-              onSelect={setSessionId}
-              onNew={() => {
-                void newSession();
-                setHistoryOpen(false);
-              }}
-              onDelete={deleteDoveSession}
-              onClose={() => setHistoryOpen(false)}
-            />
-          )}
-
-          {/* Session list — only for sub-agents with multiple sessions */}
-          {activeAgentId !== "dove" && sessions.length > 0 && (
-            <SessionList
-              sessions={sessions}
-              activeSessionId={currentSessionId}
-              onSelect={setSessionId}
-              onNew={newSession}
-              onDelete={async (contextId) => {
-                await deleteSession(contextId);
-                void refreshSessions(activeAgentId);
-              }}
-            />
-          )}
+          {/* Session history popup — draggable, floats within main */}
+          <SessionHistoryPopup
+            visible={historyOpen}
+            sessions={activeAgentId === "dove" ? doveSessions : sessions}
+            activeSessionId={currentSessionId}
+            containerRef={mainRef}
+            onSelect={setSessionId}
+            onNew={() => {
+              void newSession();
+              setHistoryOpen(false);
+            }}
+            onDelete={
+              activeAgentId === "dove"
+                ? deleteDoveSession
+                : async (contextId) => {
+                    await deleteSession(contextId);
+                    void refreshSessions(activeAgentId);
+                  }
+            }
+            onClose={() => setHistoryOpen(false)}
+          />
 
           {/* Chat area */}
           <Conversation className="flex-1 bg-background">

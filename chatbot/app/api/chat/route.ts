@@ -135,20 +135,11 @@ export async function POST(request: Request) {
     const backgroundTasks: Promise<unknown>[] = [];
     const agents = await readAgentsConfig();
 
-    const tools = agents.flatMap((agent) => {
-      const sessionPersistence = SessionManager.makePersistence(agent.name);
-      return [
-        makeAskTool(agent, abortController.signal),
-        makeStartTool(
-          agent,
-          abortController.signal,
-          makeProgressSender(send),
-          backgroundTasks,
-          sessionPersistence,
-        ),
-        makeAwaitTool(agent, abortController.signal, makeProgressSender(send), sessionPersistence),
-      ];
-    });
+    const tools = agents.flatMap((agent) => [
+      makeAskTool(agent, abortController.signal),
+      makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks),
+      makeAwaitTool(agent, abortController.signal, makeProgressSender(send)),
+    ]);
 
     if (sessionId) activeControllers.set(sessionId, abortController);
     const dispatcher = new SseQueryDispatcher(send);

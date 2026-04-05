@@ -197,30 +197,50 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
  *   publishStatusToUI    — emits a status-update (+ artifact). Structural milestones
  *                      like tool calls are surfaced as workflow step nodes.
  *
+ * A MessageAccumulator runs alongside the publisher so QueryAgentExecutor can
+ * build a clean SessionMessage (text-only segments, thinking → processContent)
+ * for DB persistence without going through a second stream pass.
+ *
  * Session events are no-ops — session IDs are meaningful only to SSE clients.
  * onArtifact is a no-op — replayed artifacts from the A2A stream are already
  * handled upstream; this dispatcher only produces, it never re-dispatches.
  */
 export class A2AQueryDispatcher implements QueryResponseDispatcher {
+  private readonly accumulator = new MessageAccumulator();
+
   constructor(private readonly publisher: ExecutorPublisher) {}
+
+  /** Build the assistant SessionMessage for DB persistence. */
+  buildAssistantMessage(id: string): SessionMessage {
+    return this.accumulator.buildMessage(id);
+  }
+
+  /** Build workflow progress entries for DB persistence. */
+  buildProgress(): ProgressEntry[] {
+    return this.accumulator.buildProgress();
+  }
 
   onSession(_sessionId: string): void {}
 
   onTextDelta(text: string): void {
     this.publisher.send(text, ARTIFACT.STREAM);
+    this.accumulator.onTextDelta(text);
   }
 
   onThinking(text: string): void {
     this.publisher.send(text, ARTIFACT.THINKING);
+    this.accumulator.onThinking(text);
   }
 
   onToolCall(name: string): void {
     // publishStatusToUI (not publishArtifact) so a workflow ProgressEntry node is created.
     this.publisher.publishStatusToUI(name, { [ARTIFACT.TOOL_CALL]: name });
+    this.accumulator.onToolCall(name);
   }
 
   onToolInput(content: string): void {
     this.publisher.send(content, ARTIFACT.TOOL_INPUT);
+    this.accumulator.onToolInput(content);
   }
 
   onResult(result: string): void {

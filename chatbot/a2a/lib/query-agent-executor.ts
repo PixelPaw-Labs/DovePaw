@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
@@ -136,6 +137,7 @@ export class QueryAgentExecutor implements AgentExecutor {
           ...makeAgentMgmtTools(this.def),
         ],
         async (innerMcpServer) => {
+          const dispatcher = new A2AQueryDispatcher(publisher);
           const claudeSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || START_SCRIPT_TOOL,
@@ -168,7 +170,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                 settingSources: ["project", "user", "local"],
               },
             }),
-            new A2AQueryDispatcher(publisher),
+            dispatcher,
           );
 
           if (claudeSessionId) {
@@ -179,6 +181,17 @@ export class QueryAgentExecutor implements AgentExecutor {
               label,
             });
           }
+
+          // Persist session with clean message: text-only segments, thinking → processContent.
+          // Runs for both Dove-triggered and direct subagent-chat requests — single source of truth.
+          SessionManager.save(
+            this.def.name,
+            contextId,
+            { output: "", progress: dispatcher.buildProgress() },
+            label,
+            instruction || "",
+            dispatcher.buildAssistantMessage(randomUUID()),
+          );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
           publisher.publishStatusToUI("", undefined, "completed");

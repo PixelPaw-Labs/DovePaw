@@ -14,7 +14,6 @@ import { TaskNotFoundError } from "@a2a-js/sdk/client";
 import type { Task } from "@a2a-js/sdk";
 import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";
-import type { SessionPersistence } from "@/lib/session-manager";
 import { z } from "zod";
 import {
   resolveAgentPort,
@@ -188,7 +187,6 @@ export function makeStartTool(
   signal?: AbortSignal,
   onProgress?: (result: StreamedResult) => void,
   backgroundTasks?: Promise<unknown>[],
-  sessionPersistence?: SessionPersistence,
 ) {
   return tool(
     doveStartToolName(agent),
@@ -209,13 +207,11 @@ export function makeStartTool(
             ],
           };
         }
-        const { taskId, contextId: handleContextId, stream } = handle;
+        const { taskId, stream } = handle;
 
         // Continue consuming the stream in the background, forwarding events via onProgress.
         if (onProgress) {
-          const task = collectStreamResult(stream, onProgress, undefined, (finalResult) => {
-            sessionPersistence?.save(handleContextId, finalResult);
-          }).catch(() => {});
+          const task = collectStreamResult(stream, onProgress).catch(() => {});
           backgroundTasks?.push(task);
         }
 
@@ -259,7 +255,6 @@ export function makeAwaitTool(
   agent: AgentDef,
   signal?: AbortSignal,
   onProgress?: (result: StreamedResult) => void,
-  sessionPersistence?: SessionPersistence,
 ) {
   return tool(
     doveAwaitToolName(agent),
@@ -274,12 +269,10 @@ export function makeAwaitTool(
         const client = await createAgentClient(port);
         // Check current task state first — no stream needed if already finished
         const task: Task = await client.getTask({ id: taskId });
-        const contextId = task.contextId;
 
         if (isTerminalState(task.status.state)) {
           markTaskResolved(taskId);
           const result = extractArtifactResult(task.artifacts);
-          sessionPersistence?.save(contextId, result);
           const completed: TaskCompletedContent = {
             status: task.status.state,
             taskId,
@@ -328,7 +321,6 @@ export function makeAwaitTool(
         }
 
         markTaskResolved(taskId);
-        sessionPersistence?.save(contextId, result.result);
         const completed: TaskCompletedContent = {
           status: "completed",
           taskId: result.taskId ?? taskId,

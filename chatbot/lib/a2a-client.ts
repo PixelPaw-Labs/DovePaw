@@ -20,7 +20,7 @@ import type {
 } from "@a2a-js/sdk";
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import type { PortsManifest } from "@/a2a/lib/base-server";
-import { TRANSIENT_ARTIFACT_NAMES } from "@/lib/query-dispatcher";
+import { TRANSIENT_ARTIFACT_NAMES, ARTIFACT } from "@/lib/query-dispatcher";
 /** A progress message with any artifacts published alongside it. */
 export type ProgressEntry = {
   message: string;
@@ -113,6 +113,7 @@ export function subscribeTaskStream(
   taskId: string,
   signal: AbortSignal | undefined,
   onProgress: (result: StreamedResult) => void,
+  onArtifact?: (name: string, text: string) => void,
 ): Promise<{ taskId?: string; result: StreamedResult }> {
   const ac = new AbortController();
   signal?.addEventListener(
@@ -126,6 +127,7 @@ export function subscribeTaskStream(
   return collectStreamResult(
     client.resubscribeTask({ id: taskId }, { signal: ac.signal }),
     onProgress,
+    onArtifact,
   );
 }
 
@@ -149,8 +151,13 @@ export async function collectStreamResult(
   let pendingEntry: ProgressEntry | undefined;
 
   const snapshot = (): StreamedResult => {
+    // Exclude tool-call artifacts (just the tool name) — only meaningful text content goes in output.
     const output = progress
-      .flatMap((e) => Object.values(e.artifacts))
+      .flatMap((e) =>
+        Object.entries(e.artifacts)
+          .filter(([name]) => name !== ARTIFACT.TOOL_CALL)
+          .map(([, v]) => v),
+      )
       .join("\n")
       .trim();
     return {
@@ -201,6 +208,10 @@ export function extractArtifactResult(rawArtifacts: Artifact[] | undefined): Str
         artifacts[name] = artifacts[name] ? `${artifacts[name]}\n${p.text}` : p.text;
     }
   }
-  const output = Object.values(artifacts).join("\n").trim() || "Agent completed.";
+  // Prefer final-output (complete response), fall back to stream (accumulated text deltas).
+  // Never include tool-call, tool-input, or thinking in the text output.
+  const output =
+    (artifacts[ARTIFACT.FINAL_OUTPUT] || artifacts[ARTIFACT.STREAM] || "").trim() ||
+    "Agent completed.";
   return { output, progress: [] };
 }

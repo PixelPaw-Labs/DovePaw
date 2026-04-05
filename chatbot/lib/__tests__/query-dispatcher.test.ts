@@ -259,4 +259,36 @@ describe("A2AQueryDispatcher", () => {
     expect(pub.publishStatusToUI).not.toHaveBeenCalled();
     expect(pub.send).not.toHaveBeenCalled();
   });
+
+  it("buildAssistantMessage returns text-only segments and thinking in processContent", () => {
+    const dispatcher = new A2AQueryDispatcher(makePublisher());
+    dispatcher.onTextDelta("Hello ");
+    dispatcher.onToolCall("ToolSearch");
+    dispatcher.onToolInput('{"query":"foo"}');
+    dispatcher.onThinking("inner reasoning");
+    dispatcher.onTextDelta("World");
+
+    const msg = dispatcher.buildAssistantMessage("msg-1");
+
+    expect(msg.id).toBe("msg-1");
+    expect(msg.role).toBe("assistant");
+    expect(msg.segments.every((s) => s.type === "text")).toBe(true);
+    expect(msg.segments.map((s) => (s as { type: "text"; content: string }).content)).toEqual([
+      "Hello ",
+      "World",
+    ]);
+    expect(msg.processContent).toBe("inner reasoning");
+  });
+
+  it("buildProgress returns tool call entries for workflow display", () => {
+    const dispatcher = new A2AQueryDispatcher(makePublisher());
+    dispatcher.onToolCall("Read");
+    dispatcher.onToolCall("Bash");
+
+    const progress = dispatcher.buildProgress();
+
+    expect(progress).toHaveLength(2);
+    expect(progress[0].message).toBe("Read");
+    expect(progress[1].message).toBe("Bash");
+  });
 });

@@ -16,8 +16,6 @@ import { createSseResponse } from "@/lib/sse-response";
 import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession } from "@/lib/db";
-import { randomUUID } from "node:crypto";
-import { SessionManager } from "@/lib/session-manager";
 import { z } from "zod";
 
 const chatRequestSchema = z.object({
@@ -79,17 +77,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       activeControllers.set(resolvedContextId, abortController);
       send({ type: "session", sessionId: resolvedContextId });
 
-      await collectStreamResult(stream, onSnapshot, onArtifact, (finalResult) => {
-        if (abortController.signal.aborted) return;
-        SessionManager.save(
-          agent.name,
-          resolvedContextId,
-          finalResult,
-          message.slice(0, 60) || "Session",
-          message,
-          dispatcher.buildAssistantMessage(randomUUID()),
-        );
-      });
+      await collectStreamResult(stream, onSnapshot, onArtifact);
 
       if (abortController.signal.aborted) {
         send({ type: "cancelled" });

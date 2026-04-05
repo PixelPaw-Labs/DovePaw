@@ -13,7 +13,12 @@ vi.mock("@/a2a/lib/base-server", () => ({
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { ClientFactory } from "@a2a-js/sdk/client";
-import { startAgentStream } from "@/lib/a2a-client";
+import {
+  startAgentStream,
+  collectStreamResult,
+  extractArtifactResult,
+  type A2AStreamEvent,
+} from "@/lib/a2a-client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,5 +127,141 @@ describe("startAgentStream", () => {
     await startAgentStream(3000, "hello", ac.signal);
 
     expect(client.cancelTask).not.toHaveBeenCalled();
+  });
+});
+
+// ─── collectStreamResult ──────────────────────────────────────────────────────
+
+async function* a2aEvents(...events: object[]): AsyncGenerator<A2AStreamEvent, void, undefined> {
+  for (const e of events) yield e as A2AStreamEvent;
+}
+
+describe("collectStreamResult", () => {
+  it("excludes tool-call artifact values from output", async () => {
+    const { result } = await collectStreamResult(
+      a2aEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "ToolSearch" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "tool-call", parts: [{ kind: "text", text: "ToolSearch" }] },
+        },
+        {
+          kind: "artifact-update",
+          artifact: {
+            name: "final-output",
+            parts: [{ kind: "text", text: "Here are the results" }],
+          },
+        },
+      ),
+    );
+    expect(result.output).not.toContain("ToolSearch");
+    expect(result.output).toBe("Here are the results");
+  });
+
+  it("includes final-output artifact value in output", async () => {
+    const { result } = await collectStreamResult(
+      a2aEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "step" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "done" }] },
+        },
+      ),
+    );
+    expect(result.output).toBe("done");
+  });
+
+  it("passes thinking artifacts to onArtifact but excludes them from output", async () => {
+    const onArtifact = vi.fn();
+    const { result } = await collectStreamResult(
+      a2aEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "step" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "thinking", parts: [{ kind: "text", text: "inner thoughts" }] },
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "response" }] },
+        },
+      ),
+      undefined,
+      onArtifact,
+    );
+    expect(onArtifact).toHaveBeenCalledWith("thinking", "inner thoughts");
+    expect(result.output).toBe("response");
+    expect(result.output).not.toContain("inner thoughts");
+  });
+});
+
+// ─── extractArtifactResult ────────────────────────────────────────────────────
+
+describe("extractArtifactResult", () => {
+  it("uses final-output artifact as output", () => {
+    const result = extractArtifactResult([
+      { name: "tool-call", parts: [{ kind: "text", text: "ToolSearch" }] } as never,
+      { name: "final-output", parts: [{ kind: "text", text: "the answer" }] } as never,
+    ]);
+    expect(result.output).toBe("the answer");
+  });
+
+  it("falls back to stream artifact when no final-output", () => {
+    const result = extractArtifactResult([
+      { name: "stream", parts: [{ kind: "text", text: "streamed text" }] } as never,
+    ]);
+    expect(result.output).toBe("streamed text");
+  });
+
+  it("does not include tool-call, tool-input, or thinking in output", () => {
+    const result = extractArtifactResult([
+      { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] } as never,
+      { name: "tool-input", parts: [{ kind: "text", text: '{"cmd":"ls"}' }] } as never,
+      { name: "thinking", parts: [{ kind: "text", text: "reasoning" }] } as never,
+    ]);
+    expect(result.output).toBe("Agent completed.");
+  });
+
+  it("returns 'Agent completed.' for empty artifacts", () => {
+    expect(extractArtifactResult([]).output).toBe("Agent completed.");
+    expect(extractArtifactResult(undefined).output).toBe("Agent completed.");
   });
 });
