@@ -13,7 +13,6 @@ interface SessionListProps {
   onDelete: (contextId: string) => void;
 }
 
-
 export function SessionList({
   sessions,
   activeSessionId,

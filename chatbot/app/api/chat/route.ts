@@ -26,7 +26,7 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { makeProgressSender } from "@/lib/chat-sse";
-import type { ChatSseEvent } from "@/lib/chat-sse";
+import { createSseResponse } from "@/lib/sse-response";
 import {
   makeAskTool,
   makeStartTool,
@@ -38,8 +38,7 @@ import {
 import { buildDoveHooks } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
-import { buildSessionMessages } from "@/lib/session-builder";
+import { deleteSession } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -132,128 +131,105 @@ export async function POST(request: Request) {
   // The hook captures it from the "session" SSE event and sends it back on every request.
   const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
-  const encoder = new TextEncoder();
-  const abortController = new AbortController();
-  request.signal.addEventListener("abort", () => abortController.abort());
+  return createSseResponse(request, async (send, abortController) => {
+    const backgroundTasks: Promise<unknown>[] = [];
+    const agents = await readAgentsConfig();
 
-  const readable = new ReadableStream({
-    cancel() {
-      abortController.abort();
-    },
-    async start(controller) {
-      const send = (payload: ChatSseEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
-      };
+    const tools = agents.flatMap((agent) => {
+      const sessionPersistence = SessionManager.makePersistence(agent.name);
+      return [
+        makeAskTool(agent, abortController.signal),
+        makeStartTool(
+          agent,
+          abortController.signal,
+          makeProgressSender(send),
+          backgroundTasks,
+          sessionPersistence,
+        ),
+        makeAwaitTool(agent, abortController.signal, makeProgressSender(send), sessionPersistence),
+      ];
+    });
 
-      const backgroundTasks: Promise<unknown>[] = [];
-      const agents = await readAgentsConfig();
-
-      const tools = agents.flatMap((agent) => {
-        const sessionPersistence = SessionManager.makePersistence(agent.name);
-        return [
-          makeAskTool(agent, abortController.signal),
-          makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks, sessionPersistence),
-          makeAwaitTool(agent, abortController.signal, makeProgressSender(send), sessionPersistence),
-        ];
-      });
-
-      if (sessionId) activeControllers.set(sessionId, abortController);
-      const dispatcher = new SseQueryDispatcher(send);
-      try {
-        await withMcpQuery(
-          tools,
-          async (mcpServer) => {
-            const resolvedSessionId = await consumeQueryEvents(
-              query({
-                prompt: message,
-                options: {
-                  abortController,
-                  env: {
-                    ...process.env, // Pass through all env vars so tools can read their configs
-                    ...resolveSettingsEnv(readSettings()), // Global settings env vars override process.env
-                  },
-                  promptSuggestions: true,
-                  cwd: AGENTS_ROOT,
-                  // Expose the launchd install directory so Claude can inspect
-                  // installed plist files (written by `npm run install`)
-                  additionalDirectories: [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT],
-                  systemPrompt: {
-                    type: "preset",
-                    preset: "claude_code",
-                    append: await buildSystemPrompt(),
-                  },
-                  permissionMode: "acceptEdits",
-                  allowedTools: agents.flatMap((a) => [
-                    `mcp__agents__${doveAskToolName(a)}`,
-                    `mcp__agents__${doveStartToolName(a)}`,
-                    `mcp__agents__${doveAwaitToolName(a)}`,
-                  ]),
-                  mcpServers: { agents: mcpServer },
-                  // Resume the existing session so the full conversation history is preserved.
-                  // On the first message sessionId is null and query() starts a fresh session.
-                  ...(sessionId ? { resume: sessionId } : {}),
-                  // Stream text tokens as they are generated
-                  includePartialMessages: true,
-                  settingSources: ["project", "user", "local"],
-                  hooks: buildDoveHooks(agents),
+    if (sessionId) activeControllers.set(sessionId, abortController);
+    const dispatcher = new SseQueryDispatcher(send);
+    try {
+      await withMcpQuery(
+        tools,
+        async (mcpServer) => {
+          const resolvedSessionId = await consumeQueryEvents(
+            query({
+              prompt: message,
+              options: {
+                abortController,
+                env: {
+                  ...process.env, // Pass through all env vars so tools can read their configs
+                  ...resolveSettingsEnv(readSettings()), // Global settings env vars override process.env
                 },
-              }),
-              dispatcher,
+                promptSuggestions: true,
+                cwd: AGENTS_ROOT,
+                // Expose the launchd install directory so Claude can inspect
+                // installed plist files (written by `npm run install`)
+                additionalDirectories: [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT],
+                systemPrompt: {
+                  type: "preset",
+                  preset: "claude_code",
+                  append: await buildSystemPrompt(),
+                },
+                permissionMode: "acceptEdits",
+                allowedTools: agents.flatMap((a) => [
+                  `mcp__agents__${doveAskToolName(a)}`,
+                  `mcp__agents__${doveStartToolName(a)}`,
+                  `mcp__agents__${doveAwaitToolName(a)}`,
+                ]),
+                mcpServers: { agents: mcpServer },
+                // Resume the existing session so the full conversation history is preserved.
+                // On the first message sessionId is null and query() starts a fresh session.
+                ...(sessionId ? { resume: sessionId } : {}),
+                // Stream text tokens as they are generated
+                includePartialMessages: true,
+                settingSources: ["project", "user", "local"],
+                hooks: buildDoveHooks(agents),
+              },
+            }),
+            dispatcher,
+          );
+          if (resolvedSessionId && !abortController.signal.aborted) {
+            SessionManager.save(
+              "dove",
+              resolvedSessionId,
+              { output: "", progress: dispatcher.buildProgress() },
+              message.slice(0, 60) || "Session",
+              message,
+              dispatcher.buildAssistantMessage(randomUUID()),
             );
-            if (resolvedSessionId && !abortController.signal.aborted) {
-              setActiveSession("dove", resolvedSessionId);
-              const assistantMsg = dispatcher.buildAssistantMessage(randomUUID());
-              upsertSession({
-                contextId: resolvedSessionId,
-                agentId: "dove",
-                startedAt: new Date().toISOString(),
-                label: message.slice(0, 60) || "Session",
-                messages: buildSessionMessages(message, assistantMsg),
-                progress: [],
-              });
+          }
+          send({ type: "done" });
+        },
+        (_err, isAbort) => {
+          if (isAbort) {
+            try {
+              send({ type: "cancelled" });
+            } catch {
+              // stream already closed
             }
-            send({ type: "done" });
-          },
-          (_err, isAbort) => {
-            if (isAbort) {
-              try {
-                send({ type: "cancelled" });
-              } catch {
-                // stream already closed
-              }
-            } else {
-              try {
-                const msg = _err instanceof Error ? _err.message : String(_err);
-                send({ type: "error", content: msg });
-                send({ type: "done" });
-              } catch {
-                // Stream already closed — client disconnected
-              }
+          } else {
+            try {
+              const msg = _err instanceof Error ? _err.message : String(_err);
+              send({ type: "error", content: msg });
+              send({ type: "done" });
+            } catch {
+              // Stream already closed — client disconnected
             }
-          },
-        );
-      } finally {
-        if (sessionId) activeControllers.delete(sessionId);
-        // Wait for all background start_* subscriptions to finish streaming
-        // before closing the SSE controller — otherwise their progress events
-        // arrive after the controller is closed and are silently dropped.
-        await Promise.allSettled(backgroundTasks);
-        abortController.abort();
-        try {
-          controller.close();
-        } catch {
-          // Already closed
-        }
-      }
-    },
-  });
-
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+          }
+        },
+      );
+    } finally {
+      if (sessionId) activeControllers.delete(sessionId);
+      // Wait for all background start_* subscriptions to finish streaming
+      // before closing the SSE stream — otherwise their progress events
+      // arrive after the stream is closed and are silently dropped.
+      await Promise.allSettled(backgroundTasks);
+    }
   });
 }
 

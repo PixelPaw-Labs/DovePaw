@@ -31,7 +31,9 @@ export function usePopupAnimation({
       releaseEase: createSpring({ stiffness: 180, damping: 18 }),
       cursor: { onHover: "grab", onGrab: "grabbing" },
     });
-    return () => draggable.revert();
+    return () => {
+      draggable.revert();
+    };
   }, [dragWrapperRef, containerRef]);
 
   // Animate panel in/out whenever visible changes (skip on initial mount)
@@ -56,7 +58,9 @@ export function usePopupAnimation({
           duration: 200,
           ease: "inExpo",
         });
-    return () => anim.cancel();
+    return () => {
+      anim.cancel();
+    };
   }, [visible, panelRef]);
 
   // Stagger list items each time the popup opens

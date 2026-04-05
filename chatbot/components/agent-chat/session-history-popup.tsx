@@ -17,7 +17,6 @@ interface SessionHistoryPopupProps {
   onClose: () => void;
 }
 
-
 export function SessionHistoryPopup({
   visible,
   sessions,
@@ -32,7 +31,14 @@ export function SessionHistoryPopup({
   const panelRef = React.useRef<HTMLDivElement>(null);
   const listRef = React.useRef<HTMLDivElement>(null);
 
-  usePopupAnimation({ visible, sessionCount: sessions.length, dragWrapperRef, panelRef, listRef, containerRef });
+  usePopupAnimation({
+    visible,
+    sessionCount: sessions.length,
+    dragWrapperRef,
+    panelRef,
+    listRef,
+    containerRef,
+  });
 
   return (
     // Drag wrapper — absolutely positioned, never scaled/faded itself

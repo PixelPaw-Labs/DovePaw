@@ -12,10 +12,11 @@
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readPortsManifest } from "@/a2a/lib/base-server";
 import { makeProgressSender } from "@/lib/chat-sse";
-import type { ChatSseEvent } from "@/lib/chat-sse";
+import { createSseResponse } from "@/lib/sse-response";
 import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession } from "@/lib/db";
+import { randomUUID } from "node:crypto";
 import { SessionManager } from "@/lib/session-manager";
 import { z } from "zod";
 
@@ -54,87 +55,66 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
 
   const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
-  const encoder = new TextEncoder();
-  const abortController = new AbortController();
-  request.signal.addEventListener("abort", () => abortController.abort());
+  return createSseResponse(request, async (send, abortController) => {
+    const onSnapshot = makeProgressSender(send);
+    const dispatcher = new SseQueryDispatcher(send);
+    const onArtifact = (artifactName: string, text: string) =>
+      dispatcher.onArtifact(artifactName, text);
 
-  const readable = new ReadableStream({
-    cancel() {
-      abortController.abort();
-    },
-    async start(controller) {
-      const send = (payload: ChatSseEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
-      };
-
-      const onSnapshot = makeProgressSender(send);
-
-      const dispatcher = new SseQueryDispatcher(send);
-      const onArtifact = (artifactName: string, text: string) =>
-        dispatcher.onArtifact(artifactName, text);
-
-      let handle: Awaited<ReturnType<typeof startAgentStream>> = null;
-      try {
-        handle = await startAgentStream(
-          portValue,
-          message,
-          abortController.signal,
-          sessionId ?? undefined,
-        );
-        if (!handle) {
-          send({ type: "error", content: "Failed to start agent task" });
-          send({ type: "done" });
-          return;
-        }
-        const { stream, contextId: resolvedContextId } = handle;
-
-        activeControllers.set(resolvedContextId, abortController);
-        send({ type: "session", sessionId: resolvedContextId });
-
-        await collectStreamResult(stream, onSnapshot, onArtifact, (finalResult) => {
-          if (abortController.signal.aborted) return;
-          SessionManager.save(agent.name, resolvedContextId, finalResult, message.slice(0, 60) || "Session", message);
-        });
-
-        if (abortController.signal.aborted) {
-          send({ type: "cancelled" });
-        } else {
-          send({ type: "done" });
-        }
-      } catch (err: unknown) {
-        if (abortController.signal.aborted) {
-          try {
-            send({ type: "cancelled" });
-          } catch {
-            /* stream closed */
-          }
-          return;
-        }
-        const msg = err instanceof Error ? err.message : String(err);
-        try {
-          send({ type: "error", content: msg });
-          send({ type: "done" });
-        } catch {
-          /* stream already closed */
-        }
-      } finally {
-        if (handle) activeControllers.delete(handle.contextId);
-        abortController.abort();
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
+    let handle: Awaited<ReturnType<typeof startAgentStream>> = null;
+    try {
+      handle = await startAgentStream(
+        portValue,
+        message,
+        abortController.signal,
+        sessionId ?? undefined,
+      );
+      if (!handle) {
+        send({ type: "error", content: "Failed to start agent task" });
+        send({ type: "done" });
+        return;
       }
-    },
-  });
+      const { stream, contextId: resolvedContextId } = handle;
 
-  return new Response(readable, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    },
+      activeControllers.set(resolvedContextId, abortController);
+      send({ type: "session", sessionId: resolvedContextId });
+
+      await collectStreamResult(stream, onSnapshot, onArtifact, (finalResult) => {
+        if (abortController.signal.aborted) return;
+        SessionManager.save(
+          agent.name,
+          resolvedContextId,
+          finalResult,
+          message.slice(0, 60) || "Session",
+          message,
+          dispatcher.buildAssistantMessage(randomUUID()),
+        );
+      });
+
+      if (abortController.signal.aborted) {
+        send({ type: "cancelled" });
+      } else {
+        send({ type: "done" });
+      }
+    } catch (err: unknown) {
+      if (abortController.signal.aborted) {
+        try {
+          send({ type: "cancelled" });
+        } catch {
+          /* stream closed */
+        }
+        return;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      try {
+        send({ type: "error", content: msg });
+        send({ type: "done" });
+      } catch {
+        /* stream already closed */
+      }
+    } finally {
+      if (handle) activeControllers.delete(handle.contextId);
+    }
   });
 }
 

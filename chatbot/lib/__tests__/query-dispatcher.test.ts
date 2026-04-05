@@ -19,7 +19,7 @@ describe("MessageAccumulator.buildMessage", () => {
     expect(msg.processContent).toBeUndefined();
   });
 
-  it("moves tool_call segments into processContent, not segments", () => {
+  it("excludes tool_call segments from both segments and processContent", () => {
     const acc = new MessageAccumulator();
     acc.onTextDelta("before ");
     acc.onToolCall("Bash");
@@ -30,7 +30,7 @@ describe("MessageAccumulator.buildMessage", () => {
       { type: "text", content: "before " },
       { type: "text", content: "after" },
     ]);
-    expect(msg.processContent).toContain("Bash");
+    expect(msg.processContent).toBeUndefined();
   });
 
   it("puts thinking into processContent", () => {
@@ -42,7 +42,7 @@ describe("MessageAccumulator.buildMessage", () => {
     expect(msg.processContent).toContain("reasoning...");
   });
 
-  it("combines thinking and tool calls in processContent", () => {
+  it("saves only thinking in processContent, not tool calls", () => {
     const acc = new MessageAccumulator();
     acc.onThinking("thought");
     acc.onToolCall("Read");
@@ -50,8 +50,7 @@ describe("MessageAccumulator.buildMessage", () => {
     acc.onTextDelta("result");
     const msg = acc.buildMessage("id-4");
     expect(msg.segments).toEqual([{ type: "text", content: "result" }]);
-    expect(msg.processContent).toContain("thought");
-    expect(msg.processContent).toContain("Read");
+    expect(msg.processContent).toBe("thought");
   });
 
   it("returns no processContent when no thinking or tool calls", () => {
@@ -59,6 +58,38 @@ describe("MessageAccumulator.buildMessage", () => {
     acc.onTextDelta("plain text");
     const msg = acc.buildMessage("id-5");
     expect(msg.processContent).toBeUndefined();
+  });
+
+  it("buildProgress returns accumulated tool call entries", () => {
+    const acc = new MessageAccumulator();
+    acc.onToolCall("Bash");
+    acc.onToolInput('{"cmd":"ls"}');
+    acc.onToolCall("Read");
+    acc.onToolInput('{"path":"/x"}');
+    expect(acc.buildProgress()).toEqual([
+      { message: "Bash", artifacts: { "tool-call": "Bash" } },
+      { message: "Read", artifacts: { "tool-call": "Read" } },
+    ]);
+  });
+
+  it("buildProgress returns empty array when no tool calls", () => {
+    const acc = new MessageAccumulator();
+    acc.onTextDelta("hello");
+    expect(acc.buildProgress()).toEqual([]);
+  });
+});
+
+// ─── SseQueryDispatcher.buildProgress ────────────────────────────────────────
+
+describe("SseQueryDispatcher.buildProgress", () => {
+  it("delegates to accumulator — returns entries for each tool call", () => {
+    const dispatcher = new SseQueryDispatcher(vi.fn());
+    dispatcher.onToolCall("Bash");
+    dispatcher.onToolCall("Read");
+    expect(dispatcher.buildProgress()).toEqual([
+      { message: "Bash", artifacts: { "tool-call": "Bash" } },
+      { message: "Read", artifacts: { "tool-call": "Read" } },
+    ]);
   });
 });
 

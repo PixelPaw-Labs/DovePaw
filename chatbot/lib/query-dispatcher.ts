@@ -18,6 +18,7 @@ import type { ChatSseEvent } from "@/lib/chat-sse";
 import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
 import { z } from "zod";
 import type { MessageSegment, SessionMessage } from "@/lib/message-types";
+import type { ProgressEntry } from "@/lib/a2a-client";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,7 @@ export class MessageAccumulator {
   private _textBuffer = "";
   private _thinkingBuffer = "";
   private _pendingToolName: string | null = null;
+  private _progress: ProgressEntry[] = [];
 
   onTextDelta(text: string): void {
     this._textBuffer += text;
@@ -79,12 +81,19 @@ export class MessageAccumulator {
     this._thinkingBuffer += text;
   }
 
-  onToolCall(name: string): void {
+  onToolCall(name: string): ProgressEntry {
     if (this._textBuffer) {
       this._segments.push({ type: "text", content: this._textBuffer });
       this._textBuffer = "";
     }
     this._pendingToolName = name;
+    const entry: ProgressEntry = { message: name, artifacts: { [ARTIFACT.TOOL_CALL]: name } };
+    this._progress.push(entry);
+    return entry;
+  }
+
+  buildProgress(): ProgressEntry[] {
+    return this._progress;
   }
 
   onToolInput(content: string): void {
@@ -107,19 +116,12 @@ export class MessageAccumulator {
     if (this._textBuffer) allSegments.push({ type: "text", content: this._textBuffer });
 
     const messageSegments = allSegments.filter((s) => MESSAGE_SEGMENT_TYPES.has(s.type));
-    const processSegments = allSegments.filter((s) => !MESSAGE_SEGMENT_TYPES.has(s.type));
-
-    const processParts: string[] = [];
-    if (this._thinkingBuffer) processParts.push(this._thinkingBuffer);
-    for (const s of processSegments) {
-      if (s.type === "tool_call") processParts.push(s.tool.name);
-    }
 
     return {
       id,
       role: "assistant",
       segments: messageSegments,
-      processContent: processParts.length > 0 ? processParts.join("\n") : undefined,
+      processContent: this._thinkingBuffer || undefined,
     };
   }
 }
@@ -138,6 +140,10 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
     return this.accumulator.buildMessage(id);
   }
 
+  buildProgress(): ProgressEntry[] {
+    return this.accumulator.buildProgress();
+  }
+
   onSession(sessionId: string): void {
     this.send({ type: "session", sessionId });
   }
@@ -153,15 +159,9 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
   }
 
   onToolCall(name: string): void {
-    this.accumulator.onToolCall(name);
+    const entry = this.accumulator.onToolCall(name);
     this.send({ type: "tool_call", name });
-    this.send({
-      type: "progress",
-      result: {
-        output: "",
-        progress: [{ message: name, artifacts: { [ARTIFACT.TOOL_CALL]: name } }],
-      },
-    });
+    this.send({ type: "progress", result: { output: "", progress: [entry] } });
   }
 
   onToolInput(content: string): void {

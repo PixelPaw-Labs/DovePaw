@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { setActiveSession, upsertSession } from "@/lib/db";
-import { buildSessionMessages } from "@/lib/session-builder";
 import type { StreamedResult } from "@/lib/a2a-client";
+import type { SessionMessage } from "@/lib/message-types";
 import type { AgentWorkspace } from "@/a2a/lib/workspace";
 
 export interface SessionPersistence {
-  save(contextId: string, result: StreamedResult): void;
+  save(contextId: string, result: StreamedResult, processContent?: string): void;
 }
 
 export interface SessionState {
@@ -55,11 +55,12 @@ export class SessionManager {
     result: StreamedResult,
     label = "Session",
     userText = "",
+    assistantMsg?: SessionMessage,
   ): void {
-    const assistantMsg = {
+    const resolvedMsg: SessionMessage = assistantMsg ?? {
       id: randomUUID(),
-      role: "assistant" as const,
-      segments: [{ type: "text" as const, content: result.output }],
+      role: "assistant",
+      segments: [{ type: "text", content: result.output }],
     };
     setActiveSession(agentId, contextId);
     upsertSession({
@@ -67,13 +68,26 @@ export class SessionManager {
       agentId,
       startedAt: new Date().toISOString(),
       label,
-      messages: buildSessionMessages(userText, assistantMsg),
+      messages: [
+        { id: randomUUID(), role: "user", segments: [{ type: "text", content: userText }] },
+        resolvedMsg,
+      ],
       progress: result.progress,
     });
   }
 
   static makePersistence(agentId: string): SessionPersistence {
-    return { save: (contextId, result) => SessionManager.save(agentId, contextId, result) };
+    return {
+      save(contextId, result, processContent) {
+        const msg: SessionMessage = {
+          id: randomUUID(),
+          role: "assistant",
+          segments: [{ type: "text", content: result.output }],
+          ...(processContent ? { processContent } : {}),
+        };
+        SessionManager.save(agentId, contextId, result, undefined, undefined, msg);
+      },
+    };
   }
 
   private evictOldestIfNeeded(): void {

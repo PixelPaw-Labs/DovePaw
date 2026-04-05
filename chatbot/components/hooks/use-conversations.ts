@@ -26,6 +26,7 @@ export type { MessageRole, ChatMessage } from "./use-messages";
 interface CachedConversation {
   messages: ChatMessage[];
   sessionId: string | null;
+  progress: ProgressEntry[];
 }
 
 // ─── Hook ──────────────────────────────────────────────────────────────────────
@@ -54,11 +55,16 @@ export function useConversations() {
   const [sessionProgress, setSessionProgress] = useState<ProgressEntry[]>([]);
   const [sessionCancelled, setSessionCancelled] = useState(false);
 
-  // Track current messages in a ref so setActiveAgentId can read them synchronously
+  // Track current messages/progress in refs so setActiveAgentId can read them synchronously
   const messagesRef = useRef<ChatMessage[]>(messages);
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  const sessionProgressRef = useRef<ProgressEntry[]>(sessionProgress);
+  useEffect(() => {
+    sessionProgressRef.current = sessionProgress;
+  }, [sessionProgress]);
 
   // ─── Animation ────────────────────────────────────────────────────────────────
   const animation = useTextAnimation((id, content) => {
@@ -118,13 +124,18 @@ export function useConversations() {
       // Save current conversation to in-memory cache
       const currentMessages = messagesRef.current;
       const savedSessionId = sessionIdRef.current;
-      cacheRef.current.set(currentId, { messages: currentMessages, sessionId: savedSessionId });
+      const savedProgress = sessionProgressRef.current;
+      cacheRef.current.set(currentId, {
+        messages: currentMessages,
+        sessionId: savedSessionId,
+        progress: savedProgress,
+      });
 
       // Load conversation for the new agent (prefer in-memory cache, then fetch from API)
       const cached = cacheRef.current.get(agentId);
       if (cached) {
         setMessages(cached.messages);
-        setSessionProgress([]);
+        setSessionProgress(cached.progress);
         setSessionCancelled(false);
         sessionIdRef.current = cached.sessionId;
         setCurrentSessionId(cached.sessionId);
@@ -158,7 +169,7 @@ export function useConversations() {
             );
             setMessages(msgs);
             setSessionProgress(progress);
-            cacheRef.current.set(agentId, { messages: msgs, sessionId: contextId });
+            cacheRef.current.set(agentId, { messages: msgs, sessionId: contextId, progress });
           } catch {
             // ignore — agent has no prior session
           }
@@ -380,7 +391,7 @@ export function useConversations() {
     const agentId = activeAgentIdRef.current;
     sessionIdRef.current = null;
     setCurrentSessionId(null);
-    cacheRef.current.set(agentId, { messages: [], sessionId: null });
+    cacheRef.current.set(agentId, { messages: [], sessionId: null, progress: [] });
     try {
       await fetch(activeSessionUrl(agentId), {
         method: "PUT",
@@ -415,7 +426,7 @@ export function useConversations() {
         setIsLoading(false);
         sessionIdRef.current = null;
         setCurrentSessionId(null);
-        cacheRef.current.set(agentId, { messages: [], sessionId: null });
+        cacheRef.current.set(agentId, { messages: [], sessionId: null, progress: [] });
       }
     },
     [animation, clear],
@@ -458,7 +469,7 @@ export function useConversations() {
         const { messages: msgs, progress } = sessionDetailResponseSchema.parse(await res.json());
         setMessages(msgs);
         setSessionProgress(progress);
-        cacheRef.current.set(agentId, { messages: msgs, sessionId: id });
+        cacheRef.current.set(agentId, { messages: msgs, sessionId: id, progress });
       },
       [setMessages],
     ),

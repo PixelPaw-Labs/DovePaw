@@ -202,7 +202,10 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               activeSessionId={currentSessionId}
               containerRef={mainRef}
               onSelect={setSessionId}
-              onNew={() => { newSession(); setHistoryOpen(false); }}
+              onNew={() => {
+                void newSession();
+                setHistoryOpen(false);
+              }}
               onDelete={deleteDoveSession}
               onClose={() => setHistoryOpen(false)}
             />
