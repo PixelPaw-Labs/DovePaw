@@ -94,11 +94,17 @@ export function IconPicker({ iconName, iconBg, iconColor, onChange }: IconPicker
                 type="button"
                 title={name}
                 onClick={() => selectIcon(name)}
-                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-[9px] leading-tight transition-all hover:bg-background ${
-                  isSelected
-                    ? "bg-primary/10 text-primary ring-1 ring-primary"
-                    : "text-muted-foreground"
+                className={`flex flex-col items-center gap-0.5 py-2 px-1 rounded-lg text-[9px] leading-tight transition-all ${
+                  isSelected ? "ring-1 ring-primary" : "text-muted-foreground hover:bg-background"
                 }`}
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: activePreset.previewBg,
+                        color: activePreset.previewIconColor,
+                      }
+                    : undefined
+                }
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span className="truncate w-full text-center">{name}</span>

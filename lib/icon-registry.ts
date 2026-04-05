@@ -174,10 +174,10 @@ export interface IconColorPreset {
 export const ICON_COLOR_PRESETS: IconColorPreset[] = [
   {
     label: "Default",
-    iconBg: "bg-accent group-hover:bg-primary",
-    iconColor: "text-accent-foreground group-hover:text-primary-foreground",
-    swatch: "#CBD5E1",
-    previewBg: "#e8edf0",
+    iconBg: "bg-secondary group-hover:bg-primary",
+    iconColor: "text-muted-foreground group-hover:text-primary-foreground",
+    swatch: "#eaeff1",
+    previewBg: "#eaeff1",
     previewIconColor: "#586064",
   },
   {

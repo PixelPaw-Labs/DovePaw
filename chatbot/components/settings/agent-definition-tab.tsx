@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { X, Plus, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -117,6 +118,7 @@ interface AgentDefinitionTabProps {
 }
 
 export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabProps) {
+  const router = useRouter();
   const [form, setForm] = React.useState<FormState>(() => entryToForm(agentEntry));
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -196,6 +198,7 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
       const { agents } = agentsResponseSchema.parse(json);
       const updated = agents.find((a) => a.name === agentEntry.name);
       if (updated) onSaved(updated);
+      router.refresh();
       setSaved(true);
     } catch {
       setError("Failed to save changes");
