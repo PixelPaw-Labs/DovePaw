@@ -498,6 +498,37 @@ describe("useConversations", () => {
     expect(assistant?.agentId).toBe("zendesk-triager");
   });
 
+  it("stamps agentId on assistant messages when loading a history session via setSessionId", async () => {
+    const stored: ChatMessage[] = [
+      { id: "u1", role: "user", segments: [{ type: "text", content: "hello" }] },
+      { id: "a1", role: "assistant", segments: [{ type: "text", content: "hi" }] },
+    ];
+    vi.mocked(fetch).mockImplementation((url, opts) => {
+      if (url === "/api/chat/active-session") return Promise.resolve(makeNoSessionResponse());
+      if (url === "/api/agent/zendesk-triager/active-session") {
+        if ((opts as RequestInit | undefined)?.method === "PUT")
+          return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+        return Promise.resolve(makeNoSessionResponse());
+      }
+      if (typeof url === "string" && url.startsWith("/api/agent/zendesk-triager/session/")) {
+        return Promise.resolve(makeDetailResponse(stored));
+      }
+      return Promise.resolve(makeNoSessionResponse());
+    });
+
+    const { result } = renderHook(() => useConversations());
+    act(() => {
+      result.current.setActiveAgentId("zendesk-triager");
+    });
+    await act(async () => {
+      await result.current.setSessionId("sess-zt");
+    });
+    await waitFor(() => expect(result.current.messages.length).toBe(2), { timeout: 3000 });
+
+    const assistant = result.current.messages.find((m) => m.role === "assistant");
+    expect(assistant?.agentId).toBe("zendesk-triager");
+  });
+
   // ─── Pending queue ────────────────────────────────────────────────────────────
 
   it("queues message sent while loading", async () => {

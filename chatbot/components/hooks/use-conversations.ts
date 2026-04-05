@@ -443,7 +443,10 @@ export function useConversations() {
         const { messages: msgs, progress } = sessionDetailResponseSchema.parse(await res.json());
         // Guard: user may have switched agents while the fetch was in flight
         if (activeAgentIdRef.current !== agentId) return;
-        setMessages(msgs);
+        const stamped = msgs.map((m) =>
+          m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
+        );
+        setMessages(stamped);
         setSessionProgress(progress);
       },
       [setMessages],
