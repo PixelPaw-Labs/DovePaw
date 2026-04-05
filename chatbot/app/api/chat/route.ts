@@ -40,6 +40,7 @@ import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
 import { buildSessionMessages } from "@/lib/session-builder";
+import { SessionManager } from "@/lib/session-manager";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -148,33 +149,11 @@ export async function POST(request: Request) {
       const agents = await readAgentsConfig();
 
       const tools = agents.flatMap((agent) => {
+        const sessionPersistence = SessionManager.makePersistence(agent.name);
         return [
           makeAskTool(agent, abortController.signal),
-          makeStartTool(
-            agent,
-            abortController.signal,
-            makeProgressSender(send),
-            backgroundTasks,
-            (contextId, finalResult) => {
-              setActiveSession(agent.name, contextId);
-              upsertSession({
-                contextId,
-                agentId: agent.name,
-                startedAt: new Date().toISOString(),
-                label: "Session",
-                messages: [
-                  { id: randomUUID(), role: "user", segments: [] },
-                  {
-                    id: randomUUID(),
-                    role: "assistant",
-                    segments: [{ type: "text", content: finalResult.output }],
-                  },
-                ],
-                progress: finalResult.progress,
-              });
-            },
-          ),
-          makeAwaitTool(agent, abortController.signal, makeProgressSender(send)),
+          makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks, sessionPersistence),
+          makeAwaitTool(agent, abortController.signal, makeProgressSender(send), sessionPersistence),
         ];
       });
 

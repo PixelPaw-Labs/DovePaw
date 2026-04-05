@@ -1,4 +1,12 @@
+import { randomUUID } from "node:crypto";
+import { setActiveSession, upsertSession } from "@/lib/db";
+import { buildSessionMessages } from "@/lib/session-builder";
+import type { StreamedResult } from "@/lib/a2a-client";
 import type { AgentWorkspace } from "@/a2a/lib/workspace";
+
+export interface SessionPersistence {
+  save(contextId: string, result: StreamedResult): void;
+}
 
 export interface SessionState {
   claudeSessionId: string;
@@ -39,6 +47,33 @@ export class SessionManager {
     return [...this.sessions.entries()]
       .map(([contextId, s]) => ({ contextId, startedAt: s.startedAt, label: s.label }))
       .toReversed();
+  }
+
+  static save(
+    agentId: string,
+    contextId: string,
+    result: StreamedResult,
+    label = "Session",
+    userText = "",
+  ): void {
+    const assistantMsg = {
+      id: randomUUID(),
+      role: "assistant" as const,
+      segments: [{ type: "text" as const, content: result.output }],
+    };
+    setActiveSession(agentId, contextId);
+    upsertSession({
+      contextId,
+      agentId,
+      startedAt: new Date().toISOString(),
+      label,
+      messages: buildSessionMessages(userText, assistantMsg),
+      progress: result.progress,
+    });
+  }
+
+  static makePersistence(agentId: string): SessionPersistence {
+    return { save: (contextId, result) => SessionManager.save(agentId, contextId, result) };
   }
 
   private evictOldestIfNeeded(): void {

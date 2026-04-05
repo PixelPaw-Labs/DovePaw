@@ -15,9 +15,8 @@ import { makeProgressSender } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { upsertSession, setActiveSession, deleteSession } from "@/lib/db";
-import { buildSessionMessages } from "@/lib/session-builder";
-import { randomUUID } from "node:crypto";
+import { deleteSession } from "@/lib/db";
+import { SessionManager } from "@/lib/session-manager";
 import { z } from "zod";
 
 const chatRequestSchema = z.object({
@@ -90,24 +89,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         const { stream, contextId: resolvedContextId } = handle;
 
         activeControllers.set(resolvedContextId, abortController);
-        setActiveSession(agent.name, resolvedContextId);
         send({ type: "session", sessionId: resolvedContextId });
 
         await collectStreamResult(stream, onSnapshot, onArtifact, (finalResult) => {
           if (abortController.signal.aborted) return;
-          const assistantMsg = {
-            id: randomUUID(),
-            role: "assistant" as const,
-            segments: [{ type: "text" as const, content: finalResult.output }],
-          };
-          upsertSession({
-            contextId: resolvedContextId,
-            agentId: agent.name,
-            startedAt: new Date().toISOString(),
-            label: message.slice(0, 60) || "Session",
-            messages: buildSessionMessages(message, assistantMsg),
-            progress: finalResult.progress,
-          });
+          SessionManager.save(agent.name, resolvedContextId, finalResult, message.slice(0, 60) || "Session", message);
         });
 
         if (abortController.signal.aborted) {
