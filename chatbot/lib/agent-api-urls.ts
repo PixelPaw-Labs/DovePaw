@@ -13,3 +13,7 @@ export function sessionDetailUrl(agentId: string, contextId: string): string {
 export function agentChatUrl(agentId: string): string {
   return agentId === DOVE_ID ? "/api/chat" : `/api/agent/${agentId}/chat`;
 }
+
+export function agentSessionsUrl(agentId: string): string {
+  return `/api/agent/${agentId}/sessions`;
+}

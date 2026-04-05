@@ -62,16 +62,6 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     deleteDoveSession,
   } = useDoveSessions(activeAgentId === "dove");
 
-  // Auto-resume the latest session when switching to an agent that has Dove-triggered sessions
-  const prevAgentIdRef = React.useRef(activeAgentId);
-  React.useEffect(() => {
-    if (prevAgentIdRef.current === activeAgentId) return;
-    prevAgentIdRef.current = activeAgentId;
-    if (sessions.length > 0 && messages.length === 0 && !currentSessionId) {
-      void setSessionId(sessions[0].contextId);
-    }
-  }, [sessions, activeAgentId, messages.length, currentSessionId, setSessionId]);
-
   // Refresh session list after each completed response
   const prevIsLoadingRef = React.useRef(isLoading);
   React.useEffect(() => {

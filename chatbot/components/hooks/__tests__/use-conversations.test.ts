@@ -119,32 +119,40 @@ describe("useConversations", () => {
     expect(result.current.activeAgentId).toBe("get-shit-done");
   });
 
-  it("setActiveAgentId saves current messages to cache before switching", async () => {
+  it("setActiveAgentId clears messages on every switch (no in-memory cache)", async () => {
     vi.mocked(fetch)
-      .mockResolvedValueOnce(makeNoSessionResponse()) // mount: active-session
+      .mockResolvedValueOnce(makeNoSessionResponse()) // mount: dove active-session
       .mockResolvedValueOnce(
         makeSseResponse([{ type: "result", content: "dove answer" }, { type: "done" }]),
       )
-      .mockResolvedValueOnce(makeNoSessionResponse()); // switch to gsd: active-session
+      .mockResolvedValueOnce(makeNoSessionResponse()) // switch to gsd: active-session
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ sessions: [] }), { status: 200 }), // gsd sessions fallback
+      )
+      .mockResolvedValueOnce(makeNoSessionResponse()); // switch back to dove: active-session
 
     const { result } = renderHook(() => useConversations());
 
     await act(async () => {
       await result.current.sendMessage("hello dove");
     });
-    const doveMessageCount = result.current.messages.length;
-    expect(doveMessageCount).toBeGreaterThan(0);
+    expect(result.current.messages.length).toBeGreaterThan(0);
 
-    // Switch away — messages are saved to cache
+    // Switch away — messages are cleared immediately
     act(() => {
       result.current.setActiveAgentId("get-shit-done");
     });
+    expect(result.current.messages).toEqual([]);
 
-    // Switch back — messages are restored from cache
+    // Switch back — messages are NOT restored from cache; API returns no session → stays empty
     act(() => {
       result.current.setActiveAgentId("dove");
     });
-    expect(result.current.messages.length).toBe(doveMessageCount);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(result.current.messages).toEqual([]);
   });
 
   it("setActiveAgentId loads messages for the new agent from API", async () => {
@@ -178,33 +186,39 @@ describe("useConversations", () => {
     await waitFor(() => expect(result.current.messages).toEqual(gsdMessages), { timeout: 3000 });
   });
 
-  it("switching back to an agent restores its cached messages (in-memory cache)", async () => {
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(makeNoSessionResponse()) // mount: active-session
-      .mockResolvedValueOnce(
-        makeSseResponse([{ type: "result", content: "dove answer" }, { type: "done" }]),
-      )
-      .mockResolvedValueOnce(makeNoSessionResponse()); // switch to gsd: active-session
+  it("switching back to an agent re-fetches from API, not from cache", async () => {
+    const freshMessages: ChatMessage[] = [
+      { id: "fresh-1", role: "user", segments: [{ type: "text", content: "fresh from api" }] },
+    ];
+
+    vi.mocked(fetch).mockImplementation((url) => {
+      if (url === "/api/chat/active-session")
+        return Promise.resolve(makeSessionResponse("dove-sess"));
+      if (typeof url === "string" && url.startsWith("/api/chat/session/"))
+        return Promise.resolve(makeDetailResponse(freshMessages));
+      if (url === "/api/agent/get-shit-done/active-session")
+        return Promise.resolve(makeNoSessionResponse());
+      if (url === "/api/agent/get-shit-done/sessions")
+        return Promise.resolve(new Response(JSON.stringify({ sessions: [] }), { status: 200 }));
+      return Promise.resolve(makeNoSessionResponse());
+    });
 
     const { result } = renderHook(() => useConversations());
 
-    // Send a dove message
-    await act(async () => {
-      await result.current.sendMessage("hello dove");
-    });
-    const doveMessages = result.current.messages;
+    // Mount hydration loads dove's session from API
+    await waitFor(() => expect(result.current.messages).toEqual(freshMessages), { timeout: 3000 });
 
-    // Switch to gsd
+    // Switch to gsd — messages cleared
     act(() => {
       result.current.setActiveAgentId("get-shit-done");
     });
     expect(result.current.messages).toEqual([]);
 
-    // Switch back to dove — from cache
+    // Switch back to dove — must re-fetch from API (same freshMessages), not serve from cache
     act(() => {
       result.current.setActiveAgentId("dove");
     });
-    expect(result.current.messages).toEqual(doveMessages);
+    await waitFor(() => expect(result.current.messages).toEqual(freshMessages), { timeout: 3000 });
   });
 
   it("setActiveAgentId is a no-op when switching to the already-active agent", () => {

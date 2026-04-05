@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { z } from "zod";
+import { agentSessionsUrl } from "@/lib/agent-api-urls";
 
 export interface AgentSession {
   contextId: string;
@@ -29,7 +30,7 @@ export function useAgentSessions(agentId: string) {
     }
     setIsLoading(true);
     try {
-      const res = await fetch(`/api/agent/${id}/sessions`);
+      const res = await fetch(agentSessionsUrl(id));
       if (!res.ok) return;
       setSessions(await parseSessions(res));
     } catch {
@@ -41,12 +42,13 @@ export function useAgentSessions(agentId: string) {
 
   useEffect(() => {
     let current = true;
+    setSessions([]);
     if (agentId === "dove") {
-      setSessions([]);
+      setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    fetch(`/api/agent/${agentId}/sessions`)
+    fetch(agentSessionsUrl(agentId))
       .then((res) => (res.ok ? parseSessions(res) : Promise.resolve([])))
       .then((data) => {
         if (current) setSessions(data);
