@@ -6,7 +6,7 @@ export async function GET() {
 }
 
 export async function DELETE(request: Request) {
-  const { contextId } = z.object({ contextId: z.string() }).parse(await request.json());
-  deleteSession(contextId);
+  const { id } = z.object({ id: z.string() }).parse(await request.json());
+  deleteSession(id);
   return Response.json({ ok: true });
 }

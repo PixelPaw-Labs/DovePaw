@@ -40,6 +40,7 @@ import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
+import { AgentContextRegistry } from "@/lib/agent-context-registry";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -52,6 +53,7 @@ export const maxDuration = 86400; // 24 hours for long-running agents
 
 // Module-level map so DELETE can abort an in-flight query by session ID.
 const activeControllers = new Map<string, AbortController>();
+const agentContextRegistry = new AgentContextRegistry();
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
@@ -135,8 +137,14 @@ export async function POST(request: Request) {
     const backgroundTasks: Promise<unknown>[] = [];
     const agents = await readAgentsConfig();
 
+    // On subsequent turns, load the persisted context map for this Dove session.
+    // On the first turn (sessionId is null), start fresh — persist() will save it after.
+    const ctxMap: Map<string, string> = sessionId
+      ? agentContextRegistry.getOrLoad(sessionId)
+      : new Map<string, string>();
+
     const tools = agents.flatMap((agent) => [
-      makeAskTool(agent, abortController.signal),
+      makeAskTool(agent, abortController.signal, ctxMap),
       makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks),
       makeAwaitTool(agent, abortController.signal, makeProgressSender(send)),
     ]);
@@ -185,13 +193,16 @@ export async function POST(request: Request) {
             dispatcher,
           );
           if (resolvedSessionId && !abortController.signal.aborted) {
+            agentContextRegistry.persist(resolvedSessionId, ctxMap);
             SessionManager.save(
               "dove",
               resolvedSessionId,
               { output: "", progress: dispatcher.buildProgress() },
-              message.slice(0, 60) || "Session",
-              message,
-              dispatcher.buildAssistantMessage(randomUUID()),
+              {
+                label: message.slice(0, 60) || "Session",
+                userText: message,
+                assistantMsg: dispatcher.buildAssistantMessage(randomUUID()),
+              },
             );
           }
           send({ type: "done" });
@@ -227,6 +238,7 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
   activeControllers.get(sessionId)?.abort();
+  agentContextRegistry.delete(sessionId);
   deleteSession(sessionId);
   return Response.json({ ok: true });
 }

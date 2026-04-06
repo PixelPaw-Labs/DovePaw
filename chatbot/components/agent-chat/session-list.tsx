@@ -31,16 +31,16 @@ export function SessionList({
       </button>
       <div className="w-px h-3 bg-border/60 shrink-0 mx-0.5" />
       {sessions.map((s) => {
-        const isActive = s.contextId === activeSessionId;
+        const isActive = s.id === activeSessionId;
         return (
           <div
-            key={s.contextId}
+            key={s.id}
             className={`group flex items-center gap-1 shrink-0 rounded transition-colors whitespace-nowrap ${
               isActive ? "bg-primary/10" : "hover:bg-muted"
             }`}
           >
             <button
-              onClick={() => onSelect(s.contextId)}
+              onClick={() => onSelect(s.id)}
               className={`flex items-center gap-1.5 px-2 py-0.5 text-xs max-w-[160px] ${
                 isActive
                   ? "text-primary font-medium"
@@ -54,7 +54,7 @@ export function SessionList({
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete(s.contextId);
+                onDelete(s.id);
               }}
               className="opacity-0 group-hover:opacity-100 pr-1.5 text-muted-foreground hover:text-destructive transition-all"
               title="Delete session"

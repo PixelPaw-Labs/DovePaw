@@ -16,7 +16,7 @@ function makeSseResponse(events: object[]) {
 
 /** A response for API calls that return null active session (no restoration). */
 function makeNoSessionResponse(): Response {
-  return new Response(JSON.stringify({ contextId: null }), {
+  return new Response(JSON.stringify({ id: null }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -24,7 +24,7 @@ function makeNoSessionResponse(): Response {
 
 /** A response for API calls that return an active session with messages. */
 function makeSessionResponse(contextId: string, _messages: ChatMessage[] = []): Response {
-  return new Response(JSON.stringify({ contextId }), {
+  return new Response(JSON.stringify({ id: contextId }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });
@@ -54,7 +54,7 @@ describe("useConversations", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        new Response(JSON.stringify({ contextId: null }), {
+        new Response(JSON.stringify({ id: null }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
         }),
@@ -87,7 +87,7 @@ describe("useConversations", () => {
     vi.mocked(fetch).mockImplementation((url) => {
       if (url === "/api/chat/active-session") {
         return Promise.resolve(
-          new Response(JSON.stringify({ contextId: "sess-abc" }), {
+          new Response(JSON.stringify({ id: "sess-abc" }), {
             status: 200,
             headers: { "Content-Type": "application/json" },
           }),
@@ -96,7 +96,7 @@ describe("useConversations", () => {
       if (typeof url === "string" && url.startsWith("/api/chat/session/")) {
         return Promise.resolve(makeDetailResponse(stored));
       }
-      return Promise.resolve(new Response(JSON.stringify({ contextId: null }), { status: 200 }));
+      return Promise.resolve(new Response(JSON.stringify({ id: null }), { status: 200 }));
     });
 
     const { result } = renderHook(() => useConversations());
@@ -399,7 +399,7 @@ describe("useConversations", () => {
       );
     expect(puts.length).toBeGreaterThan(0);
     const body = JSON.parse((puts[0][1] as RequestInit).body as string);
-    expect(body.contextId).toBeNull();
+    expect(body.id).toBeNull();
   });
 
   // ─── agentId stamping ─────────────────────────────────────────────────────────

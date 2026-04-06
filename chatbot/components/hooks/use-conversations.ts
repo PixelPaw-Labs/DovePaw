@@ -17,7 +17,7 @@ import {
 } from "@/lib/agent-api-urls";
 import { parseSessions } from "./use-agent-sessions";
 
-const activeSessionResponseSchema = z.object({ contextId: z.string().nullable() });
+const activeSessionResponseSchema = z.object({ id: z.string().nullable() });
 const sessionDetailResponseSchema = z.object({
   messages: z.array(sessionMessageSchema).default([]),
   progress: z
@@ -77,14 +77,14 @@ export function useConversations() {
     hydratedRef.current = true;
     void (async () => {
       try {
-        const { contextId } = activeSessionResponseSchema.parse(
+        const { id } = activeSessionResponseSchema.parse(
           await (await fetch(activeSessionUrl("dove"))).json(),
         );
-        if (!contextId) return;
-        sessionIdRef.current = contextId;
-        setCurrentSessionId(contextId);
+        if (!id) return;
+        sessionIdRef.current = id;
+        setCurrentSessionId(id);
         const { messages: msgs, progress } = sessionDetailResponseSchema.parse(
-          await (await fetch(sessionDetailUrl("dove", contextId))).json(),
+          await (await fetch(sessionDetailUrl("dove", id))).json(),
         );
         setMessages(
           msgs.map((m) => (m.role === "assistant" ? Object.assign({}, m, { agentId: "dove" }) : m)),
@@ -119,17 +119,17 @@ export function useConversations() {
       setActiveAgentIdState(agentId);
       void (async () => {
         try {
-          const { contextId } = activeSessionResponseSchema.parse(
+          const { id } = activeSessionResponseSchema.parse(
             await (await fetch(activeSessionUrl(agentId))).json(),
           );
           // If no active session is pinned, fall back to the most recent session
-          let resolvedContextId = contextId;
+          let resolvedContextId = id;
           if (!resolvedContextId && agentId !== "dove") {
             if (activeAgentIdRef.current !== agentId) return;
             const sessionsRes = await fetch(agentSessionsUrl(agentId));
             if (sessionsRes.ok) {
               const sessions = await parseSessions(sessionsRes);
-              resolvedContextId = sessions[0]?.contextId ?? null;
+              resolvedContextId = sessions[0]?.id ?? null;
             }
           }
           if (!resolvedContextId) return;
@@ -371,7 +371,7 @@ export function useConversations() {
       await fetch(activeSessionUrl(agentId), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contextId: null }),
+        body: JSON.stringify({ id: null }),
       });
     } catch (err) {
       console.warn("[newSession] Failed to clear active session on server:", err);
@@ -423,7 +423,7 @@ export function useConversations() {
           await fetch(activeSessionUrl(agentId), {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contextId: id }),
+            body: JSON.stringify({ id }),
           });
         } catch {
           // best effort

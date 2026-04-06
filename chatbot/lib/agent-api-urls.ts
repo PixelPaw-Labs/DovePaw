@@ -4,10 +4,8 @@ export function activeSessionUrl(agentId: string): string {
   return agentId === DOVE_ID ? "/api/chat/active-session" : `/api/agent/${agentId}/active-session`;
 }
 
-export function sessionDetailUrl(agentId: string, contextId: string): string {
-  return agentId === DOVE_ID
-    ? `/api/chat/session/${contextId}`
-    : `/api/agent/${agentId}/session/${contextId}`;
+export function sessionDetailUrl(agentId: string, id: string): string {
+  return agentId === DOVE_ID ? `/api/chat/session/${id}` : `/api/agent/${agentId}/session/${id}`;
 }
 
 export function agentChatUrl(agentId: string): string {

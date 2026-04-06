@@ -79,21 +79,31 @@ export function createAgentWorkspace(
   mkdirSync(workspacePath, { recursive: true });
   onProgress?.(`Creating workspace`, { workspace: workspacePath });
 
-  return {
-    path: workspacePath,
-    cleanup() {
-      try {
-        rmSync(workspacePath, { recursive: true, force: true });
-      } catch {
-        // best effort — do not propagate
-      }
-      try {
-        rmdirSync(root); // removes parent only if empty; throws ENOTEMPTY or ENOENT otherwise
-      } catch {
-        // best effort — do not propagate
-      }
-    },
+  return { path: workspacePath, cleanup: buildCleanup(workspacePath, root) };
+}
+
+function buildCleanup(workspacePath: string, parentDir: string): () => void {
+  return function cleanup() {
+    try {
+      rmSync(workspacePath, { recursive: true, force: true });
+    } catch {
+      // best effort — do not propagate
+    }
+    try {
+      rmdirSync(parentDir); // removes parent only if empty; throws ENOTEMPTY or ENOENT otherwise
+    } catch {
+      // best effort — do not propagate
+    }
   };
+}
+
+/**
+ * Wrap an existing workspace directory as an AgentWorkspace.
+ * Used when restoring a session from the DB — the directory already exists,
+ * so no mkdir is needed. Cleanup behaviour is identical to a freshly created workspace.
+ */
+export function restoreAgentWorkspace(workspacePath: string): AgentWorkspace {
+  return { path: workspacePath, cleanup: buildCleanup(workspacePath, dirname(workspacePath)) };
 }
 
 /**

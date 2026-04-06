@@ -55,22 +55,17 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     removeFromQueue,
   } = useConversations();
 
-  const { sessions, refresh: refreshSessions } = useAgentSessions(activeAgentId);
-  const {
-    sessions: doveSessions,
-    refresh: refreshDoveSessions,
-    deleteDoveSession,
-  } = useDoveSessions(activeAgentId === "dove");
+  const { sessions, refresh: refreshAgentSessions } = useAgentSessions(activeAgentId);
+  const { sessions: doveSessions, refresh } = useDoveSessions(activeAgentId === "dove");
+  const refreshHistory =
+    activeAgentId === "dove" ? refresh : () => refreshAgentSessions(activeAgentId);
 
   // Refresh session list after each completed response
   const prevIsLoadingRef = React.useRef(isLoading);
   React.useEffect(() => {
-    if (prevIsLoadingRef.current && !isLoading) {
-      if (activeAgentId === "dove") void refreshDoveSessions();
-      else void refreshSessions(activeAgentId);
-    }
+    if (prevIsLoadingRef.current && !isLoading) void refreshHistory();
     prevIsLoadingRef.current = isLoading;
-  }, [isLoading, activeAgentId, refreshSessions, refreshDoveSessions]);
+  }, [isLoading, refreshHistory]);
 
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId, agentConfigs);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
@@ -197,14 +192,10 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
               void newSession();
               setHistoryOpen(false);
             }}
-            onDelete={
-              activeAgentId === "dove"
-                ? deleteDoveSession
-                : async (contextId) => {
-                    await deleteSession(contextId);
-                    void refreshSessions(activeAgentId);
-                  }
-            }
+            onDelete={async (id) => {
+              await deleteSession(id);
+              void refreshHistory();
+            }}
             onClose={() => setHistoryOpen(false)}
           />
 

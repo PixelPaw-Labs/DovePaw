@@ -5,13 +5,13 @@ import { z } from "zod";
 import { agentSessionsUrl } from "@/lib/agent-api-urls";
 
 export interface AgentSession {
-  contextId: string;
+  id: string;
   startedAt: string; // ISO string from JSON serialisation of Date
   label: string;
 }
 
 const sessionsResponseSchema = z.object({
-  sessions: z.array(z.object({ contextId: z.string(), startedAt: z.string(), label: z.string() })),
+  sessions: z.array(z.object({ id: z.string(), startedAt: z.string(), label: z.string() })),
 });
 
 export async function parseSessions(res: Response): Promise<AgentSession[]> {

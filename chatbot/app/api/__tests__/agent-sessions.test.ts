@@ -34,7 +34,7 @@ describe("GET /api/agent/[name]/sessions", () => {
   it("returns sessions from DB for a known agent", async () => {
     const sessions = [
       {
-        contextId: "ctx-1",
+        id: "ctx-1",
         agentId: "test-agent",
         startedAt: "2025-01-01T00:00:00Z",
         label: "Run tickets",

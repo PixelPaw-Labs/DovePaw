@@ -370,51 +370,53 @@ describe("makeAwaitTool", () => {
     expect(result.content[0].text).toContain("npm run servers");
   });
 
-  it("returns artifact text from completed task without resubscribing", async () => {
+  it("returns artifact text from resubscribed stream", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "completed" },
-      artifacts: [
-        { artifactId: "a1", name: "final-output", parts: [{ kind: "text", text: "done output" }] },
-      ],
-    });
-    const mockResubscribe = vi.fn();
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents(
+        // status-update sets pendingEntry so the following artifact is accumulated
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "done" }],
+            },
+            timestamp: "",
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "done output" }] },
+        },
+      ),
+    );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
-        createFromUrl: vi
-          .fn()
-          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+        createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }),
       };
     } as any);
     const result = await handler({ taskId: "task-123" });
+    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
     expect(JSON.parse(result.content[0].text).output).toBe("done output");
-    expect(mockResubscribe).not.toHaveBeenCalled();
   });
 
-  it("returns 'Agent completed.' when completed task has no artifacts", async () => {
+  it("returns 'Agent completed.' when stream has no artifacts", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "completed" },
-      artifacts: [],
-    });
+    const mockResubscribe = vi.fn().mockReturnValue(asyncEvents());
     vi.mocked(ClientFactory).mockImplementation(function () {
-      return { createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) };
+      return { createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }) };
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(JSON.parse(result.content[0].text).output).toBe("Agent completed.");
   });
 
-  it("resubscribes and collects chunks when task is still working", async () => {
+  it("resubscribes and collects chunks", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "working" },
-    });
     const mockResubscribe = vi.fn().mockReturnValue(
       asyncEvents(
         {
@@ -437,9 +439,7 @@ describe("makeAwaitTool", () => {
     );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
-        createFromUrl: vi
-          .fn()
-          .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
+        createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }),
       };
     } as any);
     const result = await handler({ taskId: "task-123" });
@@ -447,42 +447,33 @@ describe("makeAwaitTool", () => {
     expect(JSON.parse(result.content[0].text).output).toBe("partial\nresult");
   });
 
-  it("handles all terminal states without resubscribing", async () => {
-    for (const state of ["completed", "canceled", "failed", "rejected"]) {
-      vi.clearAllMocks();
-      vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-      const mockGetTask = vi.fn().mockResolvedValue({
-        id: "task-123",
-        kind: "task",
-        status: { state },
-        artifacts: [
-          {
-            artifactId: "a1",
-            name: "final-output",
-            parts: [{ kind: "text", text: `result:${state}` }],
-          },
-        ],
-      });
-      const mockResubscribe = vi.fn();
-      const captured = captureTools(() => makeAwaitTool(AGENT));
-      const h = captured[doveAwaitToolName(AGENT)];
-      vi.mocked(ClientFactory).mockImplementation(function () {
-        return {
-          createFromUrl: vi
-            .fn()
-            .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
-        };
-      } as any);
-      await h({ taskId: "task-123" });
-      expect(mockResubscribe).not.toHaveBeenCalled();
-    }
+  it("always resubscribes regardless of task state", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    const mockResubscribe = vi.fn().mockReturnValue(
+      asyncEvents({
+        kind: "artifact-update",
+        artifact: { name: "final-output", parts: [{ kind: "text", text: "result" }] },
+      }),
+    );
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }),
+      };
+    } as any);
+    await h({ taskId: "task-123" });
+    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
   });
 
-  it("returns task-not-found message on TaskNotFoundError", async () => {
+  it("returns task-not-found message on TaskNotFoundError from resubscribeTask", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockRejectedValue(new TaskNotFoundError("task-123"));
+    // Throw synchronously so the error propagates through subscribeTaskStream's catch block
+    const mockResubscribe = vi.fn().mockImplementation(() => {
+      throw new TaskNotFoundError("task-123");
+    });
     vi.mocked(ClientFactory).mockImplementation(function () {
-      return { createFromUrl: vi.fn().mockResolvedValue({ getTask: mockGetTask }) };
+      return { createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }) };
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toContain("task-123");

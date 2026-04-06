@@ -151,7 +151,6 @@ export async function collectStreamResult(
   let pendingEntry: ProgressEntry | undefined;
 
   const snapshot = (): StreamedResult => {
-    // Exclude tool-call artifacts (just the tool name) — only meaningful text content goes in output.
     const output = progress
       .flatMap((e) =>
         Object.entries(e.artifacts)
@@ -174,6 +173,13 @@ export async function collectStreamResult(
       for (const p of event.artifact.parts) {
         if (p.kind === "text") {
           onArtifact?.(name, p.text);
+          // final-output must always be captured. A resumed session may respond
+          // without any tool calls, so pendingEntry may never be set — create an
+          // implicit entry to hold it rather than dropping the artifact.
+          if (name === ARTIFACT.FINAL_OUTPUT && !pendingEntry) {
+            pendingEntry = { message: "", artifacts: {} };
+            progress.push(pendingEntry);
+          }
           if (pendingEntry && !(TRANSIENT_ARTIFACT_NAMES as Set<string>).has(name)) {
             accumulate(pendingEntry.artifacts, name, p.text);
             onSnapshot?.(snapshot());

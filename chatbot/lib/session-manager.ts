@@ -1,7 +1,9 @@
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { setActiveSession, upsertSession } from "@/lib/db";
+import { setActiveSession, upsertSession, getSessionResumable } from "@/lib/db";
 import type { StreamedResult } from "@/lib/a2a-client";
 import type { SessionMessage } from "@/lib/message-types";
+import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
 import type { AgentWorkspace } from "@/a2a/lib/workspace";
 
 export interface SessionPersistence {
@@ -9,14 +11,22 @@ export interface SessionPersistence {
 }
 
 export interface SessionState {
-  claudeSessionId: string;
+  subagentSessionId: string;
   workspace: AgentWorkspace;
   startedAt: Date;
   label: string;
 }
 
+export interface SessionSaveOptions {
+  label?: string;
+  userText?: string;
+  assistantMsg?: SessionMessage;
+  subagentSessionId?: string;
+  workspacePath?: string;
+}
+
 export interface SessionInfo {
-  contextId: string;
+  id: string;
   startedAt: Date;
   label: string;
 }
@@ -45,18 +55,39 @@ export class SessionManager {
 
   getSessions(): SessionInfo[] {
     return [...this.sessions.entries()]
-      .map(([contextId, s]) => ({ contextId, startedAt: s.startedAt, label: s.label }))
+      .map(([contextId, s]) => ({ id: contextId, startedAt: s.startedAt, label: s.label }))
       .toReversed();
+  }
+
+  /**
+   * Restore a session from the DB into this in-memory manager.
+   * No-op if the session is already loaded, unknown, or its workspace no longer exists.
+   */
+  restore(contextId: string): void {
+    if (this.sessions.has(contextId)) return;
+    const resumable = getSessionResumable(contextId);
+    if (!resumable || !existsSync(resumable.workspacePath)) return;
+    this.set(contextId, {
+      subagentSessionId: resumable.subagentSessionId,
+      workspace: restoreAgentWorkspace(resumable.workspacePath),
+      startedAt: new Date(resumable.startedAt),
+      label: resumable.label,
+    });
   }
 
   static save(
     agentId: string,
     contextId: string,
     result: StreamedResult,
-    label = "Session",
-    userText = "",
-    assistantMsg?: SessionMessage,
+    options: SessionSaveOptions = {},
   ): void {
+    const {
+      label = "Session",
+      userText = "",
+      assistantMsg,
+      subagentSessionId,
+      workspacePath,
+    } = options;
     const resolvedMsg: SessionMessage = assistantMsg ?? {
       id: randomUUID(),
       role: "assistant",
@@ -64,7 +95,7 @@ export class SessionManager {
     };
     setActiveSession(agentId, contextId);
     upsertSession({
-      contextId,
+      id: contextId,
       agentId,
       startedAt: new Date().toISOString(),
       label,
@@ -73,6 +104,8 @@ export class SessionManager {
         resolvedMsg,
       ],
       progress: result.progress,
+      subagentSessionId,
+      workspacePath,
     });
   }
 
@@ -85,7 +118,7 @@ export class SessionManager {
           segments: [{ type: "text", content: result.output }],
           ...(processContent ? { processContent } : {}),
         };
-        SessionManager.save(agentId, contextId, result, undefined, undefined, msg);
+        SessionManager.save(agentId, contextId, result, { assistantMsg: msg });
       },
     };
   }

@@ -11,7 +11,7 @@ function mockWorkspace(path = "/tmp/ws") {
 
 function makeState(contextId: string, label: string, startedAt: Date) {
   return {
-    claudeSessionId: `cs-${contextId}`,
+    subagentSessionId: `cs-${contextId}`,
     workspace: mockWorkspace(`/tmp/ws-${contextId}`),
     startedAt,
     label,
@@ -35,7 +35,7 @@ describe("SessionManager", () => {
       manager.set("ctx-2", makeState("ctx-2", "Second", new Date("2025-01-02")));
       manager.set("ctx-3", makeState("ctx-3", "Third", new Date("2025-01-03")));
 
-      expect(manager.getSessions().map((s) => s.contextId)).toEqual(["ctx-3", "ctx-2", "ctx-1"]);
+      expect(manager.getSessions().map((s) => s.id)).toEqual(["ctx-3", "ctx-2", "ctx-1"]);
     });
 
     it("includes contextId, startedAt and label", () => {
@@ -43,7 +43,7 @@ describe("SessionManager", () => {
       manager.set("ctx-x", makeState("ctx-x", "My label", t));
 
       expect(manager.getSessions()[0]).toMatchObject({
-        contextId: "ctx-x",
+        id: "ctx-x",
         label: "My label",
         startedAt: t,
       });
@@ -76,7 +76,7 @@ describe("SessionManager", () => {
       manager.set("ctx-5", makeState("ctx-5", "Label 5", new Date(5000)));
 
       expect(oldest.workspace.cleanup).toHaveBeenCalledOnce();
-      expect(manager.getSessions().map((s) => s.contextId)).not.toContain("ctx-0");
+      expect(manager.getSessions().map((s) => s.id)).not.toContain("ctx-0");
       expect(manager.getSessions()).toHaveLength(5);
     });
 

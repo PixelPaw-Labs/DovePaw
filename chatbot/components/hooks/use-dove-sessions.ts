@@ -25,15 +25,6 @@ export function useDoveSessions(active: boolean) {
     }
   }, []);
 
-  const deleteDoveSession = useCallback(async (contextId: string) => {
-    await fetch("/api/chat/sessions", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contextId }),
-    });
-    setSessions((prev) => prev.filter((s) => s.contextId !== contextId));
-  }, []);
-
   useEffect(() => {
     if (!active) return;
     let current = true;
@@ -51,5 +42,5 @@ export function useDoveSessions(active: boolean) {
     };
   }, [active]);
 
-  return { sessions, isLoading, refresh, deleteDoveSession };
+  return { sessions, isLoading, refresh };
 }

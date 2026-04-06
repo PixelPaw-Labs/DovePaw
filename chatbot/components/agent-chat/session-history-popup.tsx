@@ -81,10 +81,10 @@ export function SessionHistoryPopup({
             </p>
           ) : (
             sessions.map((s) => {
-              const isActive = s.contextId === activeSessionId;
+              const isActive = s.id === activeSessionId;
               return (
                 <div
-                  key={s.contextId}
+                  key={s.id}
                   className={`session-row group flex items-center gap-2 px-3 py-2 transition-colors ${
                     isActive ? "bg-primary/8" : "hover:bg-muted/50"
                   }`}
@@ -96,7 +96,7 @@ export function SessionHistoryPopup({
                   />
                   <button
                     onClick={() => {
-                      onSelect(s.contextId);
+                      onSelect(s.id);
                       onClose();
                     }}
                     className={`flex-1 flex items-baseline gap-2 text-left min-w-0 ${
@@ -113,7 +113,7 @@ export function SessionHistoryPopup({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onDelete(s.contextId);
+                      onDelete(s.id);
                     }}
                     className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-0.5 shrink-0"
                     title="Delete"

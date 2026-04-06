@@ -84,6 +84,10 @@ export class QueryAgentExecutor implements AgentExecutor {
     // Workspace, repo cloning, and query() are all inside the outer try so
     // the finally block always runs cleanup regardless of where a failure occurs.
     this.currentContextId = contextId;
+
+    // Restore session from DB if not in-memory (e.g. server restart or resumed Dove history).
+    this.sessionManager.restore(contextId);
+
     const existingState = this.sessionManager.get(contextId);
     const startedAt = existingState?.startedAt ?? new Date();
     const label =
@@ -138,14 +142,14 @@ export class QueryAgentExecutor implements AgentExecutor {
         ],
         async (innerMcpServer) => {
           const dispatcher = new A2AQueryDispatcher(publisher);
-          const claudeSessionId = await consumeQueryEvents(
+          const subagentSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || START_SCRIPT_TOOL,
               options: {
                 cwd: workspace!.path,
                 env: { ...process.env, ...agentConfig.extraEnv },
                 agent: this.def.displayName,
-                ...(existingState ? { resume: existingState.claudeSessionId } : {}),
+                ...(existingState ? { resume: existingState.subagentSessionId } : {}),
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
@@ -173,9 +177,9 @@ export class QueryAgentExecutor implements AgentExecutor {
             dispatcher,
           );
 
-          if (claudeSessionId) {
+          if (subagentSessionId) {
             this.sessionManager.set(contextId, {
-              claudeSessionId,
+              subagentSessionId,
               workspace: workspace!,
               startedAt,
               label,
@@ -184,13 +188,19 @@ export class QueryAgentExecutor implements AgentExecutor {
 
           // Persist session with clean message: text-only segments, thinking → processContent.
           // Runs for both Dove-triggered and direct subagent-chat requests — single source of truth.
+          // subagentSessionId and workspacePath are persisted so the session can be restored after
+          // a server restart when the user reopens a historical Dove conversation.
           SessionManager.save(
             this.def.name,
             contextId,
             { output: "", progress: dispatcher.buildProgress() },
-            label,
-            instruction || "",
-            dispatcher.buildAssistantMessage(randomUUID()),
+            {
+              label,
+              userText: instruction || "",
+              assistantMsg: dispatcher.buildAssistantMessage(randomUUID()),
+              subagentSessionId: subagentSessionId ?? undefined,
+              workspacePath: workspace?.path,
+            },
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);

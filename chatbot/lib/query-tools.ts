@@ -11,7 +11,6 @@
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { TaskNotFoundError } from "@a2a-js/sdk/client";
-import type { Task } from "@a2a-js/sdk";
 import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";
 import { z } from "zod";
@@ -21,7 +20,6 @@ import {
   startAgentStream,
   subscribeTaskStream,
   collectStreamResult,
-  extractArtifactResult,
 } from "@/lib/a2a-client";
 import type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 
@@ -30,6 +28,8 @@ import type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 /** Returned by ask_* and start_* tools when a task is successfully submitted. */
 export type TaskStartedContent = {
   taskId: string;
+  /** A2A context ID — pass this back on the next ask_* call to resume the same session. */
+  contextId: string;
 };
 
 /** Returned by start_* tools (includes manifestKey for agent identification). */
@@ -65,6 +65,14 @@ export type ToolResponse<T = Record<string, unknown>> = {
   structuredContent?: T;
   isError?: boolean;
 };
+
+// ─── Agent context store ──────────────────────────────────────────────────────
+
+/** Minimal interface makeAskTool depends on — decoupled from Map<string,string>. */
+export interface AgentContextStore {
+  get(manifestKey: string): string | undefined;
+  set(manifestKey: string, contextId: string): void;
+}
 
 // ─── Pending task registry ────────────────────────────────────────────────────
 
@@ -130,7 +138,12 @@ function isConnectionError(msg: string) {
  * Asks an agent and returns a taskId immediately — agent responds asynchronously.
  * Dove should tell the user what was asked, then call await_* to collect the response.
  */
-export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
+export function makeAskTool(
+  agent: AgentDef,
+  signal?: AbortSignal,
+  /** Per-Dove-session store of manifestKey → agentContextId. Auto-resumes sessions. */
+  contextStore?: AgentContextStore,
+) {
   return tool(
     doveAskToolName(agent),
     agent.description,
@@ -146,12 +159,14 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
       if (!port) return noServersMessage();
       try {
         const client = await createAgentClient(port);
+        const contextId = contextStore?.get(agent.manifestKey);
         const result = await client.sendMessage({
           message: {
             kind: "message",
             messageId: randomUUID(),
             role: "user",
             parts: [{ kind: "text", text: instruction }],
+            ...(contextId ? { contextId } : {}),
           },
           configuration: { blocking: false },
         });
@@ -162,12 +177,13 @@ export function makeAskTool(agent: AgentDef, signal?: AbortSignal) {
             ],
           };
         }
+        contextStore?.set(agent.manifestKey, result.contextId);
         signal?.addEventListener(
           "abort",
           () => void client.cancelTask({ id: result.id }).catch(() => {}),
           { once: true },
         );
-        const started: TaskStartedContent = { taskId: result.id };
+        const started: TaskStartedContent = { taskId: result.id, contextId: result.contextId };
         return {
           content: [{ type: "text" as const, text: `Task started (taskId: ${result.id})` }],
           structuredContent: started,
@@ -219,7 +235,7 @@ export function makeStartTool(
             ],
           };
         }
-        const { taskId, stream } = handle;
+        const { taskId, contextId, stream } = handle;
 
         // Continue consuming the stream in the background, forwarding events via onProgress.
         if (onProgress) {
@@ -227,9 +243,18 @@ export function makeStartTool(
           backgroundTasks?.push(task);
         }
 
-        const started: TaskStartedWithKeyContent = { taskId, manifestKey: agent.manifestKey };
+        const started: TaskStartedWithKeyContent = {
+          taskId,
+          contextId,
+          manifestKey: agent.manifestKey,
+        };
         return {
-          content: [{ type: "text" as const, text: `Task started (taskId: ${taskId})` }],
+          content: [
+            {
+              type: "text" as const,
+              text: `Task started (taskId: ${taskId}, contextId: ${contextId})`,
+            },
+          ],
           structuredContent: started,
         };
       } catch (err: unknown) {
@@ -242,17 +267,6 @@ export function makeStartTool(
 }
 
 // ─── makeAwaitTool ────────────────────────────────────────────────────────────
-
-const TERMINAL_STATES = new Set<TaskCompletedContent["status"]>([
-  "completed",
-  "canceled",
-  "failed",
-  "rejected",
-]);
-
-function isTerminalState(state: string): state is TaskCompletedContent["status"] {
-  return (TERMINAL_STATES as Set<string>).has(state);
-}
 
 /** How long to wait for task completion before returning a still_running status. */
 const AWAIT_POLL_TIMEOUT_MS = 30_000;
@@ -279,24 +293,12 @@ export function makeAwaitTool(
       if (!port) return noServersMessage();
       try {
         const client = await createAgentClient(port);
-        // Check current task state first — no stream needed if already finished
-        const task: Task = await client.getTask({ id: taskId });
 
-        if (isTerminalState(task.status.state)) {
-          markTaskResolved(taskId);
-          const result = extractArtifactResult(task.artifacts);
-          const completed: TaskCompletedContent = {
-            status: task.status.state,
-            taskId,
-            result,
-          };
-          return {
-            content: [{ type: "text" as const, text: JSON.stringify(completed.result) }],
-            structuredContent: completed,
-          };
-        }
-
-        // Task still running — collect output for up to AWAIT_POLL_TIMEOUT_MS,
+        // Always collect via resubscribeTask — InMemoryTaskStore does not populate
+        // task.artifacts from artifact-update events, so getTask returns empty
+        // artifacts for fast tasks (e.g. resumed sessions). The stream replay log
+        // always has the full output regardless of terminal state.
+        // Collect output for up to AWAIT_POLL_TIMEOUT_MS,
         // then return still_running so Dove retries instead of spawning a new task.
         let latestSnapshot: StreamedResult | undefined;
         const timeoutAc = new AbortController();

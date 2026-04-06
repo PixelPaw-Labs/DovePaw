@@ -17,14 +17,14 @@ const progressEntryArraySchema = z.array(progressEntrySchema);
 export type { SessionMessage };
 
 export interface SessionInfo {
-  contextId: string;
+  id: string;
   agentId: string;
   startedAt: string;
   label: string;
 }
 
 export interface SessionDetail {
-  contextId: string;
+  id: string;
   agentId: string;
   startedAt: string;
   label: string;
@@ -33,12 +33,21 @@ export interface SessionDetail {
 }
 
 export interface UpsertSessionArgs {
-  contextId: string;
+  id: string;
   agentId: string;
   startedAt: string;
   label: string;
   messages: SessionMessage[];
   progress: ProgressEntry[];
+  subagentSessionId?: string;
+  workspacePath?: string;
+}
+
+export interface SessionResumable {
+  subagentSessionId: string;
+  workspacePath: string;
+  startedAt: string;
+  label: string;
 }
 
 let _db: Database.Database | null = null;
@@ -55,17 +64,27 @@ function getDb(): Database.Database {
   _db.pragma("journal_mode = WAL");
   _db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
-      context_id  TEXT PRIMARY KEY,
-      agent_id    TEXT NOT NULL,
-      started_at  TEXT NOT NULL,
-      label       TEXT NOT NULL,
-      messages    TEXT NOT NULL DEFAULT '[]',
-      progress    TEXT NOT NULL DEFAULT '[]',
-      updated_at  TEXT NOT NULL
+      id                      TEXT PRIMARY KEY,
+      agent_id                TEXT NOT NULL,
+      started_at              TEXT NOT NULL,
+      label                   TEXT NOT NULL,
+      messages                TEXT NOT NULL DEFAULT '[]',
+      progress                TEXT NOT NULL DEFAULT '[]',
+      updated_at              TEXT NOT NULL,
+      subagent_session_id     TEXT,
+      workspace_path          TEXT,
+      orchestrator_session_id TEXT,
+      subagent_a2a_context_id TEXT
     );
     CREATE TABLE IF NOT EXISTS active_sessions (
       agent_id    TEXT PRIMARY KEY,
       context_id  TEXT
+    );
+    CREATE TABLE IF NOT EXISTS dove_agent_contexts (
+      orchestrator_session_id TEXT NOT NULL,
+      manifest_key            TEXT NOT NULL,
+      subagent_a2a_context_id TEXT NOT NULL,
+      PRIMARY KEY (orchestrator_session_id, manifest_key)
     );
   `);
   return _db;
@@ -93,9 +112,9 @@ export function upsertSession(args: UpsertSessionArgs): void {
   const now = new Date().toISOString();
   const existing = db
     .prepare<[string], { messages: string; progress: string }>(
-      "SELECT messages, progress FROM sessions WHERE context_id = ?",
+      "SELECT messages, progress FROM sessions WHERE id = ?",
     )
-    .get(args.contextId);
+    .get(args.id);
 
   const existingMsgs: SessionMessage[] = existing
     ? sessionMessageArraySchema.parse(JSON.parse(existing.messages))
@@ -107,21 +126,34 @@ export function upsertSession(args: UpsertSessionArgs): void {
   const mergedMsgs = mergeMessages(existingMsgs, args.messages);
   const mergedProgress = mergeProgress(existingProgress, args.progress);
 
+  const orchestratorSessionId = args.agentId === "dove" ? args.id : null;
+  const subagentA2aContextId = args.agentId === "dove" ? null : args.id;
+
   db.prepare(`
-    INSERT INTO sessions (context_id, agent_id, started_at, label, messages, progress, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(context_id) DO UPDATE SET
-      messages   = excluded.messages,
-      progress   = excluded.progress,
-      updated_at = excluded.updated_at
+    INSERT INTO sessions (id, agent_id, started_at, label, messages, progress, updated_at,
+                          subagent_session_id, workspace_path,
+                          orchestrator_session_id, subagent_a2a_context_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      messages                = excluded.messages,
+      progress                = excluded.progress,
+      updated_at              = excluded.updated_at,
+      subagent_session_id     = COALESCE(excluded.subagent_session_id, sessions.subagent_session_id),
+      workspace_path          = COALESCE(excluded.workspace_path, sessions.workspace_path),
+      orchestrator_session_id = COALESCE(sessions.orchestrator_session_id, excluded.orchestrator_session_id),
+      subagent_a2a_context_id = COALESCE(sessions.subagent_a2a_context_id, excluded.subagent_a2a_context_id)
   `).run(
-    args.contextId,
+    args.id,
     args.agentId,
     args.startedAt,
     args.label,
     JSON.stringify(mergedMsgs),
     JSON.stringify(mergedProgress),
     now,
+    args.subagentSessionId ?? null,
+    args.workspacePath ?? null,
+    orchestratorSessionId,
+    subagentA2aContextId,
   );
 }
 
@@ -143,37 +175,88 @@ export function getActiveSession(agentId: string): string | null {
   return row?.context_id ?? null;
 }
 
+export function setOrchestratorAgentContext(
+  orchestratorSessionId: string,
+  manifestKey: string,
+  subagentA2aContextId: string,
+): void {
+  getDb()
+    .prepare(
+      `INSERT INTO dove_agent_contexts (orchestrator_session_id, manifest_key, subagent_a2a_context_id)
+       VALUES (?, ?, ?)
+       ON CONFLICT(orchestrator_session_id, manifest_key) DO UPDATE SET
+         subagent_a2a_context_id = excluded.subagent_a2a_context_id`,
+    )
+    .run(orchestratorSessionId, manifestKey, subagentA2aContextId);
+}
+
+export function getOrchestratorAgentContexts(orchestratorSessionId: string): Map<string, string> {
+  const rows = getDb()
+    .prepare<[string], { manifest_key: string; subagent_a2a_context_id: string }>(
+      "SELECT manifest_key, subagent_a2a_context_id FROM dove_agent_contexts WHERE orchestrator_session_id = ?",
+    )
+    .all(orchestratorSessionId);
+  return new Map(rows.map((r) => [r.manifest_key, r.subagent_a2a_context_id]));
+}
+
+export function deleteOrchestratorAgentContexts(orchestratorSessionId: string): void {
+  getDb()
+    .prepare("DELETE FROM dove_agent_contexts WHERE orchestrator_session_id = ?")
+    .run(orchestratorSessionId);
+}
+
+export function getSessionResumable(id: string): SessionResumable | null {
+  const row = getDb()
+    .prepare<
+      [string],
+      {
+        subagent_session_id: string | null;
+        workspace_path: string | null;
+        started_at: string;
+        label: string;
+      }
+    >("SELECT subagent_session_id, workspace_path, started_at, label FROM sessions WHERE id = ?")
+    .get(id);
+  if (!row?.subagent_session_id || !row.workspace_path) return null;
+  return {
+    subagentSessionId: row.subagent_session_id,
+    workspacePath: row.workspace_path,
+    startedAt: row.started_at,
+    label: row.label,
+  };
+}
+
 export function listSessions(agentId: string): SessionInfo[] {
   return getDb()
-    .prepare<[string], { context_id: string; agent_id: string; started_at: string; label: string }>(
-      "SELECT context_id, agent_id, started_at, label FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC, rowid DESC",
+    .prepare<[string], { id: string; agent_id: string; started_at: string; label: string }>(
+      "SELECT id, agent_id, started_at, label FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC, rowid DESC",
     )
     .all(agentId)
     .map((r) => ({
-      contextId: r.context_id,
+      id: r.id,
       agentId: r.agent_id,
       startedAt: r.started_at,
       label: r.label,
     }));
 }
 
-export function getSessionDetail(contextId: string): SessionDetail | null {
+export function getSessionDetail(id: string): SessionDetail | null {
   const row = getDb()
     .prepare<
       [string],
       {
-        context_id: string;
+        id: string;
         agent_id: string;
         started_at: string;
         label: string;
         messages: string;
         progress: string;
       }
-    >("SELECT * FROM sessions WHERE context_id = ?")
-    .get(contextId);
+    >("SELECT id, agent_id, started_at, label, messages, progress FROM sessions WHERE id = ?")
+    .get(id);
   if (!row) return null;
   return {
-    contextId: row.context_id,
+    id: row.id,
     agentId: row.agent_id,
     startedAt: row.started_at,
     label: row.label,
@@ -182,8 +265,12 @@ export function getSessionDetail(contextId: string): SessionDetail | null {
   };
 }
 
-export function deleteSession(contextId: string): void {
+export function deleteSession(id: string): void {
   const db = getDb();
-  db.prepare("DELETE FROM sessions WHERE context_id = ?").run(contextId);
-  db.prepare("UPDATE active_sessions SET context_id = NULL WHERE context_id = ?").run(contextId);
+  db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  db.prepare("UPDATE active_sessions SET context_id = NULL WHERE context_id = ?").run(id);
+  // Cascade to dove_agent_contexts: remove rows where this session was either the
+  // orchestrator (Dove session deleted) or the subagent target (subagent session deleted).
+  db.prepare("DELETE FROM dove_agent_contexts WHERE orchestrator_session_id = ?").run(id);
+  db.prepare("DELETE FROM dove_agent_contexts WHERE subagent_a2a_context_id = ?").run(id);
 }

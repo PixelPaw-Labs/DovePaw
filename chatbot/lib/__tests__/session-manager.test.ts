@@ -24,8 +24,7 @@ describe("SessionManager.save", () => {
       "test-agent",
       "ctx-1",
       { output: "done", progress: [{ message: "Bash", artifacts: { "tool-call": "Bash" } }] },
-      "My label",
-      "user text",
+      { label: "My label", userText: "user text" },
     );
     const detail = getSessionDetail("ctx-1");
     expect(detail).not.toBeNull();
@@ -59,9 +58,7 @@ describe("SessionManager.save", () => {
       "test-agent",
       "ctx-3",
       { output: "ignored output", progress: [] },
-      "label",
-      "user",
-      assistantMsg,
+      { label: "label", userText: "user", assistantMsg },
     );
     const detail = getSessionDetail("ctx-3");
     expect(detail!.messages[1].segments).toEqual([{ type: "text", content: "custom text" }]);

@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 const base = {
-  contextId: "ctx-1",
+  id: "ctx-1",
   agentId: "test-agent",
   startedAt: "2025-01-01T00:00:00.000Z",
   label: "Test",
@@ -72,10 +72,10 @@ describe("db", () => {
   });
 
   it("listSessions returns newest first", () => {
-    upsertSession({ ...base, contextId: "ctx-1", label: "First" });
-    upsertSession({ ...base, contextId: "ctx-2", label: "Second" });
+    upsertSession({ ...base, id: "ctx-1", label: "First" });
+    upsertSession({ ...base, id: "ctx-2", label: "Second" });
     const sessions = listSessions("test-agent");
-    expect(sessions[0].contextId).toBe("ctx-2");
+    expect(sessions[0].id).toBe("ctx-2");
     expect(sessions).toHaveLength(2);
   });
 
