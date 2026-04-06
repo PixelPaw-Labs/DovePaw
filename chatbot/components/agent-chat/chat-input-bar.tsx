@@ -87,7 +87,7 @@ export function ChatInputBar({
 
           {/* Textarea — full width, padded for buttons */}
           <PromptInputTextarea
-            className="py-3 pl-13 pr-40 text-sm placeholder:text-muted-foreground/50 resize-none"
+            className="py-[22px] pl-13 pr-40 text-sm placeholder:text-muted-foreground/50 resize-none"
             placeholder="Meow… what do you need, Yang?"
           />
 
