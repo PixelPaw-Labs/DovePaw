@@ -1,4 +1,4 @@
-import { execFile, execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import {
   mkdirSync,
   rmdirSync,
@@ -6,7 +6,6 @@ import {
   symlinkSync,
   existsSync,
   lstatSync,
-  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -165,9 +164,6 @@ export async function cloneReposIntoWorkspace(
   );
 }
 
-export const WORKSPACE_BASE_BRANCH = "dovepaw-base";
-const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/"];
-
 /**
  * Write .claude/settings.local.json inside a cloned repo to grant Write
  * permission to the entire workspace directory. This allows Claude Code
@@ -203,44 +199,6 @@ function writeWorkspacePermissions(clonePath: string): void {
     join(clonePath, ".claude", "settings.local.json"),
     JSON.stringify(settings, null, 2) + "\n",
   );
-
-  appendGitignorePatterns(clonePath, WORKTREE_INCLUDE_PATTERNS);
-  writeFileSync(join(clonePath, ".worktreeinclude"), WORKTREE_INCLUDE_PATTERNS.join("\n") + "\n");
-
-  // Commit patterns to a fixed setup branch so worktrees inherit them without polluting main.
-  // Skipped if the branch already exists (idempotent on re-clone).
-  try {
-    execFileSync("git", ["rev-parse", "--verify", WORKSPACE_BASE_BRANCH], {
-      cwd: clonePath,
-      stdio: "ignore",
-    });
-  } catch {
-    execFileSync("git", ["checkout", "-b", WORKSPACE_BASE_BRANCH], {
-      cwd: clonePath,
-      stdio: "pipe",
-    });
-    execFileSync("git", ["add", ".gitignore", ".worktreeinclude"], {
-      cwd: clonePath,
-      stdio: "pipe",
-    });
-    execFileSync("git", ["commit", "-m", "chore: configure workspace patterns"], {
-      cwd: clonePath,
-      stdio: "pipe",
-    });
-  }
-}
-
-/**
- * Append patterns to a repo's .gitignore, skipping any that already exist.
- */
-function appendGitignorePatterns(repoPath: string, patterns: string[]): void {
-  const gitignorePath = join(repoPath, ".gitignore");
-  const existing = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf8") : "";
-  const lines = new Set(existing.split("\n").map((l) => l.trim()));
-  const toAdd = patterns.filter((p) => !lines.has(p));
-  if (toAdd.length === 0) return;
-  const separator = existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
-  writeFileSync(gitignorePath, existing + separator + toAdd.join("\n") + "\n");
 }
 
 /**

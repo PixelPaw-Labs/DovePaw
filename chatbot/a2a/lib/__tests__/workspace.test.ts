@@ -1,13 +1,4 @@
-import {
-  existsSync,
-  lstatSync,
-  readlinkSync,
-  readFileSync,
-  rmSync,
-  mkdirSync,
-  writeFileSync,
-} from "node:fs";
-import { execFileSync } from "node:child_process";
+import { existsSync, lstatSync, readlinkSync, readFileSync, rmSync, mkdirSync } from "node:fs";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -175,25 +166,6 @@ describe("ensureAgentSourceSymlink", () => {
   });
 });
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** ghClone mock that creates a minimal real git repo at clonePath (as gh repo clone would). */
-function makeGitCloneMock() {
-  return vi.fn().mockImplementation(async (_slug: string, clonePath: string) => {
-    if (existsSync(join(clonePath, ".git"))) return; // already a repo — simulate idempotent re-clone
-    mkdirSync(clonePath, { recursive: true });
-    execFileSync("git", ["init", "-b", "main"], { cwd: clonePath, stdio: "pipe" });
-    execFileSync("git", ["config", "user.email", "test@example.com"], {
-      cwd: clonePath,
-      stdio: "pipe",
-    });
-    execFileSync("git", ["config", "user.name", "Test"], { cwd: clonePath, stdio: "pipe" });
-    writeFileSync(join(clonePath, "README.md"), "init");
-    execFileSync("git", ["add", "README.md"], { cwd: clonePath, stdio: "pipe" });
-    execFileSync("git", ["commit", "-m", "init"], { cwd: clonePath, stdio: "pipe" });
-  });
-}
-
 // ─── cloneReposIntoWorkspace ──────────────────────────────────────────────────
 
 describe("cloneReposIntoWorkspace", () => {
@@ -201,14 +173,14 @@ describe("cloneReposIntoWorkspace", () => {
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
   it("returns empty array for empty slugs", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
     const result = await cloneReposIntoWorkspace(TMP_ROOT, [], ghClone);
     expect(result).toEqual([]);
     expect(ghClone).not.toHaveBeenCalled();
   });
 
   it("calls ghClone for each slug with derived local path", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     const paths = await cloneReposIntoWorkspace(TMP_ROOT, ["org/repo-a", "org/repo-b"], ghClone);
 
@@ -219,7 +191,7 @@ describe("cloneReposIntoWorkspace", () => {
   });
 
   it("derives repo name from the slug basename", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
@@ -235,7 +207,7 @@ describe("cloneReposIntoWorkspace", () => {
   });
 
   it("writes .claude/settings.local.json granting Write permission to workspacePath", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
@@ -249,46 +221,8 @@ describe("cloneReposIntoWorkspace", () => {
     expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
   });
 
-  it("writes .worktreeinclude with .claude/agents and .claude/skills patterns", async () => {
-    const ghClone = makeGitCloneMock();
-
-    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
-
-    const worktreeIncludePath = join(TMP_ROOT, "my-app", ".worktreeinclude");
-    expect(existsSync(worktreeIncludePath)).toBe(true);
-    const content = readFileSync(worktreeIncludePath, "utf8");
-    expect(content).toContain(".claude/agents/");
-    expect(content).toContain(".claude/skills/");
-    expect(content).not.toContain(".gsd/");
-  });
-
-  it("appends .claude/agents and .claude/skills to .gitignore", async () => {
-    const ghClone = makeGitCloneMock();
-
-    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
-
-    const gitignorePath = join(TMP_ROOT, "my-app", ".gitignore");
-    expect(existsSync(gitignorePath)).toBe(true);
-    const content = readFileSync(gitignorePath, "utf8");
-    expect(content).toContain(".claude/agents/");
-    expect(content).toContain(".claude/skills/");
-    expect(content).not.toContain(".gsd/");
-  });
-
-  it("does not duplicate .gitignore entries on re-clone", async () => {
-    const ghClone = makeGitCloneMock();
-
-    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
-    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
-
-    const gitignorePath = join(TMP_ROOT, "my-app", ".gitignore");
-    const content = readFileSync(gitignorePath, "utf8");
-    const agentLines = content.split("\n").filter((l) => l.trim() === ".claude/agents/");
-    expect(agentLines).toHaveLength(1);
-  });
-
   it("writes settings.local.json for each cloned repo", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/repo-a", "org/repo-b"], ghClone);
 
@@ -310,7 +244,7 @@ describe("recloneReposIntoWorkspace", () => {
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
   it("clones repos when no previous clone exists", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     const paths = await recloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
@@ -321,7 +255,7 @@ describe("recloneReposIntoWorkspace", () => {
   it("deletes an existing clone dir before recloning", async () => {
     const existingClone = join(TMP_ROOT, "my-app");
     mkdirSync(existingClone, { recursive: true });
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     await recloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
@@ -332,7 +266,7 @@ describe("recloneReposIntoWorkspace", () => {
   it("deletes all existing clone dirs when multiple slugs provided", async () => {
     mkdirSync(join(TMP_ROOT, "app-a"), { recursive: true });
     mkdirSync(join(TMP_ROOT, "app-b"), { recursive: true });
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
 
     await recloneReposIntoWorkspace(TMP_ROOT, ["org/app-a", "org/app-b"], ghClone);
 
@@ -342,7 +276,7 @@ describe("recloneReposIntoWorkspace", () => {
   });
 
   it("returns empty array for empty slugs", async () => {
-    const ghClone = makeGitCloneMock();
+    const ghClone = vi.fn().mockResolvedValue(undefined);
     const result = await recloneReposIntoWorkspace(TMP_ROOT, [], ghClone);
     expect(result).toEqual([]);
     expect(ghClone).not.toHaveBeenCalled();

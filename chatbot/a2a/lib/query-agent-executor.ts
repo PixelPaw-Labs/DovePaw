@@ -25,7 +25,6 @@ import {
   createAgentWorkspace,
   agentSourceDirFromEntry,
   ensureAgentSourceSymlink,
-  WORKSPACE_BASE_BRANCH,
 } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
@@ -119,7 +118,6 @@ export class QueryAgentExecutor implements AgentExecutor {
       const workspaceEnv: Record<string, string> = {
         ...extraEnv,
         AGENT_WORKSPACE: workspace.path,
-        WORKSPACE_BASE_BRANCH,
         ...(repoSlugs.length > 0 ? { REPO_LIST: repoSlugs.join(",") } : {}),
       };
 
