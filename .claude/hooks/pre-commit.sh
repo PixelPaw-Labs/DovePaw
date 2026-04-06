@@ -8,6 +8,10 @@ cd "$CLAUDE_PROJECT_DIR"
 
 # Claude Code passes BaseHookInput JSON on stdin; extract session_id from it
 INPUT=$(cat)
+
+# Only run for git commit commands
+COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // ""')
+[[ "$COMMAND" != *"git commit"* ]] && exit 0
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)
 FLAG_FILE="${TMPDIR:-/tmp}/dovepaw-tests-verified-${SESSION_ID}"
 
