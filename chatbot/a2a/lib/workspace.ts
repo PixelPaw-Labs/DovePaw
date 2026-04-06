@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import {
   mkdirSync,
   rmdirSync,
@@ -176,6 +176,7 @@ export async function cloneReposIntoWorkspace(
  * checks (flags, allow-lists, PreToolUse hooks) and cannot be bypassed by them.
  * See: https://github.com/anthropics/claude-code/issues/37765
  */
+export const WORKSPACE_BASE_BRANCH = "dovepaw-base";
 const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/"];
 
 function writeWorkspacePermissions(clonePath: string): void {
@@ -203,12 +204,30 @@ function writeWorkspacePermissions(clonePath: string): void {
     JSON.stringify(settings, null, 2) + "\n",
   );
 
-  // Append patterns to .gitignore so .claude/agents/ and .claude/skills/ are not
-  // committed by the forging Claude subprocess (they are workspace-only artifacts).
   appendGitignorePatterns(clonePath, WORKTREE_INCLUDE_PATTERNS);
-
-  // .worktreeinclude always matches the GSD managed block
   writeFileSync(join(clonePath, ".worktreeinclude"), WORKTREE_INCLUDE_PATTERNS.join("\n") + "\n");
+
+  // Commit patterns to a fixed setup branch so worktrees inherit them without polluting main.
+  // Skipped if the branch already exists (idempotent on re-clone).
+  try {
+    execFileSync("git", ["rev-parse", "--verify", WORKSPACE_BASE_BRANCH], {
+      cwd: clonePath,
+      stdio: "ignore",
+    });
+  } catch {
+    execFileSync("git", ["checkout", "-b", WORKSPACE_BASE_BRANCH], {
+      cwd: clonePath,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["add", ".gitignore", ".worktreeinclude"], {
+      cwd: clonePath,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["commit", "-m", "chore: configure workspace patterns"], {
+      cwd: clonePath,
+      stdio: "pipe",
+    });
+  }
 }
 
 /**
