@@ -6,7 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import { DOVE_AVATAR } from "@/lib/avatars";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
-import { MessageContent, MessageResponse, MessageToolbar } from "@/components/ai-elements/message";
+import { MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import type { ChatMessage } from "@/components/hooks/use-messages";
@@ -15,6 +15,9 @@ import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";
 import { ProcessingBar } from "./processing-bar";
 import { EditDiffList, ToolCallItem } from "./tool-call-badge";
+
+// Width of assistant avatar (w-8 = 2rem) + gap (gap-2 = 0.5rem) in px → pl-10 (2.5rem)
+const AVATAR_OFFSET = "pl-10";
 
 const MESSAGE_RESPONSE_SPACING =
   "[&_p]:my-2 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:mt-4 [&_h2]:mb-1.5 [&_h3]:mt-3 [&_h3]:mb-1 [&_h4]:mt-2.5 [&_h4]:mb-1 [&_ul]:my-2 [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:pl-5 [&_li]:my-0.5 [&_pre]:my-2";
@@ -101,11 +104,6 @@ export function ChatMessageItem({
               <ToolCallItem key={i} tool={seg.tool} isActive={i === msg.segments.length - 1} />
             ) : null,
           )}
-          {!msg.isLoading && msg.role === "assistant" && (
-            <MessageToolbar className="justify-start mt-1">
-              <CopyAction text={fullText} />
-            </MessageToolbar>
-          )}
         </MessageContent>
       )}
 
@@ -130,9 +128,18 @@ export function ChatMessageItem({
     const hasContent = hasSegmentContent || (!msg.isLoading && msg.role === "assistant");
 
     return (
-      <div className="flex items-end gap-2 w-full">
-        {hasContent && <AssistantAvatar avatar={resolveAvatar(msg.agentId, agentConfigs)} />}
-        {messageContent}
+      <div className="group/msg flex flex-col items-start gap-0.5 w-full">
+        <div className="flex items-end gap-2 w-full">
+          {hasContent && <AssistantAvatar avatar={resolveAvatar(msg.agentId, agentConfigs)} />}
+          {messageContent}
+        </div>
+        {hasContent && (
+          <div
+            className={`${AVATAR_OFFSET} opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100`}
+          >
+            <CopyAction text={fullText} />
+          </div>
+        )}
       </div>
     );
   }
