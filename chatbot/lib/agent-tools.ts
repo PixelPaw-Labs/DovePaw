@@ -150,6 +150,7 @@ export function makeStartScriptTool(
   repoSlugs: string[],
   signal?: AbortSignal,
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
+  taskId?: string,
 ) {
   return tool(
     START_SCRIPT_TOOL,
@@ -172,7 +173,7 @@ export function makeStartScriptTool(
         clonedPaths.length > 0
           ? { ...config, extraEnv: { ...config.extraEnv, REPO_LIST: clonedPaths.join(",") } }
           : config;
-      const { runId } = startScript(finalConfig, instruction, signal, onProgress);
+      const { runId } = startScript(finalConfig, instruction, signal, onProgress, taskId);
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },

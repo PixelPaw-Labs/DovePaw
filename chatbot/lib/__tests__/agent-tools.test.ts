@@ -162,6 +162,7 @@ describe("makeStartScriptTool", () => {
       "",
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -182,7 +183,13 @@ describe("makeStartScriptTool", () => {
 
     await handler({});
 
-    expect(startScript).toHaveBeenCalledWith(expect.anything(), "", undefined, onProgress);
+    expect(startScript).toHaveBeenCalledWith(
+      expect.anything(),
+      "",
+      undefined,
+      onProgress,
+      undefined,
+    );
   });
 
   it("wraps onProgress as a clone callback that prefixes the slug", async () => {

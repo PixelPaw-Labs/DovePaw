@@ -236,8 +236,8 @@ export function startScript(
   instruction: string,
   signal?: AbortSignal,
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
+  runId: string = randomUUID(),
 ): { runId: string } {
-  const runId = randomUUID();
   const { promise, lines: latestLines } = spawnAndCollect(config, instruction, signal, onProgress);
 
   runningScripts.set(runId, { phase: "running", promise, latestLines });

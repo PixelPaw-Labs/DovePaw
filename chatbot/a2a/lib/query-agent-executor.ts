@@ -91,7 +91,8 @@ export class QueryAgentExecutor implements AgentExecutor {
     const existingState = this.sessionManager.get(contextId);
     const startedAt = existingState?.startedAt ?? new Date();
     const label =
-      existingState?.label ?? (instruction ? instruction.slice(0, LABEL_MAX_LEN) : "Session");
+      existingState?.label ??
+      (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
     let workspace: AgentWorkspace | null = null;
 
     try {
@@ -136,6 +137,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             repoSlugs,
             this.abortController.signal,
             (message, artifacts) => publisher.publishStatusToUI(message, artifacts),
+            taskId,
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),

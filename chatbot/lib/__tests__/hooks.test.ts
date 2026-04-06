@@ -58,7 +58,7 @@ describe("buildAgentHooks — Stop hook", () => {
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
     const result = await callHook(fn, stopInput());
-    expect(result).toMatchObject({ continue: false });
+    expect(result).toMatchObject({ decision: "block" });
     expect((result as { reason: string }).reason).toContain(
       "You MUST call the await tool yourself with the id",
     );

@@ -57,7 +57,6 @@ export function buildAgentHooks(
                 `Keep calling await in a loop until the operation completes.`,
                 `Never give up or stop polling; you are responsible for retrieving the final result.`,
               ].join(" "),
-              continue: false,
             };
           },
         ],
