@@ -165,6 +165,9 @@ export async function cloneReposIntoWorkspace(
   );
 }
 
+export const WORKSPACE_BASE_BRANCH = "dovepaw-base";
+const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/"];
+
 /**
  * Write .claude/settings.local.json inside a cloned repo to grant Write
  * permission to the entire workspace directory. This allows Claude Code
@@ -176,9 +179,6 @@ export async function cloneReposIntoWorkspace(
  * checks (flags, allow-lists, PreToolUse hooks) and cannot be bypassed by them.
  * See: https://github.com/anthropics/claude-code/issues/37765
  */
-export const WORKSPACE_BASE_BRANCH = "dovepaw-base";
-const WORKTREE_INCLUDE_PATTERNS = [".claude/agents/", ".claude/skills/"];
-
 function writeWorkspacePermissions(clonePath: string): void {
   mkdirSync(join(clonePath, ".claude"), { recursive: true });
   const settings = {
