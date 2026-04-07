@@ -405,14 +405,14 @@ describe("makeAwaitTool", () => {
     expect(JSON.parse(result.content[0].text).output).toBe("done output");
   });
 
-  it("returns 'Agent completed.' when stream has no artifacts", async () => {
+  it("returns 'Something wrong with agent.' when stream has no artifacts", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     const mockResubscribe = vi.fn().mockReturnValue(asyncEvents());
     vi.mocked(ClientFactory).mockImplementation(function () {
       return { createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }) };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(JSON.parse(result.content[0].text).output).toBe("Agent completed.");
+    expect(JSON.parse(result.content[0].text).output).toBe("Something wrong with agent.");
   });
 
   it("resubscribes and collects chunks", async () => {
@@ -545,7 +545,7 @@ describe("makeAwaitTool", () => {
           .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
       };
     } as any);
-    // Stream ends immediately → collected result is "Agent completed." (not still_running)
+    // Stream ends immediately → collected result is "Something wrong with agent." (not still_running)
     // This verifies the progress tracking path doesn't interfere with normal completion
     const result = await handler({ taskId: "task-123" });
     expect(result.structuredContent).toMatchObject({ status: "completed" });

@@ -160,7 +160,7 @@ export async function collectStreamResult(
       .join("\n")
       .trim();
     return {
-      output: output || "Agent completed.",
+      output: output || "Something wrong with agent.",
       progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),
     };
   };
@@ -218,6 +218,6 @@ export function extractArtifactResult(rawArtifacts: Artifact[] | undefined): Str
   // Never include tool-call, tool-input, or thinking in the text output.
   const output =
     (artifacts[ARTIFACT.FINAL_OUTPUT] || artifacts[ARTIFACT.STREAM] || "").trim() ||
-    "Agent completed.";
+    "Something wrong with agent.";
   return { output, progress: [] };
 }

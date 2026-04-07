@@ -257,11 +257,11 @@ describe("extractArtifactResult", () => {
       { name: "tool-input", parts: [{ kind: "text", text: '{"cmd":"ls"}' }] } as never,
       { name: "thinking", parts: [{ kind: "text", text: "reasoning" }] } as never,
     ]);
-    expect(result.output).toBe("Agent completed.");
+    expect(result.output).toBe("Something wrong with agent.");
   });
 
-  it("returns 'Agent completed.' for empty artifacts", () => {
-    expect(extractArtifactResult([]).output).toBe("Agent completed.");
-    expect(extractArtifactResult(undefined).output).toBe("Agent completed.");
+  it("returns 'Something wrong with agent.' for empty artifacts", () => {
+    expect(extractArtifactResult([]).output).toBe("Something wrong with agent.");
+    expect(extractArtifactResult(undefined).output).toBe("Something wrong with agent.");
   });
 });

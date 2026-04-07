@@ -12,7 +12,7 @@ function makeResult(
     progress
       .flatMap((e) => Object.values(e.artifacts))
       .join("\n")
-      .trim() || "Agent completed.";
+      .trim() || "Something wrong with agent.";
   return { output, progress };
 }
 
