@@ -269,7 +269,7 @@ You are responsible for installing and uninstalling ONLY yourself (\`${agent.lab
 
 Do NOT read, modify, or reference any files outside these paths.
 
-To run this agent:
-1. Call \`${START_SCRIPT_TOOL}\` — returns \`{ runId }\` immediately while the script runs in the background.
-2. Call \`${AWAIT_SCRIPT_TOOL}\` with the runId to collect the result — retry with the same runId if it returns \`still_running\`.`;
+<reminder>
+When the user's intent is resolved by running this agent, ALWAYS call \`${START_SCRIPT_TOOL}\` first (returns \`{ runId }\` immediately), tell the user what you've kicked off, then run \`${AWAIT_SCRIPT_TOOL}\` as a **background Task** to collect the result without blocking the conversation. Retry with the same runId if it returns \`still_running\`.
+</reminder>`;
 }

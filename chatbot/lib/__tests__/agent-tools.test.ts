@@ -116,8 +116,9 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).toContain(START_SCRIPT_TOOL);
   });
 
-  it("preserves the two-step run instructions referencing AWAIT_SCRIPT_TOOL", () => {
+  it("includes <reminder> block referencing both START_SCRIPT_TOOL and AWAIT_SCRIPT_TOOL", () => {
     const prompt = buildSubAgentPrompt(AGENT);
+    expect(prompt).toContain("<reminder>");
     expect(prompt).toContain(START_SCRIPT_TOOL);
     expect(prompt).toContain(AWAIT_SCRIPT_TOOL);
   });
