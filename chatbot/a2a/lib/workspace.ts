@@ -37,9 +37,12 @@ export function ensureAgentSourceSymlink(
   mkdirSync(configDir, { recursive: true });
   const symlinkPath = join(configDir, `source`);
   if (existsSync(symlinkPath) || lstatSync(symlinkPath, { throwIfNoEntry: false })) {
-    // Already exists (or is a broken symlink) — remove so we can recreate if stale.
+    // Already exists (or is a broken symlink or a leftover directory) — remove so
+    // we can recreate if stale. Use recursive:true so a plain directory is also
+    // handled (rmSync without recursive silently swallows EISDIR when force:true,
+    // leaving the path in place and causing symlinkSync to throw EEXIST).
     try {
-      rmSync(symlinkPath, { force: true });
+      rmSync(symlinkPath, { force: true, recursive: true });
     } catch {
       // best effort
     }

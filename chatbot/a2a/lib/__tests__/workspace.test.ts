@@ -164,6 +164,19 @@ describe("ensureAgentSourceSymlink", () => {
       ensureAgentSourceSymlink("my-agent", sourceDir);
     }).not.toThrow();
   });
+
+  it("replaces a pre-existing plain directory at the source path with a symlink", () => {
+    const sourceDir = join(TMP_ROOT, "src", "my-agent");
+    mkdirSync(sourceDir, { recursive: true });
+
+    // Simulate a leftover directory from an old install (no symlink yet).
+    const symlinkPath = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent", "source");
+    mkdirSync(symlinkPath, { recursive: true });
+
+    expect(() => ensureAgentSourceSymlink("my-agent", sourceDir)).not.toThrow();
+    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(symlinkPath)).toBe(sourceDir);
+  });
 });
 
 // ─── cloneReposIntoWorkspace ──────────────────────────────────────────────────
