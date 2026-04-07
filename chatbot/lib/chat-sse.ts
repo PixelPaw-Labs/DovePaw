@@ -37,6 +37,20 @@ export type ChatSseCancelled = { type: "cancelled" };
 /** Live progress from a downstream A2A task — emitted during await_* polling */
 export type ChatSseProgress = { type: "progress"; result: StreamedResult };
 
+/**
+ * Permission request — Claude needs user approval to use a tool.
+ * The browser should display a confirmation dialog and POST the decision
+ * to /api/chat/permission with { requestId, allowed }.
+ */
+export type ChatSsePermission = {
+  type: "permission";
+  requestId: string;
+  toolName: string;
+  toolInput: unknown;
+  /** Full prompt sentence from the bridge, e.g. "Claude wants to write to settings.json" */
+  title?: string;
+};
+
 export type ChatSseEvent =
   | ChatSseSession
   | ChatSseText
@@ -47,7 +61,8 @@ export type ChatSseEvent =
   | ChatSseError
   | ChatSseProgress
   | ChatSseCancelled
-  | ChatSseDone;
+  | ChatSseDone
+  | ChatSsePermission;
 
 /**
  * Returns an onSnapshot callback that delta-tracks a StreamedResult and

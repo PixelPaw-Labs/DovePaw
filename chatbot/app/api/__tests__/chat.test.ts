@@ -39,6 +39,7 @@ vi.mock("@/lib/query-tools", () => ({
 
 vi.mock("@/lib/hooks", () => ({
   buildDoveHooks: vi.fn(() => ({})),
+  buildDoveCanUseTool: vi.fn(() => ({ canUseTool: vi.fn(), abortPermissions: vi.fn() })),
 }));
 
 vi.mock("@@/lib/agents", () => ({

@@ -6,16 +6,20 @@
  * buildSubAgentHooks — convenience wrapper for QueryAgentExecutor sub-agents
  */
 
+import { randomUUID } from "crypto";
 import type {
   PostToolUseHookSpecificOutput,
   HookCallbackMatcher,
   HookEvent,
+  CanUseTool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { doveAwaitToolName, hasPendingTasks, getPendingTaskIds } from "@/lib/query-tools";
 import { AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
 import { hasPendingScripts, getPendingRunIds } from "@/a2a/lib/spawn";
 import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
+import type { ChatSseEvent } from "@/lib/chat-sse";
+import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
 
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 
@@ -114,6 +118,57 @@ export function buildDoveHooks(
       return typeof val === "string" ? val : undefined;
     },
   });
+}
+
+/**
+ * Builds the canUseTool callback for Dove's query().
+ *
+ * The SDK sends a `can_use_tool` control request when Claude Code needs
+ * permission to use a tool (including sensitive-path operations that
+ * `permissionMode: "acceptEdits"` doesn't auto-approve). This callback
+ * sends a `permission` SSE event to the browser and awaits the user's
+ * decision before returning allow/deny to the SDK.
+ *
+ * Returns both the callback and an `abort` function that denies all
+ * in-flight permission requests for this specific query — scoped so that
+ * cancelling one session doesn't affect concurrent sessions in other tabs.
+ */
+export function buildDoveCanUseTool(send: (event: ChatSseEvent) => void): {
+  canUseTool: CanUseTool;
+  abortPermissions: () => void;
+} {
+  const activeIds = new Set<string>();
+
+  const canUseTool: CanUseTool = async (
+    toolName,
+    input,
+    { title, displayName, blockedPath, signal },
+  ) => {
+    const requestId = randomUUID();
+    activeIds.add(requestId);
+    send({
+      type: "permission",
+      requestId,
+      toolName: displayName ?? toolName,
+      toolInput: blockedPath ? { ...input, file_path: blockedPath } : input,
+      title: title ?? undefined,
+    });
+    // Race user response against SDK abort (e.g. user cancels while prompt is open).
+    // If aborted first, deny immediately so query() can unwind without deadlocking.
+    const abortPromise = new Promise<false>((resolve) => {
+      signal.addEventListener("abort", () => resolve(false), { once: true });
+    });
+    const allowed = await Promise.race([addPendingPermission(requestId), abortPromise]);
+    // If abort won the race the POST never arrived, so the resolver is still in the map.
+    // (If the user responded, resolvePendingPermission already removed it — this is a no-op.)
+    if (signal.aborted) abortPendingPermissions(new Set([requestId]));
+    activeIds.delete(requestId);
+    return allowed
+      ? { behavior: "allow" as const, updatedInput: input }
+      : { behavior: "deny" as const, message: "User denied permission" };
+  };
+
+  return { canUseTool, abortPermissions: () => abortPendingPermissions(activeIds) };
 }
 
 /** Hooks for the QueryAgentExecutor sub-agent query(). */

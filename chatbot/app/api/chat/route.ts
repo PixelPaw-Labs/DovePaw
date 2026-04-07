@@ -35,7 +35,7 @@ import {
   doveStartToolName,
   doveAwaitToolName,
 } from "@/lib/query-tools";
-import { buildDoveHooks } from "@/lib/hooks";
+import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession } from "@/lib/db";
@@ -150,6 +150,7 @@ export async function POST(request: Request) {
     ]);
 
     if (sessionId) activeControllers.set(sessionId, abortController);
+    const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(send);
     const dispatcher = new SseQueryDispatcher(send);
     try {
       await withMcpQuery(
@@ -188,6 +189,7 @@ export async function POST(request: Request) {
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
                 hooks: buildDoveHooks(agents),
+                canUseTool: doveCanUseTool,
               },
             }),
             dispatcher,
@@ -208,6 +210,7 @@ export async function POST(request: Request) {
           send({ type: "done" });
         },
         (_err, isAbort) => {
+          abortPermissions();
           if (isAbort) {
             try {
               send({ type: "cancelled" });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import type { ChatSsePermission } from "@/lib/chat-sse";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { useMessages } from "./use-messages";
 import { useTextAnimation } from "./use-text-animation";
@@ -63,6 +64,29 @@ export function useConversations() {
   const [pendingQueue, setPendingQueue] = useState<string[]>([]);
   const pendingQueueRef = useRef<string[]>([]);
 
+  // ─── Pending permission requests ─────────────────────────────────────────────
+  const [pendingPermissions, setPendingPermissions] = useState<ChatSsePermission[]>([]);
+
+  // Abort the in-flight SSE request and clear transient permission/animation state.
+  // Called as the first step of every reset path.
+  const abortInFlight = useCallback(() => {
+    abortRef.current?.abort();
+    animation.reset();
+    setPendingPermissions([]);
+  }, [animation]);
+
+  // Full conversation reset: clear all messages/progress and reset session identity.
+  // Used by newSession and deleteSession (active branch).
+  const resetConversation = useCallback(() => {
+    abortInFlight();
+    clear();
+    setSessionProgress([]);
+    setSessionCancelled(false);
+    setIsLoading(false);
+    sessionIdRef.current = null;
+    setCurrentSessionId(null);
+  }, [abortInFlight, clear]);
+
   // ─── Per-request refs ─────────────────────────────────────────────────────────
   const sessionIdRef = useRef<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -103,13 +127,12 @@ export function useConversations() {
       const currentId = activeAgentIdRef.current;
       if (currentId === agentId) return;
 
-      // Abort in-flight request and stop animation for the current agent
-      abortRef.current?.abort();
-      animation.reset();
+      abortInFlight();
 
       setMessages([]);
       setSessionProgress([]);
       setSessionCancelled(false);
+      setPendingPermissions([]);
       sessionIdRef.current = null;
       setCurrentSessionId(null);
       pendingQueueRef.current = [];
@@ -151,7 +174,7 @@ export function useConversations() {
         }
       })();
     },
-    [animation, setMessages],
+    [abortInFlight, setMessages],
   );
 
   // ─── Send message ─────────────────────────────────────────────────────────────
@@ -221,7 +244,9 @@ export function useConversations() {
               // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
               const event = JSON.parse(line.slice(6)) as ChatSseEvent;
 
-              if (event.type === "session") {
+              if (event.type === "permission") {
+                setPendingPermissions((prev) => [...prev, event]);
+              } else if (event.type === "session") {
                 sessionIdRef.current = event.sessionId;
                 setCurrentSessionId(event.sessionId);
               } else if (event.type === "progress") {
@@ -271,6 +296,7 @@ export function useConversations() {
                   },
                 );
               } else if (event.type === "cancelled") {
+                setPendingPermissions([]);
                 animation.flush(assistantId);
                 setLiveProgress(assistantId, null);
                 setSessionCancelled(true);
@@ -345,28 +371,35 @@ export function useConversations() {
     setPendingQueue(next);
   }, []);
 
+  const resolvePermission = useCallback(async (requestId: string, allowed: boolean) => {
+    try {
+      const res = await fetch("/api/chat/permission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, allowed }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // Only remove the banner after the server confirms receipt.
+      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
+    } catch {
+      // Leave the banner visible so the user can retry.
+    }
+  }, []);
+
   const cancelMessage = useCallback(() => {
-    abortRef.current?.abort();
-    animation.reset();
+    abortInFlight();
     if (assistantIdRef.current) {
       patch(assistantIdRef.current, { isLoading: false, isCancelled: true });
       setSessionCancelled(true);
       assistantIdRef.current = null;
     }
     setIsLoading(false);
-  }, [animation, patch]);
+  }, [abortInFlight, patch]);
 
   // Start a fresh conversation — current session stays alive on the server as history.
   const newSession = useCallback(async () => {
-    abortRef.current?.abort();
-    animation.reset();
-    clear();
-    setSessionProgress([]);
-    setSessionCancelled(false);
-    setIsLoading(false);
+    resetConversation();
     const agentId = activeAgentIdRef.current;
-    sessionIdRef.current = null;
-    setCurrentSessionId(null);
     try {
       await fetch(activeSessionUrl(agentId), {
         method: "PUT",
@@ -376,7 +409,7 @@ export function useConversations() {
     } catch (err) {
       console.warn("[newSession] Failed to clear active session on server:", err);
     }
-  }, [animation, clear]);
+  }, [resetConversation]);
 
   // Abort + delete a session from the server and remove its local messages.
   // If it was the active session, also resets the UI.
@@ -393,17 +426,52 @@ export function useConversations() {
         console.warn("[deleteSession] Failed to delete session on server:", err);
       }
       if (sessionIdRef.current === contextId) {
-        abortRef.current?.abort();
-        animation.reset();
-        clear();
-        setSessionProgress([]);
-        setSessionCancelled(false);
-        setIsLoading(false);
-        sessionIdRef.current = null;
-        setCurrentSessionId(null);
+        resetConversation();
       }
     },
-    [animation, clear],
+    [resetConversation],
+  );
+
+  const setSessionId = useCallback(
+    async (id: string | null) => {
+      // Abort any in-flight request from the previous session so a pending
+      // permission prompt can't silently authorize work in a now-hidden chat.
+      abortInFlight();
+      sessionIdRef.current = id;
+      setCurrentSessionId(id);
+      setSessionCancelled(false);
+      const agentId = activeAgentIdRef.current;
+      try {
+        await fetch(activeSessionUrl(agentId), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id }),
+        });
+      } catch {
+        // best effort
+      }
+      if (!id) {
+        setMessages([]);
+        setSessionProgress([]);
+        return;
+      }
+      const res = await fetch(sessionDetailUrl(agentId, id));
+      if (!res.ok) {
+        // session not found on server — clear UI
+        setMessages([]);
+        setSessionProgress([]);
+        return;
+      }
+      const { messages: msgs, progress } = sessionDetailResponseSchema.parse(await res.json());
+      // Guard: user may have switched agents while the fetch was in flight
+      if (activeAgentIdRef.current !== agentId) return;
+      const stamped = msgs.map((m) =>
+        m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
+      );
+      setMessages(stamped);
+      setSessionProgress(progress);
+    },
+    [abortInFlight, setMessages],
   );
 
   return {
@@ -413,44 +481,7 @@ export function useConversations() {
     sessionProgress,
     sessionCancelled,
     currentSessionId,
-    setSessionId: useCallback(
-      async (id: string | null) => {
-        sessionIdRef.current = id;
-        setCurrentSessionId(id);
-        setSessionCancelled(false);
-        const agentId = activeAgentIdRef.current;
-        try {
-          await fetch(activeSessionUrl(agentId), {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id }),
-          });
-        } catch {
-          // best effort
-        }
-        if (!id) {
-          setMessages([]);
-          setSessionProgress([]);
-          return;
-        }
-        const res = await fetch(sessionDetailUrl(agentId, id));
-        if (!res.ok) {
-          // session not found on server — clear UI
-          setMessages([]);
-          setSessionProgress([]);
-          return;
-        }
-        const { messages: msgs, progress } = sessionDetailResponseSchema.parse(await res.json());
-        // Guard: user may have switched agents while the fetch was in flight
-        if (activeAgentIdRef.current !== agentId) return;
-        const stamped = msgs.map((m) =>
-          m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
-        );
-        setMessages(stamped);
-        setSessionProgress(progress);
-      },
-      [setMessages],
-    ),
+    setSessionId,
     isLoading,
     sendMessage,
     cancelMessage,
@@ -458,5 +489,7 @@ export function useConversations() {
     deleteSession,
     pendingQueue,
     removeFromQueue,
+    pendingPermissions,
+    resolvePermission,
   };
 }

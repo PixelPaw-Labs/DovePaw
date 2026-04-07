@@ -14,6 +14,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { ChatInputBar } from "./agent-chat/chat-input-bar";
 import { ProcessingBar } from "./agent-chat/processing-bar";
+import { PermissionBanner } from "./agent-chat/permission-banner";
 import { useConversations } from "@/components/hooks/use-conversations";
 import { ConversationProvider } from "@/components/hooks/use-conversation-context";
 import { AgentSidebar } from "./agent-chat/agent-sidebar";
@@ -53,6 +54,8 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     deleteSession,
     pendingQueue,
     removeFromQueue,
+    pendingPermissions,
+    resolvePermission,
   } = useConversations();
 
   const { sessions, refresh: refreshAgentSessions } = useAgentSessions(activeAgentId);
@@ -222,6 +225,18 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           </Conversation>
 
           <footer className="px-6 pb-4 pt-0 w-full max-w-5xl mx-auto shrink-0">
+            {pendingPermissions.length > 0 && (
+              <div className="mb-3 space-y-2">
+                {pendingPermissions.map((req) => (
+                  <PermissionBanner
+                    key={req.requestId}
+                    request={req}
+                    onAllow={() => void resolvePermission(req.requestId, true)}
+                    onDeny={() => void resolvePermission(req.requestId, false)}
+                  />
+                ))}
+              </div>
+            )}
             <ChatInputBar
               onSubmit={sendMessage}
               onCancel={cancelMessage}
