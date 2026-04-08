@@ -82,4 +82,18 @@ describe("generatePlist — structure", () => {
     expect(plist).toContain("<key>FOO</key>");
     expect(plist).toContain("<string>bar</string>");
   });
+
+  it("always injects DOVEPAW_SCHEDULED=1 even when no envVars defined", () => {
+    const plist = generatePlist(BASE, HOME);
+    expect(plist).toContain("<key>DOVEPAW_SCHEDULED</key>");
+    expect(plist).toContain("<string>1</string>");
+  });
+
+  it("injects DOVEPAW_SCHEDULED=1 alongside agent-specific envVars", () => {
+    const agent: AgentDef = { ...BASE, envVars: { FOO: "bar" } };
+    const plist = generatePlist(agent, HOME);
+    expect(plist).toContain("<key>DOVEPAW_SCHEDULED</key>");
+    expect(plist).toContain("<key>FOO</key>");
+    expect(plist).toContain("<string>bar</string>");
+  });
 });

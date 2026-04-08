@@ -69,10 +69,10 @@ export function generatePlist(config: AgentDef, home: string): string {
 
   const sections: string[] = [];
 
-  // EnvironmentVariables (optional)
-  if (config.envVars) {
-    sections.push(envVarsBlock(config.envVars));
-  }
+  // EnvironmentVariables — always inject DOVEPAW_SCHEDULED=1 so the agent
+  // can distinguish launchd-triggered runs from A2A tool-triggered runs.
+  const envVars = { ...config.envVars, DOVEPAW_SCHEDULED: "1" };
+  sections.push(envVarsBlock(envVars));
 
   // Label
   sections.push("    <key>Label</key>", `    <string>${escapeXml(config.label)}</string>`);
