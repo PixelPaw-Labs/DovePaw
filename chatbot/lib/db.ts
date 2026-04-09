@@ -44,6 +44,7 @@ export interface SessionDetail {
   label: string;
   messages: SessionMessage[];
   progress: ProgressEntry[];
+  resumeSeq: number;
   status: SessionStatus;
 }
 
@@ -56,6 +57,7 @@ export interface UpsertSessionArgs {
   progress: ProgressEntry[];
   subagentSessionId?: string;
   workspacePath?: string;
+  resumeSeq?: number;
   status?: SessionStatus;
 }
 
@@ -65,6 +67,10 @@ export interface SessionResumable {
   startedAt: string;
   label: string;
 }
+
+type SessionDetailResult =
+  | SessionDetail
+  | (Omit<SessionDetail, "resumeSeq"> & { resumeSeq?: number });
 
 let _db: Database.Database | null = null;
 
@@ -112,6 +118,9 @@ function getDb(): Database.Database {
   if (!cols.some((c) => c.name === "status")) {
     _db.exec("ALTER TABLE sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'done'");
   }
+  if (!cols.some((c) => c.name === "resume_seq")) {
+    _db.exec("ALTER TABLE sessions ADD COLUMN resume_seq INTEGER NOT NULL DEFAULT 0");
+  }
   return _db;
 }
 
@@ -147,8 +156,8 @@ export function upsertSession(args: UpsertSessionArgs): void {
   db.prepare(`
     INSERT INTO sessions (id, agent_id, started_at, label, messages, progress, updated_at,
                           subagent_session_id, workspace_path,
-                          orchestrator_session_id, subagent_a2a_context_id, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          orchestrator_session_id, subagent_a2a_context_id, resume_seq, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       messages                = excluded.messages,
       progress                = excluded.progress,
@@ -157,6 +166,7 @@ export function upsertSession(args: UpsertSessionArgs): void {
       workspace_path          = COALESCE(excluded.workspace_path, sessions.workspace_path),
       orchestrator_session_id = COALESCE(sessions.orchestrator_session_id, excluded.orchestrator_session_id),
       subagent_a2a_context_id = COALESCE(sessions.subagent_a2a_context_id, excluded.subagent_a2a_context_id),
+      resume_seq              = COALESCE(NULLIF(excluded.resume_seq, 0), sessions.resume_seq),
       status                  = COALESCE(excluded.status, sessions.status)
   `).run(
     args.id,
@@ -170,6 +180,7 @@ export function upsertSession(args: UpsertSessionArgs): void {
     args.workspacePath ?? null,
     orchestratorSessionId,
     subagentA2aContextId,
+    args.resumeSeq ?? 0,
     args.status ?? "done",
   );
 }
@@ -276,7 +287,7 @@ export function listSessions(agentId: string): SessionInfo[] {
     }));
 }
 
-export function getSessionDetail(id: string): SessionDetail | null {
+export function getSessionDetail(id: string): SessionDetailResult | null {
   const row = getDb()
     .prepare<
       [string],
@@ -287,10 +298,11 @@ export function getSessionDetail(id: string): SessionDetail | null {
         label: string;
         messages: string;
         progress: string;
+        resume_seq: number;
         status: string;
       }
     >(
-      "SELECT id, agent_id, started_at, label, messages, progress, status FROM sessions WHERE id = ?",
+      "SELECT id, agent_id, started_at, label, messages, progress, resume_seq, status FROM sessions WHERE id = ?",
     )
     .get(id);
   if (!row) return null;
@@ -301,6 +313,7 @@ export function getSessionDetail(id: string): SessionDetail | null {
     label: row.label,
     messages: sessionMessageArraySchema.parse(JSON.parse(row.messages)),
     progress: progressEntryArraySchema.parse(JSON.parse(row.progress)),
+    resumeSeq: row.resume_seq,
     status: toSessionStatus(row.status),
   };
 }

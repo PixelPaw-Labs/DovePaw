@@ -4,6 +4,7 @@ import {
   subscribeSession,
   clearSessionBuffer,
   getSessionBuffer,
+  getSessionCurrentSeq,
 } from "../session-events";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 
@@ -205,6 +206,40 @@ describe("MaxListeners", () => {
         resolve();
       });
     });
+  });
+});
+
+// ─── getSessionCurrentSeq ────────────────────────────────────────────────────
+
+describe("getSessionCurrentSeq", () => {
+  it("returns 0 when no bucket exists for the session", () => {
+    expect(getSessionCurrentSeq("nonexistent-session")).toBe(0);
+  });
+
+  it("returns 0 after subscribing but before any events are published", () => {
+    const ac = new AbortController();
+    subscribeSession(sessionId, () => {}, ac.signal);
+    expect(getSessionCurrentSeq(sessionId)).toBe(0);
+    ac.abort();
+  });
+
+  it("returns the current seq after events are published", () => {
+    const ac = new AbortController();
+    subscribeSession(sessionId, () => {}, ac.signal);
+    publishSessionEvent(sessionId, textEvent("a"));
+    publishSessionEvent(sessionId, textEvent("b"));
+    publishSessionEvent(sessionId, textEvent("c"));
+    ac.abort();
+    expect(getSessionCurrentSeq(sessionId)).toBe(3);
+  });
+
+  it("returns 0 after clearSessionBuffer removes the bucket", () => {
+    const ac = new AbortController();
+    subscribeSession(sessionId, () => {}, ac.signal);
+    publishSessionEvent(sessionId, textEvent("x"));
+    ac.abort();
+    clearSessionBuffer(sessionId);
+    expect(getSessionCurrentSeq(sessionId)).toBe(0);
   });
 });
 

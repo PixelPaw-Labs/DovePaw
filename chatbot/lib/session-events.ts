@@ -89,3 +89,8 @@ export function getSessionBuffer(sessionId: string): ChatSseEvent[] | null {
   const b = buckets.get(sessionId);
   return b ? [...b.buffer] : null;
 }
+
+/** Returns the latest _seq stamped for a session, or 0 if the bucket doesn't exist. */
+export function getSessionCurrentSeq(sessionId: string): number {
+  return buckets.get(sessionId)?.seq ?? 0;
+}

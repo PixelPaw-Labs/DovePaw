@@ -21,7 +21,7 @@ import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
 import { IntroCard } from "./agent-chat/intro-card";
 import { WorkflowPanel } from "./workflow/workflow-panel";
-import { SessionHistoryPopup } from "./agent-chat/session-history-popup";
+import { SessionHistoryPanel } from "./agent-chat/session-history-panel";
 import { useAgentSessions } from "@/components/hooks/use-agent-sessions";
 import { useDoveSessions } from "@/components/hooks/use-dove-sessions";
 
@@ -75,13 +75,14 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
 
-  // Close history popup when switching agents
+  // Close history panel when switching agents
   React.useEffect(() => {
     setHistoryOpen(false);
   }, [activeAgentId]);
-  const mainRef = React.useRef<HTMLElement>(null);
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
+  const [historyPanelHeight, setHistoryPanelHeight] = React.useState(220);
+  const verticalIsResizing = React.useRef(false);
   const hasProgress = sessionProgress.length > 0;
 
   const onResizeStart = React.useCallback(
@@ -106,6 +107,28 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     [panelWidth],
   );
 
+  const onVerticalResizeStart = React.useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      verticalIsResizing.current = true;
+      const startY = e.clientY;
+      const startHeight = historyPanelHeight;
+      const onMove = (ev: MouseEvent) => {
+        if (!verticalIsResizing.current) return;
+        const delta = ev.clientY - startY;
+        setHistoryPanelHeight(Math.max(80, startHeight - delta));
+      };
+      const onUp = () => {
+        verticalIsResizing.current = false;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [historyPanelHeight],
+  );
+
   // Auto-open panel when progress first arrives
   const prevHasProgress = React.useRef(false);
   React.useEffect(() => {
@@ -122,7 +145,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           onSelectAgent={setActiveAgentId}
         />
 
-        <main ref={mainRef} className="flex-1 flex flex-col bg-background relative min-w-0">
+        <main className="flex-1 flex flex-col bg-background relative min-w-0">
           {/* Glass header */}
           <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex justify-between items-center w-full px-6 py-2.5 shrink-0">
             <div className="flex items-center gap-3">
@@ -179,24 +202,6 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
             </div>
           </header>
 
-          {/* Session history popup — draggable, floats within main */}
-          <SessionHistoryPopup
-            visible={historyOpen}
-            sessions={activeAgentId === "dove" ? doveSessions : agentSessions}
-            activeSessionId={currentSessionId}
-            containerRef={mainRef}
-            onSelect={setSessionId}
-            onNew={() => {
-              newSession();
-              setHistoryOpen(false);
-            }}
-            onDelete={async (id) => {
-              await deleteSession(id);
-              void refreshHistory();
-            }}
-            onClose={() => setHistoryOpen(false)}
-          />
-
           {/* Chat area */}
           <Conversation className="flex-1 bg-background">
             <ConversationContent>
@@ -251,27 +256,60 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           <div className="fixed bottom-0 left-0 w-1/2 h-1/2 bg-linear-to-tr from-accent/10 to-transparent pointer-events-none z-0" />
         </main>
 
-        {/* Workflow diagram panel */}
-        {workflowOpen && (
+        {/* Right sidebar — workflow + session history */}
+        {(workflowOpen || historyOpen) && (
           <aside
             style={{ width: panelWidth }}
-            className="relative shrink-0 h-screen border-l border-border/20 bg-background/60 backdrop-blur-xl flex flex-col"
+            className="relative shrink-0 h-screen border-l border-border/20 bg-background/60 backdrop-blur-xl flex flex-col overflow-hidden"
           >
-            {/* Resize handle */}
+            {/* Horizontal resize handle (left edge) */}
             <div
               onMouseDown={onResizeStart}
               className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
             />
-            <div className="px-4 py-3 border-b border-border/20 flex items-center gap-2 shrink-0">
-              <GitBranch className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold text-foreground">Workflow</span>
-              <span className="ml-auto text-[10px] text-muted-foreground uppercase tracking-wider">
-                Agent execution trace
-              </span>
-            </div>
-            <div className="flex-1 min-h-0">
-              <WorkflowPanel progress={sessionProgress} isCancelled={sessionCancelled} />
-            </div>
+
+            {/* Workflow panel */}
+            {workflowOpen && (
+              <div className="flex flex-col flex-1 min-h-[80px]">
+                <div className="px-4 py-3 border-b border-border/20 flex items-center gap-2 shrink-0">
+                  <GitBranch className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">Workflow</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground uppercase tracking-wider">
+                    Agent execution trace
+                  </span>
+                </div>
+                <div className="flex-1 min-h-0">
+                  <WorkflowPanel progress={sessionProgress} isCancelled={sessionCancelled} />
+                </div>
+              </div>
+            )}
+
+            {/* Vertical resize handle between workflow and session history */}
+            {workflowOpen && historyOpen && (
+              <div
+                onMouseDown={onVerticalResizeStart}
+                className="h-1.5 w-full cursor-row-resize bg-border/20 hover:bg-primary/30 transition-colors shrink-0 z-10"
+              />
+            )}
+
+            {/* Session history panel */}
+            {historyOpen && (
+              <div
+                style={workflowOpen ? { height: historyPanelHeight } : undefined}
+                className={`flex flex-col shrink-0 min-h-[80px] ${!workflowOpen ? "flex-1" : ""}`}
+              >
+                <SessionHistoryPanel
+                  sessions={activeAgentId === "dove" ? doveSessions : agentSessions}
+                  activeSessionId={currentSessionId}
+                  onSelect={setSessionId}
+                  onNew={newSession}
+                  onDelete={async (id) => {
+                    await deleteSession(id);
+                    void refreshHistory();
+                  }}
+                />
+              </div>
+            )}
           </aside>
         )}
       </div>

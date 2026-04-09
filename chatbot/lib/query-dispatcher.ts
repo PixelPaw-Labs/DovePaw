@@ -51,7 +51,7 @@ export interface QueryResponseDispatcher {
 export { ARTIFACT, TRANSIENT_ARTIFACT_NAMES } from "@/lib/artifact-names";
 import { ARTIFACT } from "@/lib/artifact-names";
 import { upsertSession } from "@/lib/db";
-import { publishSessionEvent } from "@/lib/session-events";
+import { getSessionCurrentSeq, publishSessionEvent } from "@/lib/session-events";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -210,6 +210,7 @@ export class MessageAccumulator {
   private saveSnapshot(): void {
     if (!this._saveConfig) return;
     const { sessionId, agentId, label, userMsgId, userText } = this._saveConfig;
+    const resumeSeq = getSessionCurrentSeq(sessionId);
     upsertSession({
       id: sessionId,
       agentId,
@@ -220,6 +221,7 @@ export class MessageAccumulator {
         this.buildMessage(),
       ],
       progress: this._progress,
+      resumeSeq,
       status: "running",
     });
   }

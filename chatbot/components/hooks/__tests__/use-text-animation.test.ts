@@ -342,4 +342,64 @@ describe("useTextAnimation", () => {
     // onUpdate should have been called exactly 6 times (one per char)
     expect(onUpdate).toHaveBeenCalledTimes(6);
   });
+
+  describe("seed", () => {
+    it("stops any running timer — no onUpdate after seed", () => {
+      const onUpdate = vi.fn();
+      const { result } = renderHook(() => useTextAnimation(onUpdate));
+
+      // Start a timer by enqueuing
+      act(() => {
+        result.current.enqueue("msg-1", "abc");
+      });
+      act(() => {
+        vi.advanceTimersByTime(16); // drains 1 char
+      });
+      onUpdate.mockClear();
+
+      // Seed stops the timer
+      act(() => {
+        result.current.seed("msg-1", "saved text");
+      });
+
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
+
+    it("primes displayed text — enqueue appends to the seeded content", () => {
+      const onUpdate = vi.fn();
+      const { result } = renderHook(() => useTextAnimation(onUpdate));
+
+      act(() => {
+        result.current.seed("msg-1", "hello ");
+      });
+
+      act(() => {
+        result.current.enqueue("msg-1", "world");
+      });
+
+      // Drain 1 char per tick — first tick emits "hello " + "w"
+      act(() => {
+        vi.advanceTimersByTime(16);
+      });
+      expect(onUpdate).toHaveBeenCalledWith("msg-1", "hello w");
+    });
+
+    it("flush after seed with no queued text is a no-op", () => {
+      const onUpdate = vi.fn();
+      const { result } = renderHook(() => useTextAnimation(onUpdate));
+
+      act(() => {
+        result.current.seed("msg-1", "snapshot text");
+      });
+
+      act(() => {
+        result.current.flush("msg-1");
+      });
+
+      expect(onUpdate).not.toHaveBeenCalled();
+    });
+  });
 });

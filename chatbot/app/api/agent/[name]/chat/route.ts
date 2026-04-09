@@ -15,7 +15,7 @@ import { makeProgressSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
 import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession } from "@/lib/db";
+import { deleteSession, setSessionStatus } from "@/lib/db";
 import { z } from "zod";
 
 const chatRequestSchema = z.object({
@@ -54,12 +54,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
   const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
   const subprocessController = new AbortController();
-  return createSseResponse(request, subprocessController, async (send, connectionController) => {
-    // For direct sub-agent chat, the subprocess lifetime is tied to the connection —
-    // abort the subprocess when the browser disconnects.
-    connectionController.signal.addEventListener("abort", () => subprocessController.abort(), {
-      once: true,
-    });
+  return createSseResponse(request, subprocessController, async (send, _connectionController) => {
+    // Subprocess lifetime is decoupled from the browser connection — same pattern as the
+    // Dove route. Client disconnect (new session, page switch) only closes the SSE stream;
+    // the A2A task keeps running and buffers events for reconnect.
+    // Explicit cancellation goes through DELETE with { method: "stop" }.
 
     // Dual-publish: send every event to the browser SSE stream AND to the in-memory
     // session event bus so /api/chat/stream/[sessionId] can serve reconnecting clients.
@@ -97,12 +96,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       await collectStreamResult(stream, onSnapshot, onArtifact);
 
       if (subprocessController.signal.aborted) {
+        setSessionStatus(resolvedContextId, "cancelled");
         dispatcher.publish({ type: "cancelled" });
       } else {
+        setSessionStatus(resolvedContextId, "done");
         dispatcher.publish({ type: "done" });
       }
     } catch (err: unknown) {
       if (subprocessController.signal.aborted) {
+        if (handle) setSessionStatus(handle.contextId, "cancelled");
         try {
           dispatcher.publish({ type: "cancelled" });
         } catch {
@@ -111,6 +113,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         return;
       }
       const msg = err instanceof Error ? err.message : String(err);
+      if (handle) setSessionStatus(handle.contextId, "done");
       try {
         dispatcher.publish({ type: "error", content: msg });
         dispatcher.publish({ type: "done" });
@@ -125,12 +128,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
-  const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
+  const { sessionId, method } = z
+    .object({ sessionId: z.string(), method: z.enum(["stop", "delete"]).default("delete") })
+    .parse(await request.json());
 
-  // Abort in-flight session (if currently streaming)
+  // Abort in-flight session subprocess (if currently running)
   activeControllers.get(sessionId)?.abort();
 
-  // Explicitly clear completed session from executor state
+  if (method === "stop") {
+    // User-initiated cancel: keep session in history, mark as cancelled
+    setSessionStatus(sessionId, "cancelled");
+    return Response.json({ ok: true });
+  }
+
+  // "delete" mode: remove from A2A executor state and DB entirely
   const agent = (await readAgentsConfig()).find((a) => a.name === name);
   if (agent) {
     const portValue = resolveAgentPort(agent.manifestKey);

@@ -14,6 +14,7 @@ const {
   listSessions,
   getSessionDetail,
   deleteSession,
+  setSessionStatus,
   closeDb,
 } = await import("../db");
 
@@ -124,5 +125,44 @@ describe("db", () => {
     deleteSession("ctx-1");
     expect(getSessionDetail("ctx-1")).toBeNull();
     expect(getActiveSession("test-agent")).toBeNull();
+  });
+
+  describe("setSessionStatus", () => {
+    it("updates status from default done to cancelled", () => {
+      upsertSession(base);
+      setSessionStatus("ctx-1", "cancelled");
+      expect(getSessionDetail("ctx-1")!.status).toBe("cancelled");
+    });
+
+    it("updates status to running then back to done", () => {
+      upsertSession({ ...base, status: "running" });
+      expect(getSessionDetail("ctx-1")!.status).toBe("running");
+      setSessionStatus("ctx-1", "done");
+      expect(getSessionDetail("ctx-1")!.status).toBe("done");
+    });
+  });
+
+  describe("resumeSeq", () => {
+    it("stores and retrieves a non-zero resumeSeq", () => {
+      upsertSession({ ...base, resumeSeq: 42 });
+      expect(getSessionDetail("ctx-1")!.resumeSeq).toBe(42);
+    });
+
+    it("defaults to 0 when resumeSeq is not provided", () => {
+      upsertSession(base);
+      expect(getSessionDetail("ctx-1")!.resumeSeq).toBe(0);
+    });
+
+    it("does not overwrite existing non-zero resumeSeq when upserted with 0", () => {
+      upsertSession({ ...base, resumeSeq: 7 });
+      upsertSession({ ...base, messages: [], resumeSeq: 0 });
+      expect(getSessionDetail("ctx-1")!.resumeSeq).toBe(7);
+    });
+
+    it("overwrites resumeSeq with a larger non-zero value", () => {
+      upsertSession({ ...base, resumeSeq: 7 });
+      upsertSession({ ...base, messages: [], resumeSeq: 15 });
+      expect(getSessionDetail("ctx-1")!.resumeSeq).toBe(15);
+    });
   });
 });

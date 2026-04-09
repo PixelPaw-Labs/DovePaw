@@ -85,5 +85,19 @@ export function useTextAnimation(onUpdate: (id: string, content: string) => void
     [stop, onUpdate],
   );
 
-  return { enqueue, flush, reset, stop, cut };
+  /**
+   * Seed the animation state so new text continues from an already-displayed text.
+   * Stops any running timer and primes displayedRef without triggering an update.
+   */
+  const seed = useCallback(
+    (id: string, text: string) => {
+      stop();
+      streamingIdRef.current = id;
+      displayedRef.current = text;
+      pendingRef.current = "";
+    },
+    [stop],
+  );
+
+  return { enqueue, flush, reset, stop, cut, seed };
 }

@@ -27,6 +27,7 @@ const sessionDetailResponseSchema = z.object({
   progress: z
     .array(z.object({ message: z.string(), artifacts: z.record(z.string(), z.string()) }))
     .default([]),
+  resumeSeq: z.number().default(0),
   status: z.enum(["running", "done", "cancelled", "interrupted"]).default("done"),
 });
 
@@ -682,12 +683,17 @@ export function useSessionRegistry() {
    *  - warm (warmReconnect=true):  user was previously connected; singleLastSeqRef has
    *    the last seen seq.  Reconnects with after=lastSeq so only NEW events arrive and
    *    update the existing last assistant message in-place.
-   *  - cold (warmReconnect=false): first time connecting (e.g. clicking history). Adds
-   *    a fresh blank loading assistant message and replays the buffer from after=0 into
-   *    it so the in-progress turn is rebuilt from scratch.
+   *  - cold (warmReconnect=false): first time connecting (e.g. clicking history). Either
+   *    seed from a DB snapshot and replay only newer events, or append a blank assistant
+   *    and rebuild from after=0 if no snapshot exists yet.
    */
   const connectSingleSessionStream = useCallback(
-    (sessionId: string, agentId: string, warmReconnect: boolean) => {
+    (
+      sessionId: string,
+      agentId: string,
+      warmReconnect: boolean,
+      resumeHint?: { assistantId: string; text: string; seq: number },
+    ) => {
       singleAbortRef.current?.abort();
       const abort = new AbortController();
       singleAbortRef.current = abort;
@@ -698,23 +704,30 @@ export function useSessionRegistry() {
         const lastAssistant = messagesRef.current.toReversed().find((m) => m.role === "assistant");
         resumeAssistantId = lastAssistant?.id ?? crypto.randomUUID();
       } else {
-        // Cold: append a fresh blank loading message; stream replay will fill it in.
-        resumeAssistantId = crypto.randomUUID();
-        singleLastSeqRef.current = 0;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: resumeAssistantId,
-            role: "assistant" as const,
-            segments: [{ type: "text" as const, content: "" }],
-            isLoading: true,
-            agentId,
-          },
-        ]);
+        if (resumeHint) {
+          // Seeded cold reconnect: DB has saved text at resumeHint.seq.
+          resumeAssistantId = resumeHint.assistantId;
+          singleLastSeqRef.current = resumeHint.seq;
+          animation.seed(resumeAssistantId, resumeHint.text);
+        } else {
+          // Pure cold reconnect: no saved text yet.
+          resumeAssistantId = crypto.randomUUID();
+          singleLastSeqRef.current = 0;
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: resumeAssistantId,
+              role: "assistant" as const,
+              segments: [{ type: "text" as const, content: "" }],
+              isLoading: true,
+              agentId,
+            },
+          ]);
+        }
       }
       assistantIdRef.current = resumeAssistantId;
 
-      const after = warmReconnect ? singleLastSeqRef.current : 0;
+      const after = singleLastSeqRef.current;
       const url = `${sessionStreamUrl(sessionId)}?after=${after}`;
 
       void (async () => {
@@ -972,6 +985,7 @@ export function useSessionRegistry() {
           const {
             messages: msgs,
             progress,
+            resumeSeq,
             status,
           } = sessionDetailResponseSchema.parse(
             await (await fetch(sessionDetailUrl(agentId, resolvedContextId))).json(),
@@ -982,14 +996,29 @@ export function useSessionRegistry() {
           if (activeAgentIdRef.current !== agentId) return;
           singleSessionIdRef.current = resolvedContextId;
           setCurrentSessionId(resolvedContextId);
-          setMessages(stamped);
           setSessionProgress(progress);
+          setSessionCancelled(status === "cancelled");
           if (status === "running") {
-            // Session was running when user switched away — reconnect to live stream.
-            // Warm reconnect: singleLastSeqRef may be 0 if never connected, or > 0 if
-            // the user was previously connected and we're switching back.
+            const lastAssistant = stamped.toReversed().find((m) => m.role === "assistant");
+            const resumeText =
+              lastAssistant?.segments
+                .filter((s): s is { type: "text"; content: string } => s.type === "text")
+                .map((s) => s.content)
+                .join("") ?? "";
+            const resumeHint =
+              resumeSeq > 0 && lastAssistant && resumeText
+                ? { assistantId: lastAssistant.id, text: resumeText, seq: resumeSeq }
+                : undefined;
+            if (!resumeHint) {
+              const lastMsg = stamped[stamped.length - 1];
+              setMessages(lastMsg?.role === "assistant" ? stamped.slice(0, -1) : stamped);
+            } else {
+              setMessages(stamped);
+            }
             setIsLoading(true);
-            connectSingleSessionStream(resolvedContextId, agentId, singleLastSeqRef.current > 0);
+            connectSingleSessionStream(resolvedContextId, agentId, false, resumeHint);
+          } else {
+            setMessages(stamped);
           }
         } catch {
           // no prior session for this agent
@@ -1492,6 +1521,8 @@ export function useSessionRegistry() {
   // ─── cancelMessage ────────────────────────────────────────────────────────────
   const cancelMessage = useCallback(() => {
     if (activeAgentIdRef.current !== "dove") {
+      const agentId = activeAgentIdRef.current;
+      const sessionId = singleSessionIdRef.current;
       singleAbortRef.current?.abort();
       singleAbortRef.current = null;
       animation.flush(assistantIdRef.current ?? "");
@@ -1504,6 +1535,16 @@ export function useSessionRegistry() {
       );
       setSessionCancelled(true);
       setIsLoading(false);
+      // Explicitly abort the server subprocess and mark session as cancelled.
+      // Required because connection and subprocess are now decoupled — aborting
+      // the client fetch no longer kills the server-side A2A task automatically.
+      if (sessionId) {
+        void fetch(`/api/agent/${agentId}/chat`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId, method: "stop" }),
+        });
+      }
       return;
     }
     const key = activeKeyRef.current;
@@ -1634,6 +1675,7 @@ export function useSessionRegistry() {
             const {
               messages: msgs,
               progress,
+              resumeSeq,
               status,
             } = sessionDetailResponseSchema.parse(
               await (await fetch(sessionDetailUrl(agentId, id))).json(),
@@ -1644,14 +1686,29 @@ export function useSessionRegistry() {
             );
             singleSessionIdRef.current = id;
             setCurrentSessionId(id);
-            setMessages(stamped);
             setSessionProgress(progress);
             setSessionCancelled(status === "cancelled");
             if (status === "running") {
-              // Cold reconnect — never been connected to this session; replay from seq 0
-              // into a new blank assistant message so the in-progress turn is visible.
+              const lastAssistant = stamped.toReversed().find((m) => m.role === "assistant");
+              const resumeText =
+                lastAssistant?.segments
+                  .filter((s): s is { type: "text"; content: string } => s.type === "text")
+                  .map((s) => s.content)
+                  .join("") ?? "";
+              const resumeHint =
+                resumeSeq > 0 && lastAssistant && resumeText
+                  ? { assistantId: lastAssistant.id, text: resumeText, seq: resumeSeq }
+                  : undefined;
+              if (!resumeHint) {
+                const lastMsg = stamped[stamped.length - 1];
+                setMessages(lastMsg?.role === "assistant" ? stamped.slice(0, -1) : stamped);
+              } else {
+                setMessages(stamped);
+              }
               setIsLoading(true);
-              connectSingleSessionStream(id, agentId, false);
+              connectSingleSessionStream(id, agentId, false, resumeHint);
+            } else {
+              setMessages(stamped);
             }
           } catch {
             singleSessionIdRef.current = id;
