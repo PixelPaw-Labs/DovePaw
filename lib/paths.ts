@@ -65,6 +65,9 @@ export const schedulerNodeModule = (pkg: string) => join(SCHEDULER_ROOT, "node_m
 export const plistFilePath = (label: string) => join(LAUNCH_AGENTS_DIR, `${label}.plist`);
 /** ~/.dovepaw/cron/a2a-trigger.mjs — compiled A2A trigger script used by all launchd plists */
 export const A2A_TRIGGER_SCRIPT = join(SCHEDULER_ROOT, "a2a-trigger.mjs");
+/** <repoPath>/.claude/worktrees/<wtName> — Claude Code worktree directory for a named worktree */
+export const claudeWorktreePath = (repoPath: string, wtName: string) =>
+  join(repoPath, ".claude", "worktrees", wtName);
 /** ~/.dovepaw/.ports.<port>.json — runtime port manifest for a specific Next.js port */
 export const portsFile = (port: string | number): string =>
   join(DOVEPAW_DIR, `.ports.${port}.json`);
