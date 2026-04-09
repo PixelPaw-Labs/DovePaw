@@ -6,8 +6,11 @@ export type ProgressEntry = {
 };
 
 /**
- * Merge a single progress entry into a mutable array by message key (last-write-wins).
+ * Append a progress entry unless an exact (message + artifacts) duplicate already exists.
  * Skips empty message strings (used by terminal publishStatusToUI calls).
+ *
+ * Unlike name-only dedup, this allows parallel operations that share a step label
+ * (e.g. concurrent repo clones all emitting "Cloning") to appear as distinct entries.
  */
 export function upsertProgressEntry(
   progress: ProgressEntry[],
@@ -15,10 +18,11 @@ export function upsertProgressEntry(
   artifacts: Record<string, string>,
 ): void {
   if (!message) return;
-  const idx = progress.findLastIndex((e) => e.message === message);
-  if (idx >= 0) {
-    progress[idx] = { ...progress[idx], artifacts: { ...progress[idx].artifacts, ...artifacts } };
-  } else {
+  const artifactsJson = JSON.stringify(artifacts);
+  const alreadyExists = progress.some(
+    (e) => e.message === message && JSON.stringify(e.artifacts) === artifactsJson,
+  );
+  if (!alreadyExists) {
     progress.push({ message, artifacts });
   }
 }
@@ -52,9 +56,10 @@ export function mergeProgress(
  *
  * - Exact duplicate → skip
  * - Incoming is a value-subset of existing → skip (stale replay)
- * - All existing keys present in incoming → update in place (covers superset arrival
- *   and same-structure updates e.g. label replaced by onTaskProgress)
- * - Different artifact key sets (parallel tickets with same step label) → append
+ * - All existing keys present in incoming WITH matching values → update in place
+ *   (enrichment: incoming adds new keys on top of an identical base, e.g. label added)
+ * - Same or different artifact key sets but any existing value differs → append
+ *   (different parallel operation that shares the same step label, e.g. two repo clones)
  * - No match → append
  */
 export function mergeProgressEntries(
@@ -75,7 +80,11 @@ export function mergeProgressEntries(
       const match = merged[matchIdx];
       if (JSON.stringify(match.artifacts) === incomingArtifactStr) continue;
       if (Object.entries(entry.artifacts).every(([k, v]) => match.artifacts[k] === v)) continue;
-      if (Object.keys(match.artifacts).every((k) => k in entry.artifacts)) {
+      if (
+        Object.keys(match.artifacts).every(
+          (k) => k in entry.artifacts && match.artifacts[k] === entry.artifacts[k],
+        )
+      ) {
         merged[matchIdx] = { ...match, artifacts: { ...match.artifacts, ...entry.artifacts } };
         continue;
       }
