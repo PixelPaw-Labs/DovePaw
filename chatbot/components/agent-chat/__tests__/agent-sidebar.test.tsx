@@ -106,7 +106,7 @@ describe("AgentSidebar", () => {
       { wrapper },
     );
     const doveBtn = screen.getByText("Dove").closest("button")!;
-    expect(doveBtn.className).toContain("bg-blue-100");
+    expect(doveBtn.className).toContain("bg-primary/10");
   });
 
   it("calls onSelectAgent with 'dove' when the Dove button is clicked", () => {

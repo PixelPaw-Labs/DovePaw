@@ -63,7 +63,7 @@ export function AgentSidebar({
           className={cn(
             "relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
             activeAgentId === "dove" && !isSettings
-              ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
+              ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
@@ -75,17 +75,17 @@ export function AgentSidebar({
               style={{
                 background:
                   activeAgentId === "dove" && !isSettings
-                    ? // selected (blue bg): soft white glow
-                      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.48) 50%, rgba(255,255,255,0.04) 75%, transparent 100%)"
-                    : // unselected (near-white bg): soft blue glow
-                      "linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.04) 25%, rgba(96,165,250,0.42) 50%, rgba(96,165,250,0.04) 75%, transparent 100%)",
+                    ? // selected (primary/10 bg): white glint
+                      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)"
+                    : // unselected (near-white bg): primary-colour glint
+                      "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-primary) 4%, transparent) 25%, color-mix(in srgb, var(--color-primary) 35%, transparent) 50%, color-mix(in srgb, var(--color-primary) 4%, transparent) 75%, transparent 100%)",
               }}
             />
           )}
           <Bot
             className={cn(
               "w-4 h-4 shrink-0",
-              activeAgentId === "dove" && !isSettings ? "text-blue-700" : "",
+              activeAgentId === "dove" && !isSettings ? "text-primary" : "",
             )}
           />
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
@@ -101,14 +101,7 @@ export function AgentSidebar({
               Orchestrator
             </span>
           </div>
-          <span
-            className={cn(
-              "w-1.5 h-1.5 rounded-full shrink-0",
-              activeAgentId === "dove" && !isSettings
-                ? "bg-blue-500"
-                : "bg-green-500 animate-pulse",
-            )}
-          />
+          <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", "bg-green-500 animate-pulse")} />
         </button>
 
         {agents.map((agent) => {
@@ -137,11 +130,11 @@ export function AgentSidebar({
           className={cn(
             "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
             isSettings
-              ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
+              ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
-          <Settings className={cn("w-4 h-4 shrink-0", isSettings ? "text-blue-700" : "")} />
+          <Settings className={cn("w-4 h-4 shrink-0", isSettings ? "text-primary" : "")} />
           <span className={cn("text-sm font-medium", !isSettings && "text-foreground/80")}>
             Settings
           </span>

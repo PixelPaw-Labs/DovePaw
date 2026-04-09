@@ -116,7 +116,7 @@ export function AgentButton({
       className={cn(
         "group relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
         isActive
-          ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
+          ? "bg-primary/10 text-primary border-l-4 border-primary"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
       )}
     >
@@ -127,10 +127,10 @@ export function AgentButton({
           className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
           style={{
             background: isActive
-              ? // selected (blue bg): soft white glow
-                "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.48) 50%, rgba(255,255,255,0.04) 75%, transparent 100%)"
-              : // unselected (near-white bg): soft blue glow
-                "linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.04) 25%, rgba(96,165,250,0.42) 50%, rgba(96,165,250,0.04) 75%, transparent 100%)",
+              ? // selected (primary/10 bg): white glint — visible on any primary tint
+                "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)"
+              : // unselected (near-white bg): primary-colour glint
+                "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-primary) 4%, transparent) 25%, color-mix(in srgb, var(--color-primary) 35%, transparent) 50%, color-mix(in srgb, var(--color-primary) 4%, transparent) 75%, transparent 100%)",
           }}
         />
       )}
@@ -162,7 +162,7 @@ export function AgentButton({
           className={cn(
             "shrink-0 w-5 h-5 rounded flex items-center justify-center transition-colors relative z-10",
             isAgentSettings
-              ? "bg-blue-200/60 text-blue-700"
+              ? "bg-primary/20 text-primary"
               : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5",
           )}
         >
@@ -172,13 +172,11 @@ export function AgentButton({
       <span
         className={cn(
           "w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500",
-          isActive
-            ? "bg-blue-500"
-            : isOnline
-              ? "bg-green-500 animate-pulse"
-              : !hasData
-                ? "bg-muted-foreground/20"
-                : "bg-red-400/60",
+          isOnline
+            ? "bg-green-500 animate-pulse"
+            : !hasData
+              ? "bg-muted-foreground/20"
+              : "bg-red-400/60",
         )}
       />
     </button>
