@@ -51,6 +51,7 @@ export interface QueryResponseDispatcher {
 export { ARTIFACT, TRANSIENT_ARTIFACT_NAMES } from "@/lib/artifact-names";
 import { ARTIFACT } from "@/lib/artifact-names";
 import { upsertSession } from "@/lib/db";
+import { publishSessionEvent } from "@/lib/session-events";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -253,8 +254,36 @@ export interface IncrementalSaveConfig {
 
 export class SseQueryDispatcher implements QueryResponseDispatcher {
   private readonly accumulator = new MessageAccumulator();
+  private sessionId: string | null;
+  private readonly preSessionBuffer: ChatSseEvent[] = [];
 
-  constructor(private readonly send: (event: ChatSseEvent) => void) {}
+  constructor(
+    private readonly rawSend: (event: ChatSseEvent) => void,
+    initialSessionId?: string,
+  ) {
+    this.sessionId = initialSessionId ?? null;
+  }
+
+  /**
+   * Dual-publish: forward every event to the browser SSE stream AND to the
+   * per-session event bus so background reconnect endpoints can replay them.
+   * rawSend may throw if the SSE stream was cancelled (client disconnected) while
+   * the subprocess is still running — swallow that error so publishSessionEvent
+   * still runs and the event bus stays up to date.
+   */
+  readonly publish = (event: ChatSseEvent): void => {
+    try {
+      // Spread so publishSessionEvent's _seq stamp doesn't appear in the primary stream
+      this.rawSend({ ...event });
+    } catch {
+      // SSE stream closed — subprocess continues as background session
+    }
+    if (this.sessionId) {
+      publishSessionEvent(this.sessionId, event);
+    } else {
+      this.preSessionBuffer.push(event);
+    }
+  };
 
   /**
    * Enable incremental DB saves so a page refresh doesn't lose mid-session state.
@@ -273,32 +302,35 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
   }
 
   onSession(sessionId: string): void {
-    this.send({ type: "session", sessionId });
+    this.sessionId = sessionId;
+    for (const e of this.preSessionBuffer) publishSessionEvent(sessionId, e);
+    this.preSessionBuffer.length = 0;
+    this.publish({ type: "session", sessionId });
   }
 
   onTextDelta(text: string): void {
     this.accumulator.onTextDelta(text);
-    this.send({ type: "text", content: text });
+    this.publish({ type: "text", content: text });
   }
 
   onThinking(text: string): void {
     this.accumulator.onThinking(text);
-    this.send({ type: "thinking", content: text });
+    this.publish({ type: "thinking", content: text });
   }
 
   onToolCall(name: string, toolUseId?: string): void {
     const entry = this.accumulator.onToolCall(name, toolUseId);
-    this.send({ type: "tool_call", name });
-    this.send({ type: "progress", result: { output: "", progress: [entry] } });
+    this.publish({ type: "tool_call", name });
+    this.publish({ type: "progress", result: { output: "", progress: [entry] } });
   }
 
   onToolInput(content: string): void {
     this.accumulator.onToolInput(content);
-    this.send({ type: "tool_input", content });
+    this.publish({ type: "tool_input", content });
   }
 
   onFinalOutput(result: string): void {
-    if (result) this.send({ type: "result", content: result });
+    if (result) this.publish({ type: "result", content: result });
     this.accumulator.onFinalOutput();
   }
 
@@ -313,7 +345,7 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
 
   onTaskProgress(toolUseId: string, description: string, lastTool: string): void {
     const entry = this.accumulator.onTaskProgress(toolUseId, description, lastTool);
-    if (entry) this.send({ type: "progress", result: { output: "", progress: [entry] } });
+    if (entry) this.publish({ type: "progress", result: { output: "", progress: [entry] } });
   }
 }
 
@@ -342,7 +374,22 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
 export class A2AQueryDispatcher implements QueryResponseDispatcher {
   private readonly accumulator = new MessageAccumulator();
 
-  constructor(private readonly publisher: ExecutorPublisher) {}
+  /**
+   * @param publisher  A2A event bus publisher (required)
+   * @param sessionId  DB context ID for this session. When provided, every event is
+   *                   also published to the in-memory session event bus so the
+   *                   `/api/chat/stream/[sessionId]` endpoint can serve the subagent's
+   *                   live stream when the user switches to the subagent's tab.
+   */
+  constructor(
+    private readonly publisher: ExecutorPublisher,
+    private readonly sessionId?: string,
+  ) {}
+
+  /** Publish an event to the in-memory session event bus (no-op when sessionId absent). */
+  private emit(event: ChatSseEvent): void {
+    if (this.sessionId) publishSessionEvent(this.sessionId, event);
+  }
 
   enableIncrementalSave(config: IncrementalSaveConfig): void {
     this.accumulator.enableIncrementalSave(config);
@@ -358,16 +405,22 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     return this.accumulator.buildProgress();
   }
 
-  onSession(_sessionId: string): void {}
+  onSession(_sessionId: string): void {
+    // Emit the A2A context ID (not the inner Claude session ID) so stream subscribers
+    // know which session they are connected to.
+    if (this.sessionId) this.emit({ type: "session", sessionId: this.sessionId });
+  }
 
   onTextDelta(text: string): void {
     this.publisher.send(text, ARTIFACT.STREAM);
     this.accumulator.onTextDelta(text);
+    this.emit({ type: "text", content: text });
   }
 
   onThinking(text: string): void {
     this.publisher.send(text, ARTIFACT.THINKING);
     this.accumulator.onThinking(text);
+    this.emit({ type: "thinking", content: text });
   }
 
   onToolCall(name: string, toolUseId?: string): void {
@@ -379,16 +432,20 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     // SseQueryDispatcher behaviour. Without it the title falls back to the toolUseId UUID
     // because onTaskProgress is never called for background inner-agent tool calls.
     this.publisher.publishStatusToUI(key, { [ARTIFACT.TOOL_CALL]: name, label: name });
-    this.accumulator.onToolCall(name, toolUseId);
+    const entry = this.accumulator.onToolCall(name, toolUseId);
+    this.emit({ type: "tool_call", name });
+    this.emit({ type: "progress", result: { output: "", progress: [entry] } });
   }
 
   onToolInput(content: string): void {
     this.publisher.send(content, ARTIFACT.TOOL_INPUT);
     this.accumulator.onToolInput(content);
+    this.emit({ type: "tool_input", content });
   }
 
   onFinalOutput(result: string): void {
     if (result) this.publisher.send(result, ARTIFACT.FINAL_OUTPUT);
+    if (result) this.emit({ type: "result", content: result });
     this.accumulator.onFinalOutput();
   }
 
@@ -396,6 +453,9 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
 
   onTaskProgress(toolUseId: string, description: string, lastTool: string): void {
     const entry = this.accumulator.onTaskProgress(toolUseId, description, lastTool);
-    if (entry) this.publisher.publishStatusToUI(entry.message, entry.artifacts);
+    if (entry) {
+      this.publisher.publishStatusToUI(entry.message, entry.artifacts);
+      this.emit({ type: "progress", result: { output: "", progress: [entry] } });
+    }
   }
 }

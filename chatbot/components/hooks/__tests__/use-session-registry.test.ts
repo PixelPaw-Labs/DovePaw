@@ -550,6 +550,153 @@ describe("useSessionRegistry", () => {
     expect(result.current.currentSessionId).toBe("live-sess");
   });
 
+  // ─── setActiveAgentId — non-Dove stream reconnect ────────────────────────────
+
+  it("setActiveAgentId: cold-connects to stream when switching to non-Dove agent with running session", async () => {
+    vi.mocked(fetch)
+      // active-session lookup for gsd
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "ctx-gsd" }), { status: 200 }))
+      // session detail — running
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ messages: [], progress: [], status: "running" }), {
+          status: 200,
+        }),
+      )
+      // stream connection (cold, after=0)
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "result", content: "live" }, { type: "done" }]),
+      );
+
+    const { result } = renderHook(() => useSessionRegistry());
+
+    await act(async () => {
+      result.current.setActiveAgentId("gsd");
+      // Allow the async IIFE (active-session + session detail + stream) to complete
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    await waitFor(() => !result.current.isLoading);
+
+    // Core assertion: stream URL called with after=0 (cold reconnect — no prior seq)
+    const streamCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        (c) => typeof c[0] === "string" && String(c[0]).startsWith("/api/chat/stream/ctx-gsd"),
+      );
+    expect(streamCall).toBeTruthy();
+    expect(streamCall![0]).toContain("after=0");
+  });
+
+  it("setActiveAgentId: skips stream reconnect when non-Dove agent has no active session", async () => {
+    vi.mocked(fetch)
+      // active-session → null
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
+      // agent sessions fallback → empty
+      .mockResolvedValueOnce(new Response(JSON.stringify({ sessions: [] }), { status: 200 }));
+
+    const { result } = renderHook(() => useSessionRegistry());
+
+    await act(async () => {
+      result.current.setActiveAgentId("gsd");
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(result.current.isLoading).toBe(false);
+    const streamCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        (c) => typeof c[0] === "string" && String(c[0]).includes("/api/chat/stream/"),
+      );
+    expect(streamCalls).toHaveLength(0);
+  });
+
+  // ─── setSessionId — non-Dove stream reconnect ─────────────────────────────────
+
+  it("setSessionId: cold-connects to stream for running non-Dove session from history", async () => {
+    vi.mocked(fetch)
+      // setActiveAgentId's active-session → null (no running session on switch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
+      // setActiveAgentId's sessions fallback → empty
+      .mockResolvedValueOnce(new Response(JSON.stringify({ sessions: [] }), { status: 200 }))
+      // setSessionId session detail — running
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ messages: [], progress: [], status: "running" }), {
+          status: 200,
+        }),
+      )
+      // stream connection (cold, after=0)
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "result", content: "hi" }, { type: "done" }]),
+      );
+
+    const { result } = renderHook(() => useSessionRegistry());
+
+    // Switch to non-Dove agent first (sets the non-Dove path in the hook)
+    await act(async () => {
+      result.current.setActiveAgentId("gsd");
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    // Load a historical session from the DB
+    await act(async () => {
+      void result.current.setSessionId("ctx-hist");
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    await waitFor(() => !result.current.isLoading);
+
+    // Core assertion: stream URL called with after=0 (cold reconnect — no prior seq)
+    const streamCall = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        (c) => typeof c[0] === "string" && String(c[0]).startsWith("/api/chat/stream/ctx-hist"),
+      );
+    expect(streamCall).toBeTruthy();
+    expect(streamCall![0]).toContain("after=0");
+  });
+
+  it("setSessionId: does not stream-reconnect for a completed non-Dove session", async () => {
+    vi.mocked(fetch)
+      // setActiveAgentId's active-session → null
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
+      // setActiveAgentId's sessions fallback → empty
+      .mockResolvedValueOnce(new Response(JSON.stringify({ sessions: [] }), { status: 200 }))
+      // setSessionId session detail — done
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            messages: [
+              { id: "m1", role: "assistant", segments: [{ type: "text", content: "result" }] },
+            ],
+            progress: [],
+            status: "done",
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const { result } = renderHook(() => useSessionRegistry());
+
+    await act(async () => {
+      result.current.setActiveAgentId("gsd");
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    await act(async () => {
+      void result.current.setSessionId("ctx-done");
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(result.current.isLoading).toBe(false);
+    const streamCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(
+        (c) => typeof c[0] === "string" && String(c[0]).includes("/api/chat/stream/"),
+      );
+    expect(streamCalls).toHaveLength(0);
+    expect(result.current.messages.some((m) => m.role === "assistant")).toBe(true);
+  });
+
   // ─── Tab bar sessions snapshot ────────────────────────────────────────────────
 
   it("sessions snapshot contains all created sessions", () => {

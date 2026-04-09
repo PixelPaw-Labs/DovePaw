@@ -30,6 +30,7 @@ import {
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setSessionStatus, upsertSession } from "@/lib/db";
+import { publishSessionEvent } from "@/lib/session-events";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -65,6 +66,19 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
 
+    // Restore session early so publishProgress can use the correct label from the start.
+    // Without this, the first upsertSession call would create the DB row with label:"",
+    // and since ON CONFLICT does not update label, it would stay empty in history.
+    this.currentContextId = contextId;
+    this.sessionManager.restore(contextId);
+    const existingState = this.sessionManager.get(contextId);
+    const startedAt = existingState?.startedAt ?? new Date();
+    const label =
+      existingState?.label ??
+      (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
+    let workspace: AgentWorkspace | null = null;
+    const userMsgId = randomUUID();
+
     // Track direct publishStatusToUI calls (workspace setup, clone progress, etc.)
     // so sub-agent history sessions show these entries alongside the tool-call entries
     // already captured by dispatcher.buildProgress().
@@ -76,7 +90,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         id: contextId,
         agentId: this.def.name,
         startedAt: new Date().toISOString(),
-        label: "",
+        label,
         messages: [],
         progress: innerProgress,
         status: "running",
@@ -100,21 +114,6 @@ export class QueryAgentExecutor implements AgentExecutor {
       .map((id) => settings.repositories.find((r) => r.id === id))
       .filter((r): r is NonNullable<typeof r> => r !== undefined)
       .map((r) => r.githubRepo);
-
-    // Workspace, repo cloning, and query() are all inside the outer try so
-    // the finally block always runs cleanup regardless of where a failure occurs.
-    this.currentContextId = contextId;
-
-    // Restore session from DB if not in-memory (e.g. server restart or resumed Dove history).
-    this.sessionManager.restore(contextId);
-
-    const existingState = this.sessionManager.get(contextId);
-    const startedAt = existingState?.startedAt ?? new Date();
-    const label =
-      existingState?.label ??
-      (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
-    let workspace: AgentWorkspace | null = null;
-    const userMsgId = randomUUID();
 
     try {
       if (existingState) {
@@ -164,7 +163,7 @@ export class QueryAgentExecutor implements AgentExecutor {
           ...makeAgentMgmtTools(this.def),
         ],
         async (innerMcpServer) => {
-          const dispatcher = new A2AQueryDispatcher(publisher);
+          const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || START_SCRIPT_TOOL,
@@ -257,15 +256,19 @@ export class QueryAgentExecutor implements AgentExecutor {
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
+          publishSessionEvent(contextId, { type: "done" });
           publisher.publishStatusToUI("", undefined, "completed");
         },
         (err, isAbort) => {
           if (isAbort) {
             consola.info(`${this.def.displayName} sub-agent cancelled`);
+            publishSessionEvent(contextId, { type: "cancelled" });
             publisher.publishStatusToUI("", undefined, "canceled");
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
+            publishSessionEvent(contextId, { type: "error", content: msg });
+            publishSessionEvent(contextId, { type: "done" });
             publisher.publishStatusToUI("", { error: msg }, "failed");
           }
         },

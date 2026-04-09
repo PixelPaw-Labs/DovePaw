@@ -127,9 +127,10 @@ export function useSessionRegistry() {
   const [activeAgentId, setActiveAgentIdState] = useState<AgentId>("dove");
   const activeAgentIdRef = useRef<AgentId>("dove");
 
-  // For non-Dove agents: single-session abort and session ID tracking
+  // For non-Dove agents: single-session abort, session ID, and last-seen SSE seq tracking
   const singleAbortRef = useRef<AbortController | null>(null);
   const singleSessionIdRef = useRef<string | null>(null);
+  const singleLastSeqRef = useRef<number>(0);
 
   // ─── Active message sync ───────────────────────────────────────────────────────
   // All active-session message mutations MUST go through this function.
@@ -671,6 +672,237 @@ export function useSessionRegistry() {
     return key;
   }, [snapshotSessions]);
 
+  // ─── connectSingleSessionStream ───────────────────────────────────────────────
+  /**
+   * Connect to a running non-Dove session's live SSE stream.
+   *
+   * Two modes:
+   *  - warm (warmReconnect=true):  user was previously connected; singleLastSeqRef has
+   *    the last seen seq.  Reconnects with after=lastSeq so only NEW events arrive and
+   *    update the existing last assistant message in-place.
+   *  - cold (warmReconnect=false): first time connecting (e.g. clicking history). Adds
+   *    a fresh blank loading assistant message and replays the buffer from after=0 into
+   *    it so the in-progress turn is rebuilt from scratch.
+   */
+  const connectSingleSessionStream = useCallback(
+    (sessionId: string, agentId: string, warmReconnect: boolean) => {
+      singleAbortRef.current?.abort();
+      const abort = new AbortController();
+      singleAbortRef.current = abort;
+
+      // Determine which assistant message to update and what seq to start from.
+      let resumeAssistantId: string;
+      if (warmReconnect) {
+        const lastAssistant = messagesRef.current.toReversed().find((m) => m.role === "assistant");
+        resumeAssistantId = lastAssistant?.id ?? crypto.randomUUID();
+      } else {
+        // Cold: append a fresh blank loading message; stream replay will fill it in.
+        resumeAssistantId = crypto.randomUUID();
+        singleLastSeqRef.current = 0;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: resumeAssistantId,
+            role: "assistant" as const,
+            segments: [{ type: "text" as const, content: "" }],
+            isLoading: true,
+            agentId,
+          },
+        ]);
+      }
+      assistantIdRef.current = resumeAssistantId;
+
+      const after = warmReconnect ? singleLastSeqRef.current : 0;
+      const url = `${sessionStreamUrl(sessionId)}?after=${after}`;
+
+      void (async () => {
+        try {
+          const response = await fetch(url, { signal: abort.signal });
+          if (!response.ok || !response.body) return;
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+
+          // eslint-disable-next-line no-await-in-loop -- streaming reader pattern requires sequential awaits
+          while (true) {
+            // eslint-disable-next-line no-await-in-loop -- streaming reader pattern requires sequential awaits
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const parts = buffer.split("\n\n");
+            buffer = parts.pop() ?? "";
+            for (const part of parts) {
+              const line = part.trim();
+              if (!line.startsWith("data: ")) continue;
+              try {
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
+                const event = JSON.parse(line.slice(6)) as ChatSseEvent;
+
+                const seq = (event as Record<string, unknown>)._seq;
+                if (typeof seq === "number") singleLastSeqRef.current = seq;
+
+                if (event.type === "session") {
+                  singleSessionIdRef.current = event.sessionId;
+                  setCurrentSessionId(event.sessionId);
+                } else if (event.type === "progress") {
+                  setSessionProgress((prev) => mergeProgressEntries(prev, event.result.progress));
+                } else if (event.type === "thinking" && event.content) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === resumeAssistantId
+                        ? Object.assign({}, m, {
+                            processContent: (m.processContent ?? "") + event.content,
+                            isProcessStreaming: true,
+                          })
+                        : m,
+                    ),
+                  );
+                } else if (event.type === "tool_call") {
+                  animation.cut(resumeAssistantId);
+                  pendingToolNameRef.current = event.name;
+                } else if (event.type === "tool_input") {
+                  const toolName = pendingToolNameRef.current;
+                  pendingToolNameRef.current = null;
+                  if (toolName) {
+                    let parsedInput: Record<string, unknown>;
+                    try {
+                      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
+                      parsedInput = JSON.parse(event.content) as Record<string, unknown>;
+                    } catch {
+                      parsedInput = { raw: event.content };
+                    }
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === resumeAssistantId
+                          ? Object.assign({}, m, {
+                              segments: [
+                                ...m.segments,
+                                {
+                                  type: "tool_call" as const,
+                                  tool: { name: toolName, input: parsedInput },
+                                },
+                                { type: "text" as const, content: "" },
+                              ],
+                            })
+                          : m,
+                      ),
+                    );
+                  }
+                } else if (event.type === "text" && event.content) {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === resumeAssistantId
+                        ? Object.assign({}, m, { isProcessStreaming: false })
+                        : m,
+                    ),
+                  );
+                  animation.enqueue(resumeAssistantId, event.content);
+                } else if (event.type === "result" && event.content) {
+                  setMessages((prev) =>
+                    prev.map((m) => {
+                      if (m.id !== resumeAssistantId) return m;
+                      const segs = [...m.segments];
+                      let lastTextIdx = -1;
+                      for (let i = segs.length - 1; i >= 0; i--) {
+                        if (segs[i].type === "text") {
+                          lastTextIdx = i;
+                          break;
+                        }
+                      }
+                      if (lastTextIdx >= 0)
+                        segs[lastTextIdx] = { type: "text" as const, content: event.content };
+                      return Object.assign({}, m, {
+                        segments: segs,
+                        isLoading: false,
+                        isProcessStreaming: false,
+                      });
+                    }),
+                  );
+                } else if (event.type === "cancelled") {
+                  animation.flush(resumeAssistantId);
+                  setSessionCancelled(true);
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === resumeAssistantId
+                        ? Object.assign({}, m, {
+                            isLoading: false,
+                            isProcessStreaming: false,
+                            isCancelled: true,
+                          })
+                        : m,
+                    ),
+                  );
+                } else if (event.type === "error" && event.content) {
+                  animation.flush(resumeAssistantId);
+                  setMessages((prev) =>
+                    prev.map((m) => {
+                      if (m.id !== resumeAssistantId) return m;
+                      const segs = [...m.segments];
+                      let lastTextIdx = -1;
+                      for (let i = segs.length - 1; i >= 0; i--) {
+                        if (segs[i].type === "text") {
+                          lastTextIdx = i;
+                          break;
+                        }
+                      }
+                      if (lastTextIdx >= 0)
+                        segs[lastTextIdx] = {
+                          type: "text" as const,
+                          content: `⚠️ ${event.content}`,
+                        };
+                      return Object.assign({}, m, {
+                        segments: segs,
+                        isLoading: false,
+                        isProcessStreaming: false,
+                      });
+                    }),
+                  );
+                } else if (event.type === "done") {
+                  animation.flush(resumeAssistantId);
+                  setMessages((prev) =>
+                    prev.map((m) => {
+                      if (m.id !== resumeAssistantId || !m.isLoading) return m;
+                      const hasText = m.segments.some(
+                        (s) =>
+                          s.type === "text" &&
+                          (s as { type: "text"; content: string }).content.trim(),
+                      );
+                      if (hasText)
+                        return Object.assign({}, m, {
+                          isLoading: false,
+                          isProcessStreaming: false,
+                        });
+                      const segs = m.segments.map((s, i, arr) => {
+                        if (s.type !== "text") return s;
+                        const isLast = arr.slice(i + 1).every((x) => x.type !== "text");
+                        return isLast ? { type: "text" as const, content: "(no response)" } : s;
+                      });
+                      return Object.assign({}, m, {
+                        segments: segs,
+                        isLoading: false,
+                        isProcessStreaming: false,
+                      });
+                    }),
+                  );
+                }
+              } catch {
+                // ignore malformed SSE lines
+              }
+            }
+          }
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === "AbortError") return;
+          animation.flush(resumeAssistantId);
+        } finally {
+          setIsLoading(false);
+          if (singleAbortRef.current === abort) singleAbortRef.current = null;
+        }
+      })();
+    },
+    [animation, messagesRef],
+  );
+
   // ─── setActiveAgentId ─────────────────────────────────────────────────────────
   const setActiveAgentId = useCallback(
     (agentId: string) => {
@@ -699,6 +931,7 @@ export function useSessionRegistry() {
       setIsLoading(false);
       setCurrentSessionId(null);
       singleSessionIdRef.current = null;
+      singleLastSeqRef.current = 0;
 
       activeAgentIdRef.current = agentId;
       setActiveAgentIdState(agentId);
@@ -732,24 +965,41 @@ export function useSessionRegistry() {
             }
           }
           if (!resolvedContextId) return;
-          const { messages: msgs, progress } = sessionDetailResponseSchema.parse(
+          const {
+            messages: msgs,
+            progress,
+            status,
+          } = sessionDetailResponseSchema.parse(
             await (await fetch(sessionDetailUrl(agentId, resolvedContextId))).json(),
           );
           const stamped = msgs.map((m) =>
             m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
           );
-          if (activeAgentIdRef.current === agentId) {
-            singleSessionIdRef.current = resolvedContextId;
-            setCurrentSessionId(resolvedContextId);
-            setMessages(stamped);
-            setSessionProgress(progress);
+          if (activeAgentIdRef.current !== agentId) return;
+          singleSessionIdRef.current = resolvedContextId;
+          setCurrentSessionId(resolvedContextId);
+          setMessages(stamped);
+          setSessionProgress(progress);
+          if (status === "running") {
+            // Session was running when user switched away — reconnect to live stream.
+            // Warm reconnect: singleLastSeqRef may be 0 if never connected, or > 0 if
+            // the user was previously connected and we're switching back.
+            setIsLoading(true);
+            connectSingleSessionStream(resolvedContextId, agentId, singleLastSeqRef.current > 0);
           }
         } catch {
           // no prior session for this agent
         }
       })();
     },
-    [animation, sessionsRef, activeKeyRef, syncActiveFromRef, reconnectToSession],
+    [
+      animation,
+      sessionsRef,
+      activeKeyRef,
+      syncActiveFromRef,
+      reconnectToSession,
+      connectSingleSessionStream,
+    ],
   );
 
   // ─── sendMessage ──────────────────────────────────────────────────────────────
@@ -818,6 +1068,9 @@ export function useSessionRegistry() {
               try {
                 // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
                 const event = JSON.parse(line.slice(6)) as ChatSseEvent;
+
+                const seq = (event as Record<string, unknown>)._seq;
+                if (typeof seq === "number") singleLastSeqRef.current = seq;
 
                 if (event.type === "permission") {
                   setPendingPermissions((prev) => [...prev, event]);
@@ -1356,8 +1609,47 @@ export function useSessionRegistry() {
   const setSessionId = useCallback(
     async (id: string | null) => {
       if (activeAgentIdRef.current !== "dove") {
-        singleSessionIdRef.current = id;
-        setCurrentSessionId(id);
+        if (!id) return;
+        const agentId = activeAgentIdRef.current;
+        // Abort any current stream before loading the historical session
+        singleAbortRef.current?.abort();
+        singleAbortRef.current = null;
+        singleLastSeqRef.current = 0;
+        animation.reset();
+        setMessages([]);
+        setSessionProgress([]);
+        setIsLoading(false);
+        setSessionCancelled(false);
+        setPendingPermissions([]);
+        void (async () => {
+          try {
+            const {
+              messages: msgs,
+              progress,
+              status,
+            } = sessionDetailResponseSchema.parse(
+              await (await fetch(sessionDetailUrl(agentId, id))).json(),
+            );
+            if (activeAgentIdRef.current !== agentId) return;
+            const stamped = msgs.map((m) =>
+              m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
+            );
+            singleSessionIdRef.current = id;
+            setCurrentSessionId(id);
+            setMessages(stamped);
+            setSessionProgress(progress);
+            setSessionCancelled(status === "cancelled");
+            if (status === "running") {
+              // Cold reconnect — never been connected to this session; replay from seq 0
+              // into a new blank assistant message so the in-progress turn is visible.
+              setIsLoading(true);
+              connectSingleSessionStream(id, agentId, false);
+            }
+          } catch {
+            singleSessionIdRef.current = id;
+            setCurrentSessionId(id);
+          }
+        })();
         return;
       }
       // Dove: load the historical session from DB into the registry
@@ -1400,7 +1692,15 @@ export function useSessionRegistry() {
       syncActiveFromRef(key);
       if (isRunning) reconnectToSession(key);
     },
-    [switchToSession, syncActiveToRef, syncActiveFromRef, snapshotSessions, reconnectToSession],
+    [
+      switchToSession,
+      syncActiveToRef,
+      syncActiveFromRef,
+      snapshotSessions,
+      reconnectToSession,
+      animation,
+      connectSingleSessionStream,
+    ],
   );
 
   // ─── Queue drain effect ─────────────────────────────────────────────────────

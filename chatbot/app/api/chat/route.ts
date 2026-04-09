@@ -26,7 +26,6 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { makeProgressSender } from "@/lib/chat-sse";
-import type { ChatSseEvent } from "@/lib/chat-sse";
 import type { StreamedResult } from "@/lib/query-tools";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { createSseResponse } from "@/lib/sse-response";
@@ -44,7 +43,7 @@ import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession, markInterruptedSessions, setSessionStatus, upsertSession } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
 import { AgentContextRegistry } from "@/lib/agent-context-registry";
-import { publishSessionEvent, clearSessionBuffer } from "@/lib/session-events";
+import { clearSessionBuffer } from "@/lib/session-events";
 import { sessionRunner } from "@/lib/session-runner";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -166,29 +165,12 @@ export async function POST(request: Request) {
       ? agentContextRegistry.getOrLoad(sessionId)
       : new Map<string, string>();
 
-    // Pre-registration buffer: the Dove session ID is only known after the first
-    // "session" SSE event fires mid-stream. Until then, buffer events so we can
-    // replay them into the session event bus the moment the ID is resolved.
-    let resolvedForPublish: string | null = sessionId; // known immediately on resume turns
-    const preRegBuffer: ChatSseEvent[] = [];
-
     // Dual-publish: forward every event to the browser SSE stream AND to the
     // per-session event bus so background reconnect endpoints can replay them.
-    // send() may throw if the SSE stream was cancelled (client disconnected) while
-    // the subprocess is still running as a background session — swallow that error
-    // so publishSessionEvent still runs and the event bus stays up to date.
-    const publish = (event: ChatSseEvent): void => {
-      try {
-        send(event);
-      } catch {
-        // SSE stream closed — subprocess continues as background session
-      }
-      if (resolvedForPublish) {
-        publishSessionEvent(resolvedForPublish, event);
-      } else {
-        preRegBuffer.push(event);
-      }
-    };
+    // On resume turns the session ID is known immediately; on first turns it is
+    // resolved when the "session" SSE event fires (dispatcher buffers and flushes).
+    const dispatcher = new SseQueryDispatcher(send, sessionId ?? undefined);
+    const userMsgId = randomUUID();
 
     const tools = agents.flatMap((agent) => {
       const onInnerProgress = (result: StreamedResult): void => {
@@ -212,25 +194,25 @@ export async function POST(request: Request) {
         makeStartTool(
           agent,
           subprocessController.signal,
-          makeProgressSender(publish, onInnerProgress),
+          makeProgressSender(dispatcher.publish, onInnerProgress),
           backgroundTasks,
         ),
         makeAwaitTool(
           agent,
           subprocessController.signal,
-          makeProgressSender(publish, onInnerProgress),
+          makeProgressSender(dispatcher.publish, onInnerProgress),
           pendingTaskSet,
         ),
       ];
     });
 
-    const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(publish);
+    const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
+      dispatcher.publish,
+    );
     // Track the session ID the moment it's registered in sessionRunner (mid-stream).
     // Separate from resolvedSessionId (set only on normal completion) so the finally
     // block can clean up even if query() throws before consumeQueryEvents returns.
     let registeredSessionId: string | null = null;
-    const dispatcher = new SseQueryDispatcher(publish);
-    const userMsgId = randomUUID();
 
     let resolvedSessionId: string | null = null;
     try {
@@ -279,7 +261,6 @@ export async function POST(request: Request) {
               // Only run setup on the first time we see this session ID.
               if (registeredSessionId === id) return;
               registeredSessionId = id;
-              resolvedForPublish = id;
               const label = message.slice(0, 60) || "Session";
               // Only create DB row on first turn (sessionId was null = new session).
               // Resume turns must not recreate a row the user may have deleted.
@@ -297,8 +278,6 @@ export async function POST(request: Request) {
               }
               setSessionStatus(id, "running");
               sessionRunner.register(id, subprocessController, label);
-              for (const e of preRegBuffer) publishSessionEvent(id, e);
-              preRegBuffer.length = 0;
               dispatcher.enableIncrementalSave({
                 sessionId: id,
                 agentId: "dove",
@@ -308,21 +287,21 @@ export async function POST(request: Request) {
               });
             },
           );
-          publish({ type: "done" });
+          dispatcher.publish({ type: "done" });
         },
         (_err, isAbort) => {
           abortPermissions();
           if (isAbort) {
             try {
-              publish({ type: "cancelled" });
+              dispatcher.publish({ type: "cancelled" });
             } catch {
               // stream already closed
             }
           } else {
             try {
               const msg = _err instanceof Error ? _err.message : String(_err);
-              publish({ type: "error", content: msg });
-              publish({ type: "done" });
+              dispatcher.publish({ type: "error", content: msg });
+              dispatcher.publish({ type: "done" });
             } catch {
               // Stream already closed — client disconnected
             }

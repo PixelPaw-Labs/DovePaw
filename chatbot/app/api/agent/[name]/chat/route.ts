@@ -61,8 +61,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       once: true,
     });
 
-    const onSnapshot = makeProgressSender(send);
+    // Dual-publish: send every event to the browser SSE stream AND to the in-memory
+    // session event bus so /api/chat/stream/[sessionId] can serve reconnecting clients.
     const dispatcher = new SseQueryDispatcher(send);
+    const onSnapshot = makeProgressSender(dispatcher.publish);
     const onArtifact = (artifactName: string, text: string) =>
       dispatcher.onArtifact(artifactName, text);
 
@@ -82,7 +84,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       const { stream, contextId: resolvedContextId } = handle;
 
       activeControllers.set(resolvedContextId, subprocessController);
-      send({ type: "session", sessionId: resolvedContextId });
+      dispatcher.onSession(resolvedContextId);
 
       dispatcher.enableIncrementalSave({
         sessionId: resolvedContextId,
@@ -95,14 +97,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       await collectStreamResult(stream, onSnapshot, onArtifact);
 
       if (subprocessController.signal.aborted) {
-        send({ type: "cancelled" });
+        dispatcher.publish({ type: "cancelled" });
       } else {
-        send({ type: "done" });
+        dispatcher.publish({ type: "done" });
       }
     } catch (err: unknown) {
       if (subprocessController.signal.aborted) {
         try {
-          send({ type: "cancelled" });
+          dispatcher.publish({ type: "cancelled" });
         } catch {
           /* stream closed */
         }
@@ -110,8 +112,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       }
       const msg = err instanceof Error ? err.message : String(err);
       try {
-        send({ type: "error", content: msg });
-        send({ type: "done" });
+        dispatcher.publish({ type: "error", content: msg });
+        dispatcher.publish({ type: "done" });
       } catch {
         /* stream already closed */
       }
