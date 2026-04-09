@@ -50,7 +50,22 @@ export async function GET(
   if (status === "running") {
     // Subscribe to a fresh bucket — if the subprocess is still alive it will
     // publish events that land here.  Replay DB messages so the UI has context.
-    return makeLiveResponse(sessionId, after, request.signal);
+    const detail = getSessionDetail(sessionId);
+    const prefixEvents: ChatSseEvent[] = detail
+      ? [
+          { type: "session", sessionId: detail.id },
+          ...detail.messages.flatMap((msg) => {
+            if (msg.role !== "assistant") return [];
+            return msg.segments.flatMap((s): ChatSseEvent[] => {
+              if (s.type === "text" && s.content) {
+                return [{ type: "result", content: s.content }];
+              }
+              return [];
+            });
+          }),
+        ]
+      : [];
+    return makeLiveResponse(sessionId, after, request.signal, prefixEvents);
   }
 
   // ── Mode 3: completed session — synthesize from DB ───────────────────────────
@@ -81,7 +96,12 @@ export async function GET(
 }
 
 /** Shared helper for modes 1 & 2: subscribe to the session event bus. */
-function makeLiveResponse(sessionId: string, after: number, signal: AbortSignal): Response {
+function makeLiveResponse(
+  sessionId: string,
+  after: number,
+  signal: AbortSignal,
+  prefixEvents: ChatSseEvent[] = [],
+): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
@@ -96,6 +116,13 @@ function makeLiveResponse(sessionId: string, after: number, signal: AbortSignal)
 
         // Subscribe FIRST (before snapshot) to avoid race window
         const snapshot = subscribeSession(sessionId, write, signal);
+
+        // Replay DB-sourced events (Mode 2: buffer evicted, session still running).
+        // These are the messages saved to DB before the buffer was lost (e.g. after HMR).
+        for (const e of prefixEvents) {
+          write(e);
+        }
+
         // Replay only events after the client's last-seen seq.
         // Skip permission events whose requestId is no longer in the pending map
         // (stale prompts from a restarted/aborted subprocess would 404 on Allow).
