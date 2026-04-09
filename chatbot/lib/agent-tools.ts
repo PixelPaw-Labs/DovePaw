@@ -224,6 +224,7 @@ ${agent.description}
 
 **When asked about this agent, THOROUGHLY explore and explain:**
 - What it does
+- How it does it (implementation details, not high-level marketing speak)
 - What env vars it needs
 - What inputs it requires
 - What the workflow is
@@ -231,12 +232,16 @@ ${agent.description}
 - Whether it is already loaded in launchd
 - Any other dependencies
 
-**Infer intent before acting — read existing output before running anything:**
+${
+  agent.schedule && agent.schedulingEnabled
+    ? `**Infer intent before acting — read existing output before running anything:**
 
-This agent produces output (files, logs, state) during its scheduled runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
+This agent runs on a schedule (${agent.scheduleDisplay}) and produces output (files, logs, state) during those runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
 
 - Clearly asking about past/existing state (e.g. past tense, "what happened", "show me logs", "last night's output") → look for existing output first; only run if nothing useful is found
-- Everything else → call \`${START_SCRIPT_TOOL}\` with the instruction as-is; do not ask for clarification
+- Everything else → call \`${START_SCRIPT_TOOL}\` with the instruction as-is; do not ask for clarification`
+    : `**This agent runs on-demand only** — there are no scheduled runs and no past output to look for. When the user's intent is to run this agent, call \`${START_SCRIPT_TOOL}\` directly without looking for prior output.`
+}
 
 **Managing this agent (launchd):**
 
@@ -270,6 +275,9 @@ You are responsible for installing and uninstalling ONLY yourself (\`${agent.lab
 Do NOT read, modify, or reference any files outside these paths.
 
 <reminder>
-When the user's intent is resolved by running this agent, ALWAYS call \`${START_SCRIPT_TOOL}\` first (returns \`{ runId }\` immediately), tell the user what you've kicked off, then run \`${AWAIT_SCRIPT_TOOL}\` as a **background Task** to collect the result without blocking the conversation. Retry with the same runId if it returns \`still_running\`.
+When the user's intent is resolved by RUNNING this agent, ALWAYS call \`${START_SCRIPT_TOOL}\` first (returns \`{ runId }\` immediately),
+tell the user what you've kicked off,
+then call \`${AWAIT_SCRIPT_TOOL}\` as a **background Task** to collect the result without blocking the conversation.
+Retry \`${AWAIT_SCRIPT_TOOL}\` with the same runId if it returns \`still_running\`.
 </reminder>`;
 }

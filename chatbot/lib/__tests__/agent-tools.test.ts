@@ -127,6 +127,36 @@ describe("buildSubAgentPrompt", () => {
     const prompt = buildSubAgentPrompt(AGENT);
     expect(prompt).toContain(AGENT.label);
   });
+
+  it("shows infer-intent guidance for a scheduled agent", () => {
+    const scheduled: AgentDef = {
+      ...AGENT,
+      schedule: { type: "calendar", hour: 0, minute: 0 },
+      schedulingEnabled: true,
+    };
+    const prompt = buildSubAgentPrompt(scheduled);
+    expect(prompt).toMatch(/infer intent before acting/i);
+    expect(prompt).toMatch(/runs on a schedule/i);
+    expect(prompt).not.toMatch(/on-demand only/i);
+  });
+
+  it("shows on-demand guidance for an agent with no schedule", () => {
+    const prompt = buildSubAgentPrompt(AGENT); // AGENT has no schedule field
+    expect(prompt).toMatch(/on-demand only/i);
+    expect(prompt).not.toMatch(/infer intent before acting/i);
+    expect(prompt).not.toMatch(/runs on a schedule/i);
+  });
+
+  it("shows on-demand guidance when schedulingEnabled is false even if schedule is set", () => {
+    const disabled: AgentDef = {
+      ...AGENT,
+      schedule: { type: "calendar", hour: 0, minute: 0 },
+      schedulingEnabled: false,
+    };
+    const prompt = buildSubAgentPrompt(disabled);
+    expect(prompt).toMatch(/on-demand only/i);
+    expect(prompt).not.toMatch(/infer intent before acting/i);
+  });
 });
 
 // ─── makeStartScriptTool ──────────────────────────────────────────────────────
