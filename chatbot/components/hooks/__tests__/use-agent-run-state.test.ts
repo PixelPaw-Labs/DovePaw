@@ -18,7 +18,12 @@ function makeStatus(overrides: Partial<AgentStatus> = {}): AgentStatus {
 
 function wrapper(isLoading: boolean, activeAgentId: string) {
   return ({ children }: { children: React.ReactNode }) =>
-    React.createElement(ConversationProvider, { isLoading, activeAgentId, children });
+    React.createElement(ConversationProvider, {
+      isLoading,
+      activeAgentId,
+      doveIsRunning: false,
+      children,
+    });
 }
 
 describe("useAgentRunState — without ConversationProvider", () => {
@@ -78,7 +83,19 @@ describe("useAgentRunState", () => {
       { wrapper: wrapper(false, "memory-dream") },
     );
     // isActive=true but isLoading=false → isDoveChatRunning=false
-    // processing=true but trigger=dove (not scheduled) → isScheduledRunning=false
+    // processing=true/dove but selected → heartbeat dove filtered to prevent post-session lag
     expect(result.current.isRunning).toBe(false);
+  });
+
+  it("isRunning=true for unselected agent while dove job is running (switched away)", () => {
+    // User switched to another agent; the original agent's A2A job is still running.
+    // isActive=false so isDoveChatRunning=false, but heartbeat reports processing=dove.
+    // Unselected agents trust any heartbeat trigger.
+    const { result } = renderHook(
+      () => useAgentRunState(false, makeStatus({ processing: true, processingTrigger: "dove" })),
+      { wrapper: wrapper(false, "memory-dream") },
+    );
+    expect(result.current.isRunning).toBe(true);
+    expect(result.current.processingTrigger).toBe("dove");
   });
 });

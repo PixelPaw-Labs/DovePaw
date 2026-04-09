@@ -9,8 +9,8 @@ import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { cn } from "@/lib/utils";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { useConversationContext } from "@/components/hooks/use-conversation-context";
+import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
 import { AgentButton } from "./agent-button";
-import { ShimmerLabel } from "./shimmer-label";
 
 interface AgentSidebarProps {
   agentConfigs: AgentConfigEntry[];
@@ -23,7 +23,7 @@ export function AgentSidebar({
   activeAgentId = "dove",
   onSelectAgent,
 }: AgentSidebarProps) {
-  const { isLoading } = useConversationContext();
+  const { doveIsRunning } = useConversationContext();
   const agents = agentConfigs.map(buildAgentDef);
   const statuses = useAgentHeartbeat();
   const pathname = usePathname();
@@ -33,7 +33,8 @@ export function AgentSidebar({
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
   const anyOnline = onlineCount > 0;
 
-  const isDoveLoading = !!isLoading && activeAgentId === "dove";
+  const isDoveLoading = doveIsRunning;
+  const doveShimmerRef = useButtonShimmer(isDoveLoading);
 
   return (
     <aside className="h-screen w-64 shrink-0 flex flex-col bg-background border-r border-border/30">
@@ -60,12 +61,27 @@ export function AgentSidebar({
         <button
           onClick={() => onSelectAgent?.("dove")}
           className={cn(
-            "my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+            "relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
             activeAgentId === "dove" && !isSettings
               ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
+          {isDoveLoading && (
+            <span
+              ref={doveShimmerRef}
+              aria-hidden
+              className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
+              style={{
+                background:
+                  activeAgentId === "dove" && !isSettings
+                    ? // selected (blue bg): soft white glow
+                      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.48) 50%, rgba(255,255,255,0.04) 75%, transparent 100%)"
+                    : // unselected (near-white bg): soft blue glow
+                      "linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.04) 25%, rgba(96,165,250,0.42) 50%, rgba(96,165,250,0.04) 75%, transparent 100%)",
+              }}
+            />
+          )}
           <Bot
             className={cn(
               "w-4 h-4 shrink-0",
@@ -73,15 +89,14 @@ export function AgentSidebar({
             )}
           />
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <ShimmerLabel
-              isActive={isDoveLoading}
+            <span
               className={cn(
                 "text-sm font-medium",
                 activeAgentId !== "dove" && "text-foreground/80",
               )}
             >
               Dove
-            </ShimmerLabel>
+            </span>
             <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
               Orchestrator
             </span>

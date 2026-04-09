@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { Settings } from "lucide-react";
-import { ShimmerLabel } from "./shimmer-label";
 import { useAgentRunState } from "@/components/hooks/use-agent-run-state";
+import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
 import type { AgentDef } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
 import type { AgentStatus, LaunchdStatus } from "@/a2a/heartbeat-types";
@@ -108,17 +108,32 @@ export function AgentButton({
   const Icon = agent.icon;
   const isOnline = status?.online ?? false;
   const { isRunning, processingTrigger } = useAgentRunState(isActive, status);
+  const shimmerRef = useButtonShimmer(isRunning);
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        "group my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+        "group relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
         isActive
           ? "bg-blue-100/60 text-blue-900 border-l-4 border-blue-500"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
       )}
     >
+      {isRunning && (
+        <span
+          ref={shimmerRef}
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
+          style={{
+            background: isActive
+              ? // selected (blue bg): soft white glow
+                "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.48) 50%, rgba(255,255,255,0.04) 75%, transparent 100%)"
+              : // unselected (near-white bg): soft blue glow
+                "linear-gradient(90deg, transparent 0%, rgba(96,165,250,0.04) 25%, rgba(96,165,250,0.42) 50%, rgba(96,165,250,0.04) 75%, transparent 100%)",
+          }}
+        />
+      )}
       <div
         className={cn(
           "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
@@ -129,12 +144,9 @@ export function AgentButton({
         <Icon className="w-3 h-3" />
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <ShimmerLabel
-          isActive={isRunning}
-          className={cn("text-sm font-medium", !isActive && "text-foreground/80")}
-        >
+        <span className={cn("text-sm font-medium", !isActive && "text-foreground/80")}>
           {agent.displayName}
-        </ShimmerLabel>
+        </span>
         <LaunchdBadge
           launchd={status?.launchd ?? null}
           processing={isRunning}

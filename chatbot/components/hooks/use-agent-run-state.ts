@@ -10,11 +10,15 @@ export interface AgentRunState {
 
 /**
  * Merges two independent processing signals into a single run state:
- *   - Chat-triggered: isLoading (ConversationContext) + isActive
- *   - Launchd-triggered: heartbeat status.processing where trigger === "scheduled"
+ *   - Chat-triggered: isLoading (ConversationContext) + isActive (fast-path, no heartbeat lag)
+ *   - Heartbeat: status.processing from the A2A processing registry
  *
- * Chat signal takes priority to avoid heartbeat lag bleeding into the UI
- * after a chat session completes.
+ * For the SELECTED agent, the heartbeat is only trusted for "scheduled" trigger.
+ * This avoids lag where heartbeat still reports processing=dove after the chat
+ * session ends (isDoveChatRunning already handles that case).
+ *
+ * For UNSELECTED agents, the heartbeat is trusted for all triggers — a dove-triggered
+ * job must remain visible even after the user switches to a different agent.
  */
 export function useAgentRunState(
   isActive: boolean,
@@ -23,11 +27,14 @@ export function useAgentRunState(
   const { isLoading } = useConversationContext();
 
   const isDoveChatRunning = isLoading && isActive;
-  const isScheduledRunning =
-    (status?.processing ?? false) && status?.processingTrigger === "scheduled";
+  const isHeartbeatRunning = isActive
+    ? // Selected: only trust scheduled trigger to prevent post-session lag
+      (status?.processing ?? false) && status?.processingTrigger === "scheduled"
+    : // Unselected: trust any trigger — dove job must stay visible after switching
+      (status?.processing ?? false);
 
   return {
-    isRunning: isDoveChatRunning || isScheduledRunning,
+    isRunning: isDoveChatRunning || isHeartbeatRunning,
     processingTrigger: isDoveChatRunning ? "dove" : (status?.processingTrigger ?? null),
   };
 }

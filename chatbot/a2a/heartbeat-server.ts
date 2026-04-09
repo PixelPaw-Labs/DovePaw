@@ -13,7 +13,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import { consola } from "consola";
 import type { AgentStatus, StatusMessage } from "./heartbeat-types.js";
 import { getLaunchdStatuses } from "@/lib/launchd";
-import { isProcessing, getProcessingTrigger } from "./lib/processing-registry.js";
+import {
+  isProcessing,
+  getProcessingTrigger,
+  onProcessingChange,
+} from "./lib/processing-registry.js";
 const INTERVAL_MS = 10_000;
 const PING_TIMEOUT_MS = 5_000;
 
@@ -90,6 +94,8 @@ export function startHeartbeatServer(agentPorts: Record<string, number>): Promis
       // Run first check immediately, then on interval
       void heartbeat();
       setInterval(() => void heartbeat(), INTERVAL_MS);
+      // Broadcast immediately whenever processing state changes (no 10s wait)
+      onProcessingChange(() => void heartbeat());
       resolve(addr.port);
     });
 

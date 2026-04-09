@@ -10,6 +10,17 @@ export type ProcessingTrigger = "scheduled" | "dove";
 
 const active = new Map<string, ProcessingTrigger>();
 const controllers = new Map<string, AbortController>();
+const listeners = new Set<() => void>();
+
+function notifyListeners(): void {
+  for (const fn of listeners) fn();
+}
+
+/** Subscribe to any processing state change. Returns an unsubscribe function. */
+export function onProcessingChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
 
 export function markProcessing(
   manifestKey: string,
@@ -18,11 +29,13 @@ export function markProcessing(
 ): void {
   active.set(manifestKey, trigger);
   controllers.set(manifestKey, controller);
+  notifyListeners();
 }
 
 export function markIdle(manifestKey: string): void {
   active.delete(manifestKey);
   controllers.delete(manifestKey);
+  notifyListeners();
 }
 
 export function isProcessing(manifestKey: string): boolean {

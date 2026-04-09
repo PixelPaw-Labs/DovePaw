@@ -16,6 +16,7 @@ describe("useConversationContext", () => {
         React.createElement(ConversationProvider, {
           isLoading: true,
           activeAgentId: "dove",
+          doveIsRunning: false,
           children,
         }),
     });

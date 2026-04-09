@@ -220,6 +220,7 @@ export function useSessionRegistry() {
   return {
     // ─── Multi-session API ───────────────────────────────────────────────────────
     sessions: activeAgentId === "dove" ? dove.sessions : [],
+    doveHasRunningSession: dove.sessions.some((s) => s.isLoading),
     activeSessionKey: dove.activeSessionKey,
     switchToSession: dove.switchToSession,
     stopSession: dove.stopSession,

@@ -5,7 +5,7 @@ import { ConversationProvider } from "@/components/hooks/use-conversation-contex
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return (
-    <ConversationProvider isLoading={false} activeAgentId="dove">
+    <ConversationProvider isLoading={false} activeAgentId="dove" doveIsRunning={false}>
       {children}
     </ConversationProvider>
   );

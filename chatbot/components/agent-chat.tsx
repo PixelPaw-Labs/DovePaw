@@ -56,6 +56,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     removeFromQueue,
     pendingPermissions,
     resolvePermission,
+    doveHasRunningSession,
   } = useSessionRegistry();
 
   const { sessions: agentSessions, refresh: refreshAgentSessions } =
@@ -73,12 +74,8 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
 
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(activeAgentId, agentConfigs);
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
-  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyOpen, setHistoryOpen] = React.useState(true);
 
-  // Close history panel when switching agents
-  React.useEffect(() => {
-    setHistoryOpen(false);
-  }, [activeAgentId]);
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
   const [historyPanelHeight, setHistoryPanelHeight] = React.useState(220);
@@ -129,15 +126,17 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     [historyPanelHeight],
   );
 
-  // Auto-open panel when progress first arrives
   const prevHasProgress = React.useRef(false);
   React.useEffect(() => {
-    if (hasProgress && !prevHasProgress.current) setWorkflowOpen(true);
     prevHasProgress.current = hasProgress;
   }, [hasProgress]);
 
   return (
-    <ConversationProvider isLoading={isLoading} activeAgentId={activeAgentId}>
+    <ConversationProvider
+      isLoading={isLoading}
+      activeAgentId={activeAgentId}
+      doveIsRunning={doveHasRunningSession}
+    >
       <div className="flex h-screen bg-background overflow-hidden">
         <AgentSidebar
           agentConfigs={agentConfigs}
