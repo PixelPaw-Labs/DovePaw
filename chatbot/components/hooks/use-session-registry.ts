@@ -663,6 +663,8 @@ export function useSessionRegistry() {
     activeKeyRef.current = key;
     setActiveKey(key);
     // Reset all rendering state for the new blank session
+    pendingQueueRef.current = [];
+    setPendingQueue([]);
     setMessages([]);
     setSessionProgress([]);
     setIsLoading(false);
@@ -928,6 +930,8 @@ export function useSessionRegistry() {
       setMessages([]);
       setSessionProgress([]);
       setSessionCancelled(false);
+      pendingQueueRef.current = [];
+      setPendingQueue([]);
       setIsLoading(false);
       setCurrentSessionId(null);
       singleSessionIdRef.current = null;
@@ -1390,6 +1394,8 @@ export function useSessionRegistry() {
 
       animation.reset();
       setPendingPermissions([]);
+      pendingQueueRef.current = [];
+      setPendingQueue([]);
 
       activeKeyRef.current = key;
       setActiveKey(key);
@@ -1462,6 +1468,8 @@ export function useSessionRegistry() {
       singleAbortRef.current?.abort();
       singleAbortRef.current = null;
       singleSessionIdRef.current = null;
+      pendingQueueRef.current = [];
+      setPendingQueue([]);
       setMessages([]);
       setSessionProgress([]);
       setSessionCancelled(false);
@@ -1661,7 +1669,9 @@ export function useSessionRegistry() {
           return;
         }
       }
-      // Not in registry — create a new entry and populate from server
+      // Not in registry — disconnect the current stream and create a new entry
+      const prevKeyForHistory = activeKeyRef.current;
+      if (prevKeyForHistory) disconnectStream(prevKeyForHistory);
       syncActiveToRef();
       const key = crypto.randomUUID();
       const blank = makeBlankSession(key);
@@ -1700,6 +1710,7 @@ export function useSessionRegistry() {
       reconnectToSession,
       animation,
       connectSingleSessionStream,
+      disconnectStream,
     ],
   );
 
