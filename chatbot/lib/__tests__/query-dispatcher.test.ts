@@ -14,7 +14,7 @@ describe("MessageAccumulator.buildMessage", () => {
     const acc = new MessageAccumulator();
     acc.onTextDelta("hello ");
     acc.onTextDelta("world");
-    const msg = acc.buildMessage("id-1");
+    const msg = acc.buildMessage();
     expect(msg.segments).toEqual([{ type: "text", content: "hello world" }]);
     expect(msg.processContent).toBeUndefined();
   });
@@ -25,7 +25,7 @@ describe("MessageAccumulator.buildMessage", () => {
     acc.onToolCall("Bash");
     acc.onToolInput('{"cmd":"ls"}');
     acc.onTextDelta("after");
-    const msg = acc.buildMessage("id-2");
+    const msg = acc.buildMessage();
     expect(msg.segments).toEqual([
       { type: "text", content: "before " },
       { type: "text", content: "after" },
@@ -37,7 +37,7 @@ describe("MessageAccumulator.buildMessage", () => {
     const acc = new MessageAccumulator();
     acc.onThinking("reasoning...");
     acc.onTextDelta("answer");
-    const msg = acc.buildMessage("id-3");
+    const msg = acc.buildMessage();
     expect(msg.segments).toEqual([{ type: "text", content: "answer" }]);
     expect(msg.processContent).toContain("reasoning...");
   });
@@ -48,7 +48,7 @@ describe("MessageAccumulator.buildMessage", () => {
     acc.onToolCall("Read");
     acc.onToolInput('{"path":"/x"}');
     acc.onTextDelta("result");
-    const msg = acc.buildMessage("id-4");
+    const msg = acc.buildMessage();
     expect(msg.segments).toEqual([{ type: "text", content: "result" }]);
     expect(msg.processContent).toBe("thought");
   });
@@ -56,7 +56,7 @@ describe("MessageAccumulator.buildMessage", () => {
   it("returns no processContent when no thinking or tool calls", () => {
     const acc = new MessageAccumulator();
     acc.onTextDelta("plain text");
-    const msg = acc.buildMessage("id-5");
+    const msg = acc.buildMessage();
     expect(msg.processContent).toBeUndefined();
   });
 
@@ -67,8 +67,8 @@ describe("MessageAccumulator.buildMessage", () => {
     acc.onToolCall("Read");
     acc.onToolInput('{"path":"/x"}');
     expect(acc.buildProgress()).toEqual([
-      { message: "Bash", artifacts: { "tool-call": "Bash" } },
-      { message: "Read", artifacts: { "tool-call": "Read" } },
+      { message: "Bash", artifacts: { "tool-call": "Bash", label: "Bash: ls" } },
+      { message: "Read", artifacts: { "tool-call": "Read", label: "Read: /x" } },
     ]);
   });
 
@@ -76,6 +76,55 @@ describe("MessageAccumulator.buildMessage", () => {
     const acc = new MessageAccumulator();
     acc.onTextDelta("hello");
     expect(acc.buildProgress()).toEqual([]);
+  });
+
+  it("onTaskProgress appends a new entry per event with unique key", () => {
+    const acc = new MessageAccumulator();
+    acc.onToolCall("Agent", "tu-1");
+    acc.onToolInput('{"prompt":"go"}');
+    acc.onTaskProgress("tu-1", "List recent files", "Bash");
+    acc.onTaskProgress("tu-1", "Read config", "Read");
+    expect(acc.buildProgress()).toEqual([
+      { message: "tu-1", artifacts: { "tool-call": "Agent", label: "Agent: go" } },
+      { message: "tu-1_1", artifacts: { "tool-call": "Bash", label: "Bash: List recent files" } },
+      { message: "tu-1_2", artifacts: { "tool-call": "Read", label: "Read: Read config" } },
+    ]);
+  });
+
+  it("onTaskProgress skips entry when lastTool is empty", () => {
+    const acc = new MessageAccumulator();
+    acc.onTaskProgress("tu-1", "Starting…", "");
+    expect(acc.buildProgress()).toEqual([]);
+  });
+
+  it("onTaskProgress without prior onToolCall appends with unique key when lastTool is set", () => {
+    const acc = new MessageAccumulator();
+    acc.onTaskProgress("tu-orphan", "Running task", "Read");
+    expect(acc.buildProgress()).toEqual([
+      { message: "tu-orphan_1", artifacts: { "tool-call": "Read", label: "Read: Running task" } },
+    ]);
+  });
+
+  it("onTaskProgress counters are per toolUseId", () => {
+    const acc = new MessageAccumulator();
+    acc.onToolCall("Agent", "tu-1");
+    acc.onToolInput('{"prompt":"go"}');
+    acc.onToolCall("Agent", "tu-2");
+    acc.onToolInput('{"prompt":"go"}');
+    acc.onTaskProgress("tu-2", "Reading config", "Read");
+    const progress = acc.buildProgress();
+    expect(progress[0]).toEqual({
+      message: "tu-1",
+      artifacts: { "tool-call": "Agent", label: "Agent: go" },
+    });
+    expect(progress[1]).toEqual({
+      message: "tu-2",
+      artifacts: { "tool-call": "Agent", label: "Agent: go" },
+    });
+    expect(progress[2]).toEqual({
+      message: "tu-2_1",
+      artifacts: { "tool-call": "Read", label: "Read: Reading config" },
+    });
   });
 });
 
@@ -87,8 +136,19 @@ describe("SseQueryDispatcher.buildProgress", () => {
     dispatcher.onToolCall("Bash");
     dispatcher.onToolCall("Read");
     expect(dispatcher.buildProgress()).toEqual([
-      { message: "Bash", artifacts: { "tool-call": "Bash" } },
-      { message: "Read", artifacts: { "tool-call": "Read" } },
+      { message: "Bash", artifacts: { "tool-call": "Bash", label: "Bash" } },
+      { message: "Read", artifacts: { "tool-call": "Read", label: "Read" } },
+    ]);
+  });
+
+  it("onTaskProgress appends a separate entry per inner tool call", () => {
+    const dispatcher = new SseQueryDispatcher(vi.fn());
+    dispatcher.onToolCall("Agent", "tu-1");
+    dispatcher.onToolInput('{"prompt":"go"}');
+    dispatcher.onTaskProgress("tu-1", "List recent files", "Bash");
+    expect(dispatcher.buildProgress()).toEqual([
+      { message: "tu-1", artifacts: { "tool-call": "Agent", label: "Agent: go" } },
+      { message: "tu-1_1", artifacts: { "tool-call": "Bash", label: "Bash: List recent files" } },
     ]);
   });
 });
@@ -126,7 +186,7 @@ describe("SseQueryDispatcher", () => {
       type: "progress",
       result: {
         output: "",
-        progress: [{ message: "Bash", artifacts: { [ARTIFACT.TOOL_CALL]: "Bash" } }],
+        progress: [{ message: "Bash", artifacts: { [ARTIFACT.TOOL_CALL]: "Bash", label: "Bash" } }],
       },
     });
   });
@@ -137,15 +197,15 @@ describe("SseQueryDispatcher", () => {
     expect(send).toHaveBeenCalledWith({ type: "tool_input", content: '{"cmd":"ls"}' });
   });
 
-  it("onResult sends result event for non-empty string", () => {
+  it("onFinalOutput sends result event for non-empty string", () => {
     const send = makeSend();
-    new SseQueryDispatcher(send).onResult("done");
+    new SseQueryDispatcher(send).onFinalOutput("done");
     expect(send).toHaveBeenCalledWith({ type: "result", content: "done" });
   });
 
-  it("onResult does not send for empty string", () => {
+  it("onFinalOutput does not send for empty string", () => {
     const send = makeSend();
-    new SseQueryDispatcher(send).onResult("");
+    new SseQueryDispatcher(send).onFinalOutput("");
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -170,7 +230,9 @@ describe("SseQueryDispatcher", () => {
         type: "progress",
         result: {
           output: "",
-          progress: [{ message: "Read", artifacts: { [ARTIFACT.TOOL_CALL]: "Read" } }],
+          progress: [
+            { message: "Read", artifacts: { [ARTIFACT.TOOL_CALL]: "Read", label: "Read" } },
+          ],
         },
       });
     });
@@ -220,10 +282,22 @@ describe("A2AQueryDispatcher", () => {
     expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
-  it("onToolCall publishes status with tool-call artifact", () => {
+  it("onToolCall uses tool name as key when no toolUseId", () => {
     const pub = makePublisher();
     new A2AQueryDispatcher(pub).onToolCall("Bash");
-    expect(pub.publishStatusToUI).toHaveBeenCalledWith("Bash", { [ARTIFACT.TOOL_CALL]: "Bash" });
+    expect(pub.publishStatusToUI).toHaveBeenCalledWith("Bash", {
+      [ARTIFACT.TOOL_CALL]: "Bash",
+      label: "Bash",
+    });
+  });
+
+  it("onToolCall uses toolUseId as key when provided", () => {
+    const pub = makePublisher();
+    new A2AQueryDispatcher(pub).onToolCall("Bash", "tu-abc");
+    expect(pub.publishStatusToUI).toHaveBeenCalledWith("tu-abc", {
+      [ARTIFACT.TOOL_CALL]: "Bash",
+      label: "Bash",
+    });
   });
 
   it("onToolInput publishes tool-input artifact (no workflow node)", () => {
@@ -233,16 +307,16 @@ describe("A2AQueryDispatcher", () => {
     expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
-  it("onResult publishes final-output artifact (no workflow node)", () => {
+  it("onFinalOutput publishes final-output artifact (no workflow node)", () => {
     const pub = makePublisher();
-    new A2AQueryDispatcher(pub).onResult("task complete");
+    new A2AQueryDispatcher(pub).onFinalOutput("task complete");
     expect(pub.send).toHaveBeenCalledWith("task complete", ARTIFACT.FINAL_OUTPUT);
     expect(pub.publishStatusToUI).not.toHaveBeenCalled();
   });
 
-  it("onResult skips empty string", () => {
+  it("onFinalOutput skips empty string", () => {
     const pub = makePublisher();
-    new A2AQueryDispatcher(pub).onResult("");
+    new A2AQueryDispatcher(pub).onFinalOutput("");
     expect(pub.send).not.toHaveBeenCalled();
   });
 
@@ -260,6 +334,15 @@ describe("A2AQueryDispatcher", () => {
     expect(pub.send).not.toHaveBeenCalled();
   });
 
+  it("onTaskProgress publishes with unique step key and description label", () => {
+    const pub = makePublisher();
+    new A2AQueryDispatcher(pub).onTaskProgress("tu-1", "List recent log files", "Bash");
+    expect(pub.publishStatusToUI).toHaveBeenCalledWith("tu-1_1", {
+      [ARTIFACT.TOOL_CALL]: "Bash",
+      label: "Bash: List recent log files",
+    });
+  });
+
   it("buildAssistantMessage returns text-only segments and thinking in processContent", () => {
     const dispatcher = new A2AQueryDispatcher(makePublisher());
     dispatcher.onTextDelta("Hello ");
@@ -268,9 +351,9 @@ describe("A2AQueryDispatcher", () => {
     dispatcher.onThinking("inner reasoning");
     dispatcher.onTextDelta("World");
 
-    const msg = dispatcher.buildAssistantMessage("msg-1");
+    const msg = dispatcher.buildAssistantMessage();
 
-    expect(msg.id).toBe("msg-1");
+    expect(typeof msg.id).toBe("string");
     expect(msg.role).toBe("assistant");
     expect(msg.segments.every((s) => s.type === "text")).toBe(true);
     expect(msg.segments.map((s) => (s as { type: "text"; content: string }).content)).toEqual([

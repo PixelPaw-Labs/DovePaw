@@ -16,7 +16,7 @@
  */
 
 import { createServer } from "node:net";
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { z } from "zod";
 import { consola } from "consola";
 import express from "express";
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
@@ -30,9 +30,9 @@ import {
   restHandler,
   UserBuilder,
 } from "@a2a-js/sdk/server/express";
-import { PORTS_FILE } from "@/lib/paths";
-import { z } from "zod";
 import { QueryAgentExecutor } from "./query-agent-executor";
+export { portsManifestSchema, writePortsManifest, readPortsManifest } from "./ports-manifest";
+export type { PortsManifest } from "./ports-manifest";
 import { SessionManager } from "@/lib/session-manager";
 
 // ─── Port utilities ───────────────────────────────────────────────────────────
@@ -54,28 +54,6 @@ export function getAvailablePort(): Promise<number> {
     });
     server.on("error", reject);
   });
-}
-
-export const portsManifestSchema = z.object({ updatedAt: z.string() }).catchall(z.number());
-
-export interface PortsManifest {
-  updatedAt: string;
-  [key: string]: number | string;
-}
-
-export function writePortsManifest(ports: Record<string, number>): void {
-  const manifest: PortsManifest = { ...ports, updatedAt: new Date().toISOString() };
-  writeFileSync(PORTS_FILE, JSON.stringify(manifest, null, 2));
-}
-
-export function readPortsManifest(): PortsManifest | null {
-  if (!existsSync(PORTS_FILE)) return null;
-  try {
-    const parsed = portsManifestSchema.safeParse(JSON.parse(readFileSync(PORTS_FILE, "utf-8")));
-    return parsed.success ? parsed.data : null;
-  } catch {
-    return null;
-  }
 }
 
 // ─── Server factory ───────────────────────────────────────────────────────────
@@ -116,7 +94,8 @@ export function createAgentServer(
     app.use(express.json());
     app.get("/sessions", (_req, res) => res.json(sessionManager.getSessions()));
     app.post("/session/clear", (req, res) => {
-      const contextId = z.object({ contextId: z.string() }).parse(req.body).contextId;
+      const body: unknown = req.body;
+      const { contextId } = z.object({ contextId: z.string() }).parse(body);
       sessionManager.delete(contextId);
       res.json({ ok: true });
     });

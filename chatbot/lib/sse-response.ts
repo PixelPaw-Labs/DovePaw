@@ -2,31 +2,39 @@ import type { ChatSseEvent } from "@/lib/chat-sse";
 
 export type SseHandler = (
   send: (event: ChatSseEvent) => void,
-  abortController: AbortController,
+  connectionController: AbortController, // fires on browser disconnect — NOT the subprocess controller
 ) => Promise<void>;
 
 /**
  * Creates a streaming SSE Response from an async handler.
  *
- * Wires request abort to the AbortController, provides a typed `send` helper,
- * and closes the stream after the handler settles. The handler is responsible
- * for its own error handling and sending terminal events (done/cancelled/error).
+ * Separates connection lifecycle (connectionController, wired to request.signal) from
+ * subprocess lifecycle (subprocessController, owned by the caller). The handler receives
+ * only the connectionController so it can react to browser disconnects without accidentally
+ * killing long-running background subprocesses.
+ *
+ * The handler is responsible for its own error handling and sending terminal events
+ * (done/cancelled/error).
  */
-export function createSseResponse(request: Request, handler: SseHandler): Response {
+export function createSseResponse(
+  request: Request,
+  subprocessController: AbortController, // caller-owned, NOT wired to request.signal
+  handler: SseHandler,
+): Response {
   const encoder = new TextEncoder();
-  const abortController = new AbortController();
-  request.signal.addEventListener("abort", () => abortController.abort());
+  const connectionController = new AbortController();
+  request.signal.addEventListener("abort", () => connectionController.abort());
 
   const readable = new ReadableStream<Uint8Array>({
     cancel() {
-      abortController.abort();
+      connectionController.abort();
     },
     start(controller) {
       const send = (payload: ChatSseEvent) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
       };
-      return handler(send, abortController).finally(() => {
-        abortController.abort();
+      return handler(send, connectionController).finally(() => {
+        connectionController.abort();
         try {
           controller.close();
         } catch {

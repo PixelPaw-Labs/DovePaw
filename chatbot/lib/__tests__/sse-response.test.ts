@@ -15,7 +15,7 @@ function makeRequest(abortSignal?: AbortSignal): Request {
 
 describe("createSseResponse", () => {
   it("returns a text/event-stream response", () => {
-    const res = createSseResponse(makeRequest(), async (send) => {
+    const res = createSseResponse(makeRequest(), new AbortController(), async (send) => {
       send({ type: "done" });
     });
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
@@ -23,7 +23,7 @@ describe("createSseResponse", () => {
   });
 
   it("encodes events as SSE data lines", async () => {
-    const res = createSseResponse(makeRequest(), async (send) => {
+    const res = createSseResponse(makeRequest(), new AbortController(), async (send) => {
       send({ type: "text", content: "hello" });
       send({ type: "done" });
     });
@@ -32,21 +32,33 @@ describe("createSseResponse", () => {
     expect(lines).toContain(JSON.stringify({ type: "done" }));
   });
 
-  it("aborts the controller when the request signal aborts", () => {
+  it("aborts the connectionController when the request signal aborts", () => {
     const ac = new AbortController();
     const request = makeRequest(ac.signal);
-    let capturedAc: AbortController | undefined;
-    createSseResponse(request, async (_send, abortController) => {
-      capturedAc = abortController;
+    let capturedConnectionController: AbortController | undefined;
+    createSseResponse(request, new AbortController(), async (_send, connectionController) => {
+      capturedConnectionController = connectionController;
       await new Promise(() => {}); // never resolves
     });
-    expect(capturedAc!.signal.aborted).toBe(false);
+    expect(capturedConnectionController!.signal.aborted).toBe(false);
     ac.abort();
-    expect(capturedAc!.signal.aborted).toBe(true);
+    expect(capturedConnectionController!.signal.aborted).toBe(true);
+  });
+
+  it("does not abort the subprocessController when the request signal aborts", () => {
+    const ac = new AbortController();
+    const request = makeRequest(ac.signal);
+    const subprocessController = new AbortController();
+    createSseResponse(request, subprocessController, async () => {
+      await new Promise(() => {}); // never resolves
+    });
+    expect(subprocessController.signal.aborted).toBe(false);
+    ac.abort();
+    expect(subprocessController.signal.aborted).toBe(false);
   });
 
   it("closes the stream after the handler resolves", async () => {
-    const res = createSseResponse(makeRequest(), async (send) => {
+    const res = createSseResponse(makeRequest(), new AbortController(), async (send) => {
       send({ type: "done" });
     });
     // Reading the full body without hanging confirms the stream was closed

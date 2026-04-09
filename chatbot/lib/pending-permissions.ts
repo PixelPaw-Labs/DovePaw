@@ -5,11 +5,22 @@
  * and sends a "permission" SSE event to the browser. The POST /api/chat/permission
  * endpoint resolves the promise when the user approves or denies.
  *
- * Stored in module scope (singleton per process) — safe for Next.js server-side use
- * because route.ts and the API endpoint share the same Node.js process.
+ * Stored on globalThis so the Map survives Next.js HMR module re-evaluation in dev.
+ * Without this, a file save between addPendingPermission and the user clicking Allow
+ * would clear the Map and return 404 on the permission response.
  */
 
-const pending = new Map<string, (allowed: boolean) => void>();
+declare global {
+  // eslint-disable-next-line no-var -- must use var for globalThis augmentation
+  var __dovePendingPermissions: Map<string, (allowed: boolean) => void> | undefined;
+}
+
+const pending: Map<string, (allowed: boolean) => void> =
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- globalThis survives HMR; cast required since TS infers Map<any, any> for the global slot
+  (globalThis.__dovePendingPermissions ??= new Map<string, (allowed: boolean) => void>()) as Map<
+    string,
+    (allowed: boolean) => void
+  >;
 
 /**
  * Register a pending permission request. Returns a Promise that resolves to
@@ -19,6 +30,11 @@ export function addPendingPermission(requestId: string): Promise<boolean> {
   return new Promise((resolve) => {
     pending.set(requestId, resolve);
   });
+}
+
+/** Returns true if the requestId is still awaiting a user decision. */
+export function hasPendingPermission(requestId: string): boolean {
+  return pending.has(requestId);
 }
 
 /**

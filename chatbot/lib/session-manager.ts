@@ -20,6 +20,7 @@ export interface SessionState {
 export interface SessionSaveOptions {
   label?: string;
   userText?: string;
+  userMsgId?: string;
   assistantMsg?: SessionMessage;
   subagentSessionId?: string;
   workspacePath?: string;
@@ -84,25 +85,32 @@ export class SessionManager {
     const {
       label = "Session",
       userText = "",
+      userMsgId,
       assistantMsg,
       subagentSessionId,
       workspacePath,
     } = options;
-    const resolvedMsg: SessionMessage = assistantMsg ?? {
-      id: randomUUID(),
-      role: "assistant",
-      segments: [{ type: "text", content: result.output }],
+    const userMsg: SessionMessage = {
+      id: userMsgId ?? randomUUID(),
+      role: "user",
+      segments: [{ type: "text", content: userText }],
     };
+    const assistantResolved: SessionMessage | null =
+      assistantMsg ??
+      (result.output
+        ? {
+            id: randomUUID(),
+            role: "assistant",
+            segments: [{ type: "text", content: result.output }],
+          }
+        : null);
     setActiveSession(agentId, contextId);
     upsertSession({
       id: contextId,
       agentId,
       startedAt: new Date().toISOString(),
       label,
-      messages: [
-        { id: randomUUID(), role: "user", segments: [{ type: "text", content: userText }] },
-        resolvedMsg,
-      ],
+      messages: assistantResolved ? [userMsg, assistantResolved] : [userMsg],
       progress: result.progress,
       subagentSessionId,
       workspacePath,

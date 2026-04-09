@@ -56,6 +56,41 @@ describe("db", () => {
     expect(getSessionDetail("ctx-1")!.progress).toHaveLength(1);
   });
 
+  it("upsertSession merges progress entry with same message key when incoming has more artifact keys", () => {
+    upsertSession({
+      ...base,
+      progress: [{ message: "tu-1", artifacts: { "tool-call": "Agent" } }],
+    });
+    upsertSession({
+      ...base,
+      messages: [],
+      progress: [
+        { message: "tu-1", artifacts: { "tool-call": "Agent", label: "Await GSD agent response" } },
+      ],
+    });
+    const progress = getSessionDetail("ctx-1")!.progress;
+    expect(progress).toHaveLength(1);
+    expect(progress[0].artifacts).toEqual({
+      "tool-call": "Agent",
+      label: "Await GSD agent response",
+    });
+  });
+
+  it("upsertSession skips stale progress entry when incoming is a strict subset", () => {
+    upsertSession({
+      ...base,
+      progress: [{ message: "tu-1", artifacts: { "tool-call": "Agent", label: "Done" } }],
+    });
+    upsertSession({
+      ...base,
+      messages: [],
+      progress: [{ message: "tu-1", artifacts: { "tool-call": "Agent" } }],
+    });
+    const progress = getSessionDetail("ctx-1")!.progress;
+    expect(progress).toHaveLength(1);
+    expect(progress[0].artifacts).toEqual({ "tool-call": "Agent", label: "Done" });
+  });
+
   it("setActiveSession / getActiveSession round-trips", () => {
     setActiveSession("agent-a", "ctx-1");
     expect(getActiveSession("agent-a")).toBe("ctx-1");

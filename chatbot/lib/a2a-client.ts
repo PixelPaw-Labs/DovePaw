@@ -18,15 +18,11 @@ import type {
   TaskStatusUpdateEvent,
   TaskArtifactUpdateEvent,
 } from "@a2a-js/sdk";
-import { readPortsManifest } from "@/a2a/lib/base-server";
-import type { PortsManifest } from "@/a2a/lib/base-server";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
+import type { PortsManifest } from "@/a2a/lib/ports-manifest";
 import { TRANSIENT_ARTIFACT_NAMES, ARTIFACT } from "@/lib/query-dispatcher";
-/** A progress message with any artifacts published alongside it. */
-export type ProgressEntry = {
-  message: string;
-  /** Artifacts linked to this progress message — name → text. */
-  artifacts: Record<string, string>;
-};
+import type { ProgressEntry } from "@/lib/progress";
+export type { ProgressEntry } from "@/lib/progress";
 
 export type StreamedResult = {
   /** Primary text output (from artifact-update events), joined for readability. */

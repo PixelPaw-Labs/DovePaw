@@ -1,0 +1,7 @@
+{
+  "theme": "default",
+  "components": {
+    "directory": "chatbot/components",
+    "installed": []
+  }
+}

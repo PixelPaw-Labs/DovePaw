@@ -107,11 +107,12 @@ export function buildAgentHooks(
 /** Hooks for Dove's top-level query() in route.ts. */
 export function buildDoveHooks(
   agents: AgentDef[],
+  pendingTaskSet: Set<string>,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
-    hasPendingWork: hasPendingTasks,
-    getPendingIds: getPendingTaskIds,
+    hasPendingWork: () => hasPendingTasks(pendingTaskSet),
+    getPendingIds: () => getPendingTaskIds(pendingTaskSet),
     getStillRunningId: (s) => {
       if (typeof s !== "object" || s === null || !("taskId" in s)) return undefined;
       const val: unknown = Reflect.get(s, "taskId");

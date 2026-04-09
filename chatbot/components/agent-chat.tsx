@@ -15,7 +15,7 @@ import {
 import { ChatInputBar } from "./agent-chat/chat-input-bar";
 import { ProcessingBar } from "./agent-chat/processing-bar";
 import { PermissionBanner } from "./agent-chat/permission-banner";
-import { useConversations } from "@/components/hooks/use-conversations";
+import { useSessionRegistry } from "@/components/hooks/use-session-registry";
 import { ConversationProvider } from "@/components/hooks/use-conversation-context";
 import { AgentSidebar } from "./agent-chat/agent-sidebar";
 import { ChatMessageItem } from "./agent-chat/chat-message";
@@ -56,17 +56,18 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
     removeFromQueue,
     pendingPermissions,
     resolvePermission,
-  } = useConversations();
+  } = useSessionRegistry();
 
-  const { sessions, refresh: refreshAgentSessions } = useAgentSessions(activeAgentId);
+  const { sessions: agentSessions, refresh: refreshAgentSessions } =
+    useAgentSessions(activeAgentId);
   const { sessions: doveSessions, refresh } = useDoveSessions(activeAgentId === "dove");
   const refreshHistory =
     activeAgentId === "dove" ? refresh : () => refreshAgentSessions(activeAgentId);
 
-  // Refresh session list after each completed response
+  // Refresh session list when a session starts or completes
   const prevIsLoadingRef = React.useRef(isLoading);
   React.useEffect(() => {
-    if (prevIsLoadingRef.current && !isLoading) void refreshHistory();
+    if (prevIsLoadingRef.current !== isLoading) void refreshHistory();
     prevIsLoadingRef.current = isLoading;
   }, [isLoading, refreshHistory]);
 
@@ -82,12 +83,6 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   const [panelWidth, setPanelWidth] = React.useState(380);
   const isResizing = React.useRef(false);
   const hasProgress = sessionProgress.length > 0;
-  const lastAssistantHasContent = React.useMemo(() => {
-    const last = messages.findLast((m) => m.role === "assistant");
-    return (
-      !!last && (last.segments.some((s) => s.type === "text" && s.content) || !!last.processContent)
-    );
-  }, [messages]);
 
   const onResizeStart = React.useCallback(
     (e: React.MouseEvent) => {
@@ -187,12 +182,12 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           {/* Session history popup — draggable, floats within main */}
           <SessionHistoryPopup
             visible={historyOpen}
-            sessions={activeAgentId === "dove" ? doveSessions : sessions}
+            sessions={activeAgentId === "dove" ? doveSessions : agentSessions}
             activeSessionId={currentSessionId}
             containerRef={mainRef}
             onSelect={setSessionId}
             onNew={() => {
-              void newSession();
+              newSession();
               setHistoryOpen(false);
             }}
             onDelete={async (id) => {
@@ -207,19 +202,21 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
             <ConversationContent>
               {messages.length === 0 ? (
                 <ConversationEmptyState className="justify-start pt-8">
-                  <IntroCard
-                    key={activeAgentId}
-                    agentConfigs={agentConfigs}
-                    onSelect={sendMessage}
-                    agentId={activeAgentId}
-                  />
+                  {!isLoading && (
+                    <IntroCard
+                      key={activeAgentId}
+                      agentConfigs={agentConfigs}
+                      onSelect={sendMessage}
+                      agentId={activeAgentId}
+                    />
+                  )}
                 </ConversationEmptyState>
               ) : (
                 messages.map((msg) => (
                   <ChatMessageItem key={msg.id} msg={msg} agentConfigs={agentConfigs} />
                 ))
               )}
-              {isLoading && lastAssistantHasContent && <ProcessingBar />}
+              {isLoading && <ProcessingBar />}
             </ConversationContent>
             <ConversationScrollButton />
           </Conversation>

@@ -24,9 +24,20 @@ vi.mock("@/lib/query-events", () => ({
   consumeQueryEvents: vi.fn(),
 }));
 
-vi.mock("@/lib/query-dispatcher", () => ({
-  SseQueryDispatcher: vi.fn(),
-}));
+vi.mock("@/lib/query-dispatcher", () => {
+  const SseQueryDispatcher = vi.fn(function () {
+    return {
+      onSession: vi.fn(),
+      buildProgress: vi.fn(() => []),
+      buildAssistantMessage: vi.fn(() => ({
+        id: "mock-id",
+        role: "assistant",
+        segments: [],
+      })),
+    };
+  });
+  return { SseQueryDispatcher };
+});
 
 vi.mock("@/lib/query-tools", () => ({
   makeAskTool: vi.fn(() => ({})),
@@ -54,6 +65,7 @@ vi.mock("@@/lib/agents-config", () => ({
 
 vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch",
+  DOVEPAW_DIR: "/mock/dovepaw",
 }));
 
 vi.mock("@/lib/paths", () => ({
@@ -62,6 +74,26 @@ vi.mock("@/lib/paths", () => ({
   DOVEPAW_AGENT_LOGS: "/mock/logs",
   DOVEPAW_AGENT_STATE: "/mock/state",
   PORTS_FILE: "/mock/.ports.json",
+}));
+
+vi.mock("@/lib/db", () => ({
+  markInterruptedSessions: vi.fn(),
+  setSessionStatus: vi.fn(),
+  deleteSession: vi.fn(),
+}));
+
+vi.mock("@/lib/session-events", () => ({
+  publishSessionEvent: vi.fn(),
+  clearSessionBuffer: vi.fn(),
+}));
+
+vi.mock("@/lib/session-runner", () => ({
+  sessionRunner: {
+    register: vi.fn(),
+    abort: vi.fn(),
+    complete: vi.fn(),
+    abortAll: vi.fn(),
+  },
 }));
 
 import { readSettings } from "@@/lib/settings";

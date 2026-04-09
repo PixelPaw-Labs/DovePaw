@@ -26,6 +26,9 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { makeProgressSender } from "@/lib/chat-sse";
+import type { ChatSseEvent } from "@/lib/chat-sse";
+import type { StreamedResult } from "@/lib/query-tools";
+import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { createSseResponse } from "@/lib/sse-response";
 import {
   makeAskTool,
@@ -38,9 +41,11 @@ import {
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession } from "@/lib/db";
+import { deleteSession, markInterruptedSessions, setSessionStatus, upsertSession } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
 import { AgentContextRegistry } from "@/lib/agent-context-registry";
+import { publishSessionEvent, clearSessionBuffer } from "@/lib/session-events";
+import { sessionRunner } from "@/lib/session-runner";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -51,9 +56,15 @@ const chatRequestSchema = z.object({
 
 export const maxDuration = 86400; // 24 hours for long-running agents
 
-// Module-level map so DELETE can abort an in-flight query by session ID.
-const activeControllers = new Map<string, AbortController>();
 const agentContextRegistry = new AgentContextRegistry();
+/** Sessions explicitly deleted via DELETE handler — skip save in finally to avoid re-creating. */
+const deletedSessionIds = new Set<string>();
+
+// One-time server startup: mark sessions that were running as interrupted
+markInterruptedSessions();
+
+process.on("SIGTERM", () => sessionRunner.abortAll());
+process.on("exit", () => sessionRunner.abortAll());
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
@@ -67,7 +78,7 @@ You are a clever, mischievous cat who takes your job very seriously (between nap
 <agents>
 ${agents.map((a, i) => `${i + 1}. \`${a.displayName}\``).join("\n")}
 </agents>
-**You are the user's strong, loyal assistant — not a passive relay.** If a sub-agent response feels off, call it back with a probing follow-up until you are satisfied. 
+**You are the user's strong, loyal assistant — not a passive relay.** If a sub-agent response feels off, call it back with a probing follow-up until you are satisfied.
 Some examples:
 - Result looks vague or suspiciously clean (e.g. "double-check that", "why did it finish so fast?")
 - Status fields contradict each other (e.g. "why is there no PID if it's loaded?", "why are the logs empty?")
@@ -133,9 +144,21 @@ export async function POST(request: Request) {
   // The hook captures it from the "session" SSE event and sends it back on every request.
   const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
-  return createSseResponse(request, async (send, abortController) => {
+  const subprocessController = new AbortController();
+  return createSseResponse(request, subprocessController, async (send, _connectionController) => {
+    // subprocessController is intentionally NOT wired to _connectionController.
+    // Browser disconnect / session switch only closes the SSE stream (via connectionController)
+    // but leaves the Claude subprocess running as a background session.
+    // The subprocess is only killed by:
+    //   1. Explicit DELETE /api/chat  → sessionRunner.abort()
+    //   2. Process exit / SIGTERM    → sessionRunner.abortAll()
+
     const backgroundTasks: Promise<unknown>[] = [];
+    const pendingTaskSet = new Set<string>();
     const agents = await readAgentsConfig();
+
+    // Accumulates inner-agent progress for the final SessionManager.save.
+    const innerProgress: ProgressEntry[] = [];
 
     // On subsequent turns, load the persisted context map for this Dove session.
     // On the first turn (sessionId is null), start fresh — persist() will save it after.
@@ -143,24 +166,82 @@ export async function POST(request: Request) {
       ? agentContextRegistry.getOrLoad(sessionId)
       : new Map<string, string>();
 
-    const tools = agents.flatMap((agent) => [
-      makeAskTool(agent, abortController.signal, ctxMap),
-      makeStartTool(agent, abortController.signal, makeProgressSender(send), backgroundTasks),
-      makeAwaitTool(agent, abortController.signal, makeProgressSender(send)),
-    ]);
+    // Pre-registration buffer: the Dove session ID is only known after the first
+    // "session" SSE event fires mid-stream. Until then, buffer events so we can
+    // replay them into the session event bus the moment the ID is resolved.
+    let resolvedForPublish: string | null = sessionId; // known immediately on resume turns
+    const preRegBuffer: ChatSseEvent[] = [];
 
-    if (sessionId) activeControllers.set(sessionId, abortController);
-    const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(send);
-    const dispatcher = new SseQueryDispatcher(send);
+    // Dual-publish: forward every event to the browser SSE stream AND to the
+    // per-session event bus so background reconnect endpoints can replay them.
+    // send() may throw if the SSE stream was cancelled (client disconnected) while
+    // the subprocess is still running as a background session — swallow that error
+    // so publishSessionEvent still runs and the event bus stays up to date.
+    const publish = (event: ChatSseEvent): void => {
+      try {
+        send(event);
+      } catch {
+        // SSE stream closed — subprocess continues as background session
+      }
+      if (resolvedForPublish) {
+        publishSessionEvent(resolvedForPublish, event);
+      } else {
+        preRegBuffer.push(event);
+      }
+    };
+
+    const tools = agents.flatMap((agent) => {
+      const onInnerProgress = (result: StreamedResult): void => {
+        for (const entry of result.progress) {
+          upsertProgressEntry(innerProgress, entry.message, entry.artifacts);
+        }
+        if (registeredSessionId) {
+          upsertSession({
+            id: registeredSessionId,
+            agentId: "dove",
+            startedAt: new Date().toISOString(),
+            label: message.slice(0, 60) || "Session",
+            messages: [],
+            progress: innerProgress,
+            status: "running",
+          });
+        }
+      };
+      return [
+        makeAskTool(agent, subprocessController.signal, ctxMap),
+        makeStartTool(
+          agent,
+          subprocessController.signal,
+          makeProgressSender(publish, onInnerProgress),
+          backgroundTasks,
+        ),
+        makeAwaitTool(
+          agent,
+          subprocessController.signal,
+          makeProgressSender(publish, onInnerProgress),
+          pendingTaskSet,
+        ),
+      ];
+    });
+
+    const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(publish);
+    // Track the session ID the moment it's registered in sessionRunner (mid-stream).
+    // Separate from resolvedSessionId (set only on normal completion) so the finally
+    // block can clean up even if query() throws before consumeQueryEvents returns.
+    let registeredSessionId: string | null = null;
+    const dispatcher = new SseQueryDispatcher(publish);
+    const userMsgId = randomUUID();
+
+    let resolvedSessionId: string | null = null;
     try {
       await withMcpQuery(
         tools,
         async (mcpServer) => {
-          const resolvedSessionId = await consumeQueryEvents(
+          resolvedSessionId = await consumeQueryEvents(
             query({
               prompt: message,
               options: {
-                abortController,
+                abortController: subprocessController,
                 env: {
                   ...process.env, // Pass through all env vars so tools can read their configs
                   ...resolveSettingsEnv(readSettings()), // Global settings env vars override process.env
@@ -188,40 +269,60 @@ export async function POST(request: Request) {
                 // Stream text tokens as they are generated
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
-                hooks: buildDoveHooks(agents),
+                hooks: buildDoveHooks(agents, pendingTaskSet),
                 canUseTool: doveCanUseTool,
               },
             }),
             dispatcher,
-          );
-          if (resolvedSessionId && !abortController.signal.aborted) {
-            agentContextRegistry.persist(resolvedSessionId, ctxMap);
-            SessionManager.save(
-              "dove",
-              resolvedSessionId,
-              { output: "", progress: dispatcher.buildProgress() },
-              {
-                label: message.slice(0, 60) || "Session",
+            (id) => {
+              // system:init fires once per turn (including resume turns).
+              // Only run setup on the first time we see this session ID.
+              if (registeredSessionId === id) return;
+              registeredSessionId = id;
+              resolvedForPublish = id;
+              const label = message.slice(0, 60) || "Session";
+              // Only create DB row on first turn (sessionId was null = new session).
+              // Resume turns must not recreate a row the user may have deleted.
+              if (!sessionId) {
+                SessionManager.save(
+                  "dove",
+                  id,
+                  { output: "", progress: [] },
+                  {
+                    label,
+                    userText: message,
+                    userMsgId,
+                  },
+                );
+              }
+              setSessionStatus(id, "running");
+              sessionRunner.register(id, subprocessController, label);
+              for (const e of preRegBuffer) publishSessionEvent(id, e);
+              preRegBuffer.length = 0;
+              dispatcher.enableIncrementalSave({
+                sessionId: id,
+                agentId: "dove",
+                label,
+                userMsgId,
                 userText: message,
-                assistantMsg: dispatcher.buildAssistantMessage(randomUUID()),
-              },
-            );
-          }
-          send({ type: "done" });
+              });
+            },
+          );
+          publish({ type: "done" });
         },
         (_err, isAbort) => {
           abortPermissions();
           if (isAbort) {
             try {
-              send({ type: "cancelled" });
+              publish({ type: "cancelled" });
             } catch {
               // stream already closed
             }
           } else {
             try {
               const msg = _err instanceof Error ? _err.message : String(_err);
-              send({ type: "error", content: msg });
-              send({ type: "done" });
+              publish({ type: "error", content: msg });
+              publish({ type: "done" });
             } catch {
               // Stream already closed — client disconnected
             }
@@ -229,7 +330,34 @@ export async function POST(request: Request) {
         },
       );
     } finally {
-      if (sessionId) activeControllers.delete(sessionId);
+      // Use registeredSessionId (set when sessionRunner.register was called mid-stream)
+      // as fallback when resolvedSessionId is null (query() threw before completing).
+      const cleanupId = resolvedSessionId ?? registeredSessionId;
+      if (cleanupId && !deletedSessionIds.has(cleanupId)) {
+        agentContextRegistry.persist(cleanupId, ctxMap);
+        SessionManager.save(
+          "dove",
+          cleanupId,
+          { output: "", progress: dispatcher.buildProgress() },
+          {
+            label: message.slice(0, 60) || "Session",
+            userText: message,
+            userMsgId,
+            assistantMsg: dispatcher.buildAssistantMessage(),
+          },
+        );
+        if (sessionRunner.isRunning(cleanupId)) {
+          sessionRunner.complete(cleanupId);
+        }
+        // Don't clear the buffer here — the "done"/"cancelled" event already
+        // published by publish() starts a 60s TTL timer in session-events.ts.
+        // Clearing eagerly kills the reconnect window for users who switch
+        // away mid-session and come back within a minute.
+      } else if (cleanupId) {
+        // Explicitly deleted — just clear the event buffer
+        deletedSessionIds.delete(cleanupId);
+        clearSessionBuffer(cleanupId);
+      }
       // Wait for all background start_* subscriptions to finish streaming
       // before closing the SSE stream — otherwise their progress events
       // arrive after the stream is closed and are silently dropped.
@@ -238,9 +366,18 @@ export async function POST(request: Request) {
   });
 }
 
+/** Stop (abort subprocess, keep session row) */
+export async function PATCH(request: Request) {
+  const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
+  sessionRunner.abort(sessionId);
+  return Response.json({ ok: true });
+}
+
+/** Delete (abort subprocess and remove session row entirely) */
 export async function DELETE(request: Request) {
   const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
-  activeControllers.get(sessionId)?.abort();
+  deletedSessionIds.add(sessionId);
+  sessionRunner.abort(sessionId);
   agentContextRegistry.delete(sessionId);
   deleteSession(sessionId);
   return Response.json({ ok: true });

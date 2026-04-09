@@ -76,23 +76,20 @@ export interface AgentContextStore {
 
 // ─── Pending task registry ────────────────────────────────────────────────────
 
-/** Tracks taskIds that are still_running so the Stop hook can prevent early exit. */
-const pendingTasks = new Set<string>();
-
-export function markTaskPending(taskId: string): void {
-  pendingTasks.add(taskId);
+export function markTaskPending(set: Set<string>, taskId: string): void {
+  set.add(taskId);
 }
 
-export function markTaskResolved(taskId: string): void {
-  pendingTasks.delete(taskId);
+export function markTaskResolved(set: Set<string>, taskId: string): void {
+  set.delete(taskId);
 }
 
-export function hasPendingTasks(): boolean {
-  return pendingTasks.size > 0;
+export function hasPendingTasks(set: Set<string>): boolean {
+  return set.size > 0;
 }
 
-export function getPendingTaskIds(): string[] {
-  return [...pendingTasks];
+export function getPendingTaskIds(set: Set<string>): string[] {
+  return [...set];
 }
 
 // ─── Tool name helpers ────────────────────────────────────────────────────────
@@ -281,6 +278,7 @@ export function makeAwaitTool(
   agent: AgentDef,
   signal?: AbortSignal,
   onProgress?: (result: StreamedResult) => void,
+  pendingTaskSet?: Set<string>,
 ) {
   return tool(
     doveAwaitToolName(agent),
@@ -317,7 +315,7 @@ export function makeAwaitTool(
         ]);
 
         if (result === timeoutResult) {
-          markTaskPending(taskId);
+          if (pendingTaskSet) markTaskPending(pendingTaskSet, taskId);
           const progressLines: string[] = ["Agent is still working..."];
           const lastArtifacts = latestSnapshot?.progress.at(-1)?.artifacts ?? {};
           const lastToolCall = lastArtifacts["tool-call"];
@@ -334,7 +332,7 @@ export function makeAwaitTool(
           };
         }
 
-        markTaskResolved(taskId);
+        if (pendingTaskSet) markTaskResolved(pendingTaskSet, taskId);
         const completed: TaskCompletedContent = {
           status: "completed",
           taskId: result.taskId ?? taskId,

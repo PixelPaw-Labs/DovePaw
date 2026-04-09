@@ -7,7 +7,27 @@
  */
 
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  SDKMessage,
+  SDKSystemMessage,
+  SDKTaskProgressMessage,
+} from "@anthropic-ai/claude-agent-sdk";
+
+/** Type guard — `task_id` is unique to SDKTaskProgressMessage among system subtypes. */
+function isTaskProgress(event: SDKMessage): event is SDKTaskProgressMessage {
+  return event.type === "system" && "task_id" in event;
+}
+
+/** Type guard — only SDKSystemMessage has `subtype: "init"` with a session_id. */
+function isSystemInit(event: SDKMessage): event is SDKSystemMessage {
+  return (
+    event.type === "system" &&
+    "session_id" in event &&
+    !("task_id" in event) &&
+    !("hook_id" in event) &&
+    !("task_type" in event)
+  );
+}
 import type { QueryResponseDispatcher } from "@/lib/query-dispatcher";
 
 /**
@@ -38,21 +58,30 @@ export async function withMcpQuery(
 export async function consumeQueryEvents(
   events: AsyncIterable<SDKMessage>,
   dispatcher: QueryResponseDispatcher,
+  /** Called once when the session ID is first known (system init event).
+   *  Use to create the initial DB row so sessions appear in history immediately. */
+  onSessionStart?: (sessionId: string) => void,
 ): Promise<string | null> {
   let sessionId: string | null = null;
   let toolInputBuf = "";
   let inToolBlock = false;
 
   for await (const event of events) {
-    if (event.type === "system") {
+    if (isSystemInit(event)) {
       sessionId = event.session_id;
       dispatcher.onSession(event.session_id);
+      onSessionStart?.(event.session_id);
+    } else if (isTaskProgress(event)) {
+      const toolUseId = event.tool_use_id ?? "";
+      const description = event.description;
+      const lastTool = event.last_tool_name ?? "";
+      if (toolUseId) dispatcher.onTaskProgress(toolUseId, description, lastTool);
     } else if (event.type === "stream_event") {
       const partial = event.event;
 
       if (partial.type === "content_block_start") {
         if (partial.content_block.type === "tool_use") {
-          dispatcher.onToolCall(partial.content_block.name);
+          dispatcher.onToolCall(partial.content_block.name, partial.content_block.id);
           toolInputBuf = "";
           inToolBlock = true;
         } else {
@@ -78,7 +107,7 @@ export async function consumeQueryEvents(
         }
       }
     } else if (event.type === "result" && event.subtype === "success") {
-      dispatcher.onResult(event.result);
+      dispatcher.onFinalOutput(event.result);
     }
   }
   return sessionId;

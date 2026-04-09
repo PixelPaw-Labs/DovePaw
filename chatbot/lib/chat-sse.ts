@@ -70,10 +70,12 @@ export type ChatSseEvent =
  */
 export function makeProgressSender(
   send: (event: ChatSseEvent) => void,
+  onResult?: (result: StreamedResult) => void,
 ): (result: StreamedResult) => void {
   let lastSentCount = 0;
   let lastSentArtifactCount = 0;
   return (result: StreamedResult) => {
+    onResult?.(result);
     const newEntries = result.progress.slice(lastSentCount);
     const lastEntry = result.progress.at(-1);
     const artifactCount = lastEntry ? Object.keys(lastEntry.artifacts).length : 0;

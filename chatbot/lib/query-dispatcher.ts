@@ -18,6 +18,19 @@ import type { ChatSseEvent } from "@/lib/chat-sse";
 import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
 import { z } from "zod";
 import type { MessageSegment, SessionMessage } from "@/lib/message-types";
+import type {
+  AgentInput,
+  BashInput,
+  FileReadInput,
+  FileEditInput,
+  FileWriteInput,
+  GlobInput,
+  GrepInput,
+  WebSearchInput,
+  WebFetchInput,
+  NotebookEditInput,
+  ConfigInput,
+} from "@anthropic-ai/claude-agent-sdk/sdk-tools";
 import type { ProgressEntry } from "@/lib/a2a-client";
 
 // ─── Interface ────────────────────────────────────────────────────────────────
@@ -26,32 +39,18 @@ export interface QueryResponseDispatcher {
   onSession(sessionId: string): void;
   onTextDelta(text: string): void;
   onThinking(text: string): void;
-  onToolCall(name: string): void;
+  /** toolUseId is the SDK tool_use block id — passed so the node key matches onTaskProgress. */
+  onToolCall(name: string, toolUseId?: string): void;
   onToolInput(content: string): void;
-  onResult(result: string): void;
+  onFinalOutput(result: string): void;
   onArtifact(name: string, text: string): void;
+  /** Called for SDK task_progress events — live progress from Agent subagent tasks. */
+  onTaskProgress(toolUseId: string, description: string, lastTool: string): void;
 }
 
-/** Artifact name constants — single source of truth for all A2A artifact names. */
-export const ARTIFACT = {
-  STREAM: "stream",
-  THINKING: "thinking",
-  TOOL_CALL: "tool-call",
-  TOOL_INPUT: "tool-input",
-  FINAL_OUTPUT: "final-output",
-} as const;
-
-/**
- * Artifact names that are streaming intermediaries — they carry content to the chat
- * bubble but must NOT be accumulated into workflow ProgressEntry nodes in
- * collectStreamResult. Only TOOL_CALL and FINAL_OUTPUT are structural enough to
- * warrant a workflow step; the rest are transient stream fragments.
- */
-export const TRANSIENT_ARTIFACT_NAMES = new Set([
-  ARTIFACT.STREAM,
-  ARTIFACT.THINKING,
-  ARTIFACT.TOOL_INPUT,
-]);
+export { ARTIFACT, TRANSIENT_ARTIFACT_NAMES } from "@/lib/artifact-names";
+import { ARTIFACT } from "@/lib/artifact-names";
+import { upsertSession } from "@/lib/db";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -62,33 +61,85 @@ export const TRANSIENT_ARTIFACT_NAMES = new Set([
  */
 const MESSAGE_SEGMENT_TYPES = new Set<MessageSegment["type"]>(["text"]);
 
+// ─── Tool label helpers ───────────────────────────────────────────────────────
+
+const toStr = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
+
 /**
- * Owns the segment accumulation logic for building an assistant SessionMessage.
- * Extracted from SseQueryDispatcher so it can be composed and tested independently.
+ * Ordered field names to try per tool — field names are verified at compile time
+ * against the SDK input types using `satisfies`, so TypeScript catches renames.
+ * Bash has two fields: description (human-readable, optional) preferred over command.
  */
+const TOOL_LABEL_FIELDS: Partial<Record<string, readonly string[]>> = {
+  Agent: ["description" satisfies keyof AgentInput],
+  Bash: ["description" satisfies keyof BashInput, "command" satisfies keyof BashInput],
+  Read: ["file_path" satisfies keyof FileReadInput],
+  Edit: ["file_path" satisfies keyof FileEditInput],
+  Write: ["file_path" satisfies keyof FileWriteInput],
+  Glob: ["pattern" satisfies keyof GlobInput],
+  Grep: ["pattern" satisfies keyof GrepInput],
+  WebSearch: ["query" satisfies keyof WebSearchInput],
+  WebFetch: ["url" satisfies keyof WebFetchInput],
+  NotebookEdit: ["notebook_path" satisfies keyof NotebookEditInput],
+  Config: ["setting" satisfies keyof ConfigInput],
+} as const;
+
+function describeToolCall(toolName: string, input: Record<string, unknown>): string {
+  const fields = TOOL_LABEL_FIELDS[toolName];
+  const val = fields?.map((f) => toStr(input[f])).find((v) => v !== null) ?? null;
+  if (val) return `${toolName}: ${val}`;
+  // Generic fallback for MCP / unknown tools — first string value in the input
+  const firstStr =
+    Object.values(input)
+      .map(toStr)
+      .find((v) => v !== null) ?? null;
+  return firstStr ? `${toolName}: ${firstStr}` : toolName;
+}
+
 export class MessageAccumulator {
   private _segments: MessageSegment[] = [];
   private _textBuffer = "";
   private _thinkingBuffer = "";
   private _pendingToolName: string | null = null;
+  private _pendingEntry: ProgressEntry | null = null;
   private _progress: ProgressEntry[] = [];
+  private _taskProgressCounters = new Map<string, number>();
+  private _saveConfig: IncrementalSaveConfig | null = null;
+  private _textSavedLength = 0;
+  private static readonly TEXT_SAVE_INTERVAL = 500;
+  /** Stable ID reused across all saves so mergeMessages in db.ts deduplicates correctly. */
+  private readonly _msgId: string = crypto.randomUUID();
+
+  enableIncrementalSave(config: IncrementalSaveConfig): void {
+    this._saveConfig = config;
+  }
 
   onTextDelta(text: string): void {
     this._textBuffer += text;
+    if (this._textBuffer.length - this._textSavedLength >= MessageAccumulator.TEXT_SAVE_INTERVAL) {
+      this._textSavedLength = this._textBuffer.length;
+      this.saveSnapshot();
+    }
   }
 
   onThinking(text: string): void {
     this._thinkingBuffer += text;
   }
 
-  onToolCall(name: string): ProgressEntry {
+  onToolCall(name: string, toolUseId?: string): ProgressEntry {
     if (this._textBuffer) {
       this._segments.push({ type: "text", content: this._textBuffer });
       this._textBuffer = "";
     }
     this._pendingToolName = name;
-    const entry: ProgressEntry = { message: name, artifacts: { [ARTIFACT.TOOL_CALL]: name } };
+    const key = toolUseId ?? name;
+    const entry: ProgressEntry = {
+      message: key,
+      artifacts: { [ARTIFACT.TOOL_CALL]: name, label: name },
+    };
     this._progress.push(entry);
+    this._pendingEntry = entry;
+    this.saveProgress();
     return entry;
   }
 
@@ -101,6 +152,10 @@ export class MessageAccumulator {
       try {
         const input = z.record(z.string(), z.unknown()).parse(JSON.parse(content));
         this._segments.push({ type: "tool_call", tool: { name: this._pendingToolName, input } });
+        const description = describeToolCall(this._pendingToolName, input);
+        if (this._pendingEntry) {
+          this._pendingEntry.artifacts = { ...this._pendingEntry.artifacts, label: description };
+        }
       } catch {
         this._segments.push({
           type: "tool_call",
@@ -108,21 +163,78 @@ export class MessageAccumulator {
         });
       }
       this._pendingToolName = null;
+      this._pendingEntry = null;
     }
+    this.saveProgress();
   }
 
-  buildMessage(id: string): SessionMessage {
+  buildMessage(): SessionMessage {
     const allSegments: MessageSegment[] = [...this._segments];
     if (this._textBuffer) allSegments.push({ type: "text", content: this._textBuffer });
 
     const messageSegments = allSegments.filter((s) => MESSAGE_SEGMENT_TYPES.has(s.type));
 
     return {
-      id,
+      id: this._msgId,
       role: "assistant",
       segments: messageSegments,
       processContent: this._thinkingBuffer || undefined,
     };
+  }
+
+  onTaskProgress(toolUseId: string, description: string, lastTool: string): ProgressEntry | null {
+    // Skip events where no inner tool has been called yet — lastTool is empty on the
+    // first task_progress event fired before the Agent subagent calls anything.
+    if (!lastTool) return null;
+    // Each task_progress event is a distinct step — append a new entry with a unique
+    // key so every inner tool call is captured in progress, not collapsed into one node.
+    const count = (this._taskProgressCounters.get(toolUseId) ?? 0) + 1;
+    this._taskProgressCounters.set(toolUseId, count);
+    const entry: ProgressEntry = {
+      message: `${toolUseId}_${count}`,
+      artifacts: {
+        [ARTIFACT.TOOL_CALL]: lastTool,
+        label: describeToolCall(lastTool, { description }),
+      },
+    };
+    this._progress.push(entry);
+    this.saveProgress();
+    return entry;
+  }
+
+  onFinalOutput(): void {
+    this.saveSnapshot();
+  }
+
+  private saveSnapshot(): void {
+    if (!this._saveConfig) return;
+    const { sessionId, agentId, label, userMsgId, userText } = this._saveConfig;
+    upsertSession({
+      id: sessionId,
+      agentId,
+      startedAt: new Date().toISOString(),
+      label,
+      messages: [
+        { id: userMsgId, role: "user", segments: [{ type: "text", content: userText }] },
+        this.buildMessage(),
+      ],
+      progress: this._progress,
+      status: "running",
+    });
+  }
+
+  private saveProgress(): void {
+    if (!this._saveConfig) return;
+    const { sessionId, agentId, label } = this._saveConfig;
+    upsertSession({
+      id: sessionId,
+      agentId,
+      startedAt: new Date().toISOString(),
+      label,
+      messages: [],
+      progress: this._progress,
+      status: "running",
+    });
   }
 }
 
@@ -131,13 +243,29 @@ export class MessageAccumulator {
 /**
  * Forwards query() events as SSE events to the chat client.
  */
+export interface IncrementalSaveConfig {
+  sessionId: string;
+  agentId: string;
+  label: string;
+  userMsgId: string;
+  userText: string;
+}
+
 export class SseQueryDispatcher implements QueryResponseDispatcher {
   private readonly accumulator = new MessageAccumulator();
 
   constructor(private readonly send: (event: ChatSseEvent) => void) {}
 
-  buildAssistantMessage(id: string): SessionMessage {
-    return this.accumulator.buildMessage(id);
+  /**
+   * Enable incremental DB saves so a page refresh doesn't lose mid-session state.
+   * Call once the session ID is known (e.g. after system:init).
+   */
+  enableIncrementalSave(config: IncrementalSaveConfig): void {
+    this.accumulator.enableIncrementalSave(config);
+  }
+
+  buildAssistantMessage(): SessionMessage {
+    return this.accumulator.buildMessage();
   }
 
   buildProgress(): ProgressEntry[] {
@@ -158,8 +286,8 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
     this.send({ type: "thinking", content: text });
   }
 
-  onToolCall(name: string): void {
-    const entry = this.accumulator.onToolCall(name);
+  onToolCall(name: string, toolUseId?: string): void {
+    const entry = this.accumulator.onToolCall(name, toolUseId);
     this.send({ type: "tool_call", name });
     this.send({ type: "progress", result: { output: "", progress: [entry] } });
   }
@@ -169,8 +297,9 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
     this.send({ type: "tool_input", content });
   }
 
-  onResult(result: string): void {
+  onFinalOutput(result: string): void {
     if (result) this.send({ type: "result", content: result });
+    this.accumulator.onFinalOutput();
   }
 
   /** Maps an A2A artifact name to the appropriate SSE method. */
@@ -179,7 +308,12 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
     else if (name === ARTIFACT.THINKING) this.onThinking(text);
     else if (name === ARTIFACT.TOOL_CALL) this.onToolCall(text);
     else if (name === ARTIFACT.TOOL_INPUT) this.onToolInput(text);
-    else if (name === ARTIFACT.FINAL_OUTPUT) this.onResult(text);
+    else if (name === ARTIFACT.FINAL_OUTPUT) this.onFinalOutput(text);
+  }
+
+  onTaskProgress(toolUseId: string, description: string, lastTool: string): void {
+    const entry = this.accumulator.onTaskProgress(toolUseId, description, lastTool);
+    if (entry) this.send({ type: "progress", result: { output: "", progress: [entry] } });
   }
 }
 
@@ -210,9 +344,13 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
 
   constructor(private readonly publisher: ExecutorPublisher) {}
 
+  enableIncrementalSave(config: IncrementalSaveConfig): void {
+    this.accumulator.enableIncrementalSave(config);
+  }
+
   /** Build the assistant SessionMessage for DB persistence. */
-  buildAssistantMessage(id: string): SessionMessage {
-    return this.accumulator.buildMessage(id);
+  buildAssistantMessage(): SessionMessage {
+    return this.accumulator.buildMessage();
   }
 
   /** Build workflow progress entries for DB persistence. */
@@ -232,10 +370,16 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.accumulator.onThinking(text);
   }
 
-  onToolCall(name: string): void {
-    // publishStatusToUI (not publishArtifact) so a workflow ProgressEntry node is created.
-    this.publisher.publishStatusToUI(name, { [ARTIFACT.TOOL_CALL]: name });
-    this.accumulator.onToolCall(name);
+  onToolCall(name: string, toolUseId?: string): void {
+    const key = toolUseId ?? name;
+    // publishStatusToUI (not send) so a workflow ProgressEntry node is created.
+    // Use toolUseId as the key — onTaskProgress uses the same id, so the browser's
+    // mergeProgressEntries can add the description label to this node.
+    // Include label: name so the node title shows the tool name immediately — matching
+    // SseQueryDispatcher behaviour. Without it the title falls back to the toolUseId UUID
+    // because onTaskProgress is never called for background inner-agent tool calls.
+    this.publisher.publishStatusToUI(key, { [ARTIFACT.TOOL_CALL]: name, label: name });
+    this.accumulator.onToolCall(name, toolUseId);
   }
 
   onToolInput(content: string): void {
@@ -243,9 +387,15 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.accumulator.onToolInput(content);
   }
 
-  onResult(result: string): void {
+  onFinalOutput(result: string): void {
     if (result) this.publisher.send(result, ARTIFACT.FINAL_OUTPUT);
+    this.accumulator.onFinalOutput();
   }
 
   onArtifact(_name: string, _text: string): void {}
+
+  onTaskProgress(toolUseId: string, description: string, lastTool: string): void {
+    const entry = this.accumulator.onTaskProgress(toolUseId, description, lastTool);
+    if (entry) this.publisher.publishStatusToUI(entry.message, entry.artifacts);
+  }
 }

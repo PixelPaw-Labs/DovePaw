@@ -6,7 +6,7 @@ vi.mock("@a2a-js/sdk/client", () => ({
   ClientFactory: vi.fn(),
 }));
 
-vi.mock("@/a2a/lib/base-server", () => ({
+vi.mock("@/a2a/lib/ports-manifest", () => ({
   readPortsManifest: vi.fn(),
 }));
 

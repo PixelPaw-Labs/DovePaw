@@ -38,6 +38,7 @@ describe("GET /api/agent/[name]/sessions", () => {
         agentId: "test-agent",
         startedAt: "2025-01-01T00:00:00Z",
         label: "Run tickets",
+        status: "done" as const,
       },
     ];
     vi.mocked(listSessions).mockReturnValue(sessions);

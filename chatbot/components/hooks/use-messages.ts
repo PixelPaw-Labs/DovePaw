@@ -5,6 +5,7 @@ import type { ProgressEntry } from "@/lib/query-tools";
 
 export type { ToolCall, MessageSegment, SessionMessage } from "@/lib/message-types";
 import type { MessageSegment, ToolCall } from "@/lib/message-types";
+export { mergeProgressEntries } from "@/lib/progress";
 
 export type MessageRole = "user" | "assistant";
 
@@ -20,41 +21,6 @@ export interface ChatMessage {
   agentProgress?: ProgressEntry[];
   /** Which agent sent this message — "dove" or a subagent name */
   agentId?: string;
-}
-
-/**
- * Merge incoming progress entries into an existing list, deduplicating by message label.
- * - Exact duplicate → skip
- * - Incoming is a subset of existing → skip (stale replay)
- * - Existing is a subset of incoming → update in place (new artifact keys arrived)
- * - No match → append
- */
-export function mergeProgressEntries(
-  existing: ProgressEntry[],
-  incoming: ProgressEntry[],
-): ProgressEntry[] {
-  const merged = [...existing];
-  for (const entry of incoming) {
-    const incomingArtifactStr = JSON.stringify(entry.artifacts);
-    let matchIdx = -1;
-    for (let i = merged.length - 1; i >= 0; i--) {
-      if (merged[i].message === entry.message) {
-        matchIdx = i;
-        break;
-      }
-    }
-    if (matchIdx >= 0) {
-      const match = merged[matchIdx];
-      if (JSON.stringify(match.artifacts) === incomingArtifactStr) continue;
-      if (Object.entries(entry.artifacts).every(([k, v]) => match.artifacts[k] === v)) continue;
-      if (Object.entries(match.artifacts).every(([k, v]) => entry.artifacts[k] === v)) {
-        merged[matchIdx] = { ...match, artifacts: { ...match.artifacts, ...entry.artifacts } };
-        continue;
-      }
-    }
-    merged.push(entry);
-  }
-  return merged;
 }
 
 /** Extract all text from a message's segments as a single string. */

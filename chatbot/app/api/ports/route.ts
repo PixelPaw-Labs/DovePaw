@@ -3,7 +3,7 @@
  * Used by the AgentSidebar to display dynamic port assignments.
  */
 
-import { readPortsManifest } from "@/a2a/lib/base-server";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 
 export function GET() {
   const manifest = readPortsManifest();

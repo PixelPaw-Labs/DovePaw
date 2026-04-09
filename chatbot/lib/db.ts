@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { DOVEPAW_DIR } from "@@/lib/paths";
 import { sessionMessageSchema } from "@/lib/message-types";
 import type { SessionMessage } from "@/lib/message-types";
-import type { ProgressEntry } from "@/lib/query-tools";
+import { mergeProgress } from "@/lib/progress";
+import type { ProgressEntry } from "@/lib/progress";
 
 const sessionMessageArraySchema = z.array(sessionMessageSchema);
 const progressEntrySchema = z.object({
@@ -16,11 +17,24 @@ const progressEntryArraySchema = z.array(progressEntrySchema);
 
 export type { SessionMessage };
 
+export type SessionStatus = "running" | "done" | "cancelled" | "interrupted";
+
+function isSessionStatus(value: string): value is SessionStatus {
+  return (
+    value === "running" || value === "done" || value === "cancelled" || value === "interrupted"
+  );
+}
+
+function toSessionStatus(value: string): SessionStatus {
+  return isSessionStatus(value) ? value : "done";
+}
+
 export interface SessionInfo {
   id: string;
   agentId: string;
   startedAt: string;
   label: string;
+  status: SessionStatus;
 }
 
 export interface SessionDetail {
@@ -30,6 +44,7 @@ export interface SessionDetail {
   label: string;
   messages: SessionMessage[];
   progress: ProgressEntry[];
+  status: SessionStatus;
 }
 
 export interface UpsertSessionArgs {
@@ -41,6 +56,7 @@ export interface UpsertSessionArgs {
   progress: ProgressEntry[];
   subagentSessionId?: string;
   workspacePath?: string;
+  status?: SessionStatus;
 }
 
 export interface SessionResumable {
@@ -87,24 +103,23 @@ function getDb(): Database.Database {
       PRIMARY KEY (orchestrator_session_id, manifest_key)
     );
   `);
+  const pragmaResult = _db.pragma("table_info(sessions)");
+  const cols = Array.isArray(pragmaResult)
+    ? pragmaResult.filter(
+        (c): c is { name: string } => typeof c === "object" && c !== null && "name" in c,
+      )
+    : [];
+  if (!cols.some((c) => c.name === "status")) {
+    _db.exec("ALTER TABLE sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'done'");
+  }
   return _db;
 }
 
 function mergeMessages(existing: SessionMessage[], incoming: SessionMessage[]): SessionMessage[] {
-  return [...existing, ...incoming];
-}
-
-function mergeProgress(existing: ProgressEntry[], incoming: ProgressEntry[]): ProgressEntry[] {
-  const merged = [...existing];
-  for (const entry of incoming) {
-    const isDupe = merged.some(
-      (e) =>
-        e.message === entry.message &&
-        JSON.stringify(e.artifacts) === JSON.stringify(entry.artifacts),
-    );
-    if (!isDupe) merged.push(entry);
-  }
-  return merged;
+  const incomingById = new Map(incoming.map((m) => [m.id, m]));
+  const merged = existing.map((m) => incomingById.get(m.id) ?? m);
+  const existingIds = new Set(existing.map((m) => m.id));
+  return [...merged, ...incoming.filter((m) => !existingIds.has(m.id))];
 }
 
 export function upsertSession(args: UpsertSessionArgs): void {
@@ -132,8 +147,8 @@ export function upsertSession(args: UpsertSessionArgs): void {
   db.prepare(`
     INSERT INTO sessions (id, agent_id, started_at, label, messages, progress, updated_at,
                           subagent_session_id, workspace_path,
-                          orchestrator_session_id, subagent_a2a_context_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          orchestrator_session_id, subagent_a2a_context_id, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       messages                = excluded.messages,
       progress                = excluded.progress,
@@ -141,7 +156,8 @@ export function upsertSession(args: UpsertSessionArgs): void {
       subagent_session_id     = COALESCE(excluded.subagent_session_id, sessions.subagent_session_id),
       workspace_path          = COALESCE(excluded.workspace_path, sessions.workspace_path),
       orchestrator_session_id = COALESCE(sessions.orchestrator_session_id, excluded.orchestrator_session_id),
-      subagent_a2a_context_id = COALESCE(sessions.subagent_a2a_context_id, excluded.subagent_a2a_context_id)
+      subagent_a2a_context_id = COALESCE(sessions.subagent_a2a_context_id, excluded.subagent_a2a_context_id),
+      status                  = COALESCE(excluded.status, sessions.status)
   `).run(
     args.id,
     args.agentId,
@@ -154,6 +170,7 @@ export function upsertSession(args: UpsertSessionArgs): void {
     args.workspacePath ?? null,
     orchestratorSessionId,
     subagentA2aContextId,
+    args.status ?? "done",
   );
 }
 
@@ -173,6 +190,21 @@ export function getActiveSession(agentId: string): string | null {
     )
     .get(agentId);
   return row?.context_id ?? null;
+}
+
+export function getSessionStatus(id: string): SessionStatus | null {
+  const row = getDb()
+    .prepare<[string], { status: string }>("SELECT status FROM sessions WHERE id = ?")
+    .get(id);
+  return row ? toSessionStatus(row.status) : null;
+}
+
+export function setSessionStatus(id: string, status: SessionStatus): void {
+  getDb().prepare("UPDATE sessions SET status = ? WHERE id = ?").run(status, id);
+}
+
+export function markInterruptedSessions(): void {
+  getDb().prepare("UPDATE sessions SET status = 'interrupted' WHERE status = 'running'").run();
 }
 
 export function setOrchestratorAgentContext(
@@ -228,8 +260,11 @@ export function getSessionResumable(id: string): SessionResumable | null {
 
 export function listSessions(agentId: string): SessionInfo[] {
   return getDb()
-    .prepare<[string], { id: string; agent_id: string; started_at: string; label: string }>(
-      "SELECT id, agent_id, started_at, label FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC, rowid DESC",
+    .prepare<
+      [string],
+      { id: string; agent_id: string; started_at: string; label: string; status: string }
+    >(
+      "SELECT id, agent_id, started_at, label, status FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC, rowid DESC",
     )
     .all(agentId)
     .map((r) => ({
@@ -237,6 +272,7 @@ export function listSessions(agentId: string): SessionInfo[] {
       agentId: r.agent_id,
       startedAt: r.started_at,
       label: r.label,
+      status: toSessionStatus(r.status),
     }));
 }
 
@@ -251,8 +287,11 @@ export function getSessionDetail(id: string): SessionDetail | null {
         label: string;
         messages: string;
         progress: string;
+        status: string;
       }
-    >("SELECT id, agent_id, started_at, label, messages, progress FROM sessions WHERE id = ?")
+    >(
+      "SELECT id, agent_id, started_at, label, messages, progress, status FROM sessions WHERE id = ?",
+    )
     .get(id);
   if (!row) return null;
   return {
@@ -262,6 +301,7 @@ export function getSessionDetail(id: string): SessionDetail | null {
     label: row.label,
     messages: sessionMessageArraySchema.parse(JSON.parse(row.messages)),
     progress: progressEntryArraySchema.parse(JSON.parse(row.progress)),
+    status: toSessionStatus(row.status),
   };
 }
 

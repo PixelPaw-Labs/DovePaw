@@ -10,7 +10,7 @@
  */
 
 import { readAgentsConfig } from "@@/lib/agents-config";
-import { readPortsManifest } from "@/a2a/lib/base-server";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { makeProgressSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
 import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
@@ -53,7 +53,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
 
   const { message, sessionId } = chatRequestSchema.parse(await request.json());
 
-  return createSseResponse(request, async (send, abortController) => {
+  const subprocessController = new AbortController();
+  return createSseResponse(request, subprocessController, async (send, connectionController) => {
+    // For direct sub-agent chat, the subprocess lifetime is tied to the connection —
+    // abort the subprocess when the browser disconnects.
+    connectionController.signal.addEventListener("abort", () => subprocessController.abort(), {
+      once: true,
+    });
+
     const onSnapshot = makeProgressSender(send);
     const dispatcher = new SseQueryDispatcher(send);
     const onArtifact = (artifactName: string, text: string) =>
@@ -64,7 +71,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       handle = await startAgentStream(
         portValue,
         message,
-        abortController.signal,
+        subprocessController.signal,
         sessionId ?? undefined,
       );
       if (!handle) {
@@ -74,18 +81,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
       }
       const { stream, contextId: resolvedContextId } = handle;
 
-      activeControllers.set(resolvedContextId, abortController);
+      activeControllers.set(resolvedContextId, subprocessController);
       send({ type: "session", sessionId: resolvedContextId });
+
+      dispatcher.enableIncrementalSave({
+        sessionId: resolvedContextId,
+        agentId: name,
+        label: message.slice(0, 60) || "Session",
+        userMsgId: crypto.randomUUID(),
+        userText: message,
+      });
 
       await collectStreamResult(stream, onSnapshot, onArtifact);
 
-      if (abortController.signal.aborted) {
+      if (subprocessController.signal.aborted) {
         send({ type: "cancelled" });
       } else {
         send({ type: "done" });
       }
     } catch (err: unknown) {
-      if (abortController.signal.aborted) {
+      if (subprocessController.signal.aborted) {
         try {
           send({ type: "cancelled" });
         } catch {

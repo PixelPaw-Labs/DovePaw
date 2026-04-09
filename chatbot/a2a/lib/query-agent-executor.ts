@@ -6,6 +6,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
+import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { AGENTS_ROOT, agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
@@ -28,6 +29,7 @@ import {
 } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
+import { setSessionStatus, upsertSession } from "@/lib/db";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -63,12 +65,30 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
 
+    // Track direct publishStatusToUI calls (workspace setup, clone progress, etc.)
+    // so sub-agent history sessions show these entries alongside the tool-call entries
+    // already captured by dispatcher.buildProgress().
+    const innerProgress: ProgressEntry[] = [];
+    const publishProgress = (text: string, artifacts: Record<string, string> = {}): void => {
+      publisher.publishStatusToUI(text, artifacts);
+      upsertProgressEntry(innerProgress, text, artifacts);
+      upsertSession({
+        id: contextId,
+        agentId: this.def.name,
+        startedAt: new Date().toISOString(),
+        label: "",
+        messages: [],
+        progress: innerProgress,
+        status: "running",
+      });
+    };
+
     // Publish the Task object first so ResultManager registers it in the TaskStore.
     // Without this, every subsequent event triggers a "unknown task" warning because
     // ResultManager.currentTask is only set when it sees a kind:"task" event.
     publisher.publishTask();
 
-    publisher.publishStatusToUI("Starting…");
+    publishProgress("Starting…");
 
     // Resolve env vars fresh on each execution so settings changes take effect
     const settings = readSettings();
@@ -94,6 +114,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       existingState?.label ??
       (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
     let workspace: AgentWorkspace | null = null;
+    const userMsgId = randomUUID();
 
     try {
       if (existingState) {
@@ -104,14 +125,14 @@ export class QueryAgentExecutor implements AgentExecutor {
         ensureAgentSourceSymlink(
           this.def.name,
           agentSourceDirFromEntry(this.def.entryPath),
-          (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
+          publishProgress,
         );
         workspace = createAgentWorkspace(
           this.def.name,
           this.def.alias,
           undefined,
           taskId,
-          (text, artifacts) => publisher.publishStatusToUI(text, artifacts),
+          publishProgress,
         );
       }
 
@@ -136,7 +157,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentConfig,
             repoSlugs,
             this.abortController.signal,
-            (message, artifacts) => publisher.publishStatusToUI(message, artifacts),
+            publishProgress,
             taskId,
           ),
           makeAwaitScriptTool(this.def),
@@ -177,6 +198,35 @@ export class QueryAgentExecutor implements AgentExecutor {
               },
             }),
             dispatcher,
+            (subSessionId) => {
+              // system:init fires once per turn (including resume turns).
+              // Only create the DB row on the first turn — resuming an existing
+              // session must not recreate a row the user may have deleted.
+              if (!existingState) {
+                SessionManager.save(
+                  this.def.name,
+                  contextId,
+                  { output: "", progress: [] },
+                  {
+                    label,
+                    userText: instruction || "",
+                    userMsgId,
+                    subagentSessionId: subSessionId,
+                    workspacePath: workspace?.path,
+                  },
+                );
+                setSessionStatus(contextId, "running");
+              }
+              // Always enable incremental saves — applies to both fresh and resumed turns
+              // so onTaskProgress labels are persisted to DB during the session.
+              dispatcher.enableIncrementalSave({
+                sessionId: contextId,
+                agentId: this.def.name,
+                label,
+                userMsgId,
+                userText: instruction || "",
+              });
+            },
           );
 
           if (subagentSessionId) {
@@ -199,7 +249,8 @@ export class QueryAgentExecutor implements AgentExecutor {
             {
               label,
               userText: instruction || "",
-              assistantMsg: dispatcher.buildAssistantMessage(randomUUID()),
+              userMsgId,
+              assistantMsg: dispatcher.buildAssistantMessage(),
               subagentSessionId: subagentSessionId ?? undefined,
               workspacePath: workspace?.path,
             },

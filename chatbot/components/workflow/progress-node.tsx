@@ -8,7 +8,7 @@ import {
   NodeHeader,
   NodeTitle,
 } from "@/components/ai-elements/node";
-import { ARTIFACT } from "@/lib/query-dispatcher";
+import { ARTIFACT } from "@/lib/artifact-names";
 
 export interface ProgressNodeData {
   message: string;
@@ -41,7 +41,7 @@ const ARTIFACT_COLOR: Record<string, string> = {
 };
 
 export function ProgressNode({ data }: { data: ProgressNodeData }) {
-  const artifactEntries = Object.entries(data.artifacts);
+  const artifactEntries = Object.entries(data.artifacts).filter(([k]) => k !== "label");
 
   return (
     <Node
@@ -59,7 +59,7 @@ export function ProgressNode({ data }: { data: ProgressNodeData }) {
 
       <NodeHeader className={data.isCancelled ? "border-amber-500/20" : undefined}>
         <NodeTitle className={data.isCancelled ? "from-amber-400 to-amber-600" : undefined}>
-          {data.message}
+          {data.artifacts.label ?? data.message}
         </NodeTitle>
         <NodeDescription>Step {data.index + 1}</NodeDescription>
       </NodeHeader>

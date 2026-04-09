@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Mock readPortsManifest before importing the route
-vi.mock("@/a2a/lib/base-server", () => ({
+vi.mock("@/a2a/lib/ports-manifest", () => ({
   readPortsManifest: vi.fn(),
 }));
 
-import { readPortsManifest } from "@/a2a/lib/base-server";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { GET } from "../ports/route";
 
 const SAMPLE_MANIFEST = {

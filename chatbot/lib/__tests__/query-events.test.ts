@@ -18,7 +18,8 @@ function mockDispatcher(): QueryResponseDispatcher {
     onToolCall: vi.fn(),
     onToolInput: vi.fn(),
     onArtifact: vi.fn(),
-    onResult: vi.fn(),
+    onFinalOutput: vi.fn(),
+    onTaskProgress: vi.fn(),
   };
 }
 
@@ -111,7 +112,7 @@ describe("onToolCall / onToolInput", () => {
       }),
       d,
     );
-    expect(d.onToolCall).toHaveBeenCalledWith("my_tool");
+    expect(d.onToolCall).toHaveBeenCalledWith("my_tool", undefined);
   });
 
   it("does not fire onToolCall for non-tool content blocks", async () => {
@@ -208,24 +209,24 @@ describe("onToolCall / onToolInput", () => {
   });
 });
 
-// ─── onResult ─────────────────────────────────────────────────────────────────
+// ─── onFinalOutput ─────────────────────────────────────────────────────────────────
 
-describe("onResult", () => {
+describe("onFinalOutput", () => {
   it("fires with result string from result/success event", async () => {
     const d = mockDispatcher();
     await consumeQueryEvents(events({ type: "result", subtype: "success", result: "done!" }), d);
-    expect(d.onResult).toHaveBeenCalledWith("done!");
+    expect(d.onFinalOutput).toHaveBeenCalledWith("done!");
   });
 
   it("fires with empty string when result is empty", async () => {
     const d = mockDispatcher();
     await consumeQueryEvents(events({ type: "result", subtype: "success", result: "" }), d);
-    expect(d.onResult).toHaveBeenCalledWith("");
+    expect(d.onFinalOutput).toHaveBeenCalledWith("");
   });
 
   it("does not fire for result/error events", async () => {
     const d = mockDispatcher();
     await consumeQueryEvents(events({ type: "result", subtype: "error" }), d);
-    expect(d.onResult).not.toHaveBeenCalled();
+    expect(d.onFinalOutput).not.toHaveBeenCalled();
   });
 });

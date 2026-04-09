@@ -13,7 +13,6 @@ import type { ChatMessage } from "@/components/hooks/use-messages";
 import { messageText } from "@/components/hooks/use-messages";
 import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";
-import { ProcessingBar } from "./processing-bar";
 import { EditDiffList, ToolCallItem } from "./tool-call-badge";
 
 // Width of assistant avatar (w-8 = 2rem) + gap (gap-2 = 0.5rem) in px → pl-10 (2.5rem)
@@ -101,7 +100,20 @@ export function ChatMessageItem({
                 </MessageResponse>
               ) : null
             ) : msg.isLoading ? (
-              <ToolCallItem key={i} tool={seg.tool} isActive={i === msg.segments.length - 1} />
+              (() => {
+                const rest = msg.segments.slice(i + 1);
+                // A later tool_call means this one is already done.
+                const isCompleted = rest.some((s) => s.type === "tool_call");
+                // If final text has started streaming after all tool_calls, hide entirely.
+                const hasTextAfter = rest.some(
+                  (s) =>
+                    s.type === "text" &&
+                    (s as { type: "text"; content: string }).content.trim().length > 0,
+                );
+                return hasTextAfter ? null : (
+                  <ToolCallItem key={i} tool={seg.tool} isActive={!isCompleted} />
+                );
+              })()
             ) : null,
           )}
         </MessageContent>
@@ -120,11 +132,6 @@ export function ChatMessageItem({
   );
 
   if (msg.role === "assistant") {
-    // Pure loading state — no avatar, just dots
-    if (msg.isLoading && !hasSegmentContent && !msg.processContent) {
-      return <ProcessingBar count={3} align="left" />;
-    }
-
     const hasContent = hasSegmentContent || (!msg.isLoading && msg.role === "assistant");
 
     return (

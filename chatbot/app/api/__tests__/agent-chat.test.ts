@@ -34,7 +34,7 @@ vi.mock("@@/lib/agents-config", () => ({
   ]),
 }));
 
-vi.mock("@/a2a/lib/base-server", () => ({
+vi.mock("@/a2a/lib/ports-manifest", () => ({
   readPortsManifest: vi.fn(),
 }));
 
@@ -45,7 +45,7 @@ vi.mock("@a2a-js/sdk/client", () => ({
   }),
 }));
 
-import { readPortsManifest } from "@/a2a/lib/base-server";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { POST } from "../agent/[name]/chat/route";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

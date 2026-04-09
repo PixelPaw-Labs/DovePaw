@@ -81,12 +81,22 @@ export function buildGraph(entries: WorkflowEntry[]): { nodes: FlowNode[]; edges
   const seenNodes = new Map<string, string>();
   const seenEdges = new Set<string>();
   const nodeSizes = new Map<string, { w: number; h: number }>();
-  let prevNodeId: string | null = null;
+
+  // Always start with a dedicated circle so the first progress entry renders as a card.
+  nodes.push({
+    id: "node-start",
+    type: "circle",
+    position: { x: 0, y: 0 },
+    data: { variant: "start" } satisfies CircleNodeData,
+    draggable: false,
+    selectable: false,
+  });
+  nodeSizes.set("node-start", { w: CIRCLE_SIZE, h: CIRCLE_SIZE });
+  let prevNodeId: string | null = "node-start";
 
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
-    const isFirst = i === 0;
-    const isCircle = isFirst || !!entry.isCancelled || !!entry.isCompleted;
+    const isCircle = !!entry.isCancelled || !!entry.isCompleted;
     const isLast = i === entries.length - 1;
 
     const existingNodeId = !isCircle
@@ -114,11 +124,7 @@ export function buildGraph(entries: WorkflowEntry[]): { nodes: FlowNode[]; edges
 
     if (!isCircle) seenNodes.set(progressNodeKey(entry.message, entry.artifacts), nodeId);
 
-    const circleVariant: CircleVariant = isFirst
-      ? "start"
-      : entry.isCompleted
-        ? "completed"
-        : "stopped";
+    const circleVariant: CircleVariant = entry.isCompleted ? "completed" : "stopped";
     const w = isCircle ? CIRCLE_SIZE : NODE_WIDTH;
     const h = isCircle ? CIRCLE_SIZE : estimateNodeHeight(entry);
     nodeSizes.set(nodeId, { w, h });

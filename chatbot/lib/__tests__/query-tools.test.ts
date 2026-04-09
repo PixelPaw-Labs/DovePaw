@@ -17,7 +17,7 @@ vi.mock("@a2a-js/sdk/client", () => ({
   },
 }));
 
-vi.mock("@/a2a/lib/base-server", () => ({
+vi.mock("@/a2a/lib/ports-manifest", () => ({
   readPortsManifest: vi.fn(),
 }));
 
@@ -41,7 +41,7 @@ vi.mock("@/lib/db", () => ({
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { ClientFactory, TaskNotFoundError } from "@a2a-js/sdk/client";
-import { readPortsManifest } from "@/a2a/lib/base-server";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import {
   makeAskTool,
   makeStartTool,
