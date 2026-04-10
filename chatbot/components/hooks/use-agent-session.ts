@@ -17,6 +17,7 @@ import {
   fetchSessionDetail,
   type SharedSessionContext,
 } from "./shared-session-context";
+import { processActiveStreamEvent } from "./process-stream-event";
 
 export function useAgentSession(sharedCtx: SharedSessionContext) {
   // ─── Single-session state ─────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
                 const seq = (event as Record<string, unknown>)._seq;
                 if (typeof seq === "number") singleLastSeqRef.current = seq;
 
+                // session and progress are handled per-hook (different state models).
                 if (event.type === "session") {
                   singleSessionIdRef.current = event.sessionId;
                   sharedCtx.session.setCurrentSessionId(event.sessionId);
@@ -101,144 +103,9 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
                   sharedCtx.session.setSessionProgress((prev) =>
                     mergeProgressEntries(prev, event.result.progress),
                   );
-                } else if (event.type === "thinking" && event.content) {
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === resumeAssistantId
-                        ? Object.assign({}, m, {
-                            processContent: (m.processContent ?? "") + event.content,
-                            isProcessStreaming: true,
-                          })
-                        : m,
-                    ),
-                  );
-                } else if (event.type === "tool_call") {
-                  sharedCtx.stream.animation.cut(resumeAssistantId);
-                  sharedCtx.stream.pendingToolNameRef.current = event.name;
-                } else if (event.type === "tool_input") {
-                  const toolName = sharedCtx.stream.pendingToolNameRef.current;
-                  sharedCtx.stream.pendingToolNameRef.current = null;
-                  if (toolName) {
-                    let parsedInput: Record<string, unknown>;
-                    try {
-                      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
-                      parsedInput = JSON.parse(event.content) as Record<string, unknown>;
-                    } catch {
-                      parsedInput = { raw: event.content };
-                    }
-                    sharedCtx.session.setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === resumeAssistantId
-                          ? Object.assign({}, m, {
-                              segments: [
-                                ...m.segments,
-                                {
-                                  type: "tool_call" as const,
-                                  tool: { name: toolName, input: parsedInput },
-                                },
-                                { type: "text" as const, content: "" },
-                              ],
-                            })
-                          : m,
-                      ),
-                    );
-                  }
-                } else if (event.type === "text" && event.content) {
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === resumeAssistantId
-                        ? Object.assign({}, m, { isProcessStreaming: false })
-                        : m,
-                    ),
-                  );
-                  sharedCtx.stream.animation.enqueue(resumeAssistantId, event.content);
-                } else if (event.type === "result" && event.content) {
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) => {
-                      if (m.id !== resumeAssistantId) return m;
-                      const segs = [...m.segments];
-                      let lastTextIdx = -1;
-                      for (let i = segs.length - 1; i >= 0; i--) {
-                        if (segs[i].type === "text") {
-                          lastTextIdx = i;
-                          break;
-                        }
-                      }
-                      if (lastTextIdx >= 0)
-                        segs[lastTextIdx] = { type: "text" as const, content: event.content };
-                      return Object.assign({}, m, {
-                        segments: segs,
-                        isLoading: false,
-                        isProcessStreaming: false,
-                      });
-                    }),
-                  );
-                } else if (event.type === "cancelled") {
-                  sharedCtx.stream.animation.flush(resumeAssistantId);
-                  sharedCtx.session.setSessionCancelled(true);
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === resumeAssistantId
-                        ? Object.assign({}, m, {
-                            isLoading: false,
-                            isProcessStreaming: false,
-                            isCancelled: true,
-                          })
-                        : m,
-                    ),
-                  );
-                } else if (event.type === "error" && event.content) {
-                  sharedCtx.stream.animation.flush(resumeAssistantId);
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) => {
-                      if (m.id !== resumeAssistantId) return m;
-                      const segs = [...m.segments];
-                      let lastTextIdx = -1;
-                      for (let i = segs.length - 1; i >= 0; i--) {
-                        if (segs[i].type === "text") {
-                          lastTextIdx = i;
-                          break;
-                        }
-                      }
-                      if (lastTextIdx >= 0)
-                        segs[lastTextIdx] = {
-                          type: "text" as const,
-                          content: `⚠️ ${event.content}`,
-                        };
-                      return Object.assign({}, m, {
-                        segments: segs,
-                        isLoading: false,
-                        isProcessStreaming: false,
-                      });
-                    }),
-                  );
-                } else if (event.type === "done") {
-                  sharedCtx.stream.animation.flush(resumeAssistantId);
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) => {
-                      if (m.id !== resumeAssistantId || !m.isLoading) return m;
-                      const hasText = m.segments.some(
-                        (s) =>
-                          s.type === "text" &&
-                          (s as { type: "text"; content: string }).content.trim(),
-                      );
-                      if (hasText)
-                        return Object.assign({}, m, {
-                          isLoading: false,
-                          isProcessStreaming: false,
-                        });
-                      const segs = m.segments.map((s, i, arr) => {
-                        if (s.type !== "text") return s;
-                        const isLast = arr.slice(i + 1).every((x) => x.type !== "text");
-                        return isLast ? { type: "text" as const, content: "(no response)" } : s;
-                      });
-                      return Object.assign({}, m, {
-                        segments: segs,
-                        isLoading: false,
-                        isProcessStreaming: false,
-                      });
-                    }),
-                  );
+                } else {
+                  // Reconnect stream: result always replaces (no skipResultIfHasText).
+                  processActiveStreamEvent(event, resumeAssistantId, sharedCtx);
                 }
               } catch {
                 // ignore malformed SSE lines
@@ -325,159 +192,18 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
               const seq = (event as Record<string, unknown>)._seq;
               if (typeof seq === "number") singleLastSeqRef.current = seq;
 
-              if (event.type === "permission") {
-                sharedCtx.session.setPendingPermissions((prev) => [...prev, event]);
-              } else if (event.type === "session") {
+              // session and progress are handled per-hook (different state models).
+              if (event.type === "session") {
                 singleSessionIdRef.current = event.sessionId;
                 sharedCtx.session.setCurrentSessionId(event.sessionId);
               } else if (event.type === "progress") {
                 sharedCtx.session.setSessionProgress((prev) =>
                   mergeProgressEntries(prev, event.result.progress),
                 );
-              } else if (event.type === "thinking" && event.content) {
-                sharedCtx.session.setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId
-                      ? Object.assign({}, m, {
-                          processContent: (m.processContent ?? "") + event.content,
-                          isProcessStreaming: true,
-                        })
-                      : m,
-                  ),
-                );
-              } else if (event.type === "tool_call") {
-                sharedCtx.stream.animation.cut(assistantId);
-                sharedCtx.stream.pendingToolNameRef.current = event.name;
-              } else if (event.type === "tool_input") {
-                const toolName = sharedCtx.stream.pendingToolNameRef.current;
-                sharedCtx.stream.pendingToolNameRef.current = null;
-                if (toolName) {
-                  let parsedInput: Record<string, unknown>;
-                  try {
-                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- JSON from trusted SSE stream
-                    parsedInput = JSON.parse(event.content) as Record<string, unknown>;
-                  } catch {
-                    parsedInput = { raw: event.content };
-                  }
-                  sharedCtx.session.setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantId
-                        ? Object.assign({}, m, {
-                            segments: [
-                              ...m.segments,
-                              {
-                                type: "tool_call" as const,
-                                tool: { name: toolName, input: parsedInput },
-                              },
-                              { type: "text" as const, content: "" },
-                            ],
-                          })
-                        : m,
-                    ),
-                  );
-                }
-              } else if (event.type === "text" && event.content) {
-                sharedCtx.session.setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId ? Object.assign({}, m, { isProcessStreaming: false }) : m,
-                  ),
-                );
-                sharedCtx.stream.animation.enqueue(assistantId, event.content);
-              } else if (event.type === "result" && event.content) {
-                sharedCtx.session.setMessages((prev) =>
-                  prev.map((m) => {
-                    if (m.id !== assistantId) return m;
-                    const hasText = m.segments.some(
-                      (s) =>
-                        s.type === "text" &&
-                        (s as { type: "text"; content: string }).content.trim(),
-                    );
-                    if (hasText) return m;
-                    const segs = [...m.segments];
-                    let lastTextIdx = -1;
-                    for (let i = segs.length - 1; i >= 0; i--) {
-                      if (segs[i].type === "text") {
-                        lastTextIdx = i;
-                        break;
-                      }
-                    }
-                    if (lastTextIdx >= 0) {
-                      segs[lastTextIdx] = { type: "text" as const, content: event.content };
-                    }
-                    return Object.assign({}, m, {
-                      segments: segs,
-                      isLoading: false,
-                      isProcessStreaming: false,
-                    });
-                  }),
-                );
-              } else if (event.type === "cancelled") {
-                sharedCtx.session.setPendingPermissions([]);
-                sharedCtx.stream.animation.flush(assistantId);
-                sharedCtx.session.setSessionCancelled(true);
-                sharedCtx.session.setMessages((prev) =>
-                  prev.map((m) =>
-                    m.id === assistantId
-                      ? Object.assign({}, m, {
-                          isLoading: false,
-                          isProcessStreaming: false,
-                          isCancelled: true,
-                        })
-                      : m,
-                  ),
-                );
-              } else if (event.type === "error" && event.content) {
-                sharedCtx.stream.animation.flush(assistantId);
-                sharedCtx.session.setMessages((prev) =>
-                  prev.map((m) => {
-                    if (m.id !== assistantId) return m;
-                    const segs = [...m.segments];
-                    let lastTextIdx = -1;
-                    for (let i = segs.length - 1; i >= 0; i--) {
-                      if (segs[i].type === "text") {
-                        lastTextIdx = i;
-                        break;
-                      }
-                    }
-                    if (lastTextIdx >= 0)
-                      segs[lastTextIdx] = {
-                        type: "text" as const,
-                        content: `⚠️ ${event.content}`,
-                      };
-                    return Object.assign({}, m, {
-                      segments: segs,
-                      isLoading: false,
-                      isProcessStreaming: false,
-                    });
-                  }),
-                );
-              } else if (event.type === "done") {
-                sharedCtx.stream.animation.flush(assistantId);
-                sharedCtx.session.setMessages((prev) =>
-                  prev.map((m) => {
-                    if (m.id !== assistantId || !m.isLoading) return m;
-                    const hasText = m.segments.some(
-                      (s) =>
-                        s.type === "text" &&
-                        (s as { type: "text"; content: string }).content.trim(),
-                    );
-                    if (hasText)
-                      return Object.assign({}, m, {
-                        isLoading: false,
-                        isProcessStreaming: false,
-                      });
-                    const segs = m.segments.map((s, i, arr) => {
-                      if (s.type !== "text") return s;
-                      const isLast = arr.slice(i + 1).every((x) => x.type !== "text");
-                      return isLast ? { type: "text" as const, content: "(no response)" } : s;
-                    });
-                    return Object.assign({}, m, {
-                      segments: segs,
-                      isLoading: false,
-                      isProcessStreaming: false,
-                    });
-                  }),
-                );
+              } else {
+                processActiveStreamEvent(event, assistantId, sharedCtx, {
+                  skipResultIfHasText: true,
+                });
               }
             } catch {
               // ignore malformed SSE lines

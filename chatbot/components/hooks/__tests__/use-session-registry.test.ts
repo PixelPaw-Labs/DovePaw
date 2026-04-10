@@ -119,6 +119,37 @@ describe("useSessionRegistry", () => {
     expect(text(result.current.messages[1])).toBe("pong");
   });
 
+  it("sendMessage preserves previous turn messages on subsequent turns", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "result", content: "first reply" }, { type: "done" }]),
+      )
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "result", content: "second reply" }, { type: "done" }]),
+      );
+
+    const { result } = renderHook(() => useSessionRegistry());
+    act(() => {
+      result.current.createSession();
+    });
+
+    await act(async () => {
+      await result.current.sendMessage("first");
+    });
+    // Turn 1: user + assistant
+    expect(result.current.messages).toHaveLength(2);
+    expect(text(result.current.messages[1])).toBe("first reply");
+
+    await act(async () => {
+      await result.current.sendMessage("second");
+    });
+    // Turn 2: previous turn preserved + new user + new assistant
+    expect(result.current.messages).toHaveLength(4);
+    expect(text(result.current.messages[1])).toBe("first reply");
+    expect(result.current.messages[2].role).toBe("user");
+    expect(text(result.current.messages[3])).toBe("second reply");
+  });
+
   it("sendMessage stores the sessionId from session event", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       makeSseResponse([

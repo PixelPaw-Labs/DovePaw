@@ -11,6 +11,7 @@ import {
   type PerSessionState,
   type SharedSessionContext,
 } from "./shared-session-context";
+import { processActiveStreamEvent } from "./process-stream-event";
 
 export function useDoveSession(sharedCtx: SharedSessionContext) {
   // ─── Session map ─────────────────────────────────────────────────────────────
@@ -121,17 +122,23 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
 
       const isActive = key === activeKeyRef.current;
 
+      // ── Events handled the same for all sessions (active + background) ────────
+
+      // Permission: always update hasPendingPermission badge on the tab.
+      // Active session also receives the full event for the UI permission prompt.
       if (event.type === "permission") {
         patchEntry(key, { hasPendingPermission: true });
         if (isActive) sharedCtx.session.setPendingPermissions((prev) => [...prev, event]);
         return;
       }
 
+      // Session ID: patchEntry handles both active (calls setCurrentSessionId) and background.
       if (event.type === "session") {
         patchEntry(key, { sessionId: event.sessionId });
         return;
       }
 
+      // Progress: patchEntry handles both paths; liveProgress needs separate active/background.
       if (event.type === "progress") {
         const latestEntry = sessionsRef.current.get(key);
         const merged = mergeProgressEntries(
@@ -148,48 +155,50 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
           } else {
             const e = sessionsRef.current.get(key);
             if (e) {
-              const updatedMsgs = e.messages.map((m) =>
-                m.id === assistantId ? { ...m, liveProgress: lastToolCall } : m,
-              );
-              sessionsRef.current.set(key, { ...e, messages: updatedMsgs });
+              sessionsRef.current.set(key, {
+                ...e,
+                messages: e.messages.map((m) =>
+                  m.id === assistantId ? Object.assign({}, m, { liveProgress: lastToolCall }) : m,
+                ),
+              });
             }
           }
         }
         return;
       }
 
+      // ── Active session: delegate to shared handler ────────────────────────────
+      if (isActive) {
+        processActiveStreamEvent(event, assistantId, sharedCtx, {
+          onDone: () => patchEntry(key, { isLoading: false, status: "done" }),
+          onCancelled: () =>
+            patchEntry(key, { isLoading: false, isCancelled: true, status: "cancelled" }),
+        });
+        return;
+      }
+
+      // ── Background (inactive) session: update sessionsRef directly ────────────
+
       if (event.type === "thinking" && event.content) {
-        if (isActive) {
-          sharedCtx.stream.updateActiveMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? Object.assign({}, m, {
-                    processContent: (m.processContent ?? "") + event.content,
-                    isProcessStreaming: true,
-                  })
-                : m,
-            ),
-          );
-        } else {
-          const latestEntry = sessionsRef.current.get(key);
-          if (!latestEntry) return;
-          patchEntry(key, {
-            messages: latestEntry.messages.map((m) =>
-              m.id === assistantId
-                ? Object.assign({}, m, {
-                    processContent: (m.processContent ?? "") + event.content,
-                    isProcessStreaming: true,
-                  })
-                : m,
-            ),
-          });
-        }
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
+        patchEntry(key, {
+          messages: e.messages.map((m) =>
+            m.id === assistantId
+              ? Object.assign({}, m, {
+                  processContent: (m.processContent ?? "") + event.content,
+                  isProcessStreaming: true,
+                })
+              : m,
+          ),
+        });
         return;
       }
 
       if (event.type === "tool_call") {
+        // Store tool name for the upcoming tool_input event (shared pendingToolNameRef).
+        // animation.cut is intentionally skipped for background sessions.
         sharedCtx.stream.pendingToolNameRef.current = event.name;
-        if (isActive) sharedCtx.stream.animation.cut(assistantId);
         return;
       }
 
@@ -204,52 +213,29 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
         } catch {
           parsedInput = { raw: event.content };
         }
-        if (isActive) {
-          sharedCtx.stream.updateActiveMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId
-                ? Object.assign({}, m, {
-                    segments: [
-                      ...m.segments,
-                      { type: "tool_call" as const, tool: { name: toolName, input: parsedInput } },
-                      { type: "text" as const, content: "" },
-                    ],
-                  })
-                : m,
-            ),
-          );
-        } else {
-          const latestEntry = sessionsRef.current.get(key);
-          if (!latestEntry) return;
-          patchEntry(key, {
-            messages: latestEntry.messages.map((m) =>
-              m.id === assistantId
-                ? Object.assign({}, m, {
-                    segments: [
-                      ...m.segments,
-                      { type: "tool_call" as const, tool: { name: toolName, input: parsedInput } },
-                      { type: "text" as const, content: "" },
-                    ],
-                  })
-                : m,
-            ),
-          });
-        }
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
+        patchEntry(key, {
+          messages: e.messages.map((m) =>
+            m.id === assistantId
+              ? Object.assign({}, m, {
+                  segments: [
+                    ...m.segments,
+                    { type: "tool_call" as const, tool: { name: toolName, input: parsedInput } },
+                    { type: "text" as const, content: "" },
+                  ],
+                })
+              : m,
+          ),
+        });
         return;
       }
 
       if (event.type === "text" && event.content) {
-        if (isActive) {
-          sharedCtx.stream.updateActiveMessages((prev) =>
-            prev.map((m) =>
-              m.id === assistantId ? Object.assign({}, m, { isProcessStreaming: false }) : m,
-            ),
-          );
-          sharedCtx.stream.animation.enqueue(assistantId, event.content);
-        } else {
-          const latestEntry = sessionsRef.current.get(key);
-          if (!latestEntry) return;
-          const updatedMsgs = latestEntry.messages.map((m) => {
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
+        patchEntry(key, {
+          messages: e.messages.map((m) => {
             if (m.id !== assistantId) return m;
             const segs = [...m.segments];
             let lastTextIdx = -1;
@@ -259,8 +245,8 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
                 break;
               }
             }
-            const existingSeg = lastTextIdx >= 0 ? segs[lastTextIdx] : null;
-            const prevContent = existingSeg?.type === "text" ? existingSeg.content : "";
+            const seg = lastTextIdx >= 0 ? segs[lastTextIdx] : null;
+            const prevContent = seg?.type === "text" ? seg.content : "";
             const accumulated = prevContent + event.content;
             const updated = [...segs];
             if (lastTextIdx >= 0) {
@@ -269,17 +255,16 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
               updated.push({ type: "text" as const, content: accumulated });
             }
             return Object.assign({}, m, { segments: updated, isProcessStreaming: false });
-          });
-          patchEntry(key, { messages: updatedMsgs });
-        }
+          }),
+        });
         return;
       }
 
       if (event.type === "result" && event.content) {
-        const applyResult = (
-          prev: import("./use-messages").ChatMessage[],
-        ): import("./use-messages").ChatMessage[] =>
-          prev.map((m) => {
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
+        patchEntry(key, {
+          messages: e.messages.map((m) => {
             if (m.id !== assistantId) return m;
             const segs = [...m.segments];
             let lastTextIdx = -1;
@@ -296,35 +281,24 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
               isLoading: false,
               isProcessStreaming: false,
             });
-          });
-        if (isActive) {
-          sharedCtx.stream.updateActiveMessages(applyResult);
-        } else {
-          const latestEntry = sessionsRef.current.get(key);
-          if (!latestEntry) return;
-          patchEntry(key, { messages: applyResult(latestEntry.messages) });
-        }
+          }),
+        });
         return;
       }
 
       if (event.type === "cancelled") {
-        if (isActive) {
-          sharedCtx.session.setPendingPermissions([]);
-          sharedCtx.stream.animation.flush(assistantId);
-        }
-        const latestEntry = sessionsRef.current.get(key);
-        if (!latestEntry) return;
-        const updatedMsgs = latestEntry.messages.map((m) =>
-          m.id === assistantId
-            ? Object.assign({}, m, {
-                isLoading: false,
-                isProcessStreaming: false,
-                isCancelled: true,
-              })
-            : m,
-        );
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
         patchEntry(key, {
-          messages: updatedMsgs,
+          messages: e.messages.map((m) =>
+            m.id === assistantId
+              ? Object.assign({}, m, {
+                  isLoading: false,
+                  isProcessStreaming: false,
+                  isCancelled: true,
+                })
+              : m,
+          ),
           isLoading: false,
           isCancelled: true,
           status: "cancelled",
@@ -333,32 +307,10 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
       }
 
       if (event.type === "error" && event.content) {
-        if (isActive) {
-          sharedCtx.stream.animation.flush(assistantId);
-          sharedCtx.stream.updateActiveMessages((prev) =>
-            prev.map((m) => {
-              if (m.id !== assistantId) return m;
-              const segs = [...m.segments];
-              let lastTextIdx = -1;
-              for (let i = segs.length - 1; i >= 0; i--) {
-                if (segs[i].type === "text") {
-                  lastTextIdx = i;
-                  break;
-                }
-              }
-              if (lastTextIdx >= 0)
-                segs[lastTextIdx] = { type: "text" as const, content: `⚠️ ${event.content}` };
-              return Object.assign({}, m, {
-                segments: segs,
-                isLoading: false,
-                isProcessStreaming: false,
-              });
-            }),
-          );
-        } else {
-          const latestEntry = sessionsRef.current.get(key);
-          if (!latestEntry) return;
-          const updatedMsgs = latestEntry.messages.map((m) => {
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
+        patchEntry(key, {
+          messages: e.messages.map((m) => {
             if (m.id !== assistantId) return m;
             const segs = [...m.segments];
             let lastTextIdx = -1;
@@ -375,39 +327,17 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
               isLoading: false,
               isProcessStreaming: false,
             });
-          });
-          patchEntry(key, { messages: updatedMsgs, isLoading: false });
-        }
+          }),
+          isLoading: false,
+        });
         return;
       }
 
       if (event.type === "done") {
-        if (isActive) {
-          sharedCtx.stream.animation.flush(assistantId);
-          sharedCtx.stream.updateActiveMessages((prev) =>
-            prev.map((m) => {
-              if (m.id !== assistantId || !m.isLoading) return m;
-              const hasText = m.segments.some(
-                (s) => s.type === "text" && (s as { type: "text"; content: string }).content.trim(),
-              );
-              if (hasText)
-                return Object.assign({}, m, { isLoading: false, isProcessStreaming: false });
-              const segs = m.segments.map((s, i, arr) => {
-                if (s.type !== "text") return s;
-                const isLast = arr.slice(i + 1).every((x) => x.type !== "text");
-                return isLast ? { type: "text" as const, content: "(no response)" } : s;
-              });
-              return Object.assign({}, m, {
-                segments: segs,
-                isLoading: false,
-                isProcessStreaming: false,
-              });
-            }),
-          );
-        } else {
-          const latestEntry = sessionsRef.current.get(key);
-          if (!latestEntry) return;
-          const updatedMsgs = latestEntry.messages.map((m) => {
+        const e = sessionsRef.current.get(key);
+        if (!e) return;
+        patchEntry(key, {
+          messages: e.messages.map((m) => {
             if (m.id !== assistantId || !m.isLoading) return m;
             const hasText = m.segments.some(
               (s) => s.type === "text" && (s as { type: "text"; content: string }).content.trim(),
@@ -424,11 +354,10 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
               isLoading: false,
               isProcessStreaming: false,
             });
-          });
-          patchEntry(key, { messages: updatedMsgs, isLoading: false, status: "done" });
-        }
-        patchEntry(key, { isLoading: false, status: "done" });
-        return;
+          }),
+          isLoading: false,
+          status: "done",
+        });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sharedCtx is stable
@@ -683,7 +612,9 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
 
       const latestEntry = sessionsRef.current.get(key);
       if (!latestEntry) return;
-      const updatedMsgs = [...latestEntry.messages, userMsg, assistantMsg];
+      // Use messagesRef (mirrors React state) not latestEntry.messages — sessionsRef is not
+      // updated during streaming, so latestEntry.messages would be stale on subsequent turns.
+      const updatedMsgs = [...sharedCtx.stream.messagesRef.current, userMsg, assistantMsg];
 
       patchEntry(key, {
         messages: updatedMsgs,
