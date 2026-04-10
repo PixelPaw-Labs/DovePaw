@@ -138,9 +138,8 @@ export function useSessionRegistry() {
       // Save current Dove session rendering state back to ref before switching away.
       if (current === "dove") dove.syncToRef();
 
-      // Abort any in-flight streams
-      agent.abort();
-      // Disconnect the active Dove session's SSE (subprocess stays alive)
+      // Disconnect any in-flight streams
+      agent.disconnect();
       dove.disconnect();
 
       animation.reset();
@@ -158,9 +157,7 @@ export function useSessionRegistry() {
 
       // ── Switching back to Dove: restore from in-memory registry ─────────────
       if (agentId === "dove") {
-        const restored = dove.restore();
-        if (restored) return;
-        // No registry entry for Dove — fall through to DB load (handled by dove.restore returning false)
+        dove.load();
         return;
       }
 

@@ -14,7 +14,7 @@ import {
 import { parseSessions } from "./use-agent-sessions";
 import {
   activeSessionResponseSchema,
-  sessionDetailResponseSchema,
+  fetchSessionDetail,
   type SharedSessionContext,
 } from "./shared-session-context";
 
@@ -612,17 +612,12 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
       void (async () => {
         try {
           const {
-            messages: msgs,
+            messages: stamped,
             progress,
             resumeSeq,
             status,
-          } = sessionDetailResponseSchema.parse(
-            await (await fetch(sessionDetailUrl(agentId, id))).json(),
-          );
+          } = await fetchSessionDetail(sessionDetailUrl(agentId, id), agentId);
           if (sharedCtx.session.activeAgentIdRef.current !== agentId) return;
-          const stamped = msgs.map((m) =>
-            m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
-          );
           singleSessionIdRef.current = id;
           sharedCtx.session.setCurrentSessionId(id);
           sharedCtx.session.setSessionProgress(progress);
@@ -680,16 +675,11 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
           }
           if (!resolvedContextId) return;
           const {
-            messages: msgs,
+            messages: stamped,
             progress,
             status,
             resumeSeq,
-          } = sessionDetailResponseSchema.parse(
-            await (await fetch(sessionDetailUrl(agentId, resolvedContextId))).json(),
-          );
-          const stamped = msgs.map((m) =>
-            m.role === "assistant" ? Object.assign({}, m, { agentId }) : m,
-          );
+          } = await fetchSessionDetail(sessionDetailUrl(agentId, resolvedContextId), agentId);
           if (sharedCtx.session.activeAgentIdRef.current !== agentId) return;
           singleSessionIdRef.current = resolvedContextId;
           sharedCtx.session.setCurrentSessionId(resolvedContextId);
@@ -738,7 +728,7 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
   // ─── Orchestrator coordination methods ────────────────────────────────────────
 
   /** Called by orchestrator when switching away from this agent */
-  const abort = useCallback(() => {
+  const disconnect = useCallback(() => {
     singleAbortRef.current?.abort();
     singleAbortRef.current = null;
     singleLastSeqRef.current = 0;
@@ -751,7 +741,7 @@ export function useAgentSession(sharedCtx: SharedSessionContext) {
     newSession,
     deleteSession,
     setSessionId,
-    abort,
+    disconnect,
     load,
   };
 }

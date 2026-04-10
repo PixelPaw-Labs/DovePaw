@@ -323,6 +323,71 @@ describe("useSessionRegistry", () => {
     expect(vi.mocked(fetch)).not.toHaveBeenCalled();
   });
 
+  it("switchToSession loads from DB when session completed while away", async () => {
+    const encoder = new TextEncoder();
+
+    // Stream A emits a session event then hangs (simulates the user switching away mid-response)
+    const hangingBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            `data: ${JSON.stringify({ type: "session", sessionId: "srv-sess-hanging" })}\n\n`,
+          ),
+        );
+        // Never closes — subprocess is still running on the server
+      },
+    });
+
+    const dbMessages = [
+      { id: "u1", role: "user", segments: [{ type: "text", content: "hello" }] },
+      { id: "a1", role: "assistant", segments: [{ type: "text", content: "completed reply" }] },
+    ];
+
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(
+        // POST /api/chat for session A — stream hangs after emitting session ID
+        new Response(hangingBody, {
+          status: 200,
+          headers: { "Content-Type": "text/event-stream" },
+        }),
+      )
+      .mockResolvedValueOnce(
+        // GET /api/chat/session/srv-sess-hanging — DB status re-check inside switchToSession
+        new Response(
+          JSON.stringify({ messages: dbMessages, progress: [], resumeSeq: 0, status: "done" }),
+          { status: 200 },
+        ),
+      );
+
+    const { result } = renderHook(() => useSessionRegistry());
+    let key1!: string;
+    act(() => {
+      key1 = result.current.createSession();
+    });
+
+    // Start session A — stream connects, session event arrives (isLoading=true, sessionId set), then hangs
+    act(() => {
+      void result.current.sendMessage("hello");
+    });
+
+    // Wait for the session ID from the SSE stream to be stored
+    await waitFor(() => result.current.currentSessionId === "srv-sess-hanging");
+
+    // Switch to a new session (saves session A's state — isLoading=true, sessionId set)
+    act(() => {
+      result.current.newSession();
+    });
+
+    // Switch back to session A — should detect it completed via DB re-check, load from DB
+    await act(async () => {
+      await result.current.switchToSession(key1);
+    });
+
+    expect(result.current.messages).toHaveLength(2);
+    expect(text(result.current.messages[1])).toBe("completed reply");
+    expect(result.current.isLoading).toBe(false);
+  });
+
   // ─── stopSession ──────────────────────────────────────────────────────────────
 
   it("stopSession marks the session as cancelled and clears isLoading", async () => {

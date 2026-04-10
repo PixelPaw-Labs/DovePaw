@@ -21,6 +21,23 @@ export const sessionDetailResponseSchema = z.object({
   status: z.enum(["running", "done", "cancelled", "interrupted"]).default("done"),
 });
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch a session detail from the given URL, parse it, and stamp each
+ * assistant message with the supplied agentId.  Used by both Dove and
+ * non-Dove hooks to avoid duplicating the fetch → parse → stamp pattern.
+ */
+export async function fetchSessionDetail(url: string, agentId: AgentId) {
+  const detail = sessionDetailResponseSchema.parse(await (await fetch(url)).json());
+  return {
+    ...detail,
+    messages: detail.messages.map(
+      (m) => (m.role === "assistant" ? Object.assign({}, m, { agentId }) : m) as ChatMessage,
+    ),
+  };
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type SessionStatus = "running" | "done" | "cancelled" | "interrupted" | "pending";

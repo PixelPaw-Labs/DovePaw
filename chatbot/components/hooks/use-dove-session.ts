@@ -5,9 +5,9 @@ import type { ChatSseEvent } from "@/lib/chat-sse";
 import { mergeProgressEntries } from "./use-messages";
 import { agentChatUrl, sessionStreamUrl } from "@/lib/agent-api-urls";
 import {
+  fetchSessionDetail,
   makeBlankSession,
   MAX_BACKGROUND_CONNECTIONS,
-  sessionDetailResponseSchema,
   type PerSessionState,
   type SharedSessionContext,
 } from "./shared-session-context";
@@ -550,6 +550,32 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
       const entry = sessionsRef.current.get(key);
       if (!entry) return;
 
+      // If the session was running when we last left it, re-check DB status.
+      // It may have completed while we were viewing another session — in that
+      // case load the full conversation from DB instead of reconnecting to a
+      // potentially-dead stream (which would only replay partial text via Mode 3).
+      if (entry.isLoading && entry.sessionId) {
+        try {
+          const {
+            messages: stamped,
+            progress,
+            status,
+          } = await fetchSessionDetail(`/api/chat/session/${entry.sessionId}`, "dove");
+          if (status !== "running") {
+            patchEntry(key, {
+              messages: stamped,
+              sessionProgress: progress,
+              isLoading: false,
+              status,
+            });
+            syncActiveFromRef(key);
+            return;
+          }
+        } catch {
+          // Fetch failed — fall through to reconnect with in-memory state
+        }
+      }
+
       syncActiveFromRef(key);
       reconnectToSession(key);
     },
@@ -558,6 +584,7 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
       syncActiveToRef,
       disconnectStream,
       syncActiveFromRef,
+      patchEntry,
       reconnectToSession,
       sharedCtx.stream,
       sharedCtx.session,
@@ -794,15 +821,11 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
       let isRunning = false;
       try {
         const {
-          messages: msgs,
+          messages: stamped,
           progress,
           status,
-        } = sessionDetailResponseSchema.parse(
-          await (await fetch(`/api/chat/session/${id}`)).json(),
-        );
-        blank.messages = msgs.map((m) =>
-          m.role === "assistant" ? Object.assign({}, m, { agentId: "dove" }) : m,
-        );
+        } = await fetchSessionDetail(`/api/chat/session/${id}`, "dove");
+        blank.messages = stamped;
         blank.sessionProgress = progress;
         blank.status = status;
         isRunning = status === "running";
@@ -862,13 +885,13 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
   }, [disconnectStream]);
 
   /** Called by orchestrator when switching BACK to Dove */
-  const restore = useCallback((): boolean => {
+  const load = useCallback(() => {
     const key = activeKeyRef.current;
-    const entry = key ? sessionsRef.current.get(key) : null;
-    if (!entry) return false;
-    syncActiveFromRef(key!);
-    reconnectToSession(key!);
-    return true;
+    if (!key) return;
+    const entry = sessionsRef.current.get(key);
+    if (!entry) return;
+    syncActiveFromRef(key);
+    reconnectToSession(key);
   }, [syncActiveFromRef, reconnectToSession]);
 
   /** Called by orchestrator BEFORE switching away from Dove */
@@ -890,7 +913,7 @@ export function useDoveSession(sharedCtx: SharedSessionContext) {
     resolvePermission,
     // Orchestrator coordination
     disconnect,
-    restore,
+    load,
     syncToRef,
   };
 }
