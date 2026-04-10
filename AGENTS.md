@@ -120,7 +120,7 @@ Agent Scripts (agents/*/main.ts)
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DovePaw** (3415 symbols, 7731 relationships, 277 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DovePaw** (3422 symbols, 7779 relationships, 278 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
