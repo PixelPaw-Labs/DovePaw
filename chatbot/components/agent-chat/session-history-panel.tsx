@@ -22,11 +22,13 @@ function SessionHistoryItem({
   onDelete,
 }: SessionHistoryItemProps) {
   const shimmerRef = useButtonShimmer(isRunning);
+  // Keep the selected theme while running so switching sessions doesn't drop to unselected style.
+  const isSelected = isActive || isRunning;
 
   return (
     <div
       className={`group relative overflow-hidden flex items-center gap-2 px-3 py-2 transition-colors ${
-        isActive ? "bg-primary/8" : "hover:bg-muted/50"
+        isSelected ? "bg-primary/8" : "hover:bg-muted/50"
       }`}
     >
       {isRunning && (
@@ -35,21 +37,20 @@ function SessionHistoryItem({
           aria-hidden
           className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
           style={{
-            background: isActive
-              ? "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)"
-              : "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-primary) 4%, transparent) 25%, color-mix(in srgb, var(--color-primary) 35%, transparent) 50%, color-mix(in srgb, var(--color-primary) 4%, transparent) 75%, transparent 100%)",
+            background:
+              "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)",
           }}
         />
       )}
       <div
         className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-          isRunning ? "bg-primary animate-pulse" : isActive ? "bg-primary" : "bg-border"
+          isRunning ? "bg-primary animate-pulse" : isSelected ? "bg-primary" : "bg-border"
         }`}
       />
       <button
         onClick={() => onSelect(session.id)}
         className={`flex-1 flex items-baseline gap-2 text-left min-w-0 ${
-          isActive ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+          isSelected ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
         }`}
       >
         <span className="text-xs truncate">{session.label}</span>

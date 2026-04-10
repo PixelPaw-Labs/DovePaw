@@ -42,4 +42,11 @@ export class AgentContextRegistry {
     this.sessions.delete(sessionId);
     deleteOrchestratorAgentContexts(sessionId);
   }
+
+  /** Clear in-memory cache for all sessions (DB is handled separately). */
+  clearAll(): void {
+    this.sessions.clear();
+  }
 }
+
+export const agentContextRegistry = new AgentContextRegistry();

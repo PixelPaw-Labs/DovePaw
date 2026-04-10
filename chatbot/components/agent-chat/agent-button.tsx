@@ -109,13 +109,15 @@ export function AgentButton({
   const isOnline = status?.online ?? false;
   const { isRunning, processingTrigger } = useAgentRunState(isActive, status);
   const shimmerRef = useButtonShimmer(isRunning);
+  // Keep the selected theme while running so switching away doesn't drop to unselected style.
+  const isSelected = isActive || isRunning;
 
   return (
     <button
       onClick={onClick}
       className={cn(
         "group relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
-        isActive
+        isSelected
           ? "bg-primary/10 text-primary border-l-4 border-primary"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
       )}
@@ -126,11 +128,8 @@ export function AgentButton({
           aria-hidden
           className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
           style={{
-            background: isActive
-              ? // selected (primary/10 bg): white glint — visible on any primary tint
-                "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)"
-              : // unselected (near-white bg): primary-colour glint
-                "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-primary) 4%, transparent) 25%, color-mix(in srgb, var(--color-primary) 35%, transparent) 50%, color-mix(in srgb, var(--color-primary) 4%, transparent) 75%, transparent 100%)",
+            background:
+              "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)",
           }}
         />
       )}
@@ -144,7 +143,7 @@ export function AgentButton({
         <Icon className="w-3 h-3" />
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className={cn("text-sm font-medium", !isActive && "text-foreground/80")}>
+        <span className={cn("text-sm font-medium", !isSelected && "text-foreground/80")}>
           {agent.displayName}
         </span>
         <LaunchdBadge

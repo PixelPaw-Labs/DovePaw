@@ -37,6 +37,8 @@ export function AgentSidebar({
 
   const isDoveLoading = doveIsRunning;
   const doveShimmerRef = useButtonShimmer(isDoveLoading);
+  // Keep the selected theme while Dove is running so switching away doesn't drop to unselected style.
+  const isDoveSelected = (activeAgentId === "dove" && !isSettings) || isDoveLoading;
 
   const [confirming, setConfirming] = React.useState(false);
   const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -84,7 +86,7 @@ export function AgentSidebar({
           onClick={() => onSelectAgent?.("dove")}
           className={cn(
             "relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
-            activeAgentId === "dove" && !isSettings
+            isDoveSelected
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
@@ -96,27 +98,13 @@ export function AgentSidebar({
               className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
               style={{
                 background:
-                  activeAgentId === "dove" && !isSettings
-                    ? // selected (primary/10 bg): white glint
-                      "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)"
-                    : // unselected (near-white bg): primary-colour glint
-                      "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-primary) 4%, transparent) 25%, color-mix(in srgb, var(--color-primary) 35%, transparent) 50%, color-mix(in srgb, var(--color-primary) 4%, transparent) 75%, transparent 100%)",
+                  "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)",
               }}
             />
           )}
-          <Bot
-            className={cn(
-              "w-4 h-4 shrink-0",
-              activeAgentId === "dove" && !isSettings ? "text-primary" : "",
-            )}
-          />
+          <Bot className={cn("w-4 h-4 shrink-0", isDoveSelected ? "text-primary" : "")} />
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <span
-              className={cn(
-                "text-sm font-medium",
-                activeAgentId !== "dove" && "text-foreground/80",
-              )}
-            >
+            <span className={cn("text-sm font-medium", !isDoveSelected && "text-foreground/80")}>
               Dove
             </span>
             <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">

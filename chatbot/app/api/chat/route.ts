@@ -43,8 +43,9 @@ import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession, closeStaleSessions, setSessionStatus, upsertSession } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
-import { AgentContextRegistry } from "@/lib/agent-context-registry";
+import { agentContextRegistry } from "@/lib/agent-context-registry";
 import { clearSessionBuffer } from "@/lib/session-events";
+import { deletedSessionIds } from "@/lib/deleted-session-ids";
 import { sessionRunner } from "@/lib/session-runner";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
@@ -55,10 +56,6 @@ const chatRequestSchema = z.object({
 });
 
 export const maxDuration = 86400; // 24 hours for long-running agents
-
-const agentContextRegistry = new AgentContextRegistry();
-/** Sessions explicitly deleted via DELETE handler — skip save in finally to avoid re-creating. */
-const deletedSessionIds = new Set<string>();
 
 // One-time server startup: close any sessions left running from a previous process.
 closeStaleSessions();

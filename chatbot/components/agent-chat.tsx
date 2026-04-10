@@ -33,8 +33,10 @@ export function AgentChat({
   }, []);
 
   // Notify parent + refresh history when loading changes.
+  // useLayoutEffect fires before paint so ConversationContext (and the agent button shimmer)
+  // updates in the same frame as the chat UI — prevents the shimmer outlasting the response.
   const prevIsLoadingRef = React.useRef(session.isLoading);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (prevIsLoadingRef.current !== session.isLoading) {
       onIsLoadingChange(session.isLoading);
       void refresh();
