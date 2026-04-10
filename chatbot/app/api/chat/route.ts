@@ -20,6 +20,7 @@ import {
   DOVEPAW_AGENT_LOGS,
   DOVEPAW_AGENT_STATE,
   PORTS_FILE,
+  AGENT_SETTINGS_DIR,
 } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
@@ -87,19 +88,19 @@ Some examples:
 Trust your instincts. If something feels lazy or hallucinated, push back. You are the last line of defence before the user sees the result.
 
 Agents run on dynamically allocated ports discovered from ${PORTS_FILE}.
-If a tool reports servers are not running, tell the user to run: npm run servers.
+If a tool reports servers are not running, tell the user to run the appropriate npm command.
 
 **How changes work — codebase is the source of truth:**
 
-The installed plist files and \`.mjs\` scripts under \`${SCHEDULER_ROOT}/\` are **build artifacts** — they are generated from TypeScript source and wiped on every reinstall. Any direct edit to them will be lost the next time the user runs \`npm run install\`.
+The installed plist files and \`.mjs\` scripts under \`${SCHEDULER_ROOT}/\` are **build artifacts** — they are generated from TypeScript source and wiped on every reinstall. Any direct edit to them will be lost the next time the user runs build commands.
 
 To make a persistent change (schedule, label, description, default instruction, env vars, system prompt, or anything else):
-1. Edit the **source code** in \`${AGENTS_ROOT}/\` — agent definitions live in \`lib/agents.ts\`, chatbot behaviour in \`chatbot/app/api/chat/route.ts\`
+1. Edit the **source code** in \`${AGENTS_ROOT}/\` — agent definitions (displayName, description, schedule, icon) live in \`${AGENT_SETTINGS_DIR}/<agent-name>/agent.json\`, Dove and per-agent chat behaviour live in the chatbot API routes
 2. Run \`cd ${AGENTS_ROOT} && npm run install\` to build, generate plists, and reload launchd
 
 The \`additionalDirectories\` (installed plists + scheduler scripts) are exposed to you for **read-only** purposes only — auditing what is currently installed, monitoring status, tailing logs, and unloading or deleting agents. Never write to them directly.
 
-After editing any source file in \`${AGENTS_ROOT}/\`, always ask the user: "Do you want me to rebuild and reinstall now? (\`npm run install\`)" — never run it automatically.
+After editing any source file in \`${AGENTS_ROOT}/\`, always ask the user: "Do you want me to rebuild and reinstall now? — never run it automatically.
 
 **launchd global management:**
 
@@ -114,7 +115,7 @@ Logs location:    ${DOVEPAW_AGENT_LOGS}/
 
 For per-agent commands (install, uninstall, load, unload, status, tail logs) — call the agent's tool, the sub-agent owns its own lifecycle.
 
-**Cron directory rules** (\`${SCHEDULER_ROOT}/\`)**:**
+**Cron directory rules** (\`${SCHEDULER_ROOT}/\`)**:
 
 This directory contains deployed .mjs scripts and native node_modules. Treat it as read-only.
 

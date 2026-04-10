@@ -74,6 +74,7 @@ vi.mock("@/lib/paths", () => ({
   DOVEPAW_AGENT_LOGS: "/mock/logs",
   DOVEPAW_AGENT_STATE: "/mock/state",
   PORTS_FILE: "/mock/.ports.json",
+  AGENT_SETTINGS_DIR: "/mock/agent-settings",
 }));
 
 vi.mock("@/lib/db", () => ({
