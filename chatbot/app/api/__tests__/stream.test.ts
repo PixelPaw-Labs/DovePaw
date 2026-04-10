@@ -20,14 +20,20 @@ vi.mock("@/lib/session-events", () => ({
 vi.mock("@/lib/db", () => ({
   getSessionStatus: vi.fn(),
   getSessionDetail: vi.fn(),
+  setSessionStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/pending-permissions", () => ({
   hasPendingPermission: vi.fn(() => false),
 }));
 
+vi.mock("@/lib/session-runner", () => ({
+  sessionRunner: { isRunning: vi.fn(() => true) },
+}));
+
 import { getSessionBuffer, subscribeSession } from "@/lib/session-events";
-import { getSessionStatus, getSessionDetail } from "@/lib/db";
+import { getSessionStatus, getSessionDetail, setSessionStatus } from "@/lib/db";
+import { sessionRunner } from "@/lib/session-runner";
 import { GET } from "../chat/stream/[sessionId]/route";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -150,6 +156,7 @@ describe("Mode 2 — buffer gone, session running", () => {
   beforeEach(() => {
     vi.mocked(getSessionBuffer).mockReturnValue(null);
     vi.mocked(getSessionStatus).mockReturnValue("running");
+    vi.mocked(sessionRunner.isRunning).mockReturnValue(true);
   });
 
   it("sends session + result prefix events from DB before live stream", async () => {
@@ -268,6 +275,28 @@ describe("Mode 2 — buffer gone, session running", () => {
       .map((e) => (e as { type: "result"; content: string }).content);
     expect(contents).toContain("saved");
     expect(contents).toContain("live");
+  });
+
+  it("falls through to Mode 3 and marks interrupted when subprocess is not registered", async () => {
+    vi.mocked(sessionRunner.isRunning).mockReturnValue(false);
+    vi.mocked(getSessionDetail).mockReturnValue({
+      id: "sess-2",
+      agentId: "dove",
+      startedAt: "2026-01-01T00:00:00Z",
+      label: "Test",
+      status: "running",
+      messages: [{ id: "a1", role: "assistant", segments: [{ type: "text", content: "partial" }] }],
+      progress: [],
+    });
+
+    const req = new Request("http://localhost/api/chat/stream/sess-2?after=0");
+    const res = await GET(req, makeParams("sess-2"));
+    const events = await collectSseEvents(res);
+
+    // Should synthesize and close (Mode 3 path), not subscribe
+    expect(subscribeSession).not.toHaveBeenCalled();
+    expect(setSessionStatus).toHaveBeenCalledWith("sess-2", "interrupted");
+    expect(events).toContainEqual({ type: "done" });
   });
 });
 

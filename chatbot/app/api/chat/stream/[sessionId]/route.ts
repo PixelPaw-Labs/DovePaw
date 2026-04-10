@@ -1,6 +1,7 @@
 import { getSessionBuffer, subscribeSession } from "@/lib/session-events";
-import { getSessionDetail, getSessionStatus } from "@/lib/db";
+import { getSessionDetail, getSessionStatus, setSessionStatus } from "@/lib/db";
 import { hasPendingPermission } from "@/lib/pending-permissions";
+import { sessionRunner } from "@/lib/session-runner";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 
 export const maxDuration = 86400;
@@ -48,24 +49,30 @@ export async function GET(
   // ── Mode 2: buffer gone but session still "running" in DB ────────────────────
   const status = getSessionStatus(sessionId);
   if (status === "running") {
-    // Subscribe to a fresh bucket — if the subprocess is still alive it will
-    // publish events that land here.  Replay DB messages so the UI has context.
-    const detail = getSessionDetail(sessionId);
-    const prefixEvents: ChatSseEvent[] = detail
-      ? [
-          { type: "session", sessionId: detail.id },
-          ...detail.messages.flatMap((msg) => {
-            if (msg.role !== "assistant") return [];
-            return msg.segments.flatMap((s): ChatSseEvent[] => {
-              if (s.type === "text" && s.content) {
-                return [{ type: "result", content: s.content }];
-              }
-              return [];
-            });
-          }),
-        ]
-      : [];
-    return makeLiveResponse(sessionId, after, request.signal, prefixEvents);
+    if (sessionRunner.isRunning(sessionId)) {
+      // Subscribe to a fresh bucket — if the subprocess is still alive it will
+      // publish events that land here.  Replay DB messages so the UI has context.
+      const detail = getSessionDetail(sessionId);
+      const prefixEvents: ChatSseEvent[] = detail
+        ? [
+            { type: "session", sessionId: detail.id },
+            ...detail.messages.flatMap((msg) => {
+              if (msg.role !== "assistant") return [];
+              return msg.segments.flatMap((s): ChatSseEvent[] => {
+                if (s.type === "text" && s.content) {
+                  return [{ type: "result", content: s.content }];
+                }
+                return [];
+              });
+            }),
+          ]
+        : [];
+      return makeLiveResponse(sessionId, after, request.signal, prefixEvents);
+    }
+    // Subprocess is not registered — it died without updating the DB (e.g. server
+    // restart where markInterruptedSessions() didn't run yet, or HMR reload).
+    // Mark interrupted and fall through to Mode 3 to synthesize from DB.
+    setSessionStatus(sessionId, "interrupted");
   }
 
   // ── Mode 3: completed session — synthesize from DB ───────────────────────────
