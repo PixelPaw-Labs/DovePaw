@@ -318,6 +318,22 @@ export function getSessionDetail(id: string): SessionDetailResult | null {
   };
 }
 
+export function getSessionWorkspacePath(id: string): string | null {
+  const row = getDb()
+    .prepare<[string], { workspace_path: string | null }>(
+      "SELECT workspace_path FROM sessions WHERE id = ?",
+    )
+    .get(id);
+  return row?.workspace_path ?? null;
+}
+
+export function getAllSessionWorkspacePaths(): string[] {
+  const rows = getDb()
+    .prepare<[], { workspace_path: string | null }>("SELECT workspace_path FROM sessions")
+    .all();
+  return rows.map((r) => r.workspace_path).filter((p): p is string => p !== null);
+}
+
 export function deleteSession(id: string): void {
   const db = getDb();
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);

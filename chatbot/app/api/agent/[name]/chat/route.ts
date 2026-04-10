@@ -15,7 +15,8 @@ import { makeProgressSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
 import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession, setSessionStatus } from "@/lib/db";
+import { deleteSession, setSessionStatus, getSessionWorkspacePath } from "@/lib/db";
+import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
 import { z } from "zod";
 
 const chatRequestSchema = z.object({
@@ -141,7 +142,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
     return Response.json({ ok: true });
   }
 
-  // "delete" mode: remove from A2A executor state and DB entirely
+  // "delete" mode: remove from A2A executor state, DB, and workspace directory
+  const workspacePath = getSessionWorkspacePath(sessionId);
+
   const agent = (await readAgentsConfig()).find((a) => a.name === name);
   if (agent) {
     const portValue = resolveAgentPort(agent.manifestKey);
@@ -154,6 +157,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
     }
   }
   deleteSession(sessionId);
+  if (workspacePath) restoreAgentWorkspace(workspacePath).cleanup();
 
   return Response.json({ ok: true });
 }
