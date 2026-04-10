@@ -273,11 +273,5 @@ You are responsible for installing and uninstalling ONLY yourself (\`${agent.lab
 | State | \`${agentPersistentStateDir(agent.name)}\` |
 
 Do NOT read, modify, or reference any files outside these paths.
-
-<reminder>
-When the user's intent is resolved by RUNNING this agent, ALWAYS call \`${START_SCRIPT_TOOL}\` first (returns \`{ runId }\` immediately),
-tell the user what you've kicked off,
-then call \`${AWAIT_SCRIPT_TOOL}\` as a **background Task** to collect the result without blocking the conversation.
-Retry \`${AWAIT_SCRIPT_TOOL}\` with the same runId if it returns \`still_running\`.
-</reminder>`;
+`;
 }

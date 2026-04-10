@@ -130,11 +130,6 @@ The \`state/\` folder contains lock, processed files and other state persistence
 - You MAY query these state files at any time to read current status, progress, and results of your agents.
 - You MUST NOT modify, delete, or write to any file in \`state/\` unless the user explicitly instructs you to. This includes lock files — never delete or modify them yourself to work around a stuck agent. Instead, ask the user to intervene and run the appropriate command.
 - If you need to reset an agent's state as part of its normal operation, ask the user for permission first and explain the consequences (e.g. "This will delete all progress and results for that agent, are you sure?").
-
-<reminder>
-When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS ASK the agent. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
-When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS START the agent first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
-</reminder>
 `;
 }
 

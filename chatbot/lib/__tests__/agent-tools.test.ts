@@ -32,12 +32,7 @@ vi.mock("@/a2a/lib/workspace", () => ({
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
-import {
-  buildSubAgentPrompt,
-  makeStartScriptTool,
-  START_SCRIPT_TOOL,
-  AWAIT_SCRIPT_TOOL,
-} from "@/lib/agent-tools";
+import { buildSubAgentPrompt, makeStartScriptTool, START_SCRIPT_TOOL } from "@/lib/agent-tools";
 import type { AgentDef } from "@@/lib/agents";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
@@ -116,11 +111,9 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).toContain(START_SCRIPT_TOOL);
   });
 
-  it("includes <reminder> block referencing both START_SCRIPT_TOOL and AWAIT_SCRIPT_TOOL", () => {
+  it("does not include a <reminder> block (injected per-prompt via UserPromptSubmit hook instead)", () => {
     const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain("<reminder>");
-    expect(prompt).toContain(START_SCRIPT_TOOL);
-    expect(prompt).toContain(AWAIT_SCRIPT_TOOL);
+    expect(prompt).not.toContain("<reminder>");
   });
 
   it("includes the agent label in the launchd section", () => {
