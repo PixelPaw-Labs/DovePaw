@@ -76,7 +76,7 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(true);
 
-  const [panelWidth, setPanelWidth] = React.useState(380);
+  const [panelWidth, setPanelWidth] = React.useState(480);
   const isResizing = React.useRef(false);
   const [historyPanelHeight, setHistoryPanelHeight] = React.useState(220);
   const verticalIsResizing = React.useRef(false);
@@ -142,6 +142,11 @@ export function AgentChat({ agentConfigs }: AgentChatProps) {
           agentConfigs={agentConfigs}
           activeAgentId={activeAgentId}
           onSelectAgent={setActiveAgentId}
+          onClearAllHistory={async () => {
+            await fetch("/api/sessions/all", { method: "DELETE" });
+            newSession();
+            void refreshHistory();
+          }}
         />
 
         <main className="flex-1 flex flex-col bg-background relative min-w-0">

@@ -329,3 +329,10 @@ export function deleteSession(id: string): void {
   db.prepare("DELETE FROM dove_agent_contexts WHERE orchestrator_session_id = ?").run(id);
   db.prepare("DELETE FROM dove_agent_contexts WHERE subagent_a2a_context_id = ?").run(id);
 }
+
+export function deleteAllSessions(): void {
+  const db = getDb();
+  db.prepare("DELETE FROM sessions").run();
+  db.prepare("UPDATE active_sessions SET context_id = NULL").run();
+  db.prepare("DELETE FROM dove_agent_contexts").run();
+}

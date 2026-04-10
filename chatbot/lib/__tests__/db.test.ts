@@ -14,6 +14,7 @@ const {
   listSessions,
   getSessionDetail,
   deleteSession,
+  deleteAllSessions,
   setSessionStatus,
   closeDb,
 } = await import("../db");
@@ -125,6 +126,24 @@ describe("db", () => {
     deleteSession("ctx-1");
     expect(getSessionDetail("ctx-1")).toBeNull();
     expect(getActiveSession("test-agent")).toBeNull();
+  });
+
+  it("deleteAllSessions removes all sessions across all agents and clears active_sessions", () => {
+    upsertSession({ ...base, id: "ctx-1", agentId: "agent-a" });
+    upsertSession({ ...base, id: "ctx-2", agentId: "agent-b" });
+    upsertSession({ ...base, id: "ctx-3", agentId: "agent-a" });
+    setActiveSession("agent-a", "ctx-3");
+    setActiveSession("agent-b", "ctx-2");
+
+    deleteAllSessions();
+
+    expect(listSessions("agent-a")).toEqual([]);
+    expect(listSessions("agent-b")).toEqual([]);
+    expect(getSessionDetail("ctx-1")).toBeNull();
+    expect(getSessionDetail("ctx-2")).toBeNull();
+    expect(getSessionDetail("ctx-3")).toBeNull();
+    expect(getActiveSession("agent-a")).toBeNull();
+    expect(getActiveSession("agent-b")).toBeNull();
   });
 
   describe("setSessionStatus", () => {

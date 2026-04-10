@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, PawPrint, Settings } from "lucide-react";
+import { Bot, PawPrint, Settings, Trash2 } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { cn } from "@/lib/utils";
@@ -16,12 +16,14 @@ interface AgentSidebarProps {
   agentConfigs: AgentConfigEntry[];
   activeAgentId?: string;
   onSelectAgent?: (agentId: string) => void;
+  onClearAllHistory?: () => void;
 }
 
 export function AgentSidebar({
   agentConfigs,
   activeAgentId = "dove",
   onSelectAgent,
+  onClearAllHistory,
 }: AgentSidebarProps) {
   const { doveIsRunning } = useConversationContext();
   const agents = agentConfigs.map(buildAgentDef);
@@ -35,6 +37,26 @@ export function AgentSidebar({
 
   const isDoveLoading = doveIsRunning;
   const doveShimmerRef = useButtonShimmer(isDoveLoading);
+
+  const [confirming, setConfirming] = React.useState(false);
+  const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleClearAllClick = () => {
+    if (confirming) {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirming(false);
+      onClearAllHistory?.();
+    } else {
+      setConfirming(true);
+      confirmTimerRef.current = setTimeout(() => setConfirming(false), 3000);
+    }
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    };
+  }, []);
 
   return (
     <aside className="h-screen w-64 shrink-0 flex flex-col bg-background border-r border-border/30">
@@ -125,6 +147,22 @@ export function AgentSidebar({
 
       {/* Settings nav links */}
       <div className="pb-2 flex flex-col gap-0.5">
+        {onClearAllHistory && (
+          <button
+            onClick={handleClearAllClick}
+            className={cn(
+              "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+              confirming
+                ? "text-destructive bg-destructive/10"
+                : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+            )}
+          >
+            <Trash2 className="w-4 h-4 shrink-0" />
+            <span className="text-sm font-medium text-foreground/80">
+              {confirming ? "Confirm clear all?" : "Clear all history"}
+            </span>
+          </button>
+        )}
         <Link
           href="/settings"
           className={cn(
