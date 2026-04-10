@@ -277,7 +277,7 @@ describe("Mode 2 — buffer gone, session running", () => {
     expect(contents).toContain("live");
   });
 
-  it("falls through to Mode 3 and marks interrupted when subprocess is not registered", async () => {
+  it("falls through to Mode 3 without changing status when subprocess is not registered", async () => {
     vi.mocked(sessionRunner.isRunning).mockReturnValue(false);
     vi.mocked(getSessionDetail).mockReturnValue({
       id: "sess-2",
@@ -293,9 +293,9 @@ describe("Mode 2 — buffer gone, session running", () => {
     const res = await GET(req, makeParams("sess-2"));
     const events = await collectSseEvents(res);
 
-    // Should synthesize and close (Mode 3 path), not subscribe
+    // Should synthesize and close (Mode 3 path), not subscribe, not touch status
     expect(subscribeSession).not.toHaveBeenCalled();
-    expect(setSessionStatus).toHaveBeenCalledWith("sess-2", "interrupted");
+    expect(setSessionStatus).not.toHaveBeenCalled();
     expect(events).toContainEqual({ type: "done" });
   });
 });

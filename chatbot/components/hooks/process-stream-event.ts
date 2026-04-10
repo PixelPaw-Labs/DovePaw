@@ -1,7 +1,18 @@
 "use client";
 
 import type { ChatSseEvent } from "@/lib/chat-sse";
-import type { SharedSessionContext } from "./shared-session-context";
+import type { ChatSsePermission } from "@/lib/chat-sse";
+import type { useTextAnimation } from "./use-text-animation";
+import type { ChatMessage } from "./use-messages";
+import type React from "react";
+
+export interface StreamEventContext {
+  updateActiveMessages: (updater: (prev: ChatMessage[]) => ChatMessage[]) => void;
+  animation: ReturnType<typeof useTextAnimation>;
+  pendingToolNameRef: React.MutableRefObject<string | null>;
+  setPendingPermissions: React.Dispatch<React.SetStateAction<ChatSsePermission[]>>;
+  setSessionCancelled: React.Dispatch<React.SetStateAction<boolean>>;
+}
 
 export interface StreamEventCallbacks {
   /**
@@ -33,18 +44,24 @@ export interface StreamEventCallbacks {
 export function processActiveStreamEvent(
   event: ChatSseEvent,
   assistantId: string,
-  ctx: SharedSessionContext,
+  ctx: StreamEventContext,
   callbacks?: StreamEventCallbacks,
 ): void {
-  const { stream, session } = ctx;
+  const {
+    updateActiveMessages,
+    animation,
+    pendingToolNameRef,
+    setPendingPermissions,
+    setSessionCancelled,
+  } = ctx;
 
   if (event.type === "permission") {
-    session.setPendingPermissions((prev) => [...prev, event]);
+    setPendingPermissions((prev) => [...prev, event]);
     return;
   }
 
   if (event.type === "thinking" && event.content) {
-    stream.updateActiveMessages((prev) =>
+    updateActiveMessages((prev) =>
       prev.map((m) =>
         m.id === assistantId
           ? Object.assign({}, m, {
@@ -58,14 +75,14 @@ export function processActiveStreamEvent(
   }
 
   if (event.type === "tool_call") {
-    stream.pendingToolNameRef.current = event.name;
-    stream.animation.cut(assistantId);
+    pendingToolNameRef.current = event.name;
+    animation.cut(assistantId);
     return;
   }
 
   if (event.type === "tool_input") {
-    const toolName = stream.pendingToolNameRef.current;
-    stream.pendingToolNameRef.current = null;
+    const toolName = pendingToolNameRef.current;
+    pendingToolNameRef.current = null;
     if (!toolName) return;
     let parsedInput: Record<string, unknown>;
     try {
@@ -74,7 +91,7 @@ export function processActiveStreamEvent(
     } catch {
       parsedInput = { raw: event.content };
     }
-    stream.updateActiveMessages((prev) =>
+    updateActiveMessages((prev) =>
       prev.map((m) =>
         m.id === assistantId
           ? Object.assign({}, m, {
@@ -91,17 +108,17 @@ export function processActiveStreamEvent(
   }
 
   if (event.type === "text" && event.content) {
-    stream.updateActiveMessages((prev) =>
+    updateActiveMessages((prev) =>
       prev.map((m) =>
         m.id === assistantId ? Object.assign({}, m, { isProcessStreaming: false }) : m,
       ),
     );
-    stream.animation.enqueue(assistantId, event.content);
+    animation.enqueue(assistantId, event.content);
     return;
   }
 
   if (event.type === "result" && event.content) {
-    stream.updateActiveMessages((prev) =>
+    updateActiveMessages((prev) =>
       prev.map((m) => {
         if (m.id !== assistantId) return m;
         if (callbacks?.skipResultIfHasText) {
@@ -130,8 +147,8 @@ export function processActiveStreamEvent(
   }
 
   if (event.type === "done") {
-    stream.animation.flush(assistantId);
-    stream.updateActiveMessages((prev) =>
+    animation.flush(assistantId);
+    updateActiveMessages((prev) =>
       prev.map((m) => {
         if (m.id !== assistantId || !m.isLoading) return m;
         const hasText = m.segments.some(
@@ -155,23 +172,23 @@ export function processActiveStreamEvent(
   }
 
   if (event.type === "cancelled") {
-    session.setPendingPermissions([]);
-    stream.animation.flush(assistantId);
-    stream.updateActiveMessages((prev) =>
+    setPendingPermissions([]);
+    animation.flush(assistantId);
+    updateActiveMessages((prev) =>
       prev.map((m) =>
         m.id === assistantId
           ? Object.assign({}, m, { isLoading: false, isProcessStreaming: false, isCancelled: true })
           : m,
       ),
     );
-    session.setSessionCancelled(true);
+    setSessionCancelled(true);
     callbacks?.onCancelled?.();
     return;
   }
 
   if (event.type === "error" && event.content) {
-    stream.animation.flush(assistantId);
-    stream.updateActiveMessages((prev) =>
+    animation.flush(assistantId);
+    updateActiveMessages((prev) =>
       prev.map((m) => {
         if (m.id !== assistantId) return m;
         const segs = [...m.segments];

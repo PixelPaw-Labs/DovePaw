@@ -17,12 +17,10 @@ const progressEntryArraySchema = z.array(progressEntrySchema);
 
 export type { SessionMessage };
 
-export type SessionStatus = "running" | "done" | "cancelled" | "interrupted";
+export type SessionStatus = "running" | "done" | "cancelled";
 
 function isSessionStatus(value: string): value is SessionStatus {
-  return (
-    value === "running" || value === "done" || value === "cancelled" || value === "interrupted"
-  );
+  return value === "running" || value === "done" || value === "cancelled";
 }
 
 function toSessionStatus(value: string): SessionStatus {
@@ -214,8 +212,8 @@ export function setSessionStatus(id: string, status: SessionStatus): void {
   getDb().prepare("UPDATE sessions SET status = ? WHERE id = ?").run(status, id);
 }
 
-export function markInterruptedSessions(): void {
-  getDb().prepare("UPDATE sessions SET status = 'interrupted' WHERE status = 'running'").run();
+export function closeStaleSessions(): void {
+  getDb().prepare("UPDATE sessions SET status = 'done' WHERE status = 'running'").run();
 }
 
 export function setOrchestratorAgentContext(
@@ -277,7 +275,7 @@ export function listSessions(agentId: string): SessionInfo[] {
       [string],
       { id: string; agent_id: string; started_at: string; label: string; status: string }
     >(
-      "SELECT id, agent_id, started_at, label, status FROM sessions WHERE agent_id = ? ORDER BY updated_at DESC, rowid DESC",
+      "SELECT id, agent_id, started_at, label, status FROM sessions WHERE agent_id = ? ORDER BY started_at DESC, rowid DESC",
     )
     .all(agentId)
     .map((r) => ({

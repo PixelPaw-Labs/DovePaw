@@ -8,10 +8,20 @@ export interface AgentSession {
   id: string;
   startedAt: string; // ISO string from JSON serialisation of Date
   label: string;
+  status: "running" | "done" | "cancelled";
 }
 
+const sessionStatusSchema = z.enum(["running", "done", "cancelled"]);
+
 const sessionsResponseSchema = z.object({
-  sessions: z.array(z.object({ id: z.string(), startedAt: z.string(), label: z.string() })),
+  sessions: z.array(
+    z.object({
+      id: z.string(),
+      startedAt: z.string(),
+      label: z.string(),
+      status: sessionStatusSchema.default("done"),
+    }),
+  ),
 });
 
 export async function parseSessions(res: Response): Promise<AgentSession[]> {
@@ -23,14 +33,10 @@ export function useAgentSessions(agentId: string) {
   const [sessions, setSessions] = useState<AgentSession[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  const refresh = useCallback(async (id: string) => {
-    if (id === "dove") {
-      setSessions([]);
-      return;
-    }
+  const refresh = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch(agentSessionsUrl(id));
+      const res = await fetch(agentSessionsUrl(agentId));
       if (!res.ok) return;
       setSessions(await parseSessions(res));
     } catch {
@@ -38,15 +44,11 @@ export function useAgentSessions(agentId: string) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [agentId]);
 
   useEffect(() => {
     let current = true;
     setSessions([]);
-    if (agentId === "dove") {
-      setIsLoading(false);
-      return;
-    }
     setIsLoading(true);
     fetch(agentSessionsUrl(agentId))
       .then((res) => (res.ok ? parseSessions(res) : Promise.resolve([])))

@@ -40,7 +40,7 @@ import {
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession, markInterruptedSessions, setSessionStatus, upsertSession } from "@/lib/db";
+import { deleteSession, closeStaleSessions, setSessionStatus, upsertSession } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
 import { AgentContextRegistry } from "@/lib/agent-context-registry";
 import { clearSessionBuffer } from "@/lib/session-events";
@@ -59,8 +59,8 @@ const agentContextRegistry = new AgentContextRegistry();
 /** Sessions explicitly deleted via DELETE handler — skip save in finally to avoid re-creating. */
 const deletedSessionIds = new Set<string>();
 
-// One-time server startup: mark sessions that were running as interrupted
-markInterruptedSessions();
+// One-time server startup: close any sessions left running from a previous process.
+closeStaleSessions();
 
 process.on("SIGTERM", () => sessionRunner.abortAll());
 process.on("exit", () => sessionRunner.abortAll());

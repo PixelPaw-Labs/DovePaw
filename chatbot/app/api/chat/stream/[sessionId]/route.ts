@@ -1,5 +1,5 @@
 import { getSessionBuffer, subscribeSession } from "@/lib/session-events";
-import { getSessionDetail, getSessionStatus, setSessionStatus } from "@/lib/db";
+import { getSessionDetail, getSessionStatus } from "@/lib/db";
 import { hasPendingPermission } from "@/lib/pending-permissions";
 import { sessionRunner } from "@/lib/session-runner";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -69,10 +69,8 @@ export async function GET(
         : [];
       return makeLiveResponse(sessionId, after, request.signal, prefixEvents);
     }
-    // Subprocess is not registered — it died without updating the DB (e.g. server
-    // restart where markInterruptedSessions() didn't run yet, or HMR reload).
-    // Mark interrupted and fall through to Mode 3 to synthesize from DB.
-    setSessionStatus(sessionId, "interrupted");
+    // Subprocess is not registered — it died without updating the DB.
+    // Fall through to Mode 3 to synthesize from DB without touching status.
   }
 
   // ── Mode 3: completed session — synthesize from DB ───────────────────────────

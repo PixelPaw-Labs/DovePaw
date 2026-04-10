@@ -4,10 +4,77 @@ import * as React from "react";
 import { Clock, PlusCircle, Trash2 } from "lucide-react";
 import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import { formatRelativeTime } from "@/lib/utils";
+import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
+
+interface SessionHistoryItemProps {
+  session: AgentSession;
+  isActive: boolean;
+  isRunning: boolean;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+}
+
+function SessionHistoryItem({
+  session,
+  isActive,
+  isRunning,
+  onSelect,
+  onDelete,
+}: SessionHistoryItemProps) {
+  const shimmerRef = useButtonShimmer(isRunning);
+
+  return (
+    <div
+      className={`group relative overflow-hidden flex items-center gap-2 px-3 py-2 transition-colors ${
+        isActive ? "bg-primary/8" : "hover:bg-muted/50"
+      }`}
+    >
+      {isRunning && (
+        <span
+          ref={shimmerRef}
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
+          style={{
+            background: isActive
+              ? "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)"
+              : "linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--color-primary) 4%, transparent) 25%, color-mix(in srgb, var(--color-primary) 35%, transparent) 50%, color-mix(in srgb, var(--color-primary) 4%, transparent) 75%, transparent 100%)",
+          }}
+        />
+      )}
+      <div
+        className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+          isRunning ? "bg-primary animate-pulse" : isActive ? "bg-primary" : "bg-border"
+        }`}
+      />
+      <button
+        onClick={() => onSelect(session.id)}
+        className={`flex-1 flex items-baseline gap-2 text-left min-w-0 ${
+          isActive ? "text-primary font-medium" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <span className="text-xs truncate">{session.label}</span>
+        <span className="text-[10px] opacity-50 shrink-0">
+          {formatRelativeTime(session.startedAt)}
+        </span>
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(session.id);
+        }}
+        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-0.5 shrink-0"
+        title="Delete"
+      >
+        <Trash2 size={10} />
+      </button>
+    </div>
+  );
+}
 
 interface SessionHistoryPanelProps {
   sessions: AgentSession[];
   activeSessionId: string | null;
+  runningSessionIds?: Set<string>;
   onSelect: (contextId: string) => void;
   onNew: () => void;
   onDelete: (contextId: string) => void;
@@ -16,6 +83,7 @@ interface SessionHistoryPanelProps {
 export function SessionHistoryPanel({
   sessions,
   activeSessionId,
+  runningSessionIds,
   onSelect,
   onNew,
   onDelete,
@@ -44,46 +112,16 @@ export function SessionHistoryPanel({
             No sessions yet
           </p>
         ) : (
-          sessions.map((s) => {
-            const isActive = s.id === activeSessionId;
-            return (
-              <div
-                key={s.id}
-                className={`group flex items-center gap-2 px-3 py-2 transition-colors ${
-                  isActive ? "bg-primary/8" : "hover:bg-muted/50"
-                }`}
-              >
-                <div
-                  className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
-                    isActive ? "bg-primary" : "bg-border"
-                  }`}
-                />
-                <button
-                  onClick={() => onSelect(s.id)}
-                  className={`flex-1 flex items-baseline gap-2 text-left min-w-0 ${
-                    isActive
-                      ? "text-primary font-medium"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  <span className="text-xs truncate">{s.label}</span>
-                  <span className="text-[10px] opacity-50 shrink-0">
-                    {formatRelativeTime(s.startedAt)}
-                  </span>
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDelete(s.id);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-0.5 shrink-0"
-                  title="Delete"
-                >
-                  <Trash2 size={10} />
-                </button>
-              </div>
-            );
-          })
+          sessions.map((s) => (
+            <SessionHistoryItem
+              key={s.id}
+              session={s}
+              isActive={s.id === activeSessionId}
+              isRunning={runningSessionIds?.has(s.id) ?? false}
+              onSelect={onSelect}
+              onDelete={onDelete}
+            />
+          ))
         )}
       </div>
     </div>

@@ -14,15 +14,28 @@ afterEach(() => {
 });
 
 describe("useAgentSessions", () => {
-  it("returns empty sessions and does not fetch for dove", async () => {
+  it("fetches /api/chat/sessions on mount for dove", async () => {
+    const sessions = [
+      {
+        id: "ctx-d",
+        startedAt: "2025-01-01T00:00:00Z",
+        label: "Dove run",
+        status: "done" as const,
+      },
+    ];
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ sessions }) } as Response);
+
     const { result } = renderHook(() => useAgentSessions("dove"));
+
     await waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(mockFetch).not.toHaveBeenCalled();
-    expect(result.current.sessions).toEqual([]);
+    expect(mockFetch).toHaveBeenCalledWith("/api/chat/sessions");
+    expect(result.current.sessions).toEqual(sessions);
   });
 
   it("fetches /api/agent/[name]/sessions on mount for non-dove agent", async () => {
-    const sessions = [{ id: "ctx-1", startedAt: "2025-01-01T00:00:00Z", label: "Hello" }];
+    const sessions = [
+      { id: "ctx-1", startedAt: "2025-01-01T00:00:00Z", label: "Hello", status: "done" as const },
+    ];
     mockFetch.mockResolvedValue({ ok: true, json: async () => ({ sessions }) } as Response);
 
     const { result } = renderHook(() => useAgentSessions("memory-distiller"));
@@ -51,8 +64,12 @@ describe("useAgentSessions", () => {
   });
 
   it("re-fetches when agentId changes", async () => {
-    const sessionsA = [{ id: "ctx-a", startedAt: "2025-01-01T00:00:00Z", label: "A" }];
-    const sessionsB = [{ id: "ctx-b", startedAt: "2025-01-02T00:00:00Z", label: "B" }];
+    const sessionsA = [
+      { id: "ctx-a", startedAt: "2025-01-01T00:00:00Z", label: "A", status: "done" as const },
+    ];
+    const sessionsB = [
+      { id: "ctx-b", startedAt: "2025-01-02T00:00:00Z", label: "B", status: "done" as const },
+    ];
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: sessionsA }) } as Response)
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: sessionsB }) } as Response);
@@ -70,10 +87,17 @@ describe("useAgentSessions", () => {
   });
 
   it("refresh() re-fetches and updates sessions", async () => {
-    const initial = [{ id: "ctx-1", startedAt: "2025-01-01T00:00:00Z", label: "First" }];
+    const initial = [
+      { id: "ctx-1", startedAt: "2025-01-01T00:00:00Z", label: "First", status: "done" as const },
+    ];
     const updated = [
-      { id: "ctx-2", startedAt: "2025-01-02T00:00:00Z", label: "Second" },
-      { id: "ctx-1", startedAt: "2025-01-01T00:00:00Z", label: "First" },
+      {
+        id: "ctx-2",
+        startedAt: "2025-01-02T00:00:00Z",
+        label: "Second",
+        status: "running" as const,
+      },
+      { id: "ctx-1", startedAt: "2025-01-01T00:00:00Z", label: "First", status: "done" as const },
     ];
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => ({ sessions: initial }) } as Response)
@@ -83,7 +107,7 @@ describe("useAgentSessions", () => {
     await waitFor(() => expect(result.current.sessions).toEqual(initial));
 
     await act(async () => {
-      await result.current.refresh("memory-distiller");
+      await result.current.refresh();
     });
 
     expect(result.current.sessions).toEqual(updated);

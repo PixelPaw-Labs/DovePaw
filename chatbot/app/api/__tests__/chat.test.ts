@@ -77,7 +77,7 @@ vi.mock("@/lib/paths", () => ({
 }));
 
 vi.mock("@/lib/db", () => ({
-  markInterruptedSessions: vi.fn(),
+  closeStaleSessions: vi.fn(),
   setSessionStatus: vi.fn(),
   deleteSession: vi.fn(),
 }));
