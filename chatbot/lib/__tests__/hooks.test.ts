@@ -8,12 +8,14 @@ function makeConfig(overrides?: {
   hasPendingWork?: () => boolean;
   getPendingIds?: () => string[];
   getStillRunningId?: (s: unknown) => string | undefined;
+  userPromptReminder?: string;
 }) {
   return {
     postToolUseMatcher: "test_tool",
     hasPendingWork: overrides?.hasPendingWork ?? (() => false),
     getPendingIds: overrides?.getPendingIds ?? (() => []),
     getStillRunningId: overrides?.getStillRunningId ?? (() => undefined),
+    userPromptReminder: overrides?.userPromptReminder,
   };
 }
 
@@ -100,17 +102,15 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     expect(result).toEqual({ continue: true });
   });
 
-  it("injects additionalContext with MUST message on still_running", async () => {
+  it("blocks with MUST reason on still_running", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0); // max = 10, won't release on first call
     const hooks = buildAgentHooks(makeConfig({ getStillRunningId: () => "run-xyz" }));
     const fn = hooks.PostToolUse![0]!.hooks[0]!;
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
-    const output = (result as { hookSpecificOutput: { additionalContext: string } })
-      .hookSpecificOutput;
-    expect(output.additionalContext).toContain(
-      "You MUST call the await tool again yourself with id",
-    );
-    expect(output.additionalContext).toContain("run-xyz");
+    const { decision, reason } = result as { decision: string; reason: string };
+    expect(decision).toBe("block");
+    expect(reason).toContain("You MUST call the await tool again yourself with id");
+    expect(reason).toContain("run-xyz");
     vi.restoreAllMocks();
   });
 
@@ -123,5 +123,30 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
     expect(result).toMatchObject({ continue: true });
     vi.restoreAllMocks();
+  });
+});
+
+describe("buildAgentHooks — UserPromptSubmit hook", () => {
+  it("is absent when userPromptReminder is not set", () => {
+    const hooks = buildAgentHooks(makeConfig());
+    expect(hooks.UserPromptSubmit).toBeUndefined();
+  });
+
+  it("appends reminder as additionalContext", async () => {
+    const hooks = buildAgentHooks(makeConfig({ userPromptReminder: "my reminder" }));
+    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const result = await callHook(fn, {
+      hook_event_name: "UserPromptSubmit",
+      prompt: "hello",
+    });
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toBe("my reminder");
+  });
+
+  it("passes through non-UserPromptSubmit events", async () => {
+    const hooks = buildAgentHooks(makeConfig({ userPromptReminder: "reminder" }));
+    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const result = await callHook(fn, { hook_event_name: "Stop" });
+    expect(result).toEqual({ continue: true });
   });
 });

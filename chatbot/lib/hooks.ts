@@ -8,14 +8,14 @@
 
 import { randomUUID } from "crypto";
 import type {
-  PostToolUseHookSpecificOutput,
+  UserPromptSubmitHookSpecificOutput,
   HookCallbackMatcher,
   HookEvent,
   CanUseTool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { doveAwaitToolName, hasPendingTasks, getPendingTaskIds } from "@/lib/query-tools";
-import { AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
+import { START_SCRIPT_TOOL, AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
 import { hasPendingScripts, getPendingRunIds } from "@/a2a/lib/spawn";
 import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -32,6 +32,8 @@ export interface AgentHooksConfig {
   getPendingIds: () => string[];
   /** Extracts the operation ID from a still_running structuredContent payload. */
   getStillRunningId: (structured: unknown) => string | undefined;
+  /** Appended to every user prompt via UserPromptSubmit hook. */
+  userPromptReminder?: string;
 }
 
 /**
@@ -41,10 +43,32 @@ export interface AgentHooksConfig {
 export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const { postToolUseMatcher, hasPendingWork, getPendingIds, getStillRunningId } = config;
+  const {
+    postToolUseMatcher,
+    hasPendingWork,
+    getPendingIds,
+    getStillRunningId,
+    userPromptReminder,
+  } = config;
   const retryCounter = new StillRunningRetryCounter();
 
   return {
+    ...(userPromptReminder && {
+      UserPromptSubmit: [
+        {
+          hooks: [
+            async (input) => {
+              if (input.hook_event_name !== "UserPromptSubmit") return { continue: true };
+              const hookSpecificOutput: UserPromptSubmitHookSpecificOutput = {
+                hookEventName: "UserPromptSubmit",
+                additionalContext: userPromptReminder,
+              };
+              return { hookSpecificOutput };
+            },
+          ],
+        },
+      ],
+    }),
     Stop: [
       {
         hooks: [
@@ -88,11 +112,10 @@ export function buildAgentHooks(
                 return { continue: true };
               }
               const id = getStillRunningId(structured);
-              const hookSpecificOutput: PostToolUseHookSpecificOutput = {
-                hookEventName: "PostToolUse",
-                additionalContext: `⚠️ Still running (id: ${id}). You MUST call the await tool again yourself with id "${id}".`,
+              return {
+                decision: "block",
+                reason: `⚠️ Still running (id: ${id}). You MUST call the await tool again yourself with id "${id}".`,
               };
-              return { hookSpecificOutput };
             }
             return { continue: true };
           },
@@ -103,6 +126,11 @@ export function buildAgentHooks(
 }
 
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
+
+const DOVE_PROMPT_REMINDER = `<reminder>
+When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS ASK the agent. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
+When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS START the agent first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
+</reminder>`;
 
 /** Hooks for Dove's top-level query() in route.ts. */
 export function buildDoveHooks(
@@ -118,6 +146,7 @@ export function buildDoveHooks(
       const val: unknown = Reflect.get(s, "taskId");
       return typeof val === "string" ? val : undefined;
     },
+    userPromptReminder: DOVE_PROMPT_REMINDER,
   });
 }
 
@@ -172,6 +201,13 @@ export function buildDoveCanUseTool(send: (event: ChatSseEvent) => void): {
   return { canUseTool, abortPermissions: () => abortPendingPermissions(activeIds) };
 }
 
+const SUB_AGENT_PROMPT_REMINDER = `<reminder>
+When the user's intent is resolved by RUNNING this agent, ALWAYS call \`${START_SCRIPT_TOOL}\` first (returns \`{ runId }\` immediately),
+tell the user what you've kicked off,
+then call \`${AWAIT_SCRIPT_TOOL}\` as a **background Task** to collect the result without blocking the conversation.
+Retry \`${AWAIT_SCRIPT_TOOL}\` with the same runId if it returns \`still_running\`.
+</reminder>`;
+
 /** Hooks for the QueryAgentExecutor sub-agent query(). */
 export function buildSubAgentHooks(): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
@@ -183,5 +219,6 @@ export function buildSubAgentHooks(): Partial<Record<HookEvent, HookCallbackMatc
       const val: unknown = Reflect.get(s, "runId");
       return typeof val === "string" ? val : undefined;
     },
+    userPromptReminder: SUB_AGENT_PROMPT_REMINDER,
   });
 }
