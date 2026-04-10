@@ -64,9 +64,9 @@ export class SessionManager {
    * Restore a session from the DB into this in-memory manager.
    * No-op if the session is already loaded, unknown, or its workspace no longer exists.
    */
-  restore(contextId: string): void {
+  restore(contextId: string, agentId: string): void {
     if (this.sessions.has(contextId)) return;
-    const resumable = getSessionResumable(contextId);
+    const resumable = getSessionResumable(contextId, agentId);
     if (!resumable || !existsSync(resumable.workspacePath)) return;
     this.set(contextId, {
       subagentSessionId: resumable.subagentSessionId,

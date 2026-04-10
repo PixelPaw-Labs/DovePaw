@@ -70,7 +70,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     // Without this, the first upsertSession call would create the DB row with label:"",
     // and since ON CONFLICT does not update label, it would stay empty in history.
     this.currentContextId = contextId;
-    this.sessionManager.restore(contextId);
+    this.sessionManager.restore(contextId, this.def.name);
     const existingState = this.sessionManager.get(contextId);
     const startedAt = existingState?.startedAt ?? new Date();
     const label =

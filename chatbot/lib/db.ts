@@ -248,18 +248,20 @@ export function deleteOrchestratorAgentContexts(orchestratorSessionId: string): 
     .run(orchestratorSessionId);
 }
 
-export function getSessionResumable(id: string): SessionResumable | null {
+export function getSessionResumable(id: string, agentId: string): SessionResumable | null {
   const row = getDb()
     .prepare<
-      [string],
+      [string, string],
       {
         subagent_session_id: string | null;
         workspace_path: string | null;
         started_at: string;
         label: string;
       }
-    >("SELECT subagent_session_id, workspace_path, started_at, label FROM sessions WHERE id = ?")
-    .get(id);
+    >(
+      "SELECT subagent_session_id, workspace_path, started_at, label FROM sessions WHERE id = ? AND agent_id = ?",
+    )
+    .get(id, agentId);
   if (!row?.subagent_session_id || !row.workspace_path) return null;
   return {
     subagentSessionId: row.subagent_session_id,
