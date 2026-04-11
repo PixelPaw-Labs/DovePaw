@@ -33,10 +33,10 @@ function isGitUrl(source: string): boolean {
   return source.startsWith("git@") || source.includes("://");
 }
 
-/** Derive a candidate directory name from a git URL or slug (last component, strip .git). */
-function repoName(source: string): string {
+/** Derive a candidate directory name from a git URL or slug (last component, strip .git, lowercase). Exported for testing. */
+export function repoName(source: string): string {
   const last = source.split("/").pop() ?? source;
-  return last.replace(/\.git$/, "");
+  return last.replace(/\.git$/, "").toLowerCase();
 }
 
 async function readRegistry(): Promise<PluginsRegistry> {

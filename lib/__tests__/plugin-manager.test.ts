@@ -62,7 +62,7 @@ vi.mock("node:util", () => ({
   promisify: () => () => Promise.resolve({ stdout: "", stderr: "" }),
 }));
 
-const { addPlugin, removePlugin, listPlugins, syncPlugin, isGitHubSlug } =
+const { addPlugin, removePlugin, listPlugins, syncPlugin, isGitHubSlug, repoName } =
   await import("../plugin-manager.js");
 
 // ─── isGitHubSlug ─────────────────────────────────────────────────────────────
@@ -86,6 +86,20 @@ describe("isGitHubSlug", () => {
 
   it("does not match single word", () => {
     expect(isGitHubSlug("Plugins")).toBe(false);
+  });
+});
+
+describe("repoName", () => {
+  it("lowercases to avoid case-sensitive FS mismatches", () => {
+    expect(repoName("delexw/DovePaw-Plugins")).toBe("dovepaw-plugins");
+  });
+
+  it("strips .git suffix", () => {
+    expect(repoName("git@github.com:delexw/DovePaw-Plugins.git")).toBe("dovepaw-plugins");
+  });
+
+  it("handles https URL", () => {
+    expect(repoName("https://github.com/delexw/DovePaw-Plugins")).toBe("dovepaw-plugins");
   });
 });
 
