@@ -7,7 +7,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
-import { AGENTS_ROOT, agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
+import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
@@ -116,12 +116,18 @@ export class QueryAgentExecutor implements AgentExecutor {
       .map((r) => r.githubRepo);
 
     try {
+      if (!this.def.pluginPath) {
+        throw new Error(
+          `Agent "${this.def.name}" has no pluginPath — register it via plugin:add first`,
+        );
+      }
+      const scriptRoot = this.def.pluginPath;
+
       if (existingState) {
         // Resume existing session — reuse workspace and Claude session.
         workspace = existingState.workspace;
       } else {
         // First message in this context — create a fresh workspace.
-        const scriptRoot = this.def.pluginPath ?? AGENTS_ROOT;
         ensureAgentSourceSymlink(
           this.def.name,
           agentSourceDirFromEntry(this.def.entryPath, scriptRoot),
@@ -135,8 +141,6 @@ export class QueryAgentExecutor implements AgentExecutor {
           publishProgress,
         );
       }
-
-      const scriptRoot = this.def.pluginPath ?? AGENTS_ROOT;
       const workspaceEnv: Record<string, string> = {
         ...extraEnv,
         AGENT_WORKSPACE: workspace.path,
