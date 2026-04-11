@@ -19,11 +19,7 @@ export default async function SettingsPage() {
   );
 
   return (
-    <SettingsPageLayout
-      agentConfigs={allAgentEntries}
-      title="Settings"
-      breadcrumbs={[{ label: "Home", href: "/" }]}
-    >
+    <SettingsPageLayout agentConfigs={allAgentEntries} title="Settings">
       <SettingsContent
         initialSettings={settings}
         initialAgentRepos={initialAgentRepos}

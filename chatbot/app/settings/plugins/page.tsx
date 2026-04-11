@@ -12,11 +12,7 @@ export default async function PluginsPage() {
   ]);
 
   return (
-    <SettingsPageLayout
-      agentConfigs={agentConfigs}
-      title="Plugins"
-      breadcrumbs={[{ label: "Home", href: "/" }]}
-    >
+    <SettingsPageLayout agentConfigs={agentConfigs} title="Plugins">
       <PluginManagementContent initialPlugins={initialPlugins} />
     </SettingsPageLayout>
   );

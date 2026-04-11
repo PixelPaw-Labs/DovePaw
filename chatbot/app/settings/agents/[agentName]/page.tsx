@@ -30,8 +30,8 @@ export default async function AgentSettingsPage({ params }: Props) {
   return (
     <SettingsPageLayout
       agentConfigs={allEntries}
-      title="Agent Settings"
-      breadcrumbs={[{ label: "Home", href: "/" }]}
+      title={agentEntry.displayName}
+      breadcrumbItems={[{ label: "Settings", href: "/settings" }]}
     >
       <AgentSettingsContent
         agentEntry={agentEntry}

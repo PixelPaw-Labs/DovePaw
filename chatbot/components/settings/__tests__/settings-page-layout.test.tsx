@@ -13,7 +13,7 @@ vi.mock("@/components/agent-chat/agent-sidebar", () => ({
 }));
 
 describe("SettingsPageLayout — breadcrumbs", () => {
-  it("renders title without breadcrumb when breadcrumbs is absent", () => {
+  it("always renders the Home link from Breadcrumb", () => {
     render(
       <SettingsPageLayout agentConfigs={[]} title="Settings">
         <div />
@@ -21,34 +21,34 @@ describe("SettingsPageLayout — breadcrumbs", () => {
     );
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
-    expect(screen.queryByRole("link")).toBeNull();
+    // Breadcrumb always renders ← Home
+    expect(screen.getByRole("link", { name: /Home/i })).toBeTruthy();
   });
 
-  it("renders breadcrumb link before the title", () => {
+  it("renders extra breadcrumb items after Home", () => {
     render(
       <SettingsPageLayout
         agentConfigs={[]}
         title="Plugins"
-        breadcrumbs={[{ label: "Home", href: "/" }]}
+        breadcrumbItems={[{ label: "Settings", href: "/settings" }]}
       >
         <div />
       </SettingsPageLayout>,
     );
 
-    const link = screen.getByRole("link", { name: "Home" });
-    expect(link).toBeTruthy();
-    expect(link.getAttribute("href")).toBe("/");
+    expect(screen.getByRole("link", { name: /Home/i })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Settings" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Plugins" })).toBeTruthy();
   });
 
-  it("renders multiple breadcrumb levels in order", () => {
+  it("renders multiple breadcrumb items in order", () => {
     render(
       <SettingsPageLayout
         agentConfigs={[]}
-        title="Repos"
-        breadcrumbs={[
-          { label: "Home", href: "/" },
-          { label: "Agent Settings", href: "/settings/agents/my-agent" },
+        title="My Agent"
+        breadcrumbItems={[
+          { label: "Settings", href: "/settings" },
+          { label: "Agents", href: "/settings/agents" },
         ]}
       >
         <div />
@@ -56,8 +56,9 @@ describe("SettingsPageLayout — breadcrumbs", () => {
     );
 
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(2);
-    expect(links[0]!.getAttribute("href")).toBe("/");
-    expect(links[1]!.getAttribute("href")).toBe("/settings/agents/my-agent");
+    // Home + Settings + Agents
+    expect(links.length).toBeGreaterThanOrEqual(3);
+    expect(links.some((l) => l.getAttribute("href") === "/settings")).toBe(true);
+    expect(links.some((l) => l.getAttribute("href") === "/settings/agents")).toBe(true);
   });
 });

@@ -4,7 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FolderGit2, KeyRound, Lock, LockOpen, Eye, EyeOff, Pencil, Trash2 } from "lucide-react";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
@@ -265,10 +264,6 @@ export function AgentSettingsContent({
 
   return (
     <div className="flex flex-col gap-8">
-      <Breadcrumb
-        items={[{ label: "Settings", href: "/settings" }, { label: agent.displayName }]}
-      />
-
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <div
