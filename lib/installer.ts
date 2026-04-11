@@ -24,6 +24,8 @@ import {
   A2A_TRIGGER_SCRIPT,
   AGENTS_ROOT,
   AGENTS_DIST,
+  AGENT_SDK_DIR,
+  AGENT_SDK_SRC,
   LAUNCH_AGENTS_DIR,
   PLUGINS_DIR,
   SKILLS_DIR,
@@ -229,6 +231,27 @@ export async function getAgentLogs(agent: AgentDef, lines = 100): Promise<string
 export async function reloadAgent(agent: AgentDef, uid: string): Promise<void> {
   await unloadAgent(agent, uid);
   await loadAgent(agent, uid);
+}
+
+/**
+ * Copy packages/agent-sdk/ to ~/.dovepaw/sdk/ so plugin repos can reference it
+ * as a file: dependency and tsup can bundle it.
+ */
+export async function deployAgentSdk(): Promise<void> {
+  await rm(AGENT_SDK_DIR, { recursive: true, force: true });
+  await cp(AGENT_SDK_SRC, AGENT_SDK_DIR, { recursive: true });
+}
+
+/**
+ * Create <pluginDir>/node_modules/@dovepaw/agent-sdk → ~/.dovepaw/sdk symlink
+ * so plugin agents resolve @dovepaw/agent-sdk at both tsx runtime and tsup bundle time.
+ */
+export async function linkAgentSdkToPlugin(pluginDir: string): Promise<void> {
+  const nmScope = join(pluginDir, "node_modules", "@dovepaw");
+  await mkdir(nmScope, { recursive: true });
+  const link = join(nmScope, "agent-sdk");
+  await rm(link, { recursive: true, force: true });
+  await symlink(AGENT_SDK_DIR, link);
 }
 
 /** Ensure DovePaw/agents -> ~/.dovepaw/plugins symlink exists. */

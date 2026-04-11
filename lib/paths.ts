@@ -79,3 +79,7 @@ export const A2A_SERVERS_PID_FILE = join(DOVEPAW_DIR, ".a2a-servers.pid");
 export const PLUGINS_DIR = join(DOVEPAW_DIR, "plugins");
 /** ~/.dovepaw/plugins.json — installed plugin registry */
 export const PLUGINS_REGISTRY_FILE = join(DOVEPAW_DIR, "plugins.json");
+/** ~/.dovepaw/sdk — deployed @dovepaw/agent-sdk package (used by plugin agents) */
+export const AGENT_SDK_DIR = join(DOVEPAW_DIR, "sdk");
+/** DovePaw/packages/agent-sdk — SDK source in the monorepo */
+export const AGENT_SDK_SRC = join(AGENTS_ROOT, "packages/agent-sdk");

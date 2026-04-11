@@ -4,13 +4,14 @@
  */
 
 import { exec } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, symlinkSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
-import { AGENTS_ROOT, PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
+import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
+import { linkAgentSdkToPlugin } from "./installer";
 import {
   pluginManifestSchema,
   pluginRecordSchema,
@@ -64,42 +65,6 @@ async function readManifest(pluginDir: string): Promise<PluginManifest> {
     throw new Error(`dovepaw-plugin.json not found in ${pluginDir}`);
   }
   return pluginManifestSchema.parse(JSON.parse(raw));
-}
-
-/**
- * Ensure `{pluginDir}/agents/lib` symlink exists pointing at DovePaw's shared lib.
- * Skipped if `{pluginDir}/agents/lib` already exists as a real directory
- * (i.e. the plugin ships its own lib — e.g. after migrating agents/lib/ there).
- */
-function ensurePluginLibSymlink(pluginDir: string): void {
-  const pluginLibPath = join(pluginDir, "agents", "lib");
-  const dovepawLib = join(AGENTS_ROOT, "agents", "lib");
-
-  // Real directory already present — plugin ships its own lib, no symlink needed.
-  if (existsSync(pluginLibPath)) {
-    try {
-      if (!lstatSync(pluginLibPath).isSymbolicLink()) return;
-    } catch {
-      return;
-    }
-  }
-
-  mkdirSync(join(pluginDir, "agents"), { recursive: true });
-  try {
-    symlinkSync(dovepawLib, pluginLibPath);
-  } catch (err: unknown) {
-    // EEXIST — symlink already in place; ignore
-    if (!isEnoentCode(err, "EEXIST")) throw err;
-  }
-}
-
-function isEnoentCode(err: unknown, code: string): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as Record<string, unknown>).code === code
-  );
 }
 
 /** Upsert an agent's settings file from the plugin's agent.json, merging in pluginPath. */
@@ -174,7 +139,7 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     }
   }
 
-  ensurePluginLibSymlink(pluginDir);
+  await linkAgentSdkToPlugin(pluginDir);
 
   await Promise.all(manifest.agents.map((agentName) => upsertAgentSettings(agentName, pluginDir)));
 
@@ -269,5 +234,6 @@ export async function updatePlugin(pluginName: string): Promise<PluginRecord> {
   if (!plugin.gitUrl) throw new Error(`Plugin "${pluginName}" was not installed from a git URL`);
 
   await execAsync(`git -C ${plugin.path} pull --ff-only`);
+  await linkAgentSdkToPlugin(plugin.path);
   return syncPlugin(pluginName);
 }

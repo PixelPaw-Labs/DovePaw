@@ -14,13 +14,16 @@ import { SCHEDULER_ROOT } from "./lib/paths.js";
 import {
   getUid,
   copyNativePackages,
+  deployAgentSdk,
   installAgent,
   uninstallAgent,
   isAgentLoaded,
   linkAgents,
+  linkAgentSdkToPlugin,
   linkSkills,
   unlinkSkills,
 } from "./lib/installer.js";
+import { listPlugins } from "./lib/plugin-manager.js";
 
 const NATIVE_PACKAGES = ["@ladybugdb/core"];
 const uid = getUid();
@@ -44,9 +47,13 @@ execSync("npx tsup", { stdio: "inherit", cwd: import.meta.dirname });
 
 // ─── Install + load ──────────────────────────────────────────────────────────
 
-console.log("\nStep 2: Linking agents and skills...\n");
+console.log("\nStep 2: Linking agents, skills, and deploying SDK...\n");
 await linkAgents();
 await linkSkills();
+await deployAgentSdk();
+const plugins = await listPlugins();
+await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
+console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 
 console.log("\nStep 3: Installing and loading agents...\n");
 await copyNativePackages(NATIVE_PACKAGES);

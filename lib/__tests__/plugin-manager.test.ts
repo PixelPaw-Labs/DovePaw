@@ -4,20 +4,28 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Test directories — defined via vi.hoisted so mock factories can access them ─
 
-const { TMP, PLUGINS_DIR, PLUGINS_REGISTRY_FILE, AGENTS_ROOT, AGENT_SETTINGS_DIR } = vi.hoisted(
-  () => {
-    const os = require("node:os") as typeof import("node:os");
-    const path = require("node:path") as typeof import("node:path");
-    const tmp = path.join(os.tmpdir(), `plugin-manager-test-${process.pid}`);
-    return {
-      TMP: tmp,
-      PLUGINS_DIR: path.join(tmp, "dovepaw", "plugins"),
-      PLUGINS_REGISTRY_FILE: path.join(tmp, "dovepaw", "plugins.json"),
-      AGENTS_ROOT: path.join(tmp, "dovepaw-repo"),
-      AGENT_SETTINGS_DIR: path.join(tmp, "dovepaw", "settings.agents"),
-    };
-  },
-);
+const {
+  TMP,
+  PLUGINS_DIR,
+  PLUGINS_REGISTRY_FILE,
+  AGENTS_ROOT,
+  AGENT_SETTINGS_DIR,
+  AGENT_SDK_DIR,
+  AGENT_SDK_SRC,
+} = vi.hoisted(() => {
+  const os = require("node:os") as typeof import("node:os");
+  const path = require("node:path") as typeof import("node:path");
+  const tmp = path.join(os.tmpdir(), `plugin-manager-test-${process.pid}`);
+  return {
+    TMP: tmp,
+    PLUGINS_DIR: path.join(tmp, "dovepaw", "plugins"),
+    PLUGINS_REGISTRY_FILE: path.join(tmp, "dovepaw", "plugins.json"),
+    AGENTS_ROOT: path.join(tmp, "dovepaw-repo"),
+    AGENT_SETTINGS_DIR: path.join(tmp, "dovepaw", "settings.agents"),
+    AGENT_SDK_DIR: path.join(tmp, "dovepaw", "sdk"),
+    AGENT_SDK_SRC: path.join(tmp, "dovepaw-repo", "packages", "agent-sdk"),
+  };
+});
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -26,6 +34,8 @@ vi.mock("../paths.js", () => ({
   PLUGINS_DIR,
   PLUGINS_REGISTRY_FILE,
   AGENT_SETTINGS_DIR,
+  AGENT_SDK_DIR,
+  AGENT_SDK_SRC,
   agentConfigDir: (name: string) => join(AGENT_SETTINGS_DIR, name),
   agentDefinitionFile: (name: string) => join(AGENT_SETTINGS_DIR, name, "agent.json"),
 }));
@@ -56,6 +66,10 @@ vi.mock("../agents-config.js", async () => {
     },
   };
 });
+
+vi.mock("../installer.js", () => ({
+  linkAgentSdkToPlugin: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("node:child_process", () => ({ exec: vi.fn() }));
 vi.mock("node:util", () => ({
