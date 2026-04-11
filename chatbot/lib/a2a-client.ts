@@ -8,36 +8,22 @@
  *   extractArtifactResult — build StreamedResult from terminal task artifacts
  */
 
-import { randomUUID } from "node:crypto";
-import { ClientFactory } from "@a2a-js/sdk/client";
+import type { Artifact } from "@a2a-js/sdk";
 import type { Client } from "@a2a-js/sdk/client";
-import type {
-  Artifact,
-  Task,
-  Message,
-  TaskStatusUpdateEvent,
-  TaskArtifactUpdateEvent,
-} from "@a2a-js/sdk";
+import type { A2AStreamEvent } from "@@/lib/a2a-client";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import type { PortsManifest } from "@/a2a/lib/ports-manifest";
 import { TRANSIENT_ARTIFACT_NAMES, ARTIFACT } from "@/lib/query-dispatcher";
 import type { ProgressEntry } from "@/lib/progress";
 export type { ProgressEntry } from "@/lib/progress";
+export { createAgentClient, startAgentStream } from "@@/lib/a2a-client";
+export type { A2AStreamEvent, AgentStreamHandle } from "@@/lib/a2a-client";
 
 export type StreamedResult = {
   /** Primary text output (from artifact-update events), joined for readability. */
   output: string;
   /** Progress messages, each carrying its linked artifacts inline. */
   progress: ProgressEntry[];
-};
-
-export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
-
-export type AgentStreamHandle = {
-  client: Client;
-  taskId: string;
-  contextId: string;
-  stream: AsyncGenerator<A2AStreamEvent, void, undefined>;
 };
 
 function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
@@ -51,53 +37,6 @@ export function resolveAgentPort(manifestKey: string): number | null {
   const manifest = readPortsManifest();
   if (!manifest) return null;
   return getManifestPort(manifest, manifestKey) ?? null;
-}
-
-/** Create A2A client for the given port. Throws on connection failure. */
-export async function createAgentClient(port: number): Promise<Client> {
-  return new ClientFactory().createFromUrl(`http://localhost:${port}`);
-}
-
-/**
- * Opens a sendMessageStream, reads the first event to extract the taskId,
- * and wires signal → stream abort + task cancellation.
- * Returns null if the server did not return a task event as the first event.
- */
-export async function startAgentStream(
-  port: number,
-  message: string,
-  signal?: AbortSignal,
-  contextId?: string,
-): Promise<AgentStreamHandle | null> {
-  const client = await createAgentClient(port);
-  const ac = new AbortController();
-  signal?.addEventListener("abort", () => ac.abort(), { once: true });
-
-  const stream = client.sendMessageStream(
-    {
-      message: {
-        kind: "message",
-        messageId: randomUUID(),
-        role: "user",
-        parts: [{ kind: "text", text: message }],
-        ...(contextId ? { contextId } : {}),
-      },
-    },
-    { signal: ac.signal },
-  ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
-
-  const firstEvent = await stream[Symbol.asyncIterator]().next();
-  if (firstEvent.done || firstEvent.value.kind !== "task") {
-    return null;
-  }
-  const taskId = firstEvent.value.id;
-  const resolvedContextId = firstEvent.value.contextId ?? taskId;
-
-  signal?.addEventListener("abort", () => void client.cancelTask({ id: taskId }).catch(() => {}), {
-    once: true,
-  });
-
-  return { client, taskId, contextId: resolvedContextId, stream };
 }
 
 /**

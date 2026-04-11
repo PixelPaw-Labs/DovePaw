@@ -16,29 +16,37 @@
  *   1 — task failed, canceled, or server unavailable
  */
 import { readFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { ClientFactory } from "@a2a-js/sdk/client";
+import { startAgentStream } from "./a2a-client";
 import { portsFile } from "./paths";
 
 const PORTS_FILE = portsFile(7473);
 
-export async function triggerAgent(port: number, instruction: string): Promise<string> {
-  const factory = new ClientFactory();
-  const client = await factory.createFromUrl(`http://127.0.0.1:${port}`);
+/**
+ * Trigger an agent using sendMessageStream so the session is registered via the
+ * same streaming code path as the chat route. This ensures the contextId can be
+ * continued later from the session history UI.
+ *
+ * Pass `contextId` to continue an existing conversation; omit to start a fresh one.
+ * The server-generated contextId for a fresh session becomes the DovePaw session ID.
+ *
+ * Returns the terminal task state: "completed" | "failed" | "canceled" | "unknown".
+ */
+export async function triggerAgent(
+  port: number,
+  instruction: string,
+  contextId?: string,
+): Promise<string> {
+  const handle = await startAgentStream(port, instruction, undefined, contextId);
+  if (!handle) return "unknown";
 
-  const result = await client.sendMessage({
-    message: {
-      kind: "message",
-      messageId: randomUUID(),
-      role: "user",
-      parts: [{ kind: "text", text: instruction }],
-    },
-    configuration: { blocking: true },
-  });
-
-  if (result.kind === "task") return result.status.state;
-  return "unknown";
+  let finalState = "unknown";
+  for await (const event of handle.stream) {
+    if (event.kind === "status-update" && event.final) {
+      finalState = event.status.state;
+    }
+  }
+  return finalState;
 }
 
 async function main(): Promise<void> {
