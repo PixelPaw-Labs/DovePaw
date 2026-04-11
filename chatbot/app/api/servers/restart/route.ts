@@ -1,37 +1,22 @@
 /**
  * POST /api/servers/restart
  *
- * Kills the running A2A servers process and spawns a fresh one.
- * Works both inside Electron (which would also auto-restart) and standalone dev.
+ * Kills the running A2A servers process and spawns a fresh one via
+ * `npm run chatbot:servers` — identical to how Electron starts servers.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { writeFileSync } from "node:fs";
 import { A2A_SERVERS_PID_FILE } from "@/lib/paths";
-import { TSX_BIN, CHATBOT_ROOT } from "@/lib/paths";
-import { join } from "node:path";
+import { killServers, createServersProcess } from "@@/lib/server-manager";
 
 export async function POST() {
-  // Kill the existing process if running
-  if (existsSync(A2A_SERVERS_PID_FILE)) {
-    const pid = parseInt(readFileSync(A2A_SERVERS_PID_FILE, "utf-8").trim(), 10);
-    if (!isNaN(pid)) {
-      try {
-        process.kill(pid, "SIGTERM");
-      } catch {
-        // Already gone — fine, continue to spawn
-      }
-    }
+  killServers();
+
+  const port = Number(process.env.DOVEPAW_PORT) || 7473;
+  const child = createServersProcess(port, "ignore");
+  if (child.pid !== undefined) {
+    writeFileSync(A2A_SERVERS_PID_FILE, String(child.pid), "utf-8");
   }
-
-  // Spawn fresh A2A servers, detached so they outlive this request
-  const child = spawn(TSX_BIN, [join(CHATBOT_ROOT, "a2a/start-all.ts")], {
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env },
-  });
-
-  writeFileSync(A2A_SERVERS_PID_FILE, String(child.pid), "utf-8");
   child.unref();
 
   return Response.json({ ok: true, pid: child.pid });

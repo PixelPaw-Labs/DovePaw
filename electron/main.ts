@@ -3,6 +3,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { resolve } from "node:path";
+import { createServersProcess } from "../lib/server-manager";
 
 // electron/.dist/main.cjs → ../../ = DovePaw repo root
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -140,13 +141,7 @@ function buildMenu(isHealthy: boolean): Electron.Menu {
 function startServers(): void {
   if (serversProcess) return;
 
-  serversProcess = spawn(NPM_BIN, ["run", "chatbot:servers"], {
-    cwd: REPO_ROOT,
-    env: { ...process.env, DOVEPAW_PORT: String(NEXT_PORT) },
-    stdio: "pipe",
-    detached: true,
-  });
-
+  serversProcess = createServersProcess(NEXT_PORT, "pipe");
   pipeToLog(serversProcess, "a2a-servers");
 
   serversProcess.on("exit", () => {

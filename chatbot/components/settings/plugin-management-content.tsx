@@ -13,6 +13,21 @@ const listResponseSchema = z.object({ plugins: z.array(pluginRecordSchema) });
 const pluginResponseSchema = z.object({ plugin: pluginRecordSchema });
 const errorResponseSchema = z.object({ error: z.string().optional() });
 
+// ─── Shared: restart A2A servers ──────────────────────────────────────────────
+
+/**
+ * Signal the running A2A servers process to restart so it picks up newly
+ * registered (or removed) plugin agents. Fire-and-forget — errors are
+ * silently ignored because Electron auto-restarts on SIGTERM anyway.
+ */
+async function restartServers(): Promise<void> {
+  try {
+    await fetch("/api/servers/restart", { method: "POST" });
+  } catch {
+    // Best effort — Electron will restart the process independently
+  }
+}
+
 // ─── Add Plugin Dialog ────────────────────────────────────────────────────────
 
 interface AddPluginDialogProps {
@@ -38,6 +53,8 @@ function AddPluginDialog({ onClose, onAdded }: AddPluginDialogProps) {
       const data: unknown = await res.json();
       if (!res.ok) throw new Error(errorResponseSchema.parse(data).error ?? "Failed to add plugin");
       const { plugin } = pluginResponseSchema.parse(data);
+      // Restart servers to pick up the new agents, then hand off to parent
+      void restartServers();
       onAdded(plugin);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to add plugin");
@@ -218,9 +235,11 @@ interface PluginManagementContentProps {
 
 export function PluginManagementContent({ initialPlugins }: PluginManagementContentProps) {
   const [plugins, setPlugins] = React.useState<PluginRecord[]>(initialPlugins);
-  const [busy, setBusy] = React.useState<string | null>(null); // plugin name currently acting
+  const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = React.useState(false);
+  const noticeTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const abortRef = React.useRef<AbortController | null>(null);
 
@@ -236,6 +255,18 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
     return () => ac.abort();
   }, []);
 
+  React.useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
+
+  function showNotice(message: string) {
+    setNotice(message);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => setNotice(null), 5000);
+  }
+
   async function callPluginAction(pluginName: string, url: string, method: string): Promise<void> {
     setBusy(pluginName);
     setError(null);
@@ -246,9 +277,13 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
 
       if (method === "DELETE") {
         setPlugins((prev) => prev.filter((p) => p.name !== pluginName));
+        void restartServers();
+        showNotice("Plugin removed — servers restarting to apply changes.");
       } else {
         const { plugin } = pluginResponseSchema.parse(data);
         setPlugins((prev) => prev.map((p) => (p.name === plugin.name ? plugin : p)));
+        void restartServers();
+        showNotice(`Plugin "${plugin.name}" synced — servers restarting to apply changes.`);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
@@ -268,7 +303,7 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Plugins extend DovePaw with additional agents. After adding a plugin, run{" "}
             <code className="font-mono text-xs">npm run install</code> to build and deploy the new
-            agents.
+            agents as daemons.
           </p>
         </div>
         <button
@@ -280,6 +315,12 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
           Add Plugin
         </button>
       </div>
+
+      {notice && (
+        <div className="px-4 py-3 rounded-xl bg-primary/10 border border-primary/30 text-sm text-primary">
+          {notice}
+        </div>
+      )}
 
       {error && (
         <div className="px-4 py-3 rounded-xl bg-destructive/10 border border-destructive/30 text-sm text-destructive">
@@ -343,6 +384,9 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
                 : [...prev, plugin];
             });
             setShowAddDialog(false);
+            showNotice(
+              `Registered ${plugin.agentNames.length} agent${plugin.agentNames.length !== 1 ? "s" : ""} — servers restarting to activate them.`,
+            );
           }}
         />
       )}
