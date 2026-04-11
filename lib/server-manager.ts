@@ -12,7 +12,27 @@
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { AGENTS_ROOT, A2A_SERVERS_PID_FILE } from "./paths";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { A2A_SERVERS_PID_FILE } from "./paths";
+
+/**
+ * Resolve the DovePaw repo root reliably in any execution context.
+ *
+ * - Native ESM / tsx / Electron (tsup bundle): import.meta.url points to
+ *   lib/server-manager.ts → two levels up = DovePaw root.
+ * - Next.js webpack bundle: import.meta.url may be unavailable; fall back to
+ *   process.cwd() which Next.js sets to the project root (DovePaw/).
+ */
+function resolveRepoRoot(): string {
+  try {
+    return join(dirname(fileURLToPath(import.meta.url)), "..");
+  } catch {
+    return process.cwd();
+  }
+}
+
+const REPO_ROOT = resolveRepoRoot();
 
 /**
  * Kill the A2A servers process identified by the PID file.
@@ -44,7 +64,7 @@ export function createServersProcess(
   stdio: "pipe" | "ignore" = "ignore",
 ): ChildProcess {
   return spawn("npm", ["run", "chatbot:servers"], {
-    cwd: AGENTS_ROOT,
+    cwd: REPO_ROOT,
     env: { ...process.env, DOVEPAW_PORT: String(port) },
     stdio,
     detached: true,
