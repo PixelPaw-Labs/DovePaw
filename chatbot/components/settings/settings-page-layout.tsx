@@ -26,8 +26,9 @@ export function SettingsPageLayout({
       <AgentSidebar agentConfigs={agentConfigs} />
 
       <main className="flex-1 flex flex-col bg-background relative min-w-0 overflow-y-auto">
-        <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex flex-col justify-center w-full px-8 py-3 shrink-0 gap-0.5">
+        <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex items-center gap-2 w-full px-8 py-4 shrink-0">
           <Breadcrumb items={breadcrumbItems ?? []} />
+          <span className="text-muted-foreground/40 text-sm">/</span>
           <h1 className="text-xl font-bold text-foreground tracking-tight">{title}</h1>
         </header>
 
