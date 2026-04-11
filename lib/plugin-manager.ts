@@ -24,23 +24,18 @@ const execAsync = promisify(exec);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Expand a bare GitHub slug (owner/repo) to a full SSH URL. Exported for testing. */
-export function expandSource(source: string): string {
-  const s = source.trim();
-  // owner/repo — only word chars, dots, hyphens on each side; no protocol, @ or :
-  if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s)) {
-    return `git@github.com:${s}`;
-  }
-  return s;
+/** owner/repo GitHub slug — no protocol, @, :, or leading slash. Exported for testing. */
+export function isGitHubSlug(source: string): boolean {
+  return /^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(source);
 }
 
 function isGitUrl(source: string): boolean {
   return source.startsWith("git@") || source.includes("://");
 }
 
-/** Derive a candidate directory name from a git URL (last path component, strip .git). */
-function nameFromGitUrl(url: string): string {
-  const last = url.split("/").pop() ?? url;
+/** Derive a candidate directory name from a git URL or slug (last component, strip .git). */
+function repoName(source: string): string {
+  const last = source.split("/").pop() ?? source;
   return last.replace(/\.git$/, "");
 }
 
@@ -140,19 +135,24 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
  * Does NOT build or deploy — run `npm run install` afterwards.
  */
 export async function addPlugin(source: string): Promise<PluginRecord> {
-  source = expandSource(source);
+  source = source.trim();
   let pluginDir: string;
   let gitUrl: string | undefined;
 
-  if (isGitUrl(source)) {
-    gitUrl = source;
-    // Derive a candidate directory name from the URL (e.g. "DovePaw-Plugins")
-    const candidateName = nameFromGitUrl(source);
-    const targetDir = join(PLUGINS_DIR, candidateName);
+  if (isGitHubSlug(source)) {
+    // "owner/repo" — gh CLI understands this directly, no expansion needed
+    gitUrl = `https://github.com/${source}`;
+    const targetDir = join(PLUGINS_DIR, repoName(source));
     await mkdir(PLUGINS_DIR, { recursive: true });
     if (!existsSync(targetDir)) {
-      // Use `gh repo clone` for GitHub URLs (handles auth via gh CLI keychain).
-      // Fall back to plain `git clone` for other hosts.
+      await execAsync(`gh repo clone ${source} ${targetDir}`);
+    }
+    pluginDir = targetDir;
+  } else if (isGitUrl(source)) {
+    gitUrl = source;
+    const targetDir = join(PLUGINS_DIR, repoName(source));
+    await mkdir(PLUGINS_DIR, { recursive: true });
+    if (!existsSync(targetDir)) {
       const cloneCmd = source.includes("github.com")
         ? `gh repo clone ${source} ${targetDir}`
         : `git clone ${source} ${targetDir}`;

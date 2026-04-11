@@ -62,36 +62,30 @@ vi.mock("node:util", () => ({
   promisify: () => () => Promise.resolve({ stdout: "", stderr: "" }),
 }));
 
-const { addPlugin, removePlugin, listPlugins, syncPlugin, expandSource } =
+const { addPlugin, removePlugin, listPlugins, syncPlugin, isGitHubSlug } =
   await import("../plugin-manager.js");
 
-// ─── expandSource ─────────────────────────────────────────────────────────────
+// ─── isGitHubSlug ─────────────────────────────────────────────────────────────
 
-describe("expandSource", () => {
-  it("expands owner/repo slug to SSH URL", () => {
-    expect(expandSource("delexw/DovePaw-Plugins")).toBe("git@github.com:delexw/DovePaw-Plugins");
+describe("isGitHubSlug", () => {
+  it("matches owner/repo", () => {
+    expect(isGitHubSlug("delexw/DovePaw-Plugins")).toBe(true);
   });
 
-  it("leaves full SSH URL unchanged", () => {
-    expect(expandSource("git@github.com:delexw/DovePaw-Plugins")).toBe(
-      "git@github.com:delexw/DovePaw-Plugins",
-    );
+  it("does not match full SSH URL", () => {
+    expect(isGitHubSlug("git@github.com:delexw/DovePaw-Plugins")).toBe(false);
   });
 
-  it("leaves https URL unchanged", () => {
-    expect(expandSource("https://github.com/delexw/DovePaw-Plugins")).toBe(
-      "https://github.com/delexw/DovePaw-Plugins",
-    );
+  it("does not match https URL", () => {
+    expect(isGitHubSlug("https://github.com/delexw/DovePaw-Plugins")).toBe(false);
   });
 
-  it("leaves absolute local path unchanged", () => {
-    expect(expandSource("/Users/yang/Plugins")).toBe("/Users/yang/Plugins");
+  it("does not match absolute local path", () => {
+    expect(isGitHubSlug("/Users/yang/Plugins")).toBe(false);
   });
 
-  it("trims whitespace before expanding", () => {
-    expect(expandSource("  delexw/DovePaw-Plugins  ")).toBe(
-      "git@github.com:delexw/DovePaw-Plugins",
-    );
+  it("does not match single word", () => {
+    expect(isGitHubSlug("Plugins")).toBe(false);
   });
 });
 
