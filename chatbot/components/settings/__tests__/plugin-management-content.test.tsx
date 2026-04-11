@@ -3,6 +3,8 @@ import { render, screen, fireEvent, act, waitFor } from "@testing-library/react"
 import { PluginManagementContent } from "../plugin-management-content";
 import type { PluginRecord } from "@@/lib/plugin-schemas";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
 const PLUGIN: PluginRecord = {

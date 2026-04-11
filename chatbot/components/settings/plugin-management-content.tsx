@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronRight, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { z } from "zod";
 import { pluginRecordSchema } from "@@/lib/plugin-schemas";
@@ -234,6 +235,7 @@ interface PluginManagementContentProps {
 }
 
 export function PluginManagementContent({ initialPlugins }: PluginManagementContentProps) {
+  const router = useRouter();
   const [plugins, setPlugins] = React.useState<PluginRecord[]>(initialPlugins);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -278,11 +280,13 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
       if (method === "DELETE") {
         setPlugins((prev) => prev.filter((p) => p.name !== pluginName));
         void restartServers();
+        router.refresh();
         showNotice("Plugin removed — servers restarting to apply changes.");
       } else {
         const { plugin } = pluginResponseSchema.parse(data);
         setPlugins((prev) => prev.map((p) => (p.name === plugin.name ? plugin : p)));
         void restartServers();
+        router.refresh();
         showNotice(`Plugin "${plugin.name}" synced — servers restarting to apply changes.`);
       }
     } catch (e) {
@@ -384,6 +388,7 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
                 : [...prev, plugin];
             });
             setShowAddDialog(false);
+            router.refresh();
             showNotice(
               `Registered ${plugin.agentNames.length} agent${plugin.agentNames.length !== 1 ? "s" : ""} — servers restarting to activate them.`,
             );
