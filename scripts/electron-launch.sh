@@ -3,13 +3,7 @@ set -e
 cd "$(dirname "$0")/.."
 
 echo "Deploying agent SDK…"
-npx tsx -e "
-import { deployAgentSdk, linkAgentSdkToPlugin } from './lib/installer.js';
-import { listPlugins } from './lib/plugin-manager.js';
-await deployAgentSdk();
-const plugins = await listPlugins();
-await Promise.all(plugins.map(p => linkAgentSdkToPlugin(p.path)));
-"
+npx tsx scripts/deploy-sdk.ts
 
 echo "Compiling…"
 npx tsup --config electron/tsup.config.ts
