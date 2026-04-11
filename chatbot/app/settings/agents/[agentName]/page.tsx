@@ -28,7 +28,11 @@ export default async function AgentSettingsPage({ params }: Props) {
   const globalSettings = readSettings();
 
   return (
-    <SettingsPageLayout agentConfigs={allEntries} title="Agent Settings">
+    <SettingsPageLayout
+      agentConfigs={allEntries}
+      title="Agent Settings"
+      breadcrumbs={[{ label: "Home", href: "/" }]}
+    >
       <AgentSettingsContent
         agentEntry={agentEntry}
         repositories={globalSettings.repositories}
