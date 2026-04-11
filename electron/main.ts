@@ -4,6 +4,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs"
 import { createConnection } from "node:net";
 import { resolve } from "node:path";
 import { createServersProcess } from "../lib/server-manager";
+import { linkAgents } from "../lib/installer";
 
 // electron/.dist/main.cjs → ../../ = DovePaw repo root
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -183,7 +184,9 @@ function startNextJs(): void {
 app.setName("DovePaw A2A");
 process.title = "dovepaw-a2a";
 
-void app.whenReady().then(() => {
+void app.whenReady().then(async () => {
+  await linkAgents();
+
   if (process.platform === "darwin") {
     const dockIcon = makeIcon(true);
     if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon);

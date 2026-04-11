@@ -17,6 +17,7 @@ import {
   installAgent,
   uninstallAgent,
   isAgentLoaded,
+  linkAgents,
   linkSkills,
   unlinkSkills,
 } from "./lib/installer.js";
@@ -43,7 +44,8 @@ execSync("npx tsup", { stdio: "inherit", cwd: import.meta.dirname });
 
 // ─── Install + load ──────────────────────────────────────────────────────────
 
-console.log("\nStep 2: Linking skills...\n");
+console.log("\nStep 2: Linking agents and skills...\n");
+await linkAgents();
 await linkSkills();
 
 console.log("\nStep 3: Installing and loading agents...\n");

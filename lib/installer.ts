@@ -25,6 +25,7 @@ import {
   AGENTS_ROOT,
   AGENTS_DIST,
   LAUNCH_AGENTS_DIR,
+  PLUGINS_DIR,
   SKILLS_DIR,
   SKILLS_ROOT,
   agentDistScript,
@@ -228,6 +229,17 @@ export async function getAgentLogs(agent: AgentDef, lines = 100): Promise<string
 export async function reloadAgent(agent: AgentDef, uid: string): Promise<void> {
   await unloadAgent(agent, uid);
   await loadAgent(agent, uid);
+}
+
+/** Ensure DovePaw/agents -> ~/.dovepaw/plugins symlink exists. */
+export async function linkAgents(): Promise<void> {
+  await mkdir(PLUGINS_DIR, { recursive: true });
+  const link = join(AGENTS_ROOT, "agents");
+  try {
+    await symlink(PLUGINS_DIR, link);
+  } catch (e: unknown) {
+    if (e instanceof Error && (e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+  }
 }
 
 /** Symlink every skill in DovePaw/skills/ into ~/.claude/skills/. */
