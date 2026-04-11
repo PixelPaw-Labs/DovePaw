@@ -7,8 +7,10 @@
  */
 
 import { randomUUID } from "crypto";
+import path from "path";
 import type {
   UserPromptSubmitHookSpecificOutput,
+  PreToolUseHookSpecificOutput,
   HookCallbackMatcher,
   HookEvent,
   CanUseTool,
@@ -34,6 +36,11 @@ export interface AgentHooksConfig {
   getStillRunningId: (structured: unknown) => string | undefined;
   /** Appended to every user prompt via UserPromptSubmit hook. */
   userPromptReminder?: string;
+  /**
+   * Directories (cwd + additionalDirectories) that Edit/Write tools are
+   * permitted to modify. Paths outside this set are denied via PreToolUse.
+   */
+  allowedDirectories?: string[];
 }
 
 /**
@@ -49,8 +56,10 @@ export function buildAgentHooks(
     getPendingIds,
     getStillRunningId,
     userPromptReminder,
+    allowedDirectories,
   } = config;
   const retryCounter = new StillRunningRetryCounter();
+  const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
 
   return {
     ...(userPromptReminder && {
@@ -69,6 +78,36 @@ export function buildAgentHooks(
         },
       ],
     }),
+    ...(resolvedAllowed &&
+      resolvedAllowed.length > 0 && {
+        PreToolUse: [
+          {
+            matcher: "Edit|Write",
+            hooks: [
+              async (input) => {
+                if (input.hook_event_name !== "PreToolUse") return { continue: true };
+                if (typeof input.tool_input !== "object" || input.tool_input === null)
+                  return { continue: true };
+                const fp: unknown = Reflect.get(input.tool_input, "file_path");
+                const filePath = typeof fp === "string" ? fp : undefined;
+                if (!filePath) return { continue: true };
+                const resolved = path.resolve(filePath);
+                const allowed = resolvedAllowed.some(
+                  (dir) => resolved === dir || resolved.startsWith(dir + path.sep),
+                );
+                const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+                  hookEventName: "PreToolUse",
+                  permissionDecision: allowed ? "allow" : "deny",
+                  ...(!allowed && {
+                    permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}`,
+                  }),
+                };
+                return { hookSpecificOutput };
+              },
+            ],
+          },
+        ],
+      }),
     Stop: [
       {
         hooks: [
@@ -136,6 +175,8 @@ When the user's intent is resolved by SOMETHING BEING DONE — for one agent or 
 export function buildDoveHooks(
   agents: AgentDef[],
   pendingTaskSet: Set<string>,
+  cwd: string,
+  additionalDirectories: string[],
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
@@ -147,6 +188,7 @@ export function buildDoveHooks(
       return typeof val === "string" ? val : undefined;
     },
     userPromptReminder: DOVE_PROMPT_REMINDER,
+    allowedDirectories: [cwd, ...additionalDirectories],
   });
 }
 
@@ -209,7 +251,10 @@ Retry \`${AWAIT_SCRIPT_TOOL}\` with the same runId if it returns \`still_running
 </reminder>`;
 
 /** Hooks for the QueryAgentExecutor sub-agent query(). */
-export function buildSubAgentHooks(): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+export function buildSubAgentHooks(
+  cwd: string,
+  additionalDirectories: string[],
+): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
     hasPendingWork: hasPendingScripts,
@@ -220,5 +265,6 @@ export function buildSubAgentHooks(): Partial<Record<HookEvent, HookCallbackMatc
       return typeof val === "string" ? val : undefined;
     },
     userPromptReminder: SUB_AGENT_PROMPT_REMINDER,
+    allowedDirectories: [cwd, ...additionalDirectories],
   });
 }

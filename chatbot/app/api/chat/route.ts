@@ -213,6 +213,7 @@ export async function POST(request: Request) {
       await withMcpQuery(
         tools,
         async (mcpServer) => {
+          const additionalDirectories = [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT];
           resolvedSessionId = await consumeQueryEvents(
             query({
               prompt: message,
@@ -226,7 +227,7 @@ export async function POST(request: Request) {
                 cwd: AGENTS_ROOT,
                 // Expose the launchd install directory so Claude can inspect
                 // installed plist files (written by `npm run install`)
-                additionalDirectories: [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT],
+                additionalDirectories,
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
@@ -245,7 +246,7 @@ export async function POST(request: Request) {
                 // Stream text tokens as they are generated
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
-                hooks: buildDoveHooks(agents, pendingTaskSet),
+                hooks: buildDoveHooks(agents, pendingTaskSet, AGENTS_ROOT, additionalDirectories),
                 canUseTool: doveCanUseTool,
               },
             }),

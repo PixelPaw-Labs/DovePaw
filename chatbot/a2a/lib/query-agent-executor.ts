@@ -163,6 +163,12 @@ export class QueryAgentExecutor implements AgentExecutor {
           ...makeAgentMgmtTools(this.def),
         ],
         async (innerMcpServer) => {
+          const additionalDirectories = [
+            LAUNCH_AGENTS_DIR,
+            agentPersistentLogDir(this.def.name),
+            agentPersistentStateDir(this.def.name),
+            agentConfigDir(this.def.name),
+          ];
           const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
             query({
@@ -177,19 +183,14 @@ export class QueryAgentExecutor implements AgentExecutor {
                   preset: "claude_code",
                   append: buildSubAgentPrompt(this.def),
                 },
-                additionalDirectories: [
-                  LAUNCH_AGENTS_DIR,
-                  agentPersistentLogDir(this.def.name),
-                  agentPersistentStateDir(this.def.name),
-                  agentConfigDir(this.def.name),
-                ],
+                additionalDirectories,
                 allowedTools: [
                   `mcp__agents__${START_SCRIPT_TOOL}`,
                   `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
                 ],
                 mcpServers: { agents: innerMcpServer },
-                hooks: buildSubAgentHooks(),
+                hooks: buildSubAgentHooks(workspace!.path, additionalDirectories),
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",
                 includePartialMessages: true,
