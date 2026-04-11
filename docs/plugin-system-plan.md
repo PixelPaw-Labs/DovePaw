@@ -5,6 +5,7 @@
 All agent scripts (`agents/memory-dream/`, `agents/get-shit-done/`, etc.) currently live inside the DovePaw monorepo. The user wants to move them to a separate private "plugins marketplace" repo so agents can be dynamically installed and removed. The chatbot's Settings UI must also have a **Plugin Configuration page** that calls the same underlying functions as the CLI. `lib/plugin-manager.ts` is the single shared backend.
 
 **User decisions:**
+
 - Move **all** existing agent scripts to the plugin repo
 - `plugin:add` **registers only** (no auto-deploy; user runs `npm run install` manually)
 - Include `plugin:update` command
@@ -169,28 +170,37 @@ tsup.config.ts
 ## Phase 1 — Core Infrastructure: `pluginPath` field
 
 ### 1. `lib/agents-config-schemas.ts`
+
 Add to `agentConfigEntrySchema` (inherited by `agentFileSchema` automatically):
+
 ```typescript
 pluginPath: z.string().optional(),
 ```
 
 ### 2. `lib/agents.ts`
+
 Add to `AgentDef` interface (no new imports — stays Node.js-free for client component safety):
+
 ```typescript
 /** Absolute path to the plugin repo root. Absent = agent lives in DovePaw/agents/. */
 pluginPath?: string;
 ```
+
 In `buildAgentDef`, pass through: `pluginPath: entry.pluginPath`
 
 ### 3. `lib/paths.ts`
+
 Add:
+
 ```typescript
 export const PLUGINS_DIR = join(DOVEPAW_DIR, "plugins");
 export const PLUGINS_REGISTRY_FILE = join(DOVEPAW_DIR, "plugins.json");
 ```
 
 ### 4. `chatbot/a2a/lib/workspace.ts`
+
 Update `agentSourceDirFromEntry` — backward-compatible optional second param:
+
 ```typescript
 export function agentSourceDirFromEntry(
   entryPath: string,
@@ -201,7 +211,9 @@ export function agentSourceDirFromEntry(
 ```
 
 ### 5. `chatbot/a2a/lib/query-agent-executor.ts`
+
 Add `AGENTS_ROOT` to import from `@@/lib/paths`. Replace the two hardcoded `AGENTS_ROOT` usages:
+
 ```typescript
 const scriptRoot = this.def.pluginPath ?? AGENTS_ROOT;
 
@@ -215,7 +227,9 @@ scriptPath: join(scriptRoot, this.def.entryPath),
 ```
 
 ### 6. `tsup.config.ts`
+
 Support absolute plugin entry paths:
+
 ```typescript
 agentEntries.map((a) => {
   const entryFile = a.pluginPath
@@ -226,11 +240,11 @@ agentEntries.map((a) => {
 ```
 
 ### 7. `chatbot/lib/launchd.ts` — `installAgent` fix
+
 The per-agent install uses `agent.entryPath` as tsup entry. For plugin agents this must be absolute:
+
 ```typescript
-const entryFile = agent.pluginPath
-  ? join(agent.pluginPath, agent.entryPath)
-  : agent.entryPath;  // relative to AGENTS_ROOT (cwd)
+const entryFile = agent.pluginPath ? join(agent.pluginPath, agent.entryPath) : agent.entryPath; // relative to AGENTS_ROOT (cwd)
 
 await execAsync(`npx tsup --entry.${agent.name}=${entryFile} --metafile`, {
   cwd: AGENTS_ROOT,
@@ -242,15 +256,19 @@ await execAsync(`npx tsup --entry.${agent.name}=${entryFile} --metafile`, {
 ## Phase 2 — Plugin Management Backend (`lib/plugin-manager.ts`)
 
 ### 8. `lib/plugin-schemas.ts` (new)
+
 Zod schemas for:
+
 - **`dovepaw-plugin.json`** (plugin repo manifest): `{ name: string, version: string, agents: string[] }`
 - **`~/.dovepaw/plugins.json`** (installed registry): `{ version: 1, plugins: PluginRecord[] }`
 - **`PluginRecord`**: `{ name, path, gitUrl?, installedAt, agentNames }`
 
 ### 9. `lib/plugin-manager.ts` (new)
+
 Single source of truth for all plugin operations — called from both CLI and chatbot API routes.
 
 **`addPlugin(source: string): Promise<PluginRecord>`**
+
 1. Detect Git URL (contains `://` or starts with `git@`) vs local path
 2. If Git URL: read `dovepaw-plugin.json` to get name, then `git clone <url> ~/.dovepaw/plugins/{name}/`; if local path: use as-is
 3. Read and validate `dovepaw-plugin.json` from plugin root (Zod)
@@ -262,21 +280,24 @@ Single source of truth for all plugin operations — called from both CLI and ch
 7. Return the `PluginRecord`
 
 **`removePlugin(pluginName: string): Promise<void>`**
+
 1. Find plugin in registry
 2. For each agent: delete `~/.dovepaw/settings.agents/{name}/`
 3. Remove entry from `~/.dovepaw/plugins.json`
-4. *(does not delete the plugin directory itself — user's responsibility)*
+4. _(does not delete the plugin directory itself — user's responsibility)_
 
 **`listPlugins(): Promise<PluginRecord[]>`**
 Read and return `~/.dovepaw/plugins.json` plugins array (empty array if file absent).
 
 **`syncPlugin(pluginName: string): Promise<PluginRecord>`**
+
 1. Find plugin in registry; re-read `dovepaw-plugin.json`
 2. Remove settings for agents no longer in manifest
 3. Upsert settings for agents in manifest (re-read each `agent.json`, write with `pluginPath`)
 4. Update `agentNames` in registry entry
 
 **`updatePlugin(pluginName: string): Promise<PluginRecord>`**
+
 1. Find plugin and its `path`
 2. Run `git -C {path} pull --ff-only`
 3. Call `syncPlugin(pluginName)` to re-sync configs
@@ -287,9 +308,11 @@ Read and return `~/.dovepaw/plugins.json` plugins array (empty array if file abs
 ## Phase 3 — CLI Interface
 
 ### 10. `scripts/plugin.ts` (new)
+
 Routes subcommands (`add`, `remove`, `list`, `sync`, `update`) to `lib/plugin-manager.ts`. Prints results to stdout.
 
 ### 11. `package.json` — add scripts
+
 ```json
 "plugin:add":    "tsx scripts/plugin.ts add",
 "plugin:remove": "tsx scripts/plugin.ts remove",
@@ -303,17 +326,20 @@ Routes subcommands (`add`, `remove`, `list`, `sync`, `update`) to `lib/plugin-ma
 ## Phase 4 — Chatbot API Routes
 
 ### 12. `chatbot/app/api/settings/plugins/route.ts` (new)
+
 ```
 GET  /api/settings/plugins             → listPlugins()
 POST /api/settings/plugins             → addPlugin(body.source)
 ```
 
 ### 13. `chatbot/app/api/settings/plugins/[name]/route.ts` (new)
+
 ```
 DELETE /api/settings/plugins/[name]    → removePlugin(name)
 ```
 
 ### 14. `chatbot/app/api/settings/plugins/[name]/update/route.ts` (new)
+
 ```
 POST /api/settings/plugins/[name]/update → updatePlugin(name)
 POST /api/settings/plugins/[name]/sync   → syncPlugin(name)
@@ -326,10 +352,13 @@ All routes follow the existing pattern: Zod-validate request body, call `lib/plu
 ## Phase 5 — Chatbot Plugin Settings UI
 
 ### 15. `chatbot/app/settings/plugins/page.tsx` (new — server component)
+
 Loads initial plugin list via `listPlugins()` and renders in `SettingsPageLayout`.
 
 ### 16. `chatbot/components/settings/plugin-management-content.tsx` (new — client component)
+
 UI with:
+
 - **Header row**: "Installed Plugins" title + "Add Plugin" button (opens dialog)
 - **Plugin cards** (one per installed plugin):
   - Plugin name, git URL (if any), install date
@@ -345,6 +374,7 @@ UI with:
 - Follows existing patterns: `busy` state, error display, optimistic updates
 
 ### 17. Settings navigation update
+
 Add "Plugins" link to the settings nav (wherever the existing tabs/nav lives, likely `settings-page-layout.tsx` or `settings-content.tsx`).
 
 ---
@@ -376,24 +406,24 @@ For all 11 agents currently in `DovePaw/agents/` (blog-writer, claude-code-trace
 
 ## Critical Files Summary
 
-| File | Change |
-|------|--------|
-| `lib/agents-config-schemas.ts` | Add `pluginPath?: string` |
-| `lib/agents.ts` | Add `pluginPath?` to `AgentDef`, pass through in `buildAgentDef` |
-| `lib/paths.ts` | Add `PLUGINS_DIR`, `PLUGINS_REGISTRY_FILE` |
-| `chatbot/a2a/lib/workspace.ts` | `agentSourceDirFromEntry(path, scriptRoot?)` |
-| `chatbot/a2a/lib/query-agent-executor.ts` | Resolve `scriptRoot = def.pluginPath ?? AGENTS_ROOT` |
-| `tsup.config.ts` | Absolute entry paths for plugin agents |
-| `chatbot/lib/launchd.ts` | Per-agent install uses absolute entry path for plugins |
-| `package.json` | Add 5 `plugin:*` scripts |
-| `lib/plugin-schemas.ts` | **NEW** — Zod schemas |
-| `lib/plugin-manager.ts` | **NEW** — shared CRUD operations |
-| `scripts/plugin.ts` | **NEW** — CLI |
-| `chatbot/app/api/settings/plugins/route.ts` | **NEW** — list + add |
-| `chatbot/app/api/settings/plugins/[name]/route.ts` | **NEW** — remove |
-| `chatbot/app/api/settings/plugins/[name]/update/route.ts` | **NEW** — update + sync |
-| `chatbot/app/settings/plugins/page.tsx` | **NEW** — server page |
-| `chatbot/components/settings/plugin-management-content.tsx` | **NEW** — client UI |
+| File                                                        | Change                                                           |
+| ----------------------------------------------------------- | ---------------------------------------------------------------- |
+| `lib/agents-config-schemas.ts`                              | Add `pluginPath?: string`                                        |
+| `lib/agents.ts`                                             | Add `pluginPath?` to `AgentDef`, pass through in `buildAgentDef` |
+| `lib/paths.ts`                                              | Add `PLUGINS_DIR`, `PLUGINS_REGISTRY_FILE`                       |
+| `chatbot/a2a/lib/workspace.ts`                              | `agentSourceDirFromEntry(path, scriptRoot?)`                     |
+| `chatbot/a2a/lib/query-agent-executor.ts`                   | Resolve `scriptRoot = def.pluginPath ?? AGENTS_ROOT`             |
+| `tsup.config.ts`                                            | Absolute entry paths for plugin agents                           |
+| `chatbot/lib/launchd.ts`                                    | Per-agent install uses absolute entry path for plugins           |
+| `package.json`                                              | Add 5 `plugin:*` scripts                                         |
+| `lib/plugin-schemas.ts`                                     | **NEW** — Zod schemas                                            |
+| `lib/plugin-manager.ts`                                     | **NEW** — shared CRUD operations                                 |
+| `scripts/plugin.ts`                                         | **NEW** — CLI                                                    |
+| `chatbot/app/api/settings/plugins/route.ts`                 | **NEW** — list + add                                             |
+| `chatbot/app/api/settings/plugins/[name]/route.ts`          | **NEW** — remove                                                 |
+| `chatbot/app/api/settings/plugins/[name]/update/route.ts`   | **NEW** — update + sync                                          |
+| `chatbot/app/settings/plugins/page.tsx`                     | **NEW** — server page                                            |
+| `chatbot/components/settings/plugin-management-content.tsx` | **NEW** — client UI                                              |
 
 ---
 
