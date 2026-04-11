@@ -146,12 +146,17 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
 
   if (isGitUrl(source)) {
     gitUrl = source;
-    // Clone to a temp name derived from the URL, then confirm with the manifest
+    // Derive a candidate directory name from the URL (e.g. "DovePaw-Plugins")
     const candidateName = nameFromGitUrl(source);
     const targetDir = join(PLUGINS_DIR, candidateName);
     await mkdir(PLUGINS_DIR, { recursive: true });
     if (!existsSync(targetDir)) {
-      await execAsync(`git clone ${source} ${targetDir}`);
+      // Use `gh repo clone` for GitHub URLs (handles auth via gh CLI keychain).
+      // Fall back to plain `git clone` for other hosts.
+      const cloneCmd = source.includes("github.com")
+        ? `gh repo clone ${source} ${targetDir}`
+        : `git clone ${source} ${targetDir}`;
+      await execAsync(cloneCmd);
     }
     pluginDir = targetDir;
   } else {
