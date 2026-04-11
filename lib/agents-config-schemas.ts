@@ -54,6 +54,8 @@ export const agentConfigEntrySchema = z.object({
   runAtLoad: z.boolean().optional(),
   /** Extra static env vars to embed in the launchd plist */
   envVars: z.record(z.string(), z.string()).optional(),
+  /** Default repo IDs to seed into settings.agents on fresh install */
+  repos: z.array(z.string()).optional(),
   /** When false, hidden from Scheduled Agents Management and A2A servers. Absent = true. */
   schedulingEnabled: z.boolean().optional(),
   /** Icon name from LUCIDE_ICON_REGISTRY (e.g. "Brain", "Zap"). Defaults to "Bot" if absent. */

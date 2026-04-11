@@ -93,7 +93,7 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
     ...entry,
     pluginPath: pluginDir,
     // Preserve any user-configured runtime settings; seed from plugin source on fresh install
-    repos: existing?.repos ?? [],
+    repos: existing?.repos ?? entry.repos ?? [],
     envVars: existing?.envVars ?? seedEnvVars,
     locked: existing?.locked ?? false,
   });
