@@ -15,7 +15,7 @@
     "chatbot:build": "next build chatbot",
     "chatbot:start": "next start chatbot -p 7473",
     "chatbot:test": "vitest run --root chatbot",
-    "agents:test": "vitest run --config agents/vitest.config.ts",
+    "agents:test": "vitest run --config vitest.node.config.ts",
     "chatbot:dev:all": "tsx scripts/chatbot-start.ts",
     "plugin:add": "tsx scripts/plugin.ts add",
     "plugin:remove": "tsx scripts/plugin.ts remove",
