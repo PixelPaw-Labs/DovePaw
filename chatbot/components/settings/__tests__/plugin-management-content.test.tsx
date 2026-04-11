@@ -113,7 +113,7 @@ describe("PluginManagementContent — server restart wiring", () => {
 
     fireEvent.click(screen.getByText("Add Plugin"));
 
-    fireEvent.change(screen.getByPlaceholderText(/git@github.com/), {
+    fireEvent.change(screen.getByPlaceholderText(/DovePaw-Plugins/), {
       target: { value: "/local/path" },
     });
 

@@ -62,7 +62,38 @@ vi.mock("node:util", () => ({
   promisify: () => () => Promise.resolve({ stdout: "", stderr: "" }),
 }));
 
-const { addPlugin, removePlugin, listPlugins, syncPlugin } = await import("../plugin-manager.js");
+const { addPlugin, removePlugin, listPlugins, syncPlugin, expandSource } =
+  await import("../plugin-manager.js");
+
+// ─── expandSource ─────────────────────────────────────────────────────────────
+
+describe("expandSource", () => {
+  it("expands owner/repo slug to SSH URL", () => {
+    expect(expandSource("delexw/DovePaw-Plugins")).toBe("git@github.com:delexw/DovePaw-Plugins");
+  });
+
+  it("leaves full SSH URL unchanged", () => {
+    expect(expandSource("git@github.com:delexw/DovePaw-Plugins")).toBe(
+      "git@github.com:delexw/DovePaw-Plugins",
+    );
+  });
+
+  it("leaves https URL unchanged", () => {
+    expect(expandSource("https://github.com/delexw/DovePaw-Plugins")).toBe(
+      "https://github.com/delexw/DovePaw-Plugins",
+    );
+  });
+
+  it("leaves absolute local path unchanged", () => {
+    expect(expandSource("/Users/yang/Plugins")).toBe("/Users/yang/Plugins");
+  });
+
+  it("trims whitespace before expanding", () => {
+    expect(expandSource("  delexw/DovePaw-Plugins  ")).toBe(
+      "git@github.com:delexw/DovePaw-Plugins",
+    );
+  });
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

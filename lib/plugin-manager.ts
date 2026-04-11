@@ -24,6 +24,16 @@ const execAsync = promisify(exec);
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Expand a bare GitHub slug (owner/repo) to a full SSH URL. Exported for testing. */
+export function expandSource(source: string): string {
+  const s = source.trim();
+  // owner/repo — only word chars, dots, hyphens on each side; no protocol, @ or :
+  if (/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(s)) {
+    return `git@github.com:${s}`;
+  }
+  return s;
+}
+
 function isGitUrl(source: string): boolean {
   return source.startsWith("git@") || source.includes("://");
 }
@@ -130,6 +140,7 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
  * Does NOT build or deploy — run `npm run install` afterwards.
  */
 export async function addPlugin(source: string): Promise<PluginRecord> {
+  source = expandSource(source);
   let pluginDir: string;
   let gitUrl: string | undefined;
 

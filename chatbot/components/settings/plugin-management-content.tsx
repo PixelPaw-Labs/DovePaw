@@ -69,9 +69,9 @@ function AddPluginDialog({ onClose, onAdded }: AddPluginDialogProps) {
       <div className="bg-background border border-border rounded-2xl shadow-2xl w-full max-w-md p-6 flex flex-col gap-4">
         <h2 className="text-lg font-bold text-foreground">Add Plugin</h2>
         <p className="text-sm text-muted-foreground">
-          Enter a Git URL (e.g.{" "}
-          <code className="font-mono text-xs">git@github.com:user/Plugins</code>) or an absolute
-          local path to the plugin directory.
+          Enter a GitHub slug, full Git URL, or local path.{" "}
+          <code className="font-mono text-xs">owner/repo</code> is automatically expanded to{" "}
+          <code className="font-mono text-xs">git@github.com:owner/repo</code>.
         </p>
 
         <input
@@ -81,7 +81,7 @@ function AddPluginDialog({ onClose, onAdded }: AddPluginDialogProps) {
           onKeyDown={(e) => {
             if (e.key === "Enter") void handleAdd();
           }}
-          placeholder="git@github.com:user/MyPlugins or /path/to/plugins"
+          placeholder="delexw/DovePaw-Plugins or /path/to/plugins"
           className="w-full px-3 py-2 text-sm bg-muted border border-border rounded-lg outline-none focus:ring-2 focus:ring-primary/40 font-mono"
           autoFocus
         />
