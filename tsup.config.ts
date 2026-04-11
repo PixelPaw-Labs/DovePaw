@@ -14,7 +14,7 @@ export default defineConfig({
         return [`agents/${a.name}`, entryFile];
       }),
     ),
-    "a2a-trigger": "agents/lib/a2a-trigger.ts",
+    "a2a-trigger": "lib/a2a-trigger.ts",
   },
   format: "esm",
   outDir: "dist",
