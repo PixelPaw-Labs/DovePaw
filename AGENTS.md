@@ -1,6 +1,6 @@
 # DovePaw — Architecture Overview
 
-DovePaw is a plugin-based multi-agent orchestration platform. It provides the runtime, chatbot UI, and tooling for running autonomous AI agents as macOS background daemons. Agent scripts themselves live in separate installable **plugin repos** — DovePaw does not bundle any agents directly.
+DovePaw is a plugin-based multi-agent orchestration platform. It provides the runtime, chatbot UI, and tooling for running autonomous AI agents. Agents can be invoked directly via chat, triggered by an orchestrating agent, or scheduled as macOS launchd daemons — scheduling is optional and per-agent. Agent scripts themselves live in separate installable **plugin repos** — DovePaw does not bundle any agents directly.
 
 ## Three-Layer Runtime
 
@@ -36,7 +36,7 @@ Plugin repo (e.g. owner/my-agents)
     main.ts                 — agent entry point
 ```
 
-`agents/` in the DovePaw repo root is a symlink to `~/.dovepaw/plugins/`, so every installed plugin’s agents are visible to the build and A2A servers without any manual wiring.
+`agents/` in the DovePaw repo root is a symlink to `~/.dovepaw/plugins/`, so every installed plugin's agents are visible to the build and A2A servers without any manual wiring.
 
 ## Key Concepts
 
@@ -44,7 +44,7 @@ Plugin repo (e.g. owner/my-agents)
 
 **Dynamic ports.** A2A servers bind to OS-assigned ports at startup and publish a port manifest to `~/.dovepaw/`. The chatbot polls this manifest to discover server addresses — no hardcoded ports anywhere.
 
-**MCP tool naming.** Each agent’s MCP tool name is derived as `yolo_<agent_name_with_underscores>` from the agent’s kebab-case name in its `agent.json`.
+**MCP tool naming.** Each agent's MCP tool name is derived as `yolo_<agent_name_with_underscores>` from the agent's kebab-case name in its `agent.json`.
 
 **Parallel execution.** Agents that support concurrent work (e.g. ticket forging) spawn multiple Claude CLI subprocesses in isolated git worktrees simultaneously. A watchdog reclaims orphaned worktrees on exit.
 
