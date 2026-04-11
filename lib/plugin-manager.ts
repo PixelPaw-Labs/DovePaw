@@ -11,6 +11,7 @@ import { promisify } from "node:util";
 import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
 import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
+import { makeEnvVar } from "./settings";
 import { linkAgentSdkToPlugin } from "./installer";
 import {
   pluginManifestSchema,
@@ -80,13 +81,20 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
   const entry = agentConfigEntrySchema.parse(JSON.parse(raw));
   const existing = await readAgentFile(agentName);
 
+  // On fresh install (no existing file), seed envVars from the plugin source's
+  // static envVars (Record<string, string>). On update, always preserve the
+  // user's runtime config unchanged.
+  const seedEnvVars = Object.entries(entry.envVars ?? {}).map(([key, value]) =>
+    makeEnvVar(key, value),
+  );
+
   await writeAgentFile(agentName, {
     version: 1,
     ...entry,
     pluginPath: pluginDir,
-    // Preserve any user-configured runtime settings
+    // Preserve any user-configured runtime settings; seed from plugin source on fresh install
     repos: existing?.repos ?? [],
-    envVars: existing?.envVars ?? [],
+    envVars: existing?.envVars ?? seedEnvVars,
     locked: existing?.locked ?? false,
   });
 }

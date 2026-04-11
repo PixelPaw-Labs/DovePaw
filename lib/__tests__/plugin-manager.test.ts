@@ -129,7 +129,11 @@ const BASE_AGENT_ENTRY = {
   suggestions: [],
 };
 
-function makePluginDir(name: string, agents: string[]): string {
+function makePluginDir(
+  name: string,
+  agents: string[],
+  agentOverrides: Record<string, object> = {},
+): string {
   const dir = join(TMP, "local-plugins", name);
   mkdirSync(join(dir, "agents"), { recursive: true });
   writeFileSync(
@@ -140,7 +144,7 @@ function makePluginDir(name: string, agents: string[]): string {
     mkdirSync(join(dir, "agents", agentName), { recursive: true });
     writeFileSync(
       join(dir, "agents", agentName, "agent.json"),
-      JSON.stringify({ ...BASE_AGENT_ENTRY, name: agentName }),
+      JSON.stringify({ ...BASE_AGENT_ENTRY, name: agentName, ...agentOverrides[agentName] }),
     );
   }
   return dir;
@@ -237,6 +241,31 @@ describe("addPlugin — local path", () => {
     rmSync(join(pluginDir, "agents", "my-agent", "agent.json"));
     await expect(addPlugin(pluginDir)).rejects.toThrow("agent.json");
   });
+
+  it("seeds envVars from plugin source on fresh install", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {
+      "my-agent": { envVars: { PROJECTS: "foo,bar", API_KEY: "test-key" } },
+    });
+    await addPlugin(pluginDir);
+
+    const content = JSON.parse(
+      readFileSync(join(AGENT_SETTINGS_DIR, "my-agent", "agent.json"), "utf-8"),
+    ) as { envVars: { key: string; value: string; isSecret: boolean }[] };
+    expect(content.envVars).toHaveLength(2);
+    expect(content.envVars.find((v) => v.key === "PROJECTS")?.value).toBe("foo,bar");
+    expect(content.envVars.find((v) => v.key === "API_KEY")?.value).toBe("test-key");
+    expect(content.envVars.every((v) => !v.isSecret)).toBe(true);
+  });
+
+  it("starts with empty envVars when plugin source has none", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    await addPlugin(pluginDir);
+
+    const content = JSON.parse(
+      readFileSync(join(AGENT_SETTINGS_DIR, "my-agent", "agent.json"), "utf-8"),
+    ) as { envVars: unknown[] };
+    expect(content.envVars).toEqual([]);
+  });
 });
 
 // ─── removePlugin ─────────────────────────────────────────────────────────────
@@ -297,5 +326,28 @@ describe("syncPlugin", () => {
 
   it("throws when plugin is not installed", async () => {
     await expect(syncPlugin("no-such-plugin")).rejects.toThrow("not installed");
+  });
+
+  it("preserves existing envVars on sync — does not overwrite with plugin source defaults", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {
+      "my-agent": { envVars: { PROJECTS: "seed-value" } },
+    });
+    await addPlugin(pluginDir);
+
+    // Simulate user having changed the value after install
+    const agentFile = join(AGENT_SETTINGS_DIR, "my-agent", "agent.json");
+    const existing = JSON.parse(readFileSync(agentFile, "utf-8")) as {
+      envVars: { key: string; value: string }[];
+    };
+    existing.envVars[0]!.value = "user-configured-value";
+    writeFileSync(agentFile, JSON.stringify(existing, null, 2));
+
+    // Sync (simulates plugin update)
+    await syncPlugin("test-plugin");
+
+    const updated = JSON.parse(readFileSync(agentFile, "utf-8")) as {
+      envVars: { key: string; value: string }[];
+    };
+    expect(updated.envVars.find((v) => v.key === "PROJECTS")?.value).toBe("user-configured-value");
   });
 });
