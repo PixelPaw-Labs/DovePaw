@@ -13,7 +13,7 @@ vi.mock("@/components/agent-chat/agent-sidebar", () => ({
 }));
 
 describe("SettingsPageLayout — breadcrumbs", () => {
-  it("always renders the Home link from Breadcrumb", () => {
+  it("renders breadcrumb and title on the same row with a / separator", () => {
     render(
       <SettingsPageLayout agentConfigs={[]} title="Settings">
         <div />
@@ -23,6 +23,8 @@ describe("SettingsPageLayout — breadcrumbs", () => {
     expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
     // Breadcrumb always renders ← Home
     expect(screen.getByRole("link", { name: /Home/i })).toBeTruthy();
+    // / separator between breadcrumb trail and h1 title
+    expect(screen.getByText("/")).toBeTruthy();
   });
 
   it("renders extra breadcrumb items after Home", () => {
