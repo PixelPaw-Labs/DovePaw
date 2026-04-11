@@ -250,12 +250,24 @@ describe("useChatSession", () => {
     expect(result.current.messages).toHaveLength(2);
   });
 
-  it("setSessionId reconnects if session is running", async () => {
+  it("setSessionId reconnects via SSE when resumeHint is available", async () => {
+    const dbMessages = [
+      {
+        id: "a1",
+        role: "assistant",
+        segments: [{ type: "text", content: "partial response" }],
+      },
+    ];
     vi.mocked(fetch)
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(
-          JSON.stringify({ messages: [], progress: [], resumeSeq: 0, status: "running" }),
+          JSON.stringify({
+            messages: dbMessages,
+            progress: [],
+            resumeSeq: 3,
+            status: "running",
+          }),
           { status: 200 },
         ),
       )
@@ -276,6 +288,33 @@ describe("useChatSession", () => {
       .mocked(fetch)
       .mock.calls.filter((c) => typeof c[0] === "string" && c[0].includes("/api/chat/stream/"));
     expect(streamCalls).toHaveLength(1);
+  });
+
+  it("setSessionId reconnects via polling when no resumeHint (A2A session)", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ messages: [], progress: [], resumeSeq: 0, status: "running" }),
+          { status: 200 },
+        ),
+      );
+
+    const { result } = renderHook(() => useChatSession("my-agent"));
+
+    await act(async () => {
+      void result.current.setSessionId("running-sess");
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    // isLoading must be true — STOP button / 5-dots must be visible
+    expect(result.current.isLoading).toBe(true);
+
+    // No SSE stream fetch — startPolling is used instead
+    const streamCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter((c) => typeof c[0] === "string" && c[0].includes("/api/chat/stream/"));
+    expect(streamCalls).toHaveLength(0);
   });
 
   // ─── Pending queue drain ────────────────────────────────────────────────────

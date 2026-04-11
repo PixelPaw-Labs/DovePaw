@@ -381,92 +381,6 @@ export function useChatSession(agentId: AgentId) {
     [agentId],
   );
 
-  // ─── setSessionId ─────────────────────────────────────────────────────────────
-  const setSessionId = useCallback(
-    async (id: string | null) => {
-      if (!id) return;
-      // Set immediately so in-flight poll/stream callbacks can detect a stale session.
-      sessionIdRef.current = id;
-      abortRef.current?.abort();
-      abortRef.current = null;
-      if (pollTimeoutRef.current) {
-        clearTimeout(pollTimeoutRef.current);
-        pollTimeoutRef.current = null;
-      }
-      lastSeqRef.current = 0;
-      animation.reset();
-      setMessages([]);
-      setSessionProgress([]);
-      setIsLoading(false);
-      setSessionCancelled(false);
-      setPendingPermissions([]);
-      void (async () => {
-        try {
-          const {
-            messages: stamped,
-            progress,
-            resumeSeq,
-            status,
-          } = await fetchSessionDetail(sessionDetailUrl(agentId, id), agentId);
-          // Another setSessionId call may have fired while fetch was in flight.
-          if (sessionIdRef.current !== id) return;
-          setCurrentSessionId(id);
-          setSessionProgress(progress);
-          setSessionCancelled(status === "cancelled");
-          if (status === "running") {
-            const lastAssistant = stamped.toReversed().find((m) => m.role === "assistant");
-            const resumeText =
-              lastAssistant?.segments
-                .filter((s): s is { type: "text"; content: string } => s.type === "text")
-                .map((s) => s.content)
-                .join("") ?? "";
-            const resumeHint =
-              resumeSeq > 0 && lastAssistant && resumeText
-                ? { assistantId: lastAssistant.id, text: resumeText, seq: resumeSeq }
-                : undefined;
-            if (!resumeHint) {
-              const lastMsg = stamped[stamped.length - 1];
-              setMessages(lastMsg?.role === "assistant" ? stamped.slice(0, -1) : stamped);
-            } else {
-              setMessages(stamped);
-            }
-            setIsLoading(true);
-            connectStream(id, false, resumeHint);
-          } else {
-            setMessages(stamped);
-          }
-        } catch {
-          sessionIdRef.current = id;
-          setCurrentSessionId(id);
-        }
-      })();
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- animation is stable
-    [agentId, animation, connectStream],
-  );
-
-  // ─── resolvePermission ────────────────────────────────────────────────────────
-  const resolvePermission = useCallback(async (requestId: string, allowed: boolean) => {
-    try {
-      const res = await fetch("/api/chat/permission", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, allowed }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
-    } catch {
-      // Leave the banner visible so the user can retry.
-    }
-  }, []);
-
-  // ─── removeFromQueue ──────────────────────────────────────────────────────────
-  const removeFromQueue = useCallback((index: number) => {
-    const next = pendingQueueRef.current.filter((_, i) => i !== index);
-    pendingQueueRef.current = next;
-    setPendingQueue(next);
-  }, []);
-
   // ─── handlePoll — delta-streaming callback for startPolling ─────────────────────
   const handlePoll = useCallback(
     ({
@@ -519,9 +433,136 @@ export function useChatSession(agentId: AgentId) {
         pollAssistantIdRef.current = null;
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- animation and streamCtx are stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- animation is stable
     [agentId, animation],
   );
+
+  // ─── reconnectRunningSession ──────────────────────────────────────────────────
+  // Shared by setSessionId and the mount effect: computes resumeHint, sets
+  // messages, and routes to connectStream (buffered SSE) or startPolling (A2A).
+  const reconnectRunningSession = useCallback(
+    ({
+      sessionId,
+      stamped,
+      resumeSeq,
+      warmReconnect,
+      isCancelled,
+    }: {
+      sessionId: string;
+      stamped: ChatMessage[];
+      resumeSeq: number;
+      warmReconnect: boolean;
+      isCancelled: () => boolean;
+    }) => {
+      const lastAssistant = stamped.toReversed().find((m) => m.role === "assistant");
+      const resumeText =
+        lastAssistant?.segments
+          .filter((s): s is { type: "text"; content: string } => s.type === "text")
+          .map((s) => s.content)
+          .join("") ?? "";
+      const resumeHint =
+        resumeSeq > 0 && lastAssistant && resumeText
+          ? { assistantId: lastAssistant.id, text: resumeText, seq: resumeSeq }
+          : undefined;
+      const lastMsg = stamped[stamped.length - 1];
+      setMessages(
+        resumeHint ? stamped : lastMsg?.role === "assistant" ? stamped.slice(0, -1) : stamped,
+      );
+      setIsLoading(true);
+      if (resumeHint) {
+        connectStream(sessionId, warmReconnect, resumeHint);
+      } else {
+        // No buffered SSE (e.g. Dove-triggered A2A session) — poll DB instead.
+        pollPrevTextRef.current = "";
+        pollAssistantIdRef.current = null;
+        startPolling({
+          agentId,
+          sessionId,
+          isCancelled,
+          getCurrentSessionId: () => sessionIdRef.current,
+          pollTimeoutRef,
+          onPoll: handlePoll,
+        });
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- animation is stable
+    [agentId, connectStream, handlePoll],
+  );
+
+  // ─── setSessionId ─────────────────────────────────────────────────────────────
+  const setSessionId = useCallback(
+    async (id: string | null) => {
+      if (!id) return;
+      // Set immediately so in-flight poll/stream callbacks can detect a stale session.
+      sessionIdRef.current = id;
+      abortRef.current?.abort();
+      abortRef.current = null;
+      if (pollTimeoutRef.current) {
+        clearTimeout(pollTimeoutRef.current);
+        pollTimeoutRef.current = null;
+      }
+      lastSeqRef.current = 0;
+      animation.reset();
+      setMessages([]);
+      setSessionProgress([]);
+      setIsLoading(false);
+      setSessionCancelled(false);
+      setPendingPermissions([]);
+      void (async () => {
+        try {
+          const {
+            messages: stamped,
+            progress,
+            resumeSeq,
+            status,
+          } = await fetchSessionDetail(sessionDetailUrl(agentId, id), agentId);
+          // Another setSessionId call may have fired while fetch was in flight.
+          if (sessionIdRef.current !== id) return;
+          setCurrentSessionId(id);
+          setSessionProgress(progress);
+          setSessionCancelled(status === "cancelled");
+          if (status === "running") {
+            reconnectRunningSession({
+              sessionId: id,
+              stamped,
+              resumeSeq,
+              warmReconnect: false,
+              isCancelled: () => sessionIdRef.current !== id,
+            });
+          } else {
+            setMessages(stamped);
+          }
+        } catch {
+          sessionIdRef.current = id;
+          setCurrentSessionId(id);
+        }
+      })();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- animation is stable
+    [agentId, animation, connectStream, reconnectRunningSession],
+  );
+
+  // ─── resolvePermission ────────────────────────────────────────────────────────
+  const resolvePermission = useCallback(async (requestId: string, allowed: boolean) => {
+    try {
+      const res = await fetch("/api/chat/permission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, allowed }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setPendingPermissions((prev) => prev.filter((p) => p.requestId !== requestId));
+    } catch {
+      // Leave the banner visible so the user can retry.
+    }
+  }, []);
+
+  // ─── removeFromQueue ──────────────────────────────────────────────────────────
+  const removeFromQueue = useCallback((index: number) => {
+    const next = pendingQueueRef.current.filter((_, i) => i !== index);
+    pendingQueueRef.current = next;
+    setPendingQueue(next);
+  }, []);
 
   // ─── Pending queue drain ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -562,51 +603,17 @@ export function useChatSession(agentId: AgentId) {
         sessionIdRef.current = resolvedId;
         setCurrentSessionId(resolvedId);
 
-        const isCold = lastSeqRef.current === 0;
-        if (status === "running" && isCold) {
-          const lastMsg = stamped[stamped.length - 1];
-          const msgsWithoutInProgress =
-            lastMsg?.role === "assistant" ? stamped.slice(0, -1) : stamped;
-          setMessages(msgsWithoutInProgress);
-        } else {
-          setMessages(stamped);
-        }
         setSessionProgress(progress);
         if (status === "running") {
-          const lastAssistant = stamped.toReversed().find((m) => m.role === "assistant");
-          const resumeText =
-            lastAssistant?.segments
-              .filter((s): s is { type: "text"; content: string } => s.type === "text")
-              .map((s) => s.content)
-              .join("") ?? "";
-          const resumeHint =
-            resumeSeq > 0 && lastAssistant && resumeText
-              ? { assistantId: lastAssistant.id, text: resumeText, seq: resumeSeq }
-              : undefined;
-          if (!resumeHint) {
-            const lastMsg = stamped[stamped.length - 1];
-            setMessages(lastMsg?.role === "assistant" ? stamped.slice(0, -1) : stamped);
-          } else {
-            setMessages(stamped);
-          }
-          setIsLoading(true);
-          if (resumeHint) {
-            // Buffered SSE events available — reconnect and stream them.
-            connectStream(resolvedId, !isCold, resumeHint);
-          } else {
-            // No buffered SSE stream (e.g. Dove-triggered A2A session).
-            // Poll DB and animate text deltas to mimic streaming.
-            pollPrevTextRef.current = "";
-            pollAssistantIdRef.current = null;
-            startPolling({
-              agentId,
-              sessionId: resolvedId,
-              isCancelled: () => cancelled,
-              getCurrentSessionId: () => sessionIdRef.current,
-              pollTimeoutRef,
-              onPoll: handlePoll,
-            });
-          }
+          reconnectRunningSession({
+            sessionId: resolvedId,
+            stamped,
+            resumeSeq,
+            warmReconnect: lastSeqRef.current !== 0,
+            isCancelled: () => cancelled,
+          });
+        } else {
+          setMessages(stamped);
         }
       } catch {
         // no prior session — start fresh

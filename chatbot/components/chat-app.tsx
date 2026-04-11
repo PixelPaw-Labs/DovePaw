@@ -21,6 +21,11 @@ export function ChatApp({ agentConfigs }: ChatAppProps) {
     newSessionRef.current?.();
   }, []);
 
+  const handleSelectAgent = React.useCallback((agentId: string) => {
+    setActiveAgentId(agentId);
+    setIsLoading(false);
+  }, []);
+
   return (
     <ConversationProvider
       isLoading={isLoading}
@@ -30,7 +35,7 @@ export function ChatApp({ agentConfigs }: ChatAppProps) {
       <div className="flex h-screen bg-background overflow-hidden">
         <AgentSidebar
           agentConfigs={agentConfigs}
-          onSelectAgent={setActiveAgentId}
+          onSelectAgent={handleSelectAgent}
           activeAgentId={activeAgentId}
           onClearAllHistory={handleClearAllHistory}
         />
