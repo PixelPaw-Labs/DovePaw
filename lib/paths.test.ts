@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+  AGENTS_ROOT,
   DOVEPAW_DIR,
   DOVEPAW_AGENT_STATE,
   agentPersistentStateDir,
@@ -9,6 +10,13 @@ import {
 } from "./paths.js";
 
 describe("paths", () => {
+  it("AGENTS_ROOT contains DovePaw and is not the parent directory", () => {
+    // Regression: the webpack fallback was resolve(cwd, '..') which gave
+    // the PARENT of DovePaw. The correct fallback is process.cwd() = DovePaw.
+    expect(AGENTS_ROOT).toMatch(/DovePaw/);
+    expect(AGENTS_ROOT).not.toMatch(/Envato\/others$/);
+  });
+
   it("DOVEPAW_AGENT_STATE is under ~/.dovepaw/agents/state", () => {
     expect(DOVEPAW_AGENT_STATE).toBe(join(process.env.HOME!, ".dovepaw/agents/state"));
   });
