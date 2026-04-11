@@ -154,7 +154,7 @@ describe("makeAskTool", () => {
   it("returns servers-not-running message when manifest is null", async () => {
     vi.mocked(readPortsManifest).mockReturnValue(null);
     const result = await handler({ instruction: "run" });
-    expect(result.content[0].text).toContain("npm run servers");
+    expect(result.content[0].text).toContain("npm run chatbot:servers");
   });
 
   it("fires task and returns taskId immediately", async () => {
@@ -220,7 +220,7 @@ describe("makeAskTool", () => {
     } as any);
     const result = await handler({ instruction: "run" });
     expect(result.content[0].text).toContain("unreachable");
-    expect(result.content[0].text).toContain("npm run servers");
+    expect(result.content[0].text).toContain("npm run chatbot:servers");
   });
 
   it("returns generic error for other errors", async () => {
@@ -278,7 +278,7 @@ describe("makeStartTool", () => {
   it("returns servers-not-running message when manifest is null", async () => {
     vi.mocked(readPortsManifest).mockReturnValue(null);
     const result = await handler({ instruction: "run" });
-    expect(result.content[0].text).toContain("npm run servers");
+    expect(result.content[0].text).toContain("npm run chatbot:servers");
   });
 
   it("returns taskId and manifestKey from sendMessageStream task response", async () => {
@@ -367,7 +367,7 @@ describe("makeAwaitTool", () => {
   it("returns servers-not-running message when manifest is null", async () => {
     vi.mocked(readPortsManifest).mockReturnValue(null);
     const result = await handler({ taskId: "task-123" });
-    expect(result.content[0].text).toContain("npm run servers");
+    expect(result.content[0].text).toContain("npm run chatbot:servers");
   });
 
   it("returns artifact text from resubscribed stream", async () => {

@@ -108,7 +108,7 @@ function noServersMessage() {
     content: [
       {
         type: "text" as const,
-        text: "⚠️ A2A servers are not running. Start them with: **npm run servers** (in agents/chatbot/)",
+        text: "⚠️ A2A servers are not running. Start them with: **npm run chatbot:servers**",
       },
     ],
   };
@@ -119,7 +119,7 @@ function unreachableMessage(port: number | string) {
     content: [
       {
         type: "text" as const,
-        text: `⚠️ Agent server on port ${port} is unreachable.\nRestart servers: **npm run servers**`,
+        text: `⚠️ Agent server on port ${port} is unreachable.\nRestart servers: **npm run chatbot:servers**`,
       },
     ],
   };
