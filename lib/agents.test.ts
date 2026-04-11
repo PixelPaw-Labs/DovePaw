@@ -102,3 +102,18 @@ describe("buildAgentDef — derived fields", () => {
     expect(def.toolName).toBe("yolo_my_agent");
   });
 });
+
+describe("buildAgentDef — pluginPath", () => {
+  it("propagates pluginPath when set", () => {
+    const def = buildAgentDef({
+      ...BASE_ENTRY,
+      pluginPath: "/home/user/.dovepaw/plugins/my-plugin",
+    });
+    expect(def.pluginPath).toBe("/home/user/.dovepaw/plugins/my-plugin");
+  });
+
+  it("leaves pluginPath undefined when absent", () => {
+    const def = buildAgentDef(BASE_ENTRY);
+    expect(def.pluginPath).toBeUndefined();
+  });
+});

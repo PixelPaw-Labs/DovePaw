@@ -54,6 +54,8 @@ export interface AgentDef {
   envVars?: Record<string, string>;
   /** When false, hidden from Scheduled Agents Management and A2A servers. Defaults to true. */
   schedulingEnabled?: boolean;
+  /** Absolute path to the plugin repo root. Absent = agent lives in DovePaw/agents/. */
+  pluginPath?: string;
 }
 
 /** Build a full AgentDef (including icon and derived fields) from a serializable config entry. */
@@ -100,5 +102,6 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
     runAtLoad: entry.runAtLoad,
     envVars: entry.envVars,
     schedulingEnabled: entry.schedulingEnabled ?? true,
+    pluginPath: entry.pluginPath,
   };
 }

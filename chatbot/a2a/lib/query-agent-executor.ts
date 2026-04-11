@@ -121,9 +121,10 @@ export class QueryAgentExecutor implements AgentExecutor {
         workspace = existingState.workspace;
       } else {
         // First message in this context — create a fresh workspace.
+        const scriptRoot = this.def.pluginPath ?? AGENTS_ROOT;
         ensureAgentSourceSymlink(
           this.def.name,
-          agentSourceDirFromEntry(this.def.entryPath),
+          agentSourceDirFromEntry(this.def.entryPath, scriptRoot),
           publishProgress,
         );
         workspace = createAgentWorkspace(
@@ -135,6 +136,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         );
       }
 
+      const scriptRoot = this.def.pluginPath ?? AGENTS_ROOT;
       const workspaceEnv: Record<string, string> = {
         ...extraEnv,
         AGENT_WORKSPACE: workspace.path,
@@ -142,7 +144,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       };
 
       const agentConfig: AgentConfig = {
-        scriptPath: join(AGENTS_ROOT, this.def.entryPath),
+        scriptPath: join(scriptRoot, this.def.entryPath),
         agentName: this.def.displayName,
         whatItDoes: this.def.description,
         workspacePath: workspace.path,

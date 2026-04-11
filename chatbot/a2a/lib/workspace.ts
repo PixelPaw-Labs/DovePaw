@@ -109,11 +109,17 @@ export function restoreAgentWorkspace(workspacePath: string): AgentWorkspace {
 }
 
 /**
- * Derive the agent source directory from an entryPath (relative to AGENTS_ROOT).
- * e.g. "agents/get-shit-done/main.ts" → "{AGENTS_ROOT}/agents/get-shit-done"
+ * Derive the agent source directory from an entryPath.
+ * e.g. "agents/get-shit-done/main.ts" → "{scriptRoot}/agents/get-shit-done"
+ *
+ * @param entryPath  Path relative to scriptRoot (core agents) or absolute (plugin agents)
+ * @param scriptRoot Root directory to resolve relative paths against. Defaults to AGENTS_ROOT.
  */
-export function agentSourceDirFromEntry(entryPath: string): string {
-  return join(AGENTS_ROOT, dirname(entryPath));
+export function agentSourceDirFromEntry(
+  entryPath: string,
+  scriptRoot: string = AGENTS_ROOT,
+): string {
+  return join(scriptRoot, dirname(entryPath));
 }
 
 /**

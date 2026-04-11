@@ -308,4 +308,17 @@ describe("agentSourceDirFromEntry", () => {
     const result = agentSourceDirFromEntry("agents/memory-dream/main.ts");
     expect(result).toBe(join(TMP_ROOT, "agents", "memory-dream"));
   });
+
+  it("resolves against a custom scriptRoot (plugin path)", () => {
+    const pluginRoot = "/home/user/.dovepaw/plugins/my-plugin";
+    const result = agentSourceDirFromEntry("agents/my-agent/main.ts", pluginRoot);
+    expect(result).toBe(join(pluginRoot, "agents", "my-agent"));
+  });
+
+  it("custom scriptRoot overrides AGENTS_ROOT entirely", () => {
+    const pluginRoot = "/opt/plugins/acme";
+    const result = agentSourceDirFromEntry("agents/blog-writer/main.ts", pluginRoot);
+    expect(result).not.toContain(TMP_ROOT);
+    expect(result).toBe(join(pluginRoot, "agents", "blog-writer"));
+  });
 });

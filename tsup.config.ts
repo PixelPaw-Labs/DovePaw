@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { defineConfig } from "tsup";
 import { readAgentConfigEntries } from "./lib/agents-config.js";
 
@@ -6,7 +7,12 @@ const agentEntries = await readAgentConfigEntries();
 export default defineConfig({
   entry: {
     ...Object.fromEntries(
-      agentEntries.map((a) => [`agents/${a.name}`, `agents/${a.name}/main.ts`]),
+      agentEntries.map((a) => {
+        const entryFile = a.pluginPath
+          ? join(a.pluginPath, "agents", a.name, "main.ts")
+          : `agents/${a.name}/main.ts`;
+        return [`agents/${a.name}`, entryFile];
+      }),
     ),
     "a2a-trigger": "agents/lib/a2a-trigger.ts",
   },

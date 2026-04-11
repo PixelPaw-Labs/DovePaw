@@ -66,6 +66,8 @@ export const agentConfigEntrySchema = z.object({
   doveCard: agentSuggestionConfigSchema,
   /** Starter suggestion cards shown on the agent's empty chat screen */
   suggestions: z.array(agentSuggestionConfigSchema),
+  /** Absolute path to the plugin repo root. Absent = agent lives in DovePaw/agents/. */
+  pluginPath: z.string().optional(),
 });
 
 export type AgentConfigEntry = z.infer<typeof agentConfigEntrySchema>;

@@ -4,6 +4,7 @@
  */
 
 import { exec } from "node:child_process";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import type { AgentDef } from "@@/lib/agents";
@@ -54,8 +55,10 @@ export async function unloadAgent(agent: AgentDef): Promise<void> {
 export async function installAgent(agent: AgentDef): Promise<{ loaded: boolean }> {
   const u = getUid();
 
-  // Step 1: Build only this agent's entry
-  await execAsync(`npx tsup --entry.${agent.name}=${agent.entryPath} --metafile`, {
+  // Step 1: Build only this agent's entry.
+  // Plugin agents need an absolute entry path; core agents use the relative path.
+  const entryFile = agent.pluginPath ? join(agent.pluginPath, agent.entryPath) : agent.entryPath;
+  await execAsync(`npx tsup --entry.${agent.name}=${entryFile} --metafile`, {
     cwd: AGENTS_ROOT,
   });
 

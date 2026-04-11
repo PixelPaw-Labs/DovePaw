@@ -1,0 +1,257 @@
+/**
+ * Plugin manager — single source of truth for all plugin operations.
+ * Called from both the CLI (scripts/plugin.ts) and chatbot API routes.
+ */
+
+import { exec } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, symlinkSync } from "node:fs";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { agentConfigEntrySchema } from "./agents-config-schemas";
+import { readAgentFile, writeAgentFile } from "./agents-config";
+import { AGENTS_ROOT, PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
+import {
+  pluginManifestSchema,
+  pluginRecordSchema,
+  pluginsRegistrySchema,
+  type PluginManifest,
+  type PluginRecord,
+  type PluginsRegistry,
+} from "./plugin-schemas";
+
+const execAsync = promisify(exec);
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function isGitUrl(source: string): boolean {
+  return source.startsWith("git@") || source.includes("://");
+}
+
+/** Derive a candidate directory name from a git URL (last path component, strip .git). */
+function nameFromGitUrl(url: string): string {
+  const last = url.split("/").pop() ?? url;
+  return last.replace(/\.git$/, "");
+}
+
+async function readRegistry(): Promise<PluginsRegistry> {
+  try {
+    const raw = await readFile(PLUGINS_REGISTRY_FILE, "utf-8");
+    const result = pluginsRegistrySchema.safeParse(JSON.parse(raw));
+    if (result.success) return result.data;
+  } catch {
+    // File absent or corrupt — start fresh
+  }
+  return { version: 1, plugins: [] };
+}
+
+async function writeRegistry(registry: PluginsRegistry): Promise<void> {
+  await mkdir(PLUGINS_DIR, { recursive: true });
+  await writeFile(PLUGINS_REGISTRY_FILE, JSON.stringify(registry, null, 2) + "\n", "utf-8");
+}
+
+async function readManifest(pluginDir: string): Promise<PluginManifest> {
+  const manifestPath = join(pluginDir, "dovepaw-plugin.json");
+  let raw: string;
+  try {
+    raw = await readFile(manifestPath, "utf-8");
+  } catch {
+    throw new Error(`dovepaw-plugin.json not found in ${pluginDir}`);
+  }
+  return pluginManifestSchema.parse(JSON.parse(raw));
+}
+
+/**
+ * Ensure `{pluginDir}/agents/lib` symlink exists pointing at DovePaw's shared lib.
+ * Skipped if `{pluginDir}/agents/lib` already exists as a real directory
+ * (i.e. the plugin ships its own lib — e.g. after migrating agents/lib/ there).
+ */
+function ensurePluginLibSymlink(pluginDir: string): void {
+  const pluginLibPath = join(pluginDir, "agents", "lib");
+  const dovepawLib = join(AGENTS_ROOT, "agents", "lib");
+
+  // Real directory already present — plugin ships its own lib, no symlink needed.
+  if (existsSync(pluginLibPath)) {
+    try {
+      if (!lstatSync(pluginLibPath).isSymbolicLink()) return;
+    } catch {
+      return;
+    }
+  }
+
+  mkdirSync(join(pluginDir, "agents"), { recursive: true });
+  try {
+    symlinkSync(dovepawLib, pluginLibPath);
+  } catch (err: unknown) {
+    // EEXIST — symlink already in place; ignore
+    if (!isEnoentCode(err, "EEXIST")) throw err;
+  }
+}
+
+function isEnoentCode(err: unknown, code: string): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as Record<string, unknown>).code === code
+  );
+}
+
+/** Upsert an agent's settings file from the plugin's agent.json, merging in pluginPath. */
+async function upsertAgentSettings(agentName: string, pluginDir: string): Promise<void> {
+  const agentJsonPath = join(pluginDir, "agents", agentName, "agent.json");
+  let raw: string;
+  try {
+    raw = await readFile(agentJsonPath, "utf-8");
+  } catch {
+    throw new Error(`agents/${agentName}/agent.json not found in ${pluginDir}`);
+  }
+
+  const entry = agentConfigEntrySchema.parse(JSON.parse(raw));
+  const existing = await readAgentFile(agentName);
+
+  await writeAgentFile(agentName, {
+    version: 1,
+    ...entry,
+    pluginPath: pluginDir,
+    // Preserve any user-configured runtime settings
+    repos: existing?.repos ?? [],
+    envVars: existing?.envVars ?? [],
+    locked: existing?.locked ?? false,
+  });
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * Register a plugin from a git URL or local filesystem path.
+ * Clones the repo if a git URL is given; uses the path as-is otherwise.
+ * Writes agent settings for each agent in the manifest and updates the registry.
+ * Does NOT build or deploy — run `npm run install` afterwards.
+ */
+export async function addPlugin(source: string): Promise<PluginRecord> {
+  let pluginDir: string;
+  let gitUrl: string | undefined;
+
+  if (isGitUrl(source)) {
+    gitUrl = source;
+    // Clone to a temp name derived from the URL, then confirm with the manifest
+    const candidateName = nameFromGitUrl(source);
+    const targetDir = join(PLUGINS_DIR, candidateName);
+    await mkdir(PLUGINS_DIR, { recursive: true });
+    if (!existsSync(targetDir)) {
+      await execAsync(`git clone ${source} ${targetDir}`);
+    }
+    pluginDir = targetDir;
+  } else {
+    pluginDir = source;
+  }
+
+  const manifest = await readManifest(pluginDir);
+
+  // If the manifest name differs from the URL-derived directory name, rename
+  if (gitUrl) {
+    const expectedDir = join(PLUGINS_DIR, manifest.name);
+    if (pluginDir !== expectedDir && !existsSync(expectedDir)) {
+      await execAsync(`mv ${pluginDir} ${expectedDir}`);
+      pluginDir = expectedDir;
+    }
+  }
+
+  ensurePluginLibSymlink(pluginDir);
+
+  await Promise.all(manifest.agents.map((agentName) => upsertAgentSettings(agentName, pluginDir)));
+
+  const registry = await readRegistry();
+  const now = new Date().toISOString();
+  const existing = registry.plugins.find((p) => p.name === manifest.name);
+
+  const record: PluginRecord = pluginRecordSchema.parse({
+    name: manifest.name,
+    path: pluginDir,
+    gitUrl,
+    installedAt: existing?.installedAt ?? now,
+    agentNames: manifest.agents,
+  });
+
+  if (existing) {
+    const idx = registry.plugins.indexOf(existing);
+    registry.plugins[idx] = record;
+  } else {
+    registry.plugins.push(record);
+  }
+
+  await writeRegistry(registry);
+  return record;
+}
+
+/**
+ * Remove a plugin from the registry and delete its agent settings.
+ * Does NOT delete the plugin directory itself.
+ */
+export async function removePlugin(pluginName: string): Promise<void> {
+  const registry = await readRegistry();
+  const plugin = registry.plugins.find((p) => p.name === pluginName);
+  if (!plugin) throw new Error(`Plugin "${pluginName}" is not installed`);
+
+  await Promise.all(
+    plugin.agentNames.map(async (agentName) => {
+      const dir = agentConfigDir(agentName);
+      if (existsSync(dir)) await rm(dir, { recursive: true });
+    }),
+  );
+
+  registry.plugins = registry.plugins.filter((p) => p.name !== pluginName);
+  await writeRegistry(registry);
+}
+
+/** Return all installed plugins. Returns [] when no plugins are installed. */
+export async function listPlugins(): Promise<PluginRecord[]> {
+  const registry = await readRegistry();
+  return registry.plugins;
+}
+
+/**
+ * Re-sync a plugin's agent settings from its manifest without pulling from git.
+ * Removes settings for agents no longer in the manifest, upserts current ones.
+ */
+export async function syncPlugin(pluginName: string): Promise<PluginRecord> {
+  const registry = await readRegistry();
+  const plugin = registry.plugins.find((p) => p.name === pluginName);
+  if (!plugin) throw new Error(`Plugin "${pluginName}" is not installed`);
+
+  const manifest = await readManifest(plugin.path);
+
+  // Remove settings for agents no longer in the manifest
+  const removed = plugin.agentNames.filter((n) => !manifest.agents.includes(n));
+  await Promise.all(
+    removed.map(async (agentName) => {
+      const dir = agentConfigDir(agentName);
+      if (existsSync(dir)) await rm(dir, { recursive: true });
+    }),
+  );
+
+  // Upsert settings for current agents
+  await Promise.all(
+    manifest.agents.map((agentName) => upsertAgentSettings(agentName, plugin.path)),
+  );
+
+  const updated: PluginRecord = { ...plugin, agentNames: manifest.agents };
+  const idx = registry.plugins.indexOf(plugin);
+  registry.plugins[idx] = updated;
+  await writeRegistry(registry);
+  return updated;
+}
+
+/**
+ * Pull latest changes for a git-installed plugin, then sync its agent settings.
+ */
+export async function updatePlugin(pluginName: string): Promise<PluginRecord> {
+  const registry = await readRegistry();
+  const plugin = registry.plugins.find((p) => p.name === pluginName);
+  if (!plugin) throw new Error(`Plugin "${pluginName}" is not installed`);
+  if (!plugin.gitUrl) throw new Error(`Plugin "${pluginName}" was not installed from a git URL`);
+
+  await execAsync(`git -C ${plugin.path} pull --ff-only`);
+  return syncPlugin(pluginName);
+}
