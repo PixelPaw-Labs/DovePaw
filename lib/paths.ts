@@ -1,13 +1,15 @@
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 function resolveAgentsRoot(): string {
   try {
-    // Native ESM (Node.js / tsx): derive from this file's location
+    // Native ESM (Node.js / tsx / Electron tsup bundle): derive from this file's location.
+    // lib/paths.ts → lib/ → DovePaw/
     return join(dirname(fileURLToPath(import.meta.url)), "..");
   } catch {
-    // webpack/bundler context: chatbot/ is cwd, DovePaw/ is one level up
-    return resolve(process.cwd(), "..");
+    // webpack/Next.js bundle: import.meta.url is a webpack:/// URL that fileURLToPath rejects.
+    // Next.js is invoked from the DovePaw root, so process.cwd() IS DovePaw.
+    return process.cwd();
   }
 }
 
