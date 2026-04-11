@@ -68,7 +68,6 @@ vi.mock("../agents-config.js", async () => {
 });
 
 vi.mock("../installer.js", () => ({
-  deployAgentSdk: vi.fn().mockResolvedValue(undefined),
   linkAgentSdkToPlugin: vi.fn().mockResolvedValue(undefined),
 }));
 

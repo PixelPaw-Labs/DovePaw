@@ -11,7 +11,7 @@ import { promisify } from "node:util";
 import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
 import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
-import { deployAgentSdk, linkAgentSdkToPlugin } from "./installer";
+import { linkAgentSdkToPlugin } from "./installer";
 import {
   pluginManifestSchema,
   pluginRecordSchema,
@@ -139,7 +139,6 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     }
   }
 
-  await deployAgentSdk();
   await linkAgentSdkToPlugin(pluginDir);
 
   await Promise.all(manifest.agents.map((agentName) => upsertAgentSettings(agentName, pluginDir)));
