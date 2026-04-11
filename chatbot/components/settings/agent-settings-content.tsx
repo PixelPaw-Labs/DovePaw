@@ -124,7 +124,7 @@ export function AgentSettingsContent({
   }
 
   // ── env vars state ───────────────────────────────────────────────────────────
-  const [agentEnvVars, setAgentEnvVars] = React.useState<EnvVar[]>(initialAgentEnvVars);
+  const [agentEnvVars, setAgentEnvVars] = React.useState(initialAgentEnvVars);
   const [editingEnvVar, setEditingEnvVar] = React.useState<EnvVar | null>(null);
   const [deletingEnvVarId, setDeletingEnvVarId] = React.useState<string | null>(null);
   const [envSaving, setEnvSaving] = React.useState(false);

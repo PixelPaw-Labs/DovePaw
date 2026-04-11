@@ -1,0 +1,488 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent.schema.json",
+  "title": "DovePaw Agent Definition",
+  "description": "Schema for agent.json — the metadata file that defines a DovePaw agent inside a plugin repo (agents/<name>/agent.json). When installed, DovePaw merges this file into ~/.dovepaw/settings.agents/<name>/agent.json, adding runtime fields (repos, envVars, locked). To create a new agent, produce a valid agent.json that satisfies this schema, then pair it with a main.ts entry point and register the agent name in dovepaw-plugin.json.",
+  "type": "object",
+  "required": [
+    "version",
+    "name",
+    "alias",
+    "displayName",
+    "description",
+    "scheduleDisplay",
+    "doveCard",
+    "suggestions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "description": "File format version. Must always be 1.",
+      "const": 1
+    },
+
+    "name": {
+      "description": "Unique kebab-case identifier for this agent. Used as the directory name inside agents/, as the key in ~/.dovepaw/settings.agents/, and as the basis for the MCP tool name (yolo_<name_with_underscores>). Must start with a lowercase letter and contain only lowercase letters, digits, and hyphens.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "examples": ["memory-dream", "get-shit-done", "code-reviewer"]
+    },
+
+    "alias": {
+      "description": "Short prefix (1–4 characters) used to name isolated workspace directories for this agent, e.g. 'gsd' → .gsd-<uuid>. Keep it concise and distinct across installed agents.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4,
+      "examples": ["mdr", "gsd", "cr"]
+    },
+
+    "displayName": {
+      "description": "Human-readable name shown in the chatbot UI sidebar and settings panel.",
+      "type": "string",
+      "minLength": 1,
+      "examples": ["Memory Dream", "Get Shit Done", "Code Reviewer"]
+    },
+
+    "description": {
+      "description": "One-sentence description of what the agent does. Surfaced in the MCP tool definition presented to the orchestrating Claude model — write it so the model knows when to invoke this agent.",
+      "type": "string",
+      "minLength": 1,
+      "examples": [
+        "Consolidates memories and generates insights while the system idles.",
+        "Picks up the next open ticket and implements it end-to-end.",
+        "Reviews open pull requests and posts actionable code review comments."
+      ]
+    },
+
+    "scheduleDisplay": {
+      "description": "Human-readable schedule string shown in the UI (e.g. in the Scheduled Agents panel). Use an empty string for on-demand-only agents. Format suggestions: 'daily HH:MM', 'every N min', 'every N sec', 'Mon–Fri HH:MM'.",
+      "type": "string",
+      "examples": ["daily 00:00", "every 5 min", "Mon–Fri 09:00", ""]
+    },
+
+    "schedule": {
+      "description": "launchd schedule definition. Omit for on-demand agents that are never run automatically. Two variants are supported: interval (repeating) and calendar (time-of-day, optionally day-of-week).",
+      "oneOf": [
+        {
+          "description": "Interval schedule — runs the agent repeatedly every N seconds.",
+          "type": "object",
+          "required": ["type", "seconds"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "interval" },
+            "seconds": {
+              "description": "Repeat interval in seconds. Must be a positive integer. Common values: 300 (5 min), 900 (15 min), 3600 (1 hour).",
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "examples": [300, 900, 3600]
+            }
+          }
+        },
+        {
+          "description": "Calendar schedule — runs the agent at a specific time each day, or on a specific weekday.",
+          "type": "object",
+          "required": ["type", "hour", "minute"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "const": "calendar" },
+            "hour": {
+              "description": "Hour of day in 24-hour format (0–23).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23,
+              "examples": [0, 9, 22]
+            },
+            "minute": {
+              "description": "Minute of hour (0–59).",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 59,
+              "examples": [0, 15, 30]
+            },
+            "weekday": {
+              "description": "Optional: day of week (0 = Sunday … 6 = Saturday). Omit to run every day.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 6,
+              "examples": [1, 5]
+            }
+          }
+        }
+      ]
+    },
+
+    "runAtLoad": {
+      "description": "When true, launchd runs the agent immediately when it loads the plist (system startup or manual install), in addition to the normal schedule. Useful for agents that must not miss their first window. Omit to use the launchd default (false).",
+      "type": "boolean"
+    },
+
+    "schedulingEnabled": {
+      "description": "When explicitly set to false, this agent is hidden from the Scheduled Agents management panel and its A2A server is not started. Useful to ship a disabled agent that the user can enable later. Omit to inherit the default (true).",
+      "type": "boolean"
+    },
+
+    "iconName": {
+      "description": "Lucide icon name rendered on agent cards and the sidebar avatar. Defaults to 'Bot' if omitted. Choose an icon that reflects what the agent does.",
+      "type": "string",
+      "enum": [
+        "Activity",
+        "AlertCircle",
+        "AlertTriangle",
+        "Archive",
+        "BarChart3",
+        "Bell",
+        "BellRing",
+        "Bookmark",
+        "Bot",
+        "Brain",
+        "Bug",
+        "Calendar",
+        "Clock",
+        "Cloud",
+        "Code2",
+        "Compass",
+        "Cpu",
+        "Database",
+        "Download",
+        "Eye",
+        "File",
+        "FileText",
+        "Filter",
+        "Flag",
+        "FlaskConical",
+        "Folder",
+        "GitBranch",
+        "GitMerge",
+        "GitPullRequest",
+        "Globe",
+        "Hammer",
+        "Heart",
+        "Key",
+        "Layers",
+        "Leaf",
+        "LifeBuoy",
+        "Lock",
+        "Mail",
+        "Map",
+        "MessageCircle",
+        "Moon",
+        "Network",
+        "Package",
+        "Play",
+        "Radar",
+        "Radio",
+        "RefreshCw",
+        "RotateCw",
+        "Search",
+        "Server",
+        "Settings",
+        "Share2",
+        "Shield",
+        "ShieldCheck",
+        "Sparkles",
+        "Star",
+        "Tag",
+        "Terminal",
+        "Timer",
+        "TrendingUp",
+        "Upload",
+        "User",
+        "UserCheck",
+        "Users",
+        "Wand2",
+        "Wifi",
+        "Wrench",
+        "Zap"
+      ]
+    },
+
+    "iconBg": {
+      "description": "Tailwind CSS classes for the icon wrapper circle. Controls the background color in normal and hover states. Use one of the pre-defined presets or supply custom classes. Format: '<normal-bg> group-hover:<hover-bg>'.",
+      "type": "string",
+      "examples": [
+        "bg-secondary group-hover:bg-primary",
+        "bg-yellow-100 group-hover:bg-primary",
+        "bg-blue-100 group-hover:bg-primary",
+        "bg-purple-100 group-hover:bg-primary",
+        "bg-red-100 group-hover:bg-primary",
+        "bg-green-100 group-hover:bg-primary",
+        "bg-orange-100 group-hover:bg-primary",
+        "bg-pink-100 group-hover:bg-primary",
+        "bg-teal-100 group-hover:bg-primary",
+        "bg-indigo-100 group-hover:bg-primary"
+      ]
+    },
+
+    "iconColor": {
+      "description": "Tailwind CSS classes for the icon component color. Controls the icon fill/stroke color in normal and hover states. Must be paired with a matching iconBg. Format: '<normal-color> group-hover:<hover-color>'.",
+      "type": "string",
+      "examples": [
+        "text-muted-foreground group-hover:text-primary-foreground",
+        "text-yellow-700 group-hover:text-primary-foreground",
+        "text-blue-700 group-hover:text-primary-foreground",
+        "text-purple-700 group-hover:text-primary-foreground",
+        "text-red-600 group-hover:text-primary-foreground",
+        "text-green-700 group-hover:text-primary-foreground",
+        "text-orange-700 group-hover:text-primary-foreground",
+        "text-pink-700 group-hover:text-primary-foreground",
+        "text-teal-700 group-hover:text-primary-foreground",
+        "text-indigo-700 group-hover:text-primary-foreground"
+      ]
+    },
+
+    "doveCard": {
+      "description": "Suggestion card displayed on the Dove intro grid (the main chat landing screen). Clicking the card sends 'prompt' to the agent. Keep title short, description to one sentence, and prompt specific enough to trigger meaningful work.",
+      "$ref": "#/$defs/suggestionCard"
+    },
+
+    "suggestions": {
+      "description": "Array of starter suggestion cards shown on the agent's own empty chat screen. Aim for 2–4 cards covering the most common tasks a user would want to kick off. Each card sends its prompt to this agent when clicked.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/suggestionCard" },
+      "minItems": 1
+    },
+
+    "envVars": {
+      "description": "Runtime environment variables for this agent, managed via the DovePaw UI. Secrets are stored in the macOS Keychain; plain values are stored in agent.json. DovePaw injects these into the agent process at runtime. Do NOT embed secrets as plain values — set isSecret: true instead.",
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/envVar" }
+    },
+
+    "repos": {
+      "description": "Absolute paths to git repositories this agent operates on. DovePaw passes these to the agent process so it knows which repos to clone/work in. Populated via the Settings UI; leave empty in the plugin source.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "string",
+        "description": "Absolute filesystem path to a git repository root."
+      }
+    },
+
+    "locked": {
+      "description": "When true, this agent cannot be deleted via the DovePaw UI or settings API until explicitly unlocked. Use this to protect agents that are critical to a workflow. Defaults to false.",
+      "type": "boolean",
+      "default": false
+    },
+
+    "pluginPath": {
+      "description": "Absolute path to the plugin repo root. Injected automatically by DovePaw when the plugin is installed — do NOT set this in the plugin source agent.json.",
+      "type": "string"
+    }
+  },
+
+  "$defs": {
+    "suggestionCard": {
+      "description": "A clickable prompt card shown in the chat UI. Sends 'prompt' to the agent when the user clicks it.",
+      "type": "object",
+      "required": ["title", "description", "prompt"],
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "description": "Short card heading (2–5 words). Appears in bold at the top of the card.",
+          "type": "string",
+          "minLength": 1,
+          "examples": ["Run now", "Summarise memories", "Review open PRs"]
+        },
+        "description": {
+          "description": "One-sentence explanation of what clicking this card will do. Shown below the title.",
+          "type": "string",
+          "minLength": 1,
+          "examples": [
+            "Trigger Memory Dream immediately.",
+            "List and summarise the agent's recent memory snapshots.",
+            "Post code review comments on all open pull requests."
+          ]
+        },
+        "prompt": {
+          "description": "The exact text sent to the agent when the card is clicked. Write it as a natural-language imperative that produces useful work, e.g. 'Run Memory Dream now and summarise what you consolidated.'",
+          "type": "string",
+          "minLength": 1
+        },
+        "iconName": {
+          "description": "Optional override icon for this card. Inherits the agent's iconName if omitted.",
+          "type": "string",
+          "enum": [
+            "Activity",
+            "AlertCircle",
+            "AlertTriangle",
+            "Archive",
+            "BarChart3",
+            "Bell",
+            "BellRing",
+            "Bookmark",
+            "Bot",
+            "Brain",
+            "Bug",
+            "Calendar",
+            "Clock",
+            "Cloud",
+            "Code2",
+            "Compass",
+            "Cpu",
+            "Database",
+            "Download",
+            "Eye",
+            "File",
+            "FileText",
+            "Filter",
+            "Flag",
+            "FlaskConical",
+            "Folder",
+            "GitBranch",
+            "GitMerge",
+            "GitPullRequest",
+            "Globe",
+            "Hammer",
+            "Heart",
+            "Key",
+            "Layers",
+            "Leaf",
+            "LifeBuoy",
+            "Lock",
+            "Mail",
+            "Map",
+            "MessageCircle",
+            "Moon",
+            "Network",
+            "Package",
+            "Play",
+            "Radar",
+            "Radio",
+            "RefreshCw",
+            "RotateCw",
+            "Search",
+            "Server",
+            "Settings",
+            "Share2",
+            "Shield",
+            "ShieldCheck",
+            "Sparkles",
+            "Star",
+            "Tag",
+            "Terminal",
+            "Timer",
+            "TrendingUp",
+            "Upload",
+            "User",
+            "UserCheck",
+            "Users",
+            "Wand2",
+            "Wifi",
+            "Wrench",
+            "Zap"
+          ]
+        }
+      }
+    },
+
+    "envVar": {
+      "description": "A single environment variable entry managed by DovePaw. Secrets are stored in the macOS Keychain; plain values are stored in agent.json.",
+      "type": "object",
+      "required": ["id", "key", "value", "isSecret"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Stable unique identifier for this env var entry (e.g. a UUID). Used to correlate entries across edits.",
+          "type": "string",
+          "minLength": 1
+        },
+        "key": {
+          "description": "The environment variable name (e.g. 'GITHUB_TOKEN'). Injected into the agent process as-is.",
+          "type": "string",
+          "pattern": "^[A-Z_][A-Z0-9_]*$",
+          "examples": ["GITHUB_TOKEN", "OPENAI_API_KEY", "LINEAR_API_KEY"]
+        },
+        "value": {
+          "description": "The plain-text value. Must be an empty string when isSecret is true — the actual secret lives in the OS keychain, not here.",
+          "type": "string"
+        },
+        "isSecret": {
+          "description": "When true, the value is stored in the macOS Keychain and never written to disk in plain text. Set to false for non-sensitive values.",
+          "type": "boolean"
+        },
+        "keychainService": {
+          "description": "macOS Keychain service name for read-only links to entries owned by another app. When present, DovePaw will never write or delete this keychain entry.",
+          "type": "string"
+        },
+        "keychainAccount": {
+          "description": "macOS Keychain account name. Paired with keychainService for read-only external keychain links.",
+          "type": "string"
+        }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "version": 1,
+      "name": "memory-dream",
+      "alias": "mdr",
+      "displayName": "Memory Dream",
+      "description": "Consolidates short-term observations into long-term memory snapshots while the system idles.",
+      "scheduleDisplay": "daily 00:00",
+      "schedule": { "type": "calendar", "hour": 0, "minute": 0 },
+      "runAtLoad": false,
+      "iconName": "Moon",
+      "iconBg": "bg-purple-100 group-hover:bg-primary",
+      "iconColor": "text-purple-700 group-hover:text-primary-foreground",
+      "doveCard": {
+        "title": "Memory Dream",
+        "description": "Consolidate and replay today's memories.",
+        "prompt": "What did Memory Dream consolidate in its last run?"
+      },
+      "suggestions": [
+        {
+          "title": "Run now",
+          "description": "Trigger Memory Dream immediately.",
+          "prompt": "Run Memory Dream now and tell me what you consolidated."
+        },
+        {
+          "title": "Recent memories",
+          "description": "Summarise the most recent memory snapshot.",
+          "prompt": "Summarise the most recent memory snapshot Memory Dream created."
+        }
+      ],
+      "envVars": [],
+      "repos": [],
+      "locked": false
+    },
+    {
+      "version": 1,
+      "name": "get-shit-done",
+      "alias": "gsd",
+      "displayName": "Get Shit Done",
+      "description": "Picks up the next open ticket from the backlog and implements it end-to-end in an isolated git worktree.",
+      "scheduleDisplay": "every 5 min",
+      "schedule": { "type": "interval", "seconds": 300 },
+      "iconName": "Zap",
+      "iconBg": "bg-yellow-100 group-hover:bg-primary",
+      "iconColor": "text-yellow-700 group-hover:text-primary-foreground",
+      "doveCard": {
+        "title": "Get Shit Done",
+        "description": "Auto-implement the next open ticket.",
+        "prompt": "What is Get Shit Done currently working on?"
+      },
+      "suggestions": [
+        {
+          "title": "What's next?",
+          "description": "Show the next ticket in the backlog.",
+          "prompt": "What ticket will Get Shit Done pick up next?"
+        },
+        {
+          "title": "Run now",
+          "description": "Implement the next ticket immediately.",
+          "prompt": "Pick up and implement the next open ticket right now."
+        },
+        {
+          "title": "Recent work",
+          "description": "Summarise recently completed tickets.",
+          "prompt": "Summarise the last three tickets Get Shit Done completed."
+        }
+      ],
+      "envVars": [],
+      "repos": [],
+      "locked": false
+    }
+  ]
+}

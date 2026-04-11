@@ -234,7 +234,7 @@ interface PluginManagementContentProps {
 
 export function PluginManagementContent({ initialPlugins }: PluginManagementContentProps) {
   const router = useRouter();
-  const [plugins, setPlugins] = React.useState<PluginRecord[]>(initialPlugins);
+  const [plugins, setPlugins] = React.useState(initialPlugins);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);

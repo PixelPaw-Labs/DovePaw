@@ -39,12 +39,10 @@ export function SettingsContent({
   scheduledAgentConfigs,
 }: SettingsContentProps) {
   const [tab, setTab] = React.useState<Tab>("repositories");
-  const [repositories, setRepositories] = React.useState<Repository[]>(
-    initialSettings.repositories,
-  );
+  const [repositories, setRepositories] = React.useState(initialSettings.repositories);
   const [editingRepo, setEditingRepo] = React.useState<Repository | null>(null);
   // Fetch env vars from API on mount so secrets have their real keychain values
-  const [envVars, setEnvVars] = React.useState<EnvVar[]>(initialSettings.envVars);
+  const [envVars, setEnvVars] = React.useState(initialSettings.envVars);
   const [editingEnvVar, setEditingEnvVar] = React.useState<EnvVar | null>(null);
   const [saving, setSaving] = React.useState(false);
   const statuses = useAgentHeartbeat();

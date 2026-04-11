@@ -15,7 +15,7 @@ export function useButtonShimmer(isActive: boolean) {
 
   useEffect(() => {
     const el = shimmerRef.current;
-    if (!el || !isActive) return;
+    if (!el || !isActive) return () => {};
     const anim = animate(el, {
       translateX: ["-100%", "300%"],
       duration: 3000,

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
-import type { AgentId } from "@/lib/agent-api-urls";
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
 import { AgentChat } from "@/components/agent-chat";
 import { ConversationProvider } from "@/components/hooks/use-conversation-context";
@@ -12,7 +11,7 @@ interface ChatAppProps {
 }
 
 export function ChatApp({ agentConfigs }: ChatAppProps) {
-  const [activeAgentId, setActiveAgentId] = React.useState<AgentId>("dove");
+  const [activeAgentId, setActiveAgentId] = React.useState("dove");
   const [isLoading, setIsLoading] = React.useState(false);
   const [doveIsRunning, setDoveIsRunning] = React.useState(false);
   const newSessionRef = React.useRef<(() => void) | null>(null);

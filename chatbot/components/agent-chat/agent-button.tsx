@@ -35,7 +35,7 @@ function ScheduleCountdown({ schedule }: { schedule: AgentDef["schedule"] }) {
   });
 
   React.useEffect(() => {
-    if (remaining === null) return;
+    if (remaining === null) return () => {};
     const id = setInterval(() => {
       const t = nextRunMs(schedule);
       setRemaining(t ? Math.max(0, Math.floor((t - Date.now()) / 1000)) : null);

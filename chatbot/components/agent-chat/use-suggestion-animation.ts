@@ -8,7 +8,7 @@ export function useSuggestionAnimation() {
   const scopeRef = React.useRef<ReturnType<typeof createScope> | null>(null);
 
   React.useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) return () => {};
     scopeRef.current = createScope({ root: containerRef.current }).add(() => {
       animate(".suggestion-card", {
         opacity: [0, 1],

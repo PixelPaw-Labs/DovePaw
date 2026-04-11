@@ -31,8 +31,7 @@ function toolDetail(tool: ToolCall): string {
     }
     default: {
       const first = Object.values(input).find((v) => typeof v === "string") ?? "";
-      const str = String(first);
-      return str.length > 60 ? str.slice(0, 60) + "…" : str;
+      return first.length > 60 ? first.slice(0, 60) + "…" : first;
     }
   }
 }

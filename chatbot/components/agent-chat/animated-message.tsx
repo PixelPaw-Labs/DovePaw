@@ -15,7 +15,7 @@ export function AnimatedMessage({
   const wrapperRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    if (!wrapperRef.current) return;
+    if (!wrapperRef.current) return () => {};
     const anim = animate(wrapperRef.current, {
       translateY: [10, 0],
       opacity: [0, 1],

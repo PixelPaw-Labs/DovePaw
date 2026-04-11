@@ -45,7 +45,7 @@ export function useAgentHeartbeat(): Record<string, AgentStatus> {
   const wsPort = useWsPort();
 
   React.useEffect(() => {
-    if (wsPort === null) return;
+    if (wsPort === null) return () => {};
 
     const url = `ws://127.0.0.1:${wsPort}`;
     let ws: WebSocket | null = null;

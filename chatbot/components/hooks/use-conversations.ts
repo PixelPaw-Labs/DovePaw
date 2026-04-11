@@ -33,8 +33,8 @@ export type { MessageRole, ChatMessage } from "./use-messages";
 export function useConversations() {
   // ─── Active agent ─────────────────────────────────────────────────────────────
   // "dove" is the SSR-safe default; API is read after mount to avoid hydration mismatch
-  const [activeAgentId, setActiveAgentIdState] = useState<string>("dove");
-  const activeAgentIdRef = useRef<string>("dove");
+  const [activeAgentId, setActiveAgentIdState] = useState("dove");
+  const activeAgentIdRef = useRef("dove");
 
   // ─── Messages (for the currently-active conversation) ─────────────────────────
   const {

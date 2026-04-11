@@ -8,7 +8,7 @@ export function FloatingCatIcon() {
   const ref = React.useRef<HTMLSpanElement>(null);
 
   React.useEffect(() => {
-    if (!ref.current) return;
+    if (!ref.current) return () => {};
     const anim = animate(ref.current, {
       translateY: [-6, 6],
       duration: 2200,

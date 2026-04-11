@@ -9,7 +9,7 @@ export function ThinkingDots({ count = 3 }: { count?: number }) {
   const staggerMs = Math.round(360 / count);
 
   React.useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current) return () => {};
     scopeRef.current = createScope({ root: containerRef.current }).add(() => {
       createTimeline({ loop: true, defaults: { ease: "inOutSine" } })
         .add(".thinking-dot", { translateY: [0, -4], duration: 350, delay: stagger(staggerMs) })

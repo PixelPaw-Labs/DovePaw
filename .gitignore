@@ -163,3 +163,6 @@ electron/.dist/
 electron/release/
 
 page-inspector-output/
+
+# agents/ is a per-developer symlink to ~/.dovepaw/plugins — created by setup, not tracked in git
+/agents

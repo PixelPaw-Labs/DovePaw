@@ -45,7 +45,7 @@ export function useChatSession(agentId: AgentId) {
   // ─── Refs ─────────────────────────────────────────────────────────────────────
   const abortRef = useRef<AbortController | null>(null);
   const sessionIdRef = useRef<string | null>(null);
-  const lastSeqRef = useRef<number>(0);
+  const lastSeqRef = useRef(0);
   const isLoadingRef = useRef(false);
   const assistantIdRef = useRef<string | null>(null);
   const pendingToolNameRef = useRef<string | null>(null);
@@ -53,7 +53,7 @@ export function useChatSession(agentId: AgentId) {
   const pendingQueueRef = useRef<string[]>([]);
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Tracks the last-animated assistant text and its ID across poll ticks.
-  const pollPrevTextRef = useRef<string>("");
+  const pollPrevTextRef = useRef("");
   const pollAssistantIdRef = useRef<string | null>(null);
 
   // Keep refs in sync with state

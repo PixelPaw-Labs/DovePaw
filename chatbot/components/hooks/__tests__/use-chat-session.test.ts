@@ -274,9 +274,7 @@ describe("useChatSession", () => {
 
     const streamCalls = vi
       .mocked(fetch)
-      .mock.calls.filter(
-        (c) => typeof c[0] === "string" && String(c[0]).includes("/api/chat/stream/"),
-      );
+      .mock.calls.filter((c) => typeof c[0] === "string" && c[0].includes("/api/chat/stream/"));
     expect(streamCalls).toHaveLength(1);
   });
 

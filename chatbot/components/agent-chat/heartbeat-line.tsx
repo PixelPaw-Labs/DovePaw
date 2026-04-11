@@ -10,7 +10,7 @@ export function HeartbeatLine() {
   const groupRef = React.useRef<SVGGElement>(null);
 
   React.useEffect(() => {
-    if (!groupRef.current) return;
+    if (!groupRef.current) return () => {};
     const anim = animate(groupRef.current, {
       translateX: [0, -PERIOD],
       duration: 1000,
