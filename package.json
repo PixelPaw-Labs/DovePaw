@@ -7,7 +7,7 @@
     "build": "tsup --metafile",
     "install": "tsx build.ts",
     "uninstall": "tsx build.ts --uninstall",
-    "lint": "oxlint --disable-nested-config",
+    "lint": "oxlint --disable-nested-config --ignore-pattern agents/",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "chatbot:servers": "tsx --watch chatbot/a2a/start-all.ts",

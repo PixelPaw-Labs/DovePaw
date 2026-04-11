@@ -174,6 +174,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentPersistentLogDir(this.def.name),
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
+            join(scriptRoot, "agents", this.def.name),
           ];
           const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
