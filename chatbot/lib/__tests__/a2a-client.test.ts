@@ -17,6 +17,8 @@ import {
   startAgentStream,
   collectStreamResult,
   extractArtifactResult,
+  collectAgentStreamContext,
+  formatAgentStreamContext,
   type A2AStreamEvent,
 } from "@/lib/a2a-client";
 
@@ -263,5 +265,111 @@ describe("extractArtifactResult", () => {
   it("returns 'Something wrong with agent.' for empty artifacts", () => {
     expect(extractArtifactResult([]).output).toBe("Something wrong with agent.");
     expect(extractArtifactResult(undefined).output).toBe("Something wrong with agent.");
+  });
+});
+
+// ─── collectAgentStreamContext ────────────────────────────────────────────────
+
+describe("collectAgentStreamContext", () => {
+  it("collects stream chunks as response", async () => {
+    const stream = asyncEvents(
+      {
+        kind: "artifact-update",
+        artifact: { name: "stream", parts: [{ kind: "text", text: "hello " }] },
+      },
+      {
+        kind: "artifact-update",
+        artifact: { name: "stream", parts: [{ kind: "text", text: "world" }] },
+      },
+      { kind: "status-update", status: { state: "completed" }, final: true },
+    ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
+    const ctx = await collectAgentStreamContext(stream, "ctx-1");
+    expect(ctx.response).toBe("hello world");
+    expect(ctx.state).toBe("completed");
+    expect(ctx.contextId).toBe("ctx-1");
+  });
+
+  it("collects thinking chunks", async () => {
+    const stream = asyncEvents(
+      {
+        kind: "artifact-update",
+        artifact: { name: "thinking", parts: [{ kind: "text", text: "Let me think..." }] },
+      },
+      { kind: "status-update", status: { state: "completed" }, final: true },
+    ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
+    const ctx = await collectAgentStreamContext(stream, "ctx-2");
+    expect(ctx.thinking).toBe("Let me think...");
+  });
+
+  it("collects tool calls paired with tool input", async () => {
+    const stream = asyncEvents(
+      {
+        kind: "artifact-update",
+        artifact: { name: "tool-call", parts: [{ kind: "text", text: "bash" }] },
+      },
+      {
+        kind: "artifact-update",
+        artifact: { name: "tool-input", parts: [{ kind: "text", text: '{"command":"ls"}' }] },
+      },
+      { kind: "status-update", status: { state: "completed" }, final: true },
+    ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
+    const ctx = await collectAgentStreamContext(stream, "ctx-3");
+    expect(ctx.toolCalls).toEqual(['bash: {"command":"ls"}']);
+  });
+
+  it("returns unknown state when no final status-update", async () => {
+    const stream = asyncEvents() as AsyncGenerator<A2AStreamEvent, void, undefined>;
+    const ctx = await collectAgentStreamContext(stream, "ctx-4");
+    expect(ctx.state).toBe("unknown");
+  });
+});
+
+// ─── formatAgentStreamContext ─────────────────────────────────────────────────
+
+describe("formatAgentStreamContext", () => {
+  it("includes state and contextId", () => {
+    const text = formatAgentStreamContext(
+      { state: "completed", contextId: "abc", response: "", thinking: "", toolCalls: [] },
+      "MyAgent",
+    );
+    expect(text).toContain("completed");
+    expect(text).toContain("abc");
+  });
+
+  it("includes response section when present", () => {
+    const text = formatAgentStreamContext(
+      { state: "completed", contextId: "abc", response: "done", thinking: "", toolCalls: [] },
+      "MyAgent",
+    );
+    expect(text).toContain("<response>");
+    expect(text).toContain("done");
+  });
+
+  it("includes thinking section when present", () => {
+    const text = formatAgentStreamContext(
+      { state: "completed", contextId: "abc", response: "", thinking: "reasoning", toolCalls: [] },
+      "MyAgent",
+    );
+    expect(text).toContain("<thinking>");
+    expect(text).toContain("reasoning");
+  });
+
+  it("includes actions section when tool calls present", () => {
+    const text = formatAgentStreamContext(
+      { state: "completed", contextId: "abc", response: "", thinking: "", toolCalls: ["bash: ls"] },
+      "MyAgent",
+    );
+    expect(text).toContain("<actions>");
+    expect(text).toContain("- bash: ls");
+  });
+
+  it("omits empty sections", () => {
+    const text = formatAgentStreamContext(
+      { state: "completed", contextId: "abc", response: "", thinking: "", toolCalls: [] },
+      "MyAgent",
+    );
+    expect(text).not.toContain("<thinking>");
+    expect(text).not.toContain("<response>");
+    expect(text).not.toContain("<actions>");
   });
 });

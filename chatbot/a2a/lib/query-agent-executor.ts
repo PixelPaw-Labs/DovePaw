@@ -1,4 +1,3 @@
-import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
@@ -9,8 +8,6 @@ import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
-import { readSettings, readAgentSettings } from "@@/lib/settings";
-import { resolveSettingsEnv } from "@/lib/env-resolver";
 import {
   makeAgentMgmtTools,
   makeStartScriptTool,
@@ -20,8 +17,11 @@ import {
   START_SCRIPT_TOOL,
   AWAIT_SCRIPT_TOOL,
 } from "@/lib/agent-tools";
-import { extractInstruction, type AgentConfig } from "./spawn";
-import { buildSubAgentHooks } from "@/lib/hooks";
+import { AgentConfigReader } from "./agent-config-reader";
+import { extractInstruction } from "./message-parts";
+import { buildAgentConfig } from "./agent-config-builder";
+import { PipelineTrigger } from "./pipeline-trigger";
+import { buildSubAgentHooks } from "@/lib/subagent-hooks";
 import {
   createAgentWorkspace,
   agentSourceDirFromEntry,
@@ -50,6 +50,8 @@ export { SessionInfo };
 export class QueryAgentExecutor implements AgentExecutor {
   private abortController: AbortController | null = null;
   private currentContextId: string | null = null;
+  private readonly agentConfigReader = new AgentConfigReader();
+  private readonly pipelineTrigger = new PipelineTrigger();
 
   constructor(
     private readonly def: AgentDef,
@@ -104,16 +106,9 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     publishProgress("Starting…");
 
-    // Resolve env vars fresh on each execution so settings changes take effect
-    const settings = readSettings();
-    const agentSettings = await readAgentSettings(this.def.name);
-    const extraEnv = resolveSettingsEnv(settings, agentSettings.envVars);
-
-    // Resolve selected repos to GitHub slugs for cloning and REPO_LIST injection
-    const repoSlugs = agentSettings.repos
-      .map((id) => settings.repositories.find((r) => r.id === id))
-      .filter((r): r is NonNullable<typeof r> => r !== undefined)
-      .map((r) => r.githubRepo);
+    const { extraEnv, repoSlugs } = await this.agentConfigReader.resolveAgentSettings(
+      this.def.name,
+    );
 
     try {
       if (!this.def.pluginPath) {
@@ -121,7 +116,6 @@ export class QueryAgentExecutor implements AgentExecutor {
           `Agent "${this.def.name}" has no pluginPath — register it via plugin:add first`,
         );
       }
-      const scriptRoot = this.def.pluginPath;
 
       if (existingState) {
         // Resume existing session — reuse workspace and Claude session.
@@ -130,7 +124,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         // First message in this context — create a fresh workspace.
         ensureAgentSourceSymlink(
           this.def.name,
-          agentSourceDirFromEntry(this.def.entryPath, scriptRoot),
+          agentSourceDirFromEntry(this.def.entryPath, this.def.pluginPath),
           publishProgress,
         );
         workspace = createAgentWorkspace(
@@ -141,19 +135,13 @@ export class QueryAgentExecutor implements AgentExecutor {
           publishProgress,
         );
       }
-      const workspaceEnv: Record<string, string> = {
-        ...extraEnv,
-        AGENT_WORKSPACE: workspace.path,
-        ...(repoSlugs.length > 0 ? { REPO_LIST: repoSlugs.join(",") } : {}),
-      };
 
-      const agentConfig: AgentConfig = {
-        scriptPath: join(scriptRoot, this.def.entryPath),
-        agentName: this.def.displayName,
-        whatItDoes: this.def.description,
-        workspacePath: workspace.path,
-        extraEnv: workspaceEnv,
-      };
+      const agentConfig = buildAgentConfig(this.def, workspace, extraEnv, repoSlugs);
+
+      const chatToTools = await this.agentConfigReader.resolveLinkedTools(
+        this.def.name,
+        this.abortController.signal,
+      );
 
       await withMcpQuery(
         [
@@ -167,6 +155,7 @@ export class QueryAgentExecutor implements AgentExecutor {
           ),
           makeAwaitScriptTool(this.def),
           ...makeAgentMgmtTools(this.def),
+          ...chatToTools,
         ],
         async (innerMcpServer) => {
           const additionalDirectories = [
@@ -174,7 +163,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentPersistentLogDir(this.def.name),
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
-            agentSourceDirFromEntry(this.def.entryPath, scriptRoot),
+            agentSourceDirFromEntry(this.def.entryPath, this.def.pluginPath),
           ];
           const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
@@ -195,6 +184,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                   `mcp__agents__${START_SCRIPT_TOOL}`,
                   `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
+                  ...chatToTools.map((t) => `mcp__agents__${t.name}`),
                 ],
                 mcpServers: { agents: innerMcpServer },
                 hooks: buildSubAgentHooks(workspace!.path, additionalDirectories),
@@ -264,6 +254,16 @@ export class QueryAgentExecutor implements AgentExecutor {
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
+
+          // Pipeline: hand off to PipelineTrigger — it owns target resolution and stream firing
+          const finalOutput = dispatcher
+            .buildAssistantMessage()
+            .segments.filter((s): s is Extract<typeof s, { type: "text" }> => s.type === "text")
+            .map((s) => s.content)
+            .join("\n")
+            .trim();
+          void this.pipelineTrigger.fire(this.def.name, finalOutput);
+
           publishSessionEvent(contextId, { type: "done" });
           publisher.publishStatusToUI("", undefined, "completed");
         },

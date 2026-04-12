@@ -21,6 +21,23 @@ import {
 const INTERVAL_MS = 10_000;
 const PING_TIMEOUT_MS = 5_000;
 
+/** Last known heartbeat state, updated every INTERVAL_MS. Module-scope so other
+ *  server-side code (e.g. AgentConfigReader) can read live agent status without
+ *  re-pinging or reading the ports manifest. */
+let lastStatus: Record<string, AgentStatus> = {};
+let heartbeatReady = false;
+
+/** Returns true once the first heartbeat cycle has completed and lastStatus is populated. */
+export function isHeartbeatReady(): boolean {
+  return heartbeatReady;
+}
+
+/** Returns true if the agent with the given manifestKey was online in the most
+ *  recent heartbeat cycle. Returns false when no heartbeat has run yet. */
+export function isAgentOnline(manifestKey: string): boolean {
+  return lastStatus[manifestKey]?.online ?? false;
+}
+
 async function pingAgent(port: number): Promise<Pick<AgentStatus, "online" | "latency">> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
@@ -61,8 +78,6 @@ export function startHeartbeatServer(agentPorts: Record<string, number>): Promis
   return new Promise((resolve, reject) => {
     const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
 
-    let current: Record<string, AgentStatus> = {};
-
     function broadcast(msg: StatusMessage) {
       const payload = JSON.stringify(msg);
       for (const client of wss.clients) {
@@ -73,14 +88,15 @@ export function startHeartbeatServer(agentPorts: Record<string, number>): Promis
     }
 
     async function heartbeat() {
-      current = await checkAll(agentPorts);
-      broadcast({ type: "status", agents: current });
+      lastStatus = await checkAll(agentPorts);
+      heartbeatReady = true;
+      broadcast({ type: "status", agents: lastStatus });
     }
 
     wss.on("connection", (ws) => {
       // Send current status immediately so the client doesn't wait for the next interval
-      if (Object.keys(current).length > 0) {
-        ws.send(JSON.stringify({ type: "status", agents: current }));
+      if (Object.keys(lastStatus).length > 0) {
+        ws.send(JSON.stringify({ type: "status", agents: lastStatus }));
       }
     });
 

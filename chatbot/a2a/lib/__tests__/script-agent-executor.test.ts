@@ -6,7 +6,8 @@
 import { describe, expect, it } from "vitest";
 
 // These are pure functions — no mocks needed.
-import { extractInstruction, buildScriptArgs } from "../spawn";
+import { extractInstruction } from "../message-parts";
+import { buildScriptArgs } from "../spawn";
 import { START_SCRIPT_TOOL } from "@/lib/agent-tools";
 
 describe("extractInstruction", () => {

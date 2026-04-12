@@ -9,6 +9,7 @@ import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN } from "@/lib/paths";
+import type { AgentConfig } from "./agent-config-builder";
 
 /** Sentinel for transient progress messages written by emitProgress(). */
 export const PROGRESS_PREFIX = "__PROGRESS__:";
@@ -52,28 +53,7 @@ export class OutputLineProcessor {
   }
 }
 
-// ─── AgentConfig ──────────────────────────────────────────────────────────────
-
-export interface AgentConfig {
-  scriptPath: string;
-  agentName: string;
-  whatItDoes: string;
-  /** Resolved env vars from settings to merge into the spawned process environment. */
-  extraEnv?: Record<string, string>;
-  /** The workspace directory for this run — used as cwd when spawning the agent script. */
-  workspacePath: string;
-}
-
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
-
-/** Extract the plain text instruction from an A2A user message's parts. */
-export function extractInstruction(parts: { kind: string; text?: string }[]): string {
-  return parts
-    .filter((p) => p.kind === "text")
-    .map((p) => p.text ?? "")
-    .join(" ")
-    .trim();
-}
 
 /** Build the argv array for spawning the agent script. */
 export function buildScriptArgs(scriptPath: string, instruction: string): string[] {

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Package, PawPrint, Settings, Trash2 } from "lucide-react";
+import { Bot, Network, Package, PawPrint, Settings, Trash2 } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,7 @@ export function AgentSidebar({
   const pathname = usePathname();
   const isSettings = pathname === "/settings";
   const isPlugins = pathname === "/settings/plugins";
+  const isAgentLinks = pathname === "/settings/agent-links";
 
   const hasData = Object.keys(statuses).length > 0;
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
@@ -152,6 +153,20 @@ export function AgentSidebar({
             </span>
           </button>
         )}
+        <Link
+          href="/settings/agent-links"
+          className={cn(
+            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+            isAgentLinks
+              ? "bg-primary/10 text-primary border-l-4 border-primary"
+              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+          )}
+        >
+          <Network className={cn("w-4 h-4 shrink-0", isAgentLinks ? "text-primary" : "")} />
+          <span className={cn("text-sm font-medium", !isAgentLinks && "text-foreground/80")}>
+            Agent Links
+          </span>
+        </Link>
         <Link
           href="/settings/plugins"
           className={cn(

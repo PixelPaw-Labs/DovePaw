@@ -20,6 +20,7 @@ import {
   startAgentStream,
   subscribeTaskStream,
   collectStreamResult,
+  formatAgentStreamContext,
 } from "@/lib/a2a-client";
 import type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 
@@ -338,8 +339,18 @@ export function makeAwaitTool(
           taskId: result.taskId ?? taskId,
           result: result.result,
         };
+        const formatted = formatAgentStreamContext(
+          {
+            state: "completed",
+            contextId: result.taskId ?? taskId,
+            response: result.result.output,
+            thinking: result.result.thinking ?? "",
+            toolCalls: result.result.toolCalls ?? [],
+          },
+          agent.displayName,
+        );
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(completed.result) }],
+          content: [{ type: "text" as const, text: formatted }],
           structuredContent: completed,
         };
       } catch (err: unknown) {

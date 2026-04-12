@@ -3,7 +3,8 @@
  *
  * buildAgentHooks — generic factory, usable by any query() caller
  * buildDoveHooks  — convenience wrapper for Dove's top-level query (route.ts)
- * buildSubAgentHooks — convenience wrapper for QueryAgentExecutor sub-agents
+ *
+ * Sub-agent hooks live in subagent-hooks.ts.
  */
 
 import { randomUUID } from "crypto";
@@ -17,8 +18,6 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { doveAwaitToolName, hasPendingTasks, getPendingTaskIds } from "@/lib/query-tools";
-import { START_SCRIPT_TOOL, AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
-import { hasPendingScripts, getPendingRunIds } from "@/a2a/lib/spawn";
 import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
@@ -241,30 +240,4 @@ export function buildDoveCanUseTool(send: (event: ChatSseEvent) => void): {
   };
 
   return { canUseTool, abortPermissions: () => abortPendingPermissions(activeIds) };
-}
-
-const SUB_AGENT_PROMPT_REMINDER = `<reminder>
-When the user's intent is resolved by RUNNING this agent, ALWAYS call \`${START_SCRIPT_TOOL}\` first (returns \`{ runId }\` immediately),
-tell the user what you've kicked off,
-then call \`${AWAIT_SCRIPT_TOOL}\` as a **background Task** to collect the result without blocking the conversation.
-Retry \`${AWAIT_SCRIPT_TOOL}\` with the same runId if it returns \`still_running\`.
-</reminder>`;
-
-/** Hooks for the QueryAgentExecutor sub-agent query(). */
-export function buildSubAgentHooks(
-  cwd: string,
-  additionalDirectories: string[],
-): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  return buildAgentHooks({
-    postToolUseMatcher: `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
-    hasPendingWork: hasPendingScripts,
-    getPendingIds: getPendingRunIds,
-    getStillRunningId: (s) => {
-      if (typeof s !== "object" || s === null || !("runId" in s)) return undefined;
-      const val: unknown = Reflect.get(s, "runId");
-      return typeof val === "string" ? val : undefined;
-    },
-    userPromptReminder: SUB_AGENT_PROMPT_REMINDER,
-    allowedDirectories: [cwd, ...additionalDirectories],
-  });
 }

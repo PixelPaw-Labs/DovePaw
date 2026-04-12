@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAgentHooks } from "../hooks";
+import { buildSubAgentHooks } from "../subagent-hooks";
 
 const signal = new AbortController().signal;
 const callHook = (fn: Function, input: unknown) => fn(input, undefined, { signal });
@@ -264,5 +265,104 @@ describe("buildAgentHooks — UserPromptSubmit hook", () => {
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "Stop" });
     expect(result).toEqual({ continue: true });
+  });
+});
+
+// ─── buildSubAgentHooks — self-reflection gate ────────────────────────────────
+
+vi.mock("@/a2a/lib/spawn", () => ({
+  hasPendingScripts: () => false,
+  getPendingRunIds: () => [],
+}));
+
+describe("buildSubAgentHooks — chat_to reflection gate", () => {
+  function getReflectionHook() {
+    const hooks = buildSubAgentHooks("/cwd", []);
+    // The reflection matcher is the last PreToolUse matcher
+    const matchers = hooks.PreToolUse!;
+    const reflectionMatcher = matchers[matchers.length - 1]!;
+    return reflectionMatcher.hooks[0]!;
+  }
+
+  function chatToInput(toolInput: unknown) {
+    return {
+      hook_event_name: "PreToolUse" as const,
+      tool_name: "mcp__agents__chat_to_fixer",
+      tool_input: toolInput,
+      tool_use_id: "tu-1",
+    };
+  }
+
+  it("denies when justification is absent", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(fn, chatToInput({ instruction: "fix it" }));
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+  });
+
+  it("denies when justification is not an object", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({ instruction: "fix it", justification: "some string" }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+  });
+
+  it("denies when confidence is missing", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: { pattern: "Detection → Resolution", handoff: "3 errors found" },
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("confidence");
+  });
+
+  it("denies when confidence is below threshold", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: {
+          pattern: "Detection → Resolution",
+          handoff: "3 errors found",
+          confidence: 85,
+        },
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("85");
+  });
+
+  it("allows when confidence meets threshold", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: {
+          pattern: "Detection → Resolution",
+          handoff: "3 errors found",
+          confidence: 90,
+        },
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
+  });
+
+  it("allows when confidence exceeds threshold", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: { pattern: "Phase handoff", handoff: "report complete", confidence: 98 },
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
   });
 });

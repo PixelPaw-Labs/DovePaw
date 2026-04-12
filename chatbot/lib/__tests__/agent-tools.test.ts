@@ -37,7 +37,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
-import type { AgentConfig } from "@/a2a/lib/spawn";
+import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

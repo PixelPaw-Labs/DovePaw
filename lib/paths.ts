@@ -21,6 +21,8 @@ export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
 export const DOVEPAW_DIR = join(process.env.HOME!, ".dovepaw");
 /** ~/.dovepaw/settings.json — global settings (watched repositories, etc.) */
 export const SETTINGS_FILE = join(DOVEPAW_DIR, "settings.json");
+/** ~/.dovepaw/agent-links.json — global agent communication link topology */
+export const AGENT_LINKS_FILE = join(DOVEPAW_DIR, "agent-links.json");
 /** ~/.dovepaw/settings.agents/ — per-agent settings directory */
 export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
 /** ~/.dovepaw/workspaces/ — isolated execution workspace roots for all agents */
