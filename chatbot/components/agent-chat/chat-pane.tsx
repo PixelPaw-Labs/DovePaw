@@ -82,6 +82,20 @@ export function ChatPane({
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(true);
 
+  // Auto-open workflow panel when a history session has progress but no visible chat messages
+  // (e.g. scheduled sessions interrupted before the final assistant message was saved)
+  const userOpenedWorkflow = React.useRef(false);
+  React.useEffect(() => {
+    if (userOpenedWorkflow.current) return;
+    if (isLoading) return;
+    const hasVisibleMessages = messages.some((msg) =>
+      msg.segments.some((s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call"),
+    );
+    if (!hasVisibleMessages && sessionProgress.length > 0) {
+      setWorkflowOpen(true);
+    }
+  }, [messages, sessionProgress, isLoading]);
+
   const [panelWidth, setPanelWidth] = React.useState(480);
   const isResizing = React.useRef(false);
   const [historyPanelHeight, setHistoryPanelHeight] = React.useState(220);
@@ -158,7 +172,11 @@ export function ChatPane({
             >
               <Clock className="w-4 h-4" />
             </button>
-            {messages.length > 0 && (
+            {messages.some((msg) =>
+              msg.segments.some(
+                (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
+              ),
+            ) && (
               <button
                 onClick={newSession}
                 className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
@@ -168,7 +186,10 @@ export function ChatPane({
               </button>
             )}
             <button
-              onClick={() => setWorkflowOpen((v) => !v)}
+              onClick={() => {
+                userOpenedWorkflow.current = true;
+                setWorkflowOpen((v) => !v);
+              }}
               className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${workflowOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
               title="Workflow"
             >
@@ -193,7 +214,11 @@ export function ChatPane({
         {/* Chat area */}
         <Conversation className="flex-1 bg-background">
           <ConversationContent>
-            {messages.length === 0 ? (
+            {messages.filter((msg) =>
+              msg.segments.some(
+                (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
+              ),
+            ).length === 0 ? (
               <ConversationEmptyState className="justify-start pt-8">
                 {!isLoading && (
                   <IntroCard
@@ -290,7 +315,10 @@ export function ChatPane({
                 sessions={sessions}
                 activeSessionId={currentSessionId}
                 runningSessionIds={runningSessionIds}
-                onSelect={setSessionId}
+                onSelect={(id) => {
+                  userOpenedWorkflow.current = false;
+                  void setSessionId(id);
+                }}
                 onNew={newSession}
                 onDelete={async (id) => {
                   await deleteSession(id);
