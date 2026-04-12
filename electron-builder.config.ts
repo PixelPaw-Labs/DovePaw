@@ -1,8 +1,8 @@
 import type { Configuration } from "electron-builder";
 
 const config: Configuration = {
-  appId: "com.dovepaw.dovepawa2a",
-  productName: "DovePaw A2A",
+  appId: "com.dovepaw.dovepaw",
+  productName: "DovePaw",
   directories: {
     output: "electron/release",
   },

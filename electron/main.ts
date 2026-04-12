@@ -14,6 +14,7 @@ const ASSETS_DIR = resolve(__dirname, "../assets");
 const LOGS_DIR = resolve(process.env.HOME!, ".dovepaw/logs");
 const NPM_BIN = "npm";
 const CHATBOT_URL = `http://localhost:${NEXT_PORT}`;
+const SERVICE_NAME = "DovePaw";
 
 let tray: Tray | null = null;
 let serversProcess: ChildProcess | null = null;
@@ -92,14 +93,14 @@ function refreshTray(): void {
     tray.setImage(icon);
     tray.setTitle("");
   }
-  tray.setToolTip(healthy ? "DovePaw A2A — servers running" : "DovePaw A2A — servers down");
+  tray.setToolTip(healthy ? `${SERVICE_NAME} — servers running` : `${SERVICE_NAME} — servers down`);
   tray.setContextMenu(buildMenu(healthy));
 }
 
 function buildMenu(isHealthy: boolean): Electron.Menu {
   return Menu.buildFromTemplate([
     {
-      label: "DovePaw A2A",
+      label: SERVICE_NAME,
       icon: nativeImage.createFromPath(
         resolve(ASSETS_DIR, isHealthy ? "dot-green.png" : "dot-red.png"),
       ),
@@ -123,7 +124,8 @@ function buildMenu(isHealthy: boolean): Electron.Menu {
       label: "Start at Login",
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
-      click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked }),
+      click: (item) =>
+        app.setLoginItemSettings({ openAtLogin: item.checked, serviceName: SERVICE_NAME }),
     },
     { type: "separator" },
     {
@@ -181,8 +183,8 @@ function startNextJs(): void {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-app.setName("DovePaw A2A");
-process.title = "dovepaw-a2a";
+app.setName(SERVICE_NAME);
+process.title = SERVICE_NAME;
 
 void app.whenReady().then(async () => {
   await linkAgents();
@@ -196,7 +198,7 @@ void app.whenReady().then(async () => {
   const icon = makeIcon(false);
   tray = new Tray(icon);
   if (icon.isEmpty()) tray.setTitle("▽");
-  tray.setToolTip("DovePaw A2A — starting…");
+  tray.setToolTip(`${SERVICE_NAME} — starting…`);
   tray.setContextMenu(buildMenu(false));
   tray.on("click", () => tray?.popUpContextMenu());
 
