@@ -28,6 +28,12 @@ vi.mock("@@/lib/paths", () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   agentDefinitionFile: (agentName: string) =>
     require("node:path").join(tmpAgentSettingsDir, agentName, "agent.json"),
+  // tmp dir: use a subdirectory so it is always empty and distinct from settings dir
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  DOVEPAW_TMP_DIR: require("node:path").join(tmpAgentSettingsDir, "__tmp__"),
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  tmpAgentDefinitionFile: (agentName: string) =>
+    require("node:path").join(tmpAgentSettingsDir, "__tmp__", agentName, "agent.json"),
 }));
 
 import {

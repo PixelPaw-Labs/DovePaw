@@ -1,6 +1,14 @@
 import { ChatApp } from "@/components/chat-app";
-import { readAgentConfigEntries } from "@@/lib/agents-config";
+import { readAgentConfigEntries, readTmpAgentConfigEntries } from "@@/lib/agents-config";
+import { listPlugins } from "@@/lib/plugin-manager";
 
 export default async function Home() {
-  return <ChatApp agentConfigs={await readAgentConfigEntries()} />;
+  const [agentConfigs, tmpAgentConfigs, plugins] = await Promise.all([
+    readAgentConfigEntries(),
+    readTmpAgentConfigEntries(),
+    listPlugins(),
+  ]);
+  return (
+    <ChatApp agentConfigs={agentConfigs} tmpAgentConfigs={tmpAgentConfigs} plugins={plugins} />
+  );
 }

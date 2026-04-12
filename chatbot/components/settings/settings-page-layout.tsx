@@ -1,6 +1,7 @@
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import type { PluginRecord } from "@@/lib/plugin-schemas";
 
 interface BreadcrumbItem {
   label: string;
@@ -9,6 +10,8 @@ interface BreadcrumbItem {
 
 interface SettingsPageLayoutProps {
   agentConfigs: AgentConfigEntry[];
+  tmpAgentConfigs?: AgentConfigEntry[];
+  plugins?: readonly Pick<PluginRecord, "path" | "name">[];
   title: string;
   /** Breadcrumb items rendered in the sticky header (after the hardcoded ← Home). */
   breadcrumbItems?: BreadcrumbItem[];
@@ -17,13 +20,19 @@ interface SettingsPageLayoutProps {
 
 export function SettingsPageLayout({
   agentConfigs,
+  tmpAgentConfigs = [],
+  plugins = [],
   title,
   breadcrumbItems,
   children,
 }: SettingsPageLayoutProps) {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <AgentSidebar agentConfigs={agentConfigs} />
+      <AgentSidebar
+        agentConfigs={agentConfigs}
+        tmpAgentConfigs={tmpAgentConfigs}
+        plugins={plugins}
+      />
 
       <main className="flex-1 flex flex-col bg-background relative min-w-0 overflow-y-auto">
         <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex items-center gap-2 w-full px-8 py-4 shrink-0">

@@ -8,9 +8,16 @@ import {
   access,
   constants,
 } from "node:fs/promises";
+import { join } from "node:path";
 import { agentFileSchema, type AgentConfigEntry, type AgentFile } from "./agents-config-schemas";
 import { buildAgentDef } from "./agents";
-import { AGENT_SETTINGS_DIR, agentConfigDir, agentDefinitionFile } from "./paths";
+import {
+  AGENT_SETTINGS_DIR,
+  DOVEPAW_TMP_DIR,
+  agentConfigDir,
+  agentDefinitionFile,
+  tmpAgentDefinitionFile,
+} from "./paths";
 import type { AgentDef } from "./agents";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -38,6 +45,7 @@ async function tryParseFile(file: string): Promise<AgentFile | null> {
 
 /**
  * Read a single agent's combined definition+settings file.
+ * Checks settings.agents/ first; falls back to tmp/ for session agents.
  * Returns null when the file is absent or corrupt (after bak recovery attempt).
  */
 export async function readAgentFile(agentName: string): Promise<AgentFile | null> {
@@ -50,7 +58,9 @@ export async function readAgentFile(agentName: string): Promise<AgentFile | null
     await copyFile(bak, file);
     return backup;
   }
-  return null;
+  // Fall back to tmp/ for session agents created by Dove at runtime
+  const tmpFile = tmpAgentDefinitionFile(agentName);
+  return tryParseFile(tmpFile);
 }
 
 /** Scan all agent subdirectories and return their parsed agent.json files. */
@@ -152,8 +162,41 @@ export async function patchAgentDefinition(
   await patchAgentFile(agentName, defPatch);
 }
 
-/** Delete the agent's entire directory. */
+// ─── Session (tmp) agents ─────────────────────────────────────────────────────
+
+/** Scan ~/.dovepaw/tmp/ and return parsed AgentConfigEntry[] for session agents. Returns [] when absent. */
+export async function readTmpAgentConfigEntries(): Promise<AgentConfigEntry[]> {
+  if (!(await fileExists(DOVEPAW_TMP_DIR))) return [];
+  try {
+    const entries = await readdir(DOVEPAW_TMP_DIR, { withFileTypes: true });
+    const files = await Promise.all(
+      entries
+        .filter((d) => d.isDirectory())
+        .map((d) => tryParseFile(tmpAgentDefinitionFile(d.name))),
+    );
+    return (
+      files
+        .filter((f): f is AgentFile => f !== null)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        .map(({ repos: _r, envVars: _e, version: _v, locked: _l, ...entry }) => entry)
+    );
+  } catch {
+    return [];
+  }
+}
+
+// ─── Grouping (re-exported from client-safe lib/agent-groups.ts) ─────────────
+export { groupAgentsByPlugin, type AgentGroup } from "./agent-groups";
+
+// ─── Delete ───────────────────────────────────────────────────────────────────
+
+/** Delete the agent's entire directory (settings.agents/ or tmp/ for session agents). */
 export async function deleteAgentDefinition(agentName: string): Promise<void> {
-  const dir = agentConfigDir(agentName);
-  if (await fileExists(dir)) await rm(dir, { recursive: true });
+  const settingsDir = agentConfigDir(agentName);
+  if (await fileExists(settingsDir)) {
+    await rm(settingsDir, { recursive: true });
+    return;
+  }
+  const tmpDir = join(DOVEPAW_TMP_DIR, agentName);
+  if (await fileExists(tmpDir)) await rm(tmpDir, { recursive: true });
 }

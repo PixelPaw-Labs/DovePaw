@@ -2,7 +2,12 @@ import { notFound } from "next/navigation";
 import { SettingsPageLayout } from "@/components/settings/settings-page-layout";
 import { AgentSettingsContent } from "@/components/settings/agent-settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
-import { readAgentConfigEntries, readAgentFile } from "@@/lib/agents-config";
+import {
+  readAgentConfigEntries,
+  readAgentFile,
+  readTmpAgentConfigEntries,
+} from "@@/lib/agents-config";
+import { listPlugins } from "@@/lib/plugin-manager";
 
 interface Props {
   params: Promise<{ agentName: string }>;
@@ -21,15 +26,19 @@ export default async function AgentSettingsPage({ params }: Props) {
   const agentEntry = allEntries.find((a) => a.name === agentName);
   if (!agentEntry) notFound();
 
-  const [agentSettings, agentFile] = await Promise.all([
+  const [agentSettings, agentFile, tmpAgentConfigs, plugins] = await Promise.all([
     readAgentSettings(agentName),
     readAgentFile(agentName),
+    readTmpAgentConfigEntries(),
+    listPlugins(),
   ]);
   const globalSettings = readSettings();
 
   return (
     <SettingsPageLayout
       agentConfigs={allEntries}
+      tmpAgentConfigs={tmpAgentConfigs}
+      plugins={plugins}
       title={agentEntry.displayName}
       breadcrumbItems={[{ label: "Settings", href: "/settings" }]}
     >

@@ -2,15 +2,18 @@
 
 import * as React from "react";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
 import { AgentChat } from "@/components/agent-chat";
 import { ConversationProvider } from "@/components/hooks/use-conversation-context";
 
 interface ChatAppProps {
   agentConfigs: AgentConfigEntry[];
+  tmpAgentConfigs?: AgentConfigEntry[];
+  plugins?: readonly Pick<PluginRecord, "path" | "name">[];
 }
 
-export function ChatApp({ agentConfigs }: ChatAppProps) {
+export function ChatApp({ agentConfigs, tmpAgentConfigs = [], plugins = [] }: ChatAppProps) {
   const [activeAgentId, setActiveAgentId] = React.useState("dove");
   const [isLoading, setIsLoading] = React.useState(false);
   const [doveIsRunning, setDoveIsRunning] = React.useState(false);
@@ -35,6 +38,8 @@ export function ChatApp({ agentConfigs }: ChatAppProps) {
       <div className="flex h-screen bg-background overflow-hidden">
         <AgentSidebar
           agentConfigs={agentConfigs}
+          tmpAgentConfigs={tmpAgentConfigs}
+          plugins={plugins}
           onSelectAgent={handleSelectAgent}
           activeAgentId={activeAgentId}
           onClearAllHistory={handleClearAllHistory}

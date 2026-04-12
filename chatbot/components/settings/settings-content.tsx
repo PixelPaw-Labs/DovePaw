@@ -12,6 +12,7 @@ import { AgentManagementContent } from "./agent-management-content";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { z } from "zod";
 import {
   type GlobalSettings,
@@ -30,6 +31,7 @@ interface SettingsContentProps {
   initialAgentRepos: Record<string, string[]>;
   agentConfigs: AgentConfigEntry[];
   scheduledAgentConfigs: AgentConfigEntry[];
+  plugins?: readonly Pick<PluginRecord, "path" | "name">[];
 }
 
 export function SettingsContent({
@@ -37,6 +39,7 @@ export function SettingsContent({
   initialAgentRepos,
   agentConfigs,
   scheduledAgentConfigs,
+  plugins = [],
 }: SettingsContentProps) {
   const [tab, setTab] = React.useState<Tab>("repositories");
   const [repositories, setRepositories] = React.useState(initialSettings.repositories);
@@ -237,7 +240,10 @@ export function SettingsContent({
         ) : tab === "env-vars" ? (
           <EnvVarTable envVars={envVars} onEdit={setEditingEnvVar} onRemove={handleRemoveEnvVar} />
         ) : (
-          <AgentManagementContent agents={scheduledAgentConfigs.map(buildAgentDef)} />
+          <AgentManagementContent
+            agents={scheduledAgentConfigs.map(buildAgentDef)}
+            plugins={plugins}
+          />
         )}
       </div>
 

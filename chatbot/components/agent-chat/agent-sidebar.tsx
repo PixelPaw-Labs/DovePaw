@@ -2,18 +2,33 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Bot, Network, Package, PawPrint, Settings, Trash2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Bot,
+  ChevronDown,
+  Network,
+  Package,
+  PawPrint,
+  Settings,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import { groupAgentsByPlugin, type AgentGroup } from "@@/lib/agent-groups";
+import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { cn } from "@/lib/utils";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { useConversationContext } from "@/components/hooks/use-conversation-context";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
+import type { AgentStatus } from "@/a2a/heartbeat-types";
 import { AgentButton } from "./agent-button";
 
 interface AgentSidebarProps {
   agentConfigs: AgentConfigEntry[];
+  tmpAgentConfigs?: AgentConfigEntry[];
+  plugins?: readonly Pick<PluginRecord, "path" | "name">[];
   activeAgentId?: string;
   onSelectAgent?: (agentId: string) => void;
   onClearAllHistory?: () => void;
@@ -21,14 +36,16 @@ interface AgentSidebarProps {
 
 export function AgentSidebar({
   agentConfigs,
+  tmpAgentConfigs = [],
+  plugins = [],
   activeAgentId = "dove",
   onSelectAgent,
   onClearAllHistory,
 }: AgentSidebarProps) {
   const { doveIsRunning } = useConversationContext();
-  const agents = agentConfigs.map(buildAgentDef);
   const statuses = useAgentHeartbeat();
   const pathname = usePathname();
+  const router = useRouter();
   const isSettings = pathname === "/settings";
   const isPlugins = pathname === "/settings/plugins";
   const isAgentLinks = pathname === "/settings/agent-links";
@@ -39,7 +56,6 @@ export function AgentSidebar({
 
   const isDoveLoading = doveIsRunning;
   const doveShimmerRef = useButtonShimmer(isDoveLoading);
-  // Keep the selected theme while Dove is running so switching away doesn't drop to unselected style.
   const isDoveSelected = (activeAgentId === "dove" && !isSettings) || isDoveLoading;
 
   const [confirming, setConfirming] = React.useState(false);
@@ -62,6 +78,19 @@ export function AgentSidebar({
     };
   }, []);
 
+  const groups = groupAgentsByPlugin(agentConfigs, tmpAgentConfigs, plugins);
+  // Show group headers whenever any group has a named plugin — even if there's only one plugin
+  const showHeaders = groups.some((g) => g.pluginName !== "");
+
+  async function handleDeleteTmpAgent(agentName: string) {
+    await fetch("/api/settings/agents", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: agentName }),
+    });
+    router.refresh();
+  }
+
   return (
     <aside className="h-screen w-64 shrink-0 flex flex-col bg-background border-r border-border/30">
       {/* Logo header */}
@@ -81,9 +110,9 @@ export function AgentSidebar({
         </div>
       </div>
 
-      {/* Agent nav */}
+      {/* Agent nav — scrolls independently; settings links stay pinned below */}
       <nav className="flex flex-col gap-1 flex-1 overflow-y-auto misty-scroll">
-        {/* Dove — the orchestrator (always first) */}
+        {/* Dove — the orchestrator (always first, outside all groups) */}
         <button
           onClick={() => onSelectAgent?.("dove")}
           className={cn(
@@ -116,26 +145,24 @@ export function AgentSidebar({
           <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", "bg-green-500 animate-pulse")} />
         </button>
 
-        {agents.map((agent) => {
-          const isAgentSettings =
-            pathname === `/settings/agents/${agent.name}` ||
-            pathname === `/settings/agents/${agent.name}/repos`;
-          return (
-            <AgentButton
-              key={agent.manifestKey}
-              agent={agent}
-              isActive={!isSettings && !isAgentSettings && activeAgentId === agent.name}
-              status={statuses[agent.manifestKey]}
-              hasData={hasData}
-              onClick={() => onSelectAgent?.(agent.name)}
-              settingsHref={`/settings/agents/${agent.name}`}
-              isAgentSettings={isAgentSettings}
-            />
-          );
-        })}
+        {/* Plugin groups */}
+        {groups.map((group) => (
+          <PluginGroup
+            key={group.pluginName || "__ungrouped__"}
+            group={group}
+            showHeader={showHeaders && group.pluginName !== ""}
+            pathname={pathname}
+            activeAgentId={activeAgentId}
+            isSettings={isSettings}
+            statuses={statuses}
+            hasData={hasData}
+            onSelectAgent={onSelectAgent}
+            onDeleteTmpAgent={group.temporary ? handleDeleteTmpAgent : undefined}
+          />
+        ))}
       </nav>
 
-      {/* Settings nav links */}
+      {/* Settings nav links — always pinned at bottom */}
       <div className="pb-2 flex flex-col gap-0.5">
         {onClearAllHistory && (
           <button
@@ -219,5 +246,86 @@ export function AgentSidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+// ─── PluginGroup ──────────────────────────────────────────────────────────────
+
+interface PluginGroupProps {
+  group: AgentGroup;
+  showHeader: boolean;
+  pathname: string;
+  activeAgentId: string;
+  isSettings: boolean;
+  statuses: Record<string, AgentStatus>;
+  hasData: boolean;
+  onSelectAgent?: (agentId: string) => void;
+  onDeleteTmpAgent?: (agentName: string) => Promise<void>;
+}
+
+function PluginGroup({
+  group,
+  showHeader,
+  pathname,
+  activeAgentId,
+  isSettings,
+  statuses,
+  hasData,
+  onSelectAgent,
+  onDeleteTmpAgent,
+}: PluginGroupProps) {
+  const [open, setOpen] = React.useState(true);
+
+  const GroupIcon = group.temporary ? Sparkles : Package;
+
+  const agentButtons = group.agents.map((config) => {
+    const agent = buildAgentDef(config);
+    const isAgentSettings =
+      pathname === `/settings/agents/${agent.name}` ||
+      pathname === `/settings/agents/${agent.name}/repos`;
+    return (
+      <div key={agent.manifestKey} className="flex items-center gap-1 pr-1">
+        <AgentButton
+          agent={agent}
+          isActive={!isSettings && !isAgentSettings && activeAgentId === agent.name}
+          status={statuses[agent.manifestKey]}
+          hasData={hasData}
+          onClick={() => onSelectAgent?.(agent.name)}
+          settingsHref={`/settings/agents/${agent.name}`}
+          isAgentSettings={isAgentSettings}
+        />
+        {onDeleteTmpAgent && (
+          <button
+            onClick={() => void onDeleteTmpAgent(agent.name)}
+            title={`Delete ${agent.displayName}`}
+            className="shrink-0 p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    );
+  });
+
+  if (!showHeader) {
+    return <>{agentButtons}</>;
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col mt-3">
+      <CollapsibleTrigger className="flex items-center gap-2 px-4 py-2 w-full text-left border-t border-border/40 bg-muted/40 hover:bg-muted/70 transition-colors group">
+        <GroupIcon className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+        <span className="flex-1 text-[11px] uppercase tracking-widest font-bold text-muted-foreground truncate">
+          {group.pluginName}
+        </span>
+        <ChevronDown
+          className={cn(
+            "w-3.5 h-3.5 shrink-0 text-muted-foreground transition-transform duration-200",
+            open ? "rotate-0" : "-rotate-90",
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="flex flex-col gap-0">{agentButtons}</CollapsibleContent>
+    </Collapsible>
   );
 }

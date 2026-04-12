@@ -19,6 +19,7 @@ vi.mock("@/components/hooks/use-agent-heartbeat", () => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => "/",
+  useRouter: () => ({ refresh: vi.fn() }),
 }));
 
 vi.mock("@@/lib/agents", () => ({

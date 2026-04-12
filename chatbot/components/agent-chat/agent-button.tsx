@@ -66,23 +66,31 @@ function LaunchdBadge({
 }) {
   if (processing)
     return (
-      <span className="text-[9px] text-blue-500/80 uppercase tracking-wide">
-        processing{processingTrigger ? ` · ${processingTrigger}` : ""}
+      <span className="text-[9px] text-blue-500 font-semibold uppercase tracking-wide">
+        ● processing{processingTrigger ? ` · ${processingTrigger}` : ""}
       </span>
     );
 
   if (!launchd)
-    return <span className="text-[9px] text-muted-foreground/30 uppercase tracking-wide">—</span>;
+    return (
+      <span className="text-[9px] text-muted-foreground/50 uppercase tracking-wide">
+        not installed
+      </span>
+    );
   if (!launchd.loaded)
     return (
-      <span className="text-[9px] text-muted-foreground/40 uppercase tracking-wide">unloaded</span>
+      <span className="text-[9px] text-amber-500/80 font-medium uppercase tracking-wide">
+        unloaded
+      </span>
     );
 
   const countdown = <ScheduleCountdown schedule={schedule} />;
 
   return (
     <span className="flex items-center gap-1.5">
-      <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">● idle</span>
+      <span className="text-[9px] text-emerald-500/90 font-medium uppercase tracking-wide">
+        ● idle
+      </span>
       {countdown}
     </span>
   );
@@ -143,7 +151,7 @@ export function AgentButton({
         <Icon className="w-3 h-3" />
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        <span className={cn("text-sm font-medium", !isSelected && "text-foreground/80")}>
+        <span className={cn("text-xs font-medium", !isSelected && "text-foreground/80")}>
           {agent.displayName}
         </span>
         <LaunchdBadge

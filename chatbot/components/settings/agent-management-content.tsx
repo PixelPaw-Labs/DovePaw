@@ -1,7 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { ChevronDown, Package } from "lucide-react";
 import type { AgentDef } from "@@/lib/agents";
+import { resolvePluginName } from "@@/lib/agent-groups";
+import type { PluginRecord } from "@@/lib/plugin-schemas";
+import { cn } from "@/lib/utils";
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { z } from "zod";
 
 const agentLaunchdStatusSchema = z.object({
@@ -33,11 +38,44 @@ async function callAction(agentName: string, action: Action): Promise<AgentLaunc
   return agentLaunchdStatusSchema.parse(await res.json());
 }
 
-interface AgentManagementContentProps {
+interface AgentDefGroup {
+  pluginName: string;
+  pluginPath?: string;
   agents: AgentDef[];
 }
 
-export function AgentManagementContent({ agents }: AgentManagementContentProps) {
+function groupAgentDefs(
+  agents: AgentDef[],
+  plugins: readonly Pick<PluginRecord, "path" | "name">[] = [],
+): AgentDefGroup[] {
+  const ungrouped: AgentDef[] = [];
+  const byPlugin = new Map<string, AgentDef[]>();
+  for (const agent of agents) {
+    if (!agent.pluginPath) {
+      ungrouped.push(agent);
+    } else {
+      if (!byPlugin.has(agent.pluginPath)) byPlugin.set(agent.pluginPath, []);
+      byPlugin.get(agent.pluginPath)!.push(agent);
+    }
+  }
+  const result: AgentDefGroup[] = [];
+  if (ungrouped.length > 0) result.push({ pluginName: "", agents: ungrouped });
+  for (const [pluginPath, pluginAgents] of byPlugin) {
+    result.push({
+      pluginName: resolvePluginName(pluginPath, plugins),
+      pluginPath,
+      agents: pluginAgents,
+    });
+  }
+  return result;
+}
+
+interface AgentManagementContentProps {
+  agents: AgentDef[];
+  plugins?: readonly Pick<PluginRecord, "path" | "name">[];
+}
+
+export function AgentManagementContent({ agents, plugins = [] }: AgentManagementContentProps) {
   const [statuses, setStatuses] = React.useState<AllAgentsStatus | null>(null);
   const [busy, setBusy] = React.useState<string | null>(null); // agentName currently acting
   const [installingAll, setInstallingAll] = React.useState(false);
@@ -110,21 +148,71 @@ export function AgentManagementContent({ agents }: AgentManagementContentProps) 
         </div>
       )}
 
-      {/* Card grid — 2 columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {agents.map((agent) => (
-          <AgentCard
-            key={agent.name}
-            agent={agent}
-            status={statuses?.[agent.name] ?? null}
-            isBusy={busy === agent.name}
-            onAction={(action) => void handleAction(agent.name, action)}
-          />
-        ))}
-      </div>
+      {/* Cards grouped by plugin */}
+      {groupAgentDefs(agents, plugins).map((group) => (
+        <PluginSection
+          key={group.pluginName || "__ungrouped__"}
+          group={group}
+          statuses={statuses}
+          busy={busy}
+          onAction={handleAction}
+        />
+      ))}
     </div>
   );
 }
+
+// ─── PluginSection ────────────────────────────────────────────────────────────
+
+interface PluginSectionProps {
+  group: AgentDefGroup;
+  statuses: AllAgentsStatus | null;
+  busy: string | null;
+  onAction: (agentName: string, action: Action) => void;
+}
+
+function PluginSection({ group, statuses, busy, onAction }: PluginSectionProps) {
+  const [open, setOpen] = React.useState(true);
+
+  const cards = (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {group.agents.map((agent) => (
+        <AgentCard
+          key={agent.name}
+          agent={agent}
+          status={statuses?.[agent.name] ?? null}
+          isBusy={busy === agent.name}
+          onAction={(action) => onAction(agent.name, action)}
+        />
+      ))}
+    </div>
+  );
+
+  if (!group.pluginName) return cards;
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className="flex items-center gap-2 mb-3 group w-full text-left">
+        <Package className="w-4 h-4 text-muted-foreground/60 shrink-0" />
+        <span className="text-sm font-semibold text-muted-foreground flex-1">
+          {group.pluginName}
+        </span>
+        <span className="text-[10px] text-muted-foreground/50 font-mono">
+          {group.agents.length} agent{group.agents.length !== 1 ? "s" : ""}
+        </span>
+        <ChevronDown
+          className={cn(
+            "w-4 h-4 shrink-0 text-muted-foreground/40 transition-transform duration-200",
+            open ? "rotate-0" : "-rotate-90",
+          )}
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent>{cards}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ─── AgentCard ────────────────────────────────────────────────────────────────
 
 interface AgentCardProps {
   agent: AgentDef;

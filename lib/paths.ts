@@ -77,6 +77,11 @@ export const portsFile = (port: string | number): string =>
   join(DOVEPAW_DIR, `.ports.${port}.json`);
 /** ~/.dovepaw/.a2a-servers.pid — PID of the running A2A servers process */
 export const A2A_SERVERS_PID_FILE = join(DOVEPAW_DIR, ".a2a-servers.pid");
+/** ~/.dovepaw/tmp/ — dynamically created session agent configs (written by Dove at runtime) */
+export const DOVEPAW_TMP_DIR = join(DOVEPAW_DIR, "tmp");
+/** ~/.dovepaw/tmp/<agentName>/agent.json — session agent definition */
+export const tmpAgentDefinitionFile = (agentName: string) =>
+  join(DOVEPAW_TMP_DIR, agentName, "agent.json");
 /** ~/.dovepaw/plugins — installed plugin directories */
 export const PLUGINS_DIR = join(DOVEPAW_DIR, "plugins");
 /** ~/.dovepaw/plugins.json — installed plugin registry */
