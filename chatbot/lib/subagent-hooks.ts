@@ -26,7 +26,7 @@ import { buildAgentHooks } from "@/lib/hooks";
 
 const SUB_AGENT_PROMPT_REMINDER = `<reminder>
 When the intent is to RUN this agent: call \`${START_SCRIPT_TOOL}\` first (returns runId immediately), then \`${AWAIT_SCRIPT_TOOL}\` as a background Task. Retry with the same runId if still_running.
-When the intent is to DELEGATE to a linked agent: use chat_to_*, start_chat_to_*/await_chat_to_*, review_with_*, or escalate_to_* — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
+When the intent is to HANDOFF to a linked agent: use chat_to_*, start_chat_to_*/await_chat_to_*, review_with_*, or escalate_to_* — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
 </reminder>`;
 
 // ─── Agent link self-reflection gate ─────────────────────────────────────────
@@ -134,12 +134,38 @@ const chatToReflectionMatcher: HookCallbackMatcher = {
   ],
 };
 
+// ─── Stop hook: handoff consideration ────────────────────────────────────────
+
+const HANDOFF_CONSIDERATION_PROMPT = `<reminder>
+Before you finish: have you considered whether to hand off your results to a linked agent?
+
+If you produced concrete output (findings, issues, report, IDs), check whether any of these patterns apply:
+${HANDOFF_PATTERNS}
+
+If yes: call the appropriate chat_to_*, review_with_*, or escalate_to_* tool before stopping.
+If no: you may stop.
+</reminder>`;
+
+const handoffConsiderationStop: HookCallbackMatcher = {
+  hooks: [
+    async (input) => {
+      if (input.hook_event_name !== "Stop") return { continue: true };
+      // Already reminded once this turn — let the agent stop.
+      if (input.stop_hook_active) return { continue: true };
+      // Pending scripts exist — the base Stop hook handles that case.
+      if (hasPendingScripts()) return { continue: true };
+      return { decision: "block", reason: HANDOFF_CONSIDERATION_PROMPT };
+    },
+  ],
+};
+
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
 /** Hooks for the QueryAgentExecutor sub-agent query(). */
 export function buildSubAgentHooks(
   cwd: string,
   additionalDirectories: string[],
+  hasAgentLinks: boolean,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const base = buildAgentHooks({
     postToolUseMatcher: "mcp__agents__await_.*",
@@ -157,5 +183,8 @@ export function buildSubAgentHooks(
   return {
     ...base,
     PreToolUse: [...(base.PreToolUse ?? []), chatToReflectionMatcher],
+    ...(hasAgentLinks && {
+      Stop: [...(base.Stop ?? []), handoffConsiderationStop],
+    }),
   };
 }

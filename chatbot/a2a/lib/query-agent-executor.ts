@@ -189,7 +189,11 @@ export class QueryAgentExecutor implements AgentExecutor {
                   ...chatToTools.map((t) => `mcp__agents__${t.name}`),
                 ],
                 mcpServers: { agents: innerMcpServer },
-                hooks: buildSubAgentHooks(workspace!.path, additionalDirectories),
+                hooks: buildSubAgentHooks(
+                  workspace!.path,
+                  additionalDirectories,
+                  chatToTools.length > 0,
+                ),
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",
                 includePartialMessages: true,

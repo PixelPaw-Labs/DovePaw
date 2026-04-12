@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAgentHooks } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
+import { hasPendingScripts } from "@/a2a/lib/spawn";
 
 const signal = new AbortController().signal;
 const callHook = (fn: Function, input: unknown) => fn(input, undefined, { signal });
@@ -271,13 +272,13 @@ describe("buildAgentHooks — UserPromptSubmit hook", () => {
 // ─── buildSubAgentHooks — self-reflection gate ────────────────────────────────
 
 vi.mock("@/a2a/lib/spawn", () => ({
-  hasPendingScripts: () => false,
-  getPendingRunIds: () => [],
+  hasPendingScripts: vi.fn().mockReturnValue(false),
+  getPendingRunIds: vi.fn().mockReturnValue([]),
 }));
 
 describe("buildSubAgentHooks — chat_to reflection gate", () => {
   function getReflectionHook() {
-    const hooks = buildSubAgentHooks("/cwd", []);
+    const hooks = buildSubAgentHooks("/cwd", [], true);
     // The reflection matcher is the last PreToolUse matcher
     const matchers = hooks.PreToolUse!;
     const reflectionMatcher = matchers[matchers.length - 1]!;
@@ -424,5 +425,53 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
       }),
     );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
+  });
+});
+
+// ─── buildSubAgentHooks — handoff consideration stop hook ─────────────────────
+
+describe("buildSubAgentHooks — handoff consideration stop hook", () => {
+  function getHandoffStopHook() {
+    const hooks = buildSubAgentHooks("/cwd", [], true);
+    // The handoff hook is the last Stop matcher (base pending-work hook is first)
+    const matchers = hooks.Stop!;
+    return matchers[matchers.length - 1]!.hooks[0]!;
+  }
+
+  it("blocks on first stop with handoff reminder when no pending scripts", async () => {
+    const fn = getHandoffStopHook();
+    const result = await callHook(fn, stopInput());
+    expect(result).toMatchObject({ decision: "block" });
+    expect((result as { reason: string }).reason).toContain("hand off");
+  });
+
+  it("allows on second stop when stop_hook_active is true", async () => {
+    const fn = getHandoffStopHook();
+    const result = await callHook(fn, stopInput({ stop_hook_active: true }));
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("allows when pending scripts exist (defers to base stop hook)", async () => {
+    vi.mocked(hasPendingScripts).mockReturnValueOnce(true);
+    const fn = getHandoffStopHook();
+    const result = await callHook(fn, stopInput());
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("passes through non-Stop events", async () => {
+    const fn = getHandoffStopHook();
+    const result = await callHook(fn, {
+      hook_event_name: "PreToolUse",
+      tool_name: "foo",
+      tool_input: {},
+      tool_use_id: "t1",
+    });
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("is absent when hasAgentLinks is false", () => {
+    const hooks = buildSubAgentHooks("/cwd", [], false);
+    // Stop array should only contain the base pending-work hook, not the handoff hook
+    expect(hooks.Stop).toHaveLength(1);
   });
 });
