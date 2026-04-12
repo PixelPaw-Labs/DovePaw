@@ -125,7 +125,11 @@ function buildMenu(isHealthy: boolean): Electron.Menu {
       type: "checkbox",
       checked: app.getLoginItemSettings().openAtLogin,
       click: (item) =>
-        app.setLoginItemSettings({ openAtLogin: item.checked, serviceName: SERVICE_NAME }),
+        app.setLoginItemSettings({
+          openAtLogin: item.checked,
+          serviceName: SERVICE_NAME,
+          name: SERVICE_NAME,
+        }),
     },
     { type: "separator" },
     {
