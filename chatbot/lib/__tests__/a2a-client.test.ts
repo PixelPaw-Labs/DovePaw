@@ -17,7 +17,6 @@ import {
   startAgentStream,
   collectStreamResult,
   extractArtifactResult,
-  collectAgentStreamContext,
   formatAgentStreamContext,
   type A2AStreamEvent,
 } from "@/lib/a2a-client";
@@ -268,86 +267,109 @@ describe("extractArtifactResult", () => {
   });
 });
 
-// ─── collectAgentStreamContext ────────────────────────────────────────────────
+// ─── collectStreamResult — finalState capture ─────────────────────────────────
 
-describe("collectAgentStreamContext", () => {
-  it("collects stream chunks as response", async () => {
-    const stream = asyncEvents(
-      {
-        kind: "artifact-update",
-        artifact: { name: "stream", parts: [{ kind: "text", text: "hello " }] },
-      },
-      {
-        kind: "artifact-update",
-        artifact: { name: "stream", parts: [{ kind: "text", text: "world" }] },
-      },
-      { kind: "status-update", status: { state: "completed" }, final: true },
-    ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
-    const ctx = await collectAgentStreamContext(stream, "ctx-1");
-    expect(ctx.response).toBe("hello world");
-    expect(ctx.state).toBe("completed");
-    expect(ctx.contextId).toBe("ctx-1");
+describe("collectStreamResult — finalState", () => {
+  it("captures finalState from terminal status-update", async () => {
+    makeClientFactory({
+      resubscribeTask: vi
+        .fn()
+        .mockReturnValue(
+          asyncEvents({ kind: "status-update", status: { state: "completed" }, final: true }),
+        ),
+    });
+    const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
+    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    expect(result.finalState).toBe("completed");
   });
 
-  it("collects thinking chunks", async () => {
-    const stream = asyncEvents(
-      {
-        kind: "artifact-update",
-        artifact: { name: "thinking", parts: [{ kind: "text", text: "Let me think..." }] },
-      },
-      { kind: "status-update", status: { state: "completed" }, final: true },
-    ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
-    const ctx = await collectAgentStreamContext(stream, "ctx-2");
-    expect(ctx.thinking).toBe("Let me think...");
+  it("leaves finalState undefined when no terminal status-update", async () => {
+    makeClientFactory({ resubscribeTask: vi.fn().mockReturnValue(asyncEvents()) });
+    const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
+    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    expect(result.finalState).toBeUndefined();
   });
 
-  it("collects tool calls paired with tool input", async () => {
-    const stream = asyncEvents(
-      {
-        kind: "artifact-update",
-        artifact: { name: "tool-call", parts: [{ kind: "text", text: "bash" }] },
-      },
-      {
-        kind: "artifact-update",
-        artifact: { name: "tool-input", parts: [{ kind: "text", text: '{"command":"ls"}' }] },
-      },
-      { kind: "status-update", status: { state: "completed" }, final: true },
-    ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
-    const ctx = await collectAgentStreamContext(stream, "ctx-3");
-    expect(ctx.toolCalls).toEqual(['bash: {"command":"ls"}']);
+  it("collects thinking from thinking artifact", async () => {
+    makeClientFactory({
+      resubscribeTask: vi.fn().mockReturnValue(
+        asyncEvents(
+          {
+            kind: "artifact-update",
+            artifact: { name: "thinking", parts: [{ kind: "text", text: "Let me think..." }] },
+          },
+          { kind: "status-update", status: { state: "completed" }, final: true },
+        ),
+      ),
+    });
+    const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
+    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    expect(result.thinking).toBe("Let me think...");
   });
 
-  it("returns unknown state when no final status-update", async () => {
-    const stream = asyncEvents() as AsyncGenerator<A2AStreamEvent, void, undefined>;
-    const ctx = await collectAgentStreamContext(stream, "ctx-4");
-    expect(ctx.state).toBe("unknown");
+  it("collects tool calls from tool-call + tool-input artifacts", async () => {
+    makeClientFactory({
+      resubscribeTask: vi.fn().mockReturnValue(
+        asyncEvents(
+          {
+            kind: "status-update",
+            status: {
+              state: "working",
+              message: {
+                kind: "message",
+                messageId: "1",
+                role: "agent",
+                parts: [{ kind: "text", text: "calling bash" }],
+                timestamp: "",
+              },
+            },
+            final: false,
+          },
+          {
+            kind: "artifact-update",
+            artifact: { name: "tool-call", parts: [{ kind: "text", text: "bash" }] },
+          },
+          {
+            kind: "artifact-update",
+            artifact: { name: "tool-input", parts: [{ kind: "text", text: '{"command":"ls"}' }] },
+          },
+          { kind: "status-update", status: { state: "completed" }, final: true },
+        ),
+      ),
+    });
+    const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
+    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    expect(result.toolCalls).toEqual(['bash: {"command":"ls"}']);
   });
 });
 
 // ─── formatAgentStreamContext ─────────────────────────────────────────────────
 
+const BASE_RESULT = {
+  output: "",
+  progress: [],
+  thinking: "",
+  toolCalls: [],
+  finalState: "completed",
+};
+
 describe("formatAgentStreamContext", () => {
   it("includes state and contextId", () => {
-    const text = formatAgentStreamContext(
-      { state: "completed", contextId: "abc", response: "", thinking: "", toolCalls: [] },
-      "MyAgent",
-    );
+    const text = formatAgentStreamContext(BASE_RESULT, "abc", "MyAgent");
     expect(text).toContain("completed");
     expect(text).toContain("abc");
   });
 
-  it("includes response section when present", () => {
-    const text = formatAgentStreamContext(
-      { state: "completed", contextId: "abc", response: "done", thinking: "", toolCalls: [] },
-      "MyAgent",
-    );
+  it("includes response section when output present", () => {
+    const text = formatAgentStreamContext({ ...BASE_RESULT, output: "done" }, "abc", "MyAgent");
     expect(text).toContain("<response>");
     expect(text).toContain("done");
   });
 
   it("includes thinking section when present", () => {
     const text = formatAgentStreamContext(
-      { state: "completed", contextId: "abc", response: "", thinking: "reasoning", toolCalls: [] },
+      { ...BASE_RESULT, thinking: "reasoning" },
+      "abc",
       "MyAgent",
     );
     expect(text).toContain("<thinking>");
@@ -356,7 +378,8 @@ describe("formatAgentStreamContext", () => {
 
   it("includes actions section when tool calls present", () => {
     const text = formatAgentStreamContext(
-      { state: "completed", contextId: "abc", response: "", thinking: "", toolCalls: ["bash: ls"] },
+      { ...BASE_RESULT, toolCalls: ["bash: ls"] },
+      "abc",
       "MyAgent",
     );
     expect(text).toContain("<actions>");
@@ -364,10 +387,7 @@ describe("formatAgentStreamContext", () => {
   });
 
   it("omits empty sections", () => {
-    const text = formatAgentStreamContext(
-      { state: "completed", contextId: "abc", response: "", thinking: "", toolCalls: [] },
-      "MyAgent",
-    );
+    const text = formatAgentStreamContext(BASE_RESULT, "abc", "MyAgent");
     expect(text).not.toContain("<thinking>");
     expect(text).not.toContain("<response>");
     expect(text).not.toContain("<actions>");

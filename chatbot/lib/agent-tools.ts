@@ -27,7 +27,6 @@ import { z } from "zod";
 import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
 import {
-  collectAgentStreamContext,
   collectStreamResult,
   formatAgentStreamContext,
   resolveAgentPort,
@@ -399,9 +398,15 @@ ${HANDOFF_PATTERNS}
         };
       }
 
-      const ctx = await collectAgentStreamContext(handle.stream, handle.contextId);
+      const { result } = await collectStreamResult(handle.stream);
       return {
-        content: [{ type: "text" as const, text: formatAgentStreamContext(ctx, displayName) }],
+        content: [
+          {
+            type: "text" as const,
+            text: formatAgentStreamContext(result, handle.contextId, displayName),
+          },
+        ],
+        structuredContent: { ...result, contextId: handle.contextId },
       };
     },
   );
@@ -479,17 +484,11 @@ export function makeAwaitChatToTool(targetDef: AgentDef, signal?: AbortSignal) {
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
       const client = await createAgentClient(port);
       const { result } = await subscribeTaskStream(client, taskId, signal, () => {});
-      const formatted = formatAgentStreamContext(
-        {
-          state: "completed",
-          contextId: taskId,
-          response: result.output,
-          thinking: result.thinking ?? "",
-          toolCalls: result.toolCalls ?? [],
-        },
-        displayName,
-      );
-      return { content: [{ type: "text" as const, text: formatted }] };
+      const formatted = formatAgentStreamContext(result, taskId, displayName);
+      return {
+        content: [{ type: "text" as const, text: formatted }],
+        structuredContent: { ...result, contextId: taskId },
+      };
     },
   );
 }
@@ -534,23 +533,18 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
         return {
           content: [{ type: "text" as const, text: `${displayName} did not start.` }],
         };
-      const ctx = await collectAgentStreamContext(handle.stream, handle.contextId);
-      const approved = /\bAPPROVED\b/i.test(ctx.response);
-      const rejected = /\bREJECTED\b/i.test(ctx.response);
+      const { result } = await collectStreamResult(handle.stream);
+      const approved = /\bAPPROVED\b/i.test(result.output);
+      const rejected = /\bREJECTED\b/i.test(result.output);
       const decision = approved ? "APPROVED" : rejected ? "REJECTED" : "NO_DECISION";
       return {
         content: [
           {
             type: "text" as const,
-            text: [
-              `Review decision: ${decision}`,
-              `Reviewer (${displayName}) contextId: ${ctx.contextId}`,
-              `\n<review_feedback>\n${ctx.response}\n</review_feedback>`,
-              ...(ctx.thinking ? [`\n<thinking>\n${ctx.thinking}\n</thinking>`] : []),
-            ].join("\n"),
+            text: `Review decision: ${decision}\n${formatAgentStreamContext(result, handle.contextId, displayName)}`,
           },
         ],
-        structuredContent: { decision, contextId: ctx.contextId },
+        structuredContent: { ...result, contextId: handle.contextId, decision },
       };
     },
   );
@@ -595,19 +589,15 @@ export function makeEscalateTool(targetDef: AgentDef, signal?: AbortSignal) {
       const handle = await startAgentStream(port, instruction, signal);
       if (!handle)
         return { content: [{ type: "text" as const, text: `${displayName} did not start.` }] };
-      const ctx = await collectAgentStreamContext(handle.stream, handle.contextId);
+      const { result } = await collectStreamResult(handle.stream);
       return {
         content: [
           {
             type: "text" as const,
-            text: [
-              `Escalation response from ${displayName}:`,
-              `contextId: ${ctx.contextId}`,
-              `\n<guidance>\n${ctx.response}\n</guidance>`,
-              ...(ctx.thinking ? [`\n<thinking>\n${ctx.thinking}\n</thinking>`] : []),
-            ].join("\n"),
+            text: formatAgentStreamContext(result, handle.contextId, displayName),
           },
         ],
+        structuredContent: { ...result, contextId: handle.contextId },
       };
     },
   );

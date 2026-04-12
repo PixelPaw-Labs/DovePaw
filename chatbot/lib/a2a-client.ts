@@ -28,6 +28,8 @@ export type StreamedResult = {
   thinking?: string;
   /** Tool calls made by the agent, formatted as "toolName: args". */
   toolCalls?: string[];
+  /** Terminal task state from the final status-update event. */
+  finalState?: string;
 };
 
 function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
@@ -86,6 +88,7 @@ export async function collectStreamResult(
   onComplete?: (result: StreamedResult) => void,
 ): Promise<{ taskId?: string; result: StreamedResult }> {
   let taskId: string | undefined;
+  let finalState: string | undefined;
   const progress: ProgressEntry[] = [];
   let pendingEntry: ProgressEntry | undefined;
   const thinkingChunks: string[] = [];
@@ -105,6 +108,7 @@ export async function collectStreamResult(
       output: output || "Something wrong with agent.",
       progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),
       thinking: thinkingChunks.join("").trim(),
+      finalState,
       toolCalls: [...toolCalls],
     };
   };
@@ -139,7 +143,9 @@ export async function collectStreamResult(
         }
       }
     } else if (event.kind === "status-update") {
-      if (event.status.message) {
+      if (event.final) {
+        finalState = event.status.state;
+      } else if (event.status.message) {
         for (const p of event.status.message.parts) {
           if (p.kind === "text") {
             const entry: ProgressEntry = { message: p.text, artifacts: {} };
@@ -156,82 +162,26 @@ export async function collectStreamResult(
   return { taskId, result: snapshot() };
 }
 
-// ─── Rich context collector ───────────────────────────────────────────────────
+// ─── Stream context formatter ─────────────────────────────────────────────────
 
 /**
- * Structured context collected from a completed A2A agent stream.
- * Includes thinking, tool calls, and the response so callers (Dove or another
- * agent) have full visibility into what the agent did — no black-box handoffs.
- */
-export type AgentStreamContext = {
-  state: string;
-  contextId: string;
-  response: string;
-  thinking: string;
-  toolCalls: string[];
-};
-
-/**
- * Consume an A2A event stream and collect the agent's thinking, tool calls,
- * and text response into a structured context object.
- *
- * Shared by makeChatToTool (agent→agent) and makeAwaitTool (Dove→agent) so
+ * Format a StreamedResult into a structured text block for LLM consumption.
+ * Used by makeChatToTool, makeAwaitTool, makeReviewTool, makeEscalateTool so
  * every level of the call chain returns consistent context to its caller.
  */
-export async function collectAgentStreamContext(
-  stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
+export function formatAgentStreamContext(
+  result: StreamedResult,
   contextId: string,
-): Promise<AgentStreamContext> {
-  let state = "unknown";
-  const streamChunks: string[] = [];
-  const thinkingChunks: string[] = [];
-  const toolCalls: string[] = [];
-  let pendingToolCall = "";
-
-  for await (const event of stream) {
-    if (event.kind === "artifact-update") {
-      const name = event.artifact.name ?? "";
-      const textPart = event.artifact.parts.find((p) => p.kind === "text");
-      const text = textPart?.kind === "text" ? (textPart.text ?? "") : "";
-      if (!text) continue;
-
-      if (name === ARTIFACT.STREAM) {
-        streamChunks.push(text);
-      } else if (name === ARTIFACT.THINKING) {
-        thinkingChunks.push(text);
-      } else if (name === ARTIFACT.TOOL_CALL) {
-        pendingToolCall = text;
-      } else if (name === ARTIFACT.TOOL_INPUT && pendingToolCall) {
-        toolCalls.push(`${pendingToolCall}: ${text}`);
-        pendingToolCall = "";
-      }
-    } else if (event.kind === "status-update" && event.final) {
-      state = event.status.state;
-    }
-  }
-
-  return {
-    state,
-    contextId,
-    response: streamChunks.join("").trim(),
-    thinking: thinkingChunks.join("").trim(),
-    toolCalls,
-  };
-}
-
-/**
- * Format an AgentStreamContext into a structured text block for LLM consumption.
- * Used by both makeChatToTool and makeAwaitTool so the context chain is consistent.
- */
-export function formatAgentStreamContext(ctx: AgentStreamContext, displayName: string): string {
+  displayName: string,
+): string {
   const lines: string[] = [
-    `Agent ${displayName} finished — state: ${ctx.state}.`,
-    `Session contextId: ${ctx.contextId} (pass as contextId to continue this conversation).`,
+    `Agent ${displayName} finished — state: ${result.finalState ?? "unknown"}.`,
+    `Session contextId: ${contextId} (pass as contextId to continue this conversation).`,
   ];
-  if (ctx.thinking) lines.push(`\n<thinking>\n${ctx.thinking}\n</thinking>`);
-  if (ctx.toolCalls.length > 0)
-    lines.push(`\n<actions>\n${ctx.toolCalls.map((t) => `- ${t}`).join("\n")}\n</actions>`);
-  if (ctx.response) lines.push(`\n<response>\n${ctx.response}\n</response>`);
+  if (result.thinking) lines.push(`\n<thinking>\n${result.thinking}\n</thinking>`);
+  if (result.toolCalls && result.toolCalls.length > 0)
+    lines.push(`\n<actions>\n${result.toolCalls.map((t) => `- ${t}`).join("\n")}\n</actions>`);
+  if (result.output) lines.push(`\n<response>\n${result.output}\n</response>`);
   return lines.join("\n");
 }
 

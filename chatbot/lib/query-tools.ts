@@ -340,13 +340,8 @@ export function makeAwaitTool(
           result: result.result,
         };
         const formatted = formatAgentStreamContext(
-          {
-            state: "completed",
-            contextId: result.taskId ?? taskId,
-            response: result.result.output,
-            thinking: result.result.thinking ?? "",
-            toolCalls: result.result.toolCalls ?? [],
-          },
+          result.result,
+          result.taskId ?? taskId,
           agent.displayName,
         );
         return {

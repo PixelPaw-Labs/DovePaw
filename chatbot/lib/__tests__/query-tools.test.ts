@@ -402,7 +402,8 @@ describe("makeAwaitTool", () => {
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
-    expect(JSON.parse(result.content[0].text).output).toBe("done output");
+    expect(result.structuredContent.result.output).toBe("done output");
+    expect(result.content[0].text).toContain("done output");
   });
 
   it("returns 'Something wrong with agent.' when stream has no artifacts", async () => {
@@ -412,7 +413,7 @@ describe("makeAwaitTool", () => {
       return { createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }) };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(JSON.parse(result.content[0].text).output).toBe("Something wrong with agent.");
+    expect(result.structuredContent.result.output).toBe("Something wrong with agent.");
   });
 
   it("resubscribes and collects chunks", async () => {
@@ -444,7 +445,7 @@ describe("makeAwaitTool", () => {
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
-    expect(JSON.parse(result.content[0].text).output).toBe("partial\nresult");
+    expect(result.structuredContent.result.output).toBe("partial\nresult");
   });
 
   it("always resubscribes regardless of task state", async () => {
@@ -779,11 +780,10 @@ describe("makeAwaitTool", () => {
     const h = captured[doveAwaitToolName(AGENT)];
     const result = await h({ taskId: "task-123" });
 
-    const parsed = JSON.parse(result.content[0].text);
-    expect(parsed.output).toContain("actual result");
-    expect(parsed.output).not.toContain("progress noise");
+    expect(result.structuredContent.result.output).toContain("actual result");
+    expect(result.structuredContent.result.output).not.toContain("progress noise");
     // progress messages are separated into their own array as ProgressEntry objects
-    expect(parsed.progress).toEqual(
+    expect(result.structuredContent.result.progress).toEqual(
       expect.arrayContaining([expect.objectContaining({ message: "progress noise" })]),
     );
   });
