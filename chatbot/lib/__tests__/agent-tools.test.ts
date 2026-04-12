@@ -2,6 +2,16 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({ tool: vi.fn() }));
 
+vi.mock("@/lib/a2a-client", () => ({
+  resolveAgentPort: vi.fn(),
+  startAgentStream: vi.fn(),
+  collectStreamResult: vi.fn(),
+  collectAgentStreamContext: vi.fn(),
+  formatAgentStreamContext: vi.fn(),
+  createAgentClient: vi.fn(),
+  subscribeTaskStream: vi.fn(),
+}));
+
 vi.mock("@/lib/launchd", () => ({
   installAgent: vi.fn(),
   uninstallAgent: vi.fn(),
@@ -32,7 +42,13 @@ vi.mock("@/a2a/lib/workspace", () => ({
 
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
-import { buildSubAgentPrompt, makeStartScriptTool, START_SCRIPT_TOOL } from "@/lib/agent-tools";
+import {
+  buildSubAgentPrompt,
+  makeStartScriptTool,
+  makeStartChatToTool,
+  START_SCRIPT_TOOL,
+} from "@/lib/agent-tools";
+import { resolveAgentPort, startAgentStream, collectStreamResult } from "@/lib/a2a-client";
 import type { AgentDef } from "@@/lib/agents";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
@@ -243,5 +259,79 @@ describe("makeStartScriptTool", () => {
       undefined,
       undefined,
     );
+  });
+});
+
+// ─── makeStartChatToTool ──────────────────────────────────────────────────────
+
+describe("makeStartChatToTool", () => {
+  async function* mockStream() {
+    /* empty stream */
+  }
+
+  function captureStartChatToHandler(backgroundTasks?: Promise<unknown>[]) {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    return makeStartChatToTool(AGENT, undefined, backgroundTasks) as any;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(startAgentStream).mockResolvedValue({
+      taskId: "task-123",
+      contextId: "ctx-456",
+      stream: mockStream(),
+      client: {} as any,
+    });
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: { output: "", progress: [], thinking: "", toolCalls: [] },
+    });
+  });
+
+  it("uses startAgentStream — not sendMessage", async () => {
+    const handler = captureStartChatToHandler();
+    await handler({ instruction: "do something" });
+    expect(startAgentStream).toHaveBeenCalledWith(9999, "do something", undefined, undefined);
+  });
+
+  it("returns taskId and contextId from the stream handle", async () => {
+    const handler = captureStartChatToHandler();
+    const result = (await handler({ instruction: "do something" })) as any;
+    expect(result.structuredContent).toEqual({ taskId: "task-123", contextId: "ctx-456" });
+  });
+
+  it("drains stream via collectStreamResult in background", async () => {
+    const handler = captureStartChatToHandler();
+    await handler({ instruction: "do something" });
+    expect(collectStreamResult).toHaveBeenCalled();
+  });
+
+  it("pushes drain task into backgroundTasks when provided", async () => {
+    const backgroundTasks: Promise<unknown>[] = [];
+    const handler = captureStartChatToHandler(backgroundTasks);
+    await handler({ instruction: "do something" });
+    expect(backgroundTasks).toHaveLength(1);
+  });
+
+  it("returns error when agent port not found", async () => {
+    vi.mocked(resolveAgentPort).mockReturnValue(null);
+    const handler = captureStartChatToHandler();
+    const result = (await handler({ instruction: "do something" })) as any;
+    expect(result.content[0].text).toContain("not reachable");
+    expect(startAgentStream).not.toHaveBeenCalled();
+  });
+
+  it("returns error when startAgentStream returns null", async () => {
+    vi.mocked(startAgentStream).mockResolvedValue(null);
+    const handler = captureStartChatToHandler();
+    const result = (await handler({ instruction: "do something" })) as any;
+    expect(result.content[0].text).toContain("task ID not received");
+  });
+
+  it("passes contextId to startAgentStream when provided", async () => {
+    const handler = captureStartChatToHandler();
+    await handler({ instruction: "resume", contextId: "existing-ctx" });
+    expect(startAgentStream).toHaveBeenCalledWith(9999, "resume", undefined, "existing-ctx");
   });
 });

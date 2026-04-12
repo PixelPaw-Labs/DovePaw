@@ -80,6 +80,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
     let workspace: AgentWorkspace | null = null;
     const userMsgId = randomUUID();
+    const backgroundTasks: Promise<unknown>[] = [];
 
     // Track direct publishStatusToUI calls (workspace setup, clone progress, etc.)
     // so sub-agent history sessions show these entries alongside the tool-call entries
@@ -141,6 +142,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       const chatToTools = await this.agentConfigReader.resolveLinkedTools(
         this.def.name,
         this.abortController.signal,
+        backgroundTasks,
       );
 
       await withMcpQuery(
@@ -282,6 +284,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         },
       );
     } finally {
+      await Promise.allSettled(backgroundTasks);
       this.abortController?.abort();
       this.abortController = null;
       markIdle(this.def.manifestKey);

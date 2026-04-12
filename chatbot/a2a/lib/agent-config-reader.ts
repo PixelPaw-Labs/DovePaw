@@ -46,7 +46,11 @@ export class AgentConfigReader {
    * Only injects tools for linked agents that are currently online.
    * Before the first heartbeat cycle, falls back to port manifest presence.
    */
-  async resolveLinkedTools(agentName: string, signal?: AbortSignal) {
+  async resolveLinkedTools(
+    agentName: string,
+    signal?: AbortSignal,
+    backgroundTasks?: Promise<unknown>[],
+  ) {
     const [links, allAgents] = await Promise.all([
       Promise.resolve(readAgentLinks()),
       readAgentsConfig(),
@@ -74,7 +78,7 @@ export class AgentConfigReader {
           tools.push(makeEscalateTool(targetDef, signal));
           break;
         default: // "parallel" and any future strategies default to start + await
-          tools.push(makeStartChatToTool(targetDef, signal));
+          tools.push(makeStartChatToTool(targetDef, signal, backgroundTasks));
           tools.push(makeAwaitChatToTool(targetDef, signal));
       }
     }

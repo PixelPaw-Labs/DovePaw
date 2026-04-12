@@ -28,13 +28,13 @@ import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
 import {
   collectAgentStreamContext,
+  collectStreamResult,
   formatAgentStreamContext,
   resolveAgentPort,
   createAgentClient,
   startAgentStream,
   subscribeTaskStream,
 } from "@/lib/a2a-client";
-import { randomUUID } from "node:crypto";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { HANDOFF_PATTERNS } from "@/lib/agent-link-patterns";
 
@@ -414,7 +414,11 @@ ${HANDOFF_PATTERNS}
  * Mirrors Dove's start_* pattern — returns taskId immediately so the caller
  * can kick off multiple linked agents concurrently before awaiting any of them.
  */
-export function makeStartChatToTool(targetDef: AgentDef, signal?: AbortSignal) {
+export function makeStartChatToTool(
+  targetDef: AgentDef,
+  signal?: AbortSignal,
+  backgroundTasks?: Promise<unknown>[],
+) {
   const { displayName, manifestKey } = targetDef;
   return tool(
     `start_chat_to_${manifestKey}`,
@@ -429,32 +433,30 @@ export function makeStartChatToTool(targetDef: AgentDef, signal?: AbortSignal) {
       const port = resolveAgentPort(manifestKey);
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-      const client = await createAgentClient(port);
-      signal?.addEventListener("abort", () => void client.cancelTask({ id: "" }).catch(() => {}), {
-        once: true,
-      });
-      const result = await client.sendMessage({
-        message: {
-          kind: "message",
-          messageId: randomUUID(),
-          role: "user",
-          parts: [{ kind: "text", text: instruction }],
-          ...(contextId ? { contextId } : {}),
-        },
-        configuration: { blocking: false },
-      });
-      if (result.kind !== "task")
+
+      // Use startAgentStream (sendMessageStream) so the EventQueue is created before
+      // execute() runs — same reason as makeStartTool. Abort signal is wired internally.
+      const handle = await startAgentStream(port, instruction, signal, contextId);
+      if (!handle)
         return {
           content: [{ type: "text" as const, text: "Error: task ID not received from agent." }],
         };
+
+      const { taskId, contextId: sessionContextId, stream } = handle;
+
+      // Drain stream in background so the EventQueue doesn't stall.
+      // Results are collected later by await_chat_to_* via resubscribeTask.
+      const drainTask = collectStreamResult(stream).catch(() => {});
+      backgroundTasks?.push(drainTask);
+
       return {
         content: [
           {
             type: "text" as const,
-            text: `${displayName} started (taskId: ${result.id}, contextId: ${result.contextId})`,
+            text: `${displayName} started (taskId: ${taskId}, contextId: ${sessionContextId})`,
           },
         ],
-        structuredContent: { taskId: result.id, contextId: result.contextId },
+        structuredContent: { taskId, contextId: sessionContextId },
       };
     },
   );
