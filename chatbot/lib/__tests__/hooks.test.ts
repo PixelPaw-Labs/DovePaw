@@ -293,6 +293,16 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
     };
   }
 
+  function justification(overrides: Record<string, unknown> = {}) {
+    return {
+      impact: "medium",
+      pattern: "Detection → Resolution",
+      handoff: "3 errors found",
+      confidence: 90,
+      ...overrides,
+    };
+  }
+
   it("denies when justification is absent", async () => {
     const fn = getReflectionHook();
     const result = await callHook(fn, chatToInput({ instruction: "fix it" }));
@@ -314,53 +324,103 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
       fn,
       chatToInput({
         instruction: "fix it",
-        justification: { pattern: "Detection → Resolution", handoff: "3 errors found" },
+        justification: justification({ confidence: undefined }),
       }),
     );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
     expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("confidence");
   });
 
-  it("denies when confidence is below threshold", async () => {
+  it("denies when impact is missing", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({ instruction: "fix it", justification: justification({ impact: undefined }) }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("impact");
+  });
+
+  it("denies when impact is invalid", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({ instruction: "fix it", justification: justification({ impact: "critical" }) }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("impact");
+  });
+
+  it("always denies low impact regardless of confidence", async () => {
     const fn = getReflectionHook();
     const result = await callHook(
       fn,
       chatToInput({
         instruction: "fix it",
-        justification: {
-          pattern: "Detection → Resolution",
-          handoff: "3 errors found",
-          confidence: 85,
-        },
+        justification: justification({ impact: "low", confidence: 100 }),
       }),
     );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("85");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("Low-impact");
   });
 
-  it("allows when confidence meets threshold", async () => {
+  it("denies high impact when confidence is below 70", async () => {
     const fn = getReflectionHook();
     const result = await callHook(
       fn,
       chatToInput({
         instruction: "fix it",
-        justification: {
-          pattern: "Detection → Resolution",
-          handoff: "3 errors found",
-          confidence: 90,
-        },
+        justification: justification({ impact: "high", confidence: 69 }),
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("69");
+  });
+
+  it("allows high impact when confidence meets 70", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: justification({ impact: "high", confidence: 70 }),
       }),
     );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
   });
 
-  it("allows when confidence exceeds threshold", async () => {
+  it("denies medium impact when confidence is below 85", async () => {
     const fn = getReflectionHook();
     const result = await callHook(
       fn,
       chatToInput({
         instruction: "fix it",
-        justification: { pattern: "Phase handoff", handoff: "report complete", confidence: 98 },
+        justification: justification({ impact: "medium", confidence: 84 }),
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("84");
+  });
+
+  it("allows medium impact when confidence meets 85", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: justification({ impact: "medium", confidence: 85 }),
+      }),
+    );
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
+  });
+
+  it("allows medium impact when confidence exceeds threshold", async () => {
+    const fn = getReflectionHook();
+    const result = await callHook(
+      fn,
+      chatToInput({
+        instruction: "fix it",
+        justification: justification({ impact: "medium", confidence: 98 }),
       }),
     );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");

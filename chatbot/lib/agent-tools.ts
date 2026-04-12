@@ -37,6 +37,70 @@ import {
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { HANDOFF_PATTERNS } from "@/lib/agent-link-patterns";
 
+// ─── Delegation thresholds ────────────────────────────────────────────────────
+
+export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; description: string }> = {
+  high: {
+    threshold: 70,
+    description:
+      "your output is pivotal — the recipient cannot meaningfully proceed, decide, or respond without it. " +
+      "The handoff has clear directionality: there is an obvious and immediate action the recipient takes from what you are giving them. " +
+      "Use this when you have completed something that directly feeds their next step, changes the direction of the overall task, or unblocks work that is waiting on you. " +
+      "If you are uncertain whether it qualifies, ask: would the recipient be stuck or significantly misled without this? If yes, it is high.",
+  },
+  medium: {
+    threshold: 85,
+    description:
+      "your output is complete and self-contained — the recipient can engage with it fully, build on it, or use it as a foundation for their own contribution. " +
+      "It may not be the final word, but it adds real, concrete substance to the shared understanding. " +
+      "Use this for the normal progression of work: your analysis is ready, your prediction is formed, your review covers the agreed scope, your part of a collaborative task is done. " +
+      "The recipient has a clear next step but is not blocked without this — the handoff advances the work rather than unblocking it.",
+  },
+  low: {
+    threshold: Infinity,
+    description:
+      "your output is preliminary, tangential, or informational only — the recipient may find it interesting but does not need it to do their part. " +
+      "A formal handoff is not the right vehicle: share via message, add it as context, or hold it until you have something more complete. " +
+      "If you are unsure whether it is low or medium, ask: is there a concrete action the recipient would take directly from this output? If not, it is low.",
+  },
+};
+
+export const impactPlaceholder = Object.keys(CONFIDENCE_THRESHOLD).join("|");
+
+export const thresholdClause = Object.entries(CONFIDENCE_THRESHOLD)
+  .map(
+    ([k, { threshold, description }]) =>
+      `${k} ${threshold === Infinity ? "never handed off" : `≥ ${threshold}`} (${description})`,
+  )
+  .join(", ");
+
+const [firstImpact, ...restImpacts] = Object.keys(CONFIDENCE_THRESHOLD);
+
+/** Shared justification schema for all agent delegation tools (chat_to, review_with, escalate_to). */
+export const justificationField = z
+  .object({
+    impact: z
+      .enum([firstImpact, ...restImpacts] as [string, ...string[]])
+      .describe(
+        `Impact level of this handoff. Confidence threshold is impact-gated: ${thresholdClause}.`,
+      ),
+    pattern: z
+      .string()
+      .describe(
+        "Which handoff pattern applies: 'Detection → Resolution', 'Aggregation → Action', 'Blocked by gap', or 'Phase handoff'.",
+      ),
+    handoff: z
+      .string()
+      .describe("One sentence describing the concrete output or blocker being handed off."),
+    confidence: z
+      .number()
+      .min(0)
+      .max(100)
+      .describe(`Confidence score (0–100). Threshold is impact-gated: ${thresholdClause}.`),
+  })
+  .optional()
+  .describe("Required on retry after self-reflection.");
+
 // ─── Management tool names ─────────────────────────────────────────────────────
 
 export const MGMT_TOOL = {
@@ -352,26 +416,7 @@ ${HANDOFF_PATTERNS}
         .string()
         .optional()
         .describe("Continue a prior conversation with this agent. Omit to start a fresh session."),
-      justification: z
-        .object({
-          pattern: z
-            .string()
-            .describe(
-              "Which handoff pattern applies: 'Detection → Resolution', 'Aggregation → Action', 'Blocked by gap', or 'Phase handoff'.",
-            ),
-          handoff: z
-            .string()
-            .describe("One sentence describing the concrete output being handed off."),
-          confidence: z
-            .number()
-            .min(0)
-            .max(100)
-            .describe(
-              "How confident you are this handoff is necessary (0–100). Must be 90 or above to proceed.",
-            ),
-        })
-        .optional()
-        .describe("Required on retry after self-reflection."),
+      justification: justificationField,
     },
     async ({ instruction, contextId }) => {
       const port = resolveAgentPort(manifestKey);
@@ -510,14 +555,7 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
     {
       content: z.string().describe("The work product to submit for review — must be complete."),
       context: z.string().optional().describe("Additional context the reviewer needs."),
-      justification: z
-        .object({
-          pattern: z.string(),
-          handoff: z.string(),
-          confidence: z.number().min(0).max(100),
-        })
-        .optional()
-        .describe("Required on retry after self-reflection."),
+      justification: justificationField,
     },
     async ({ content, context }) => {
       const port = resolveAgentPort(manifestKey);
@@ -570,18 +608,14 @@ export function makeEscalateTool(targetDef: AgentDef, signal?: AbortSignal) {
     {
       blocker: z.string().describe("The specific decision or problem you cannot resolve alone."),
       context: z.string().describe("What you have tried and what you know so far."),
-      confidence: z
-        .number()
-        .min(0)
-        .max(100)
-        .describe("Your confidence in proceeding without escalation (0–100). Should be low."),
+      justification: justificationField,
     },
-    async ({ blocker, context, confidence }) => {
+    async ({ blocker, context, justification }) => {
       const port = resolveAgentPort(manifestKey);
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
       const instruction = [
-        `ESCALATION — confidence: ${confidence}/100\n`,
+        `ESCALATION — confidence: ${justification?.confidence ?? "?"}/100\n`,
         `Blocker: ${blocker}`,
         `\nContext:\n${context}`,
         `\nPlease provide guidance or make the decision so I can continue.`,
