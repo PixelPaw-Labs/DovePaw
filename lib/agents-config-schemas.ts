@@ -13,7 +13,8 @@ export const agentCalendarScheduleSchema = z.object({
   type: z.literal("calendar"),
   hour: z.number().int().min(0).max(23),
   minute: z.number().int().min(0).max(59),
-  weekday: z.number().int().min(0).max(6).optional(),
+  /** ISO weekday: 1 = Monday … 7 = Sunday */
+  weekday: z.number().int().min(1).max(7).optional(),
 });
 
 export const agentScheduleSchema = z.discriminatedUnion("type", [
@@ -22,6 +23,28 @@ export const agentScheduleSchema = z.discriminatedUnion("type", [
 ]);
 
 export type AgentSchedule = z.infer<typeof agentScheduleSchema>;
+
+// ─── Schedule display ──────────────────────────────────────────────────────────
+
+const ISO_WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+/** Derive a human-readable schedule string from the schedule object. No stored field needed. */
+export function formatScheduleDisplay(schedule: AgentSchedule | undefined): string {
+  if (!schedule) return "on demand";
+  if (schedule.type === "interval") {
+    const { seconds } = schedule;
+    if (seconds % 3600 === 0) return `every ${seconds / 3600}h`;
+    if (seconds % 60 === 0) return `every ${seconds / 60}m`;
+    return `every ${seconds}s`;
+  }
+  const hh = String(schedule.hour).padStart(2, "0");
+  const mm = String(schedule.minute).padStart(2, "0");
+  const time = `${hh}:${mm}`;
+  if (schedule.weekday !== undefined) {
+    return `${ISO_WEEKDAY_NAMES[schedule.weekday - 1]} ${time}`;
+  }
+  return `Daily ${time}`;
+}
 
 // ─── Suggestion (serializable — no LucideIcon) ───────────────────────────────
 
@@ -46,8 +69,6 @@ export const agentConfigEntrySchema = z.object({
   displayName: z.string().min(1),
   /** Short description for MCP tool and system prompt */
   description: z.string().min(1),
-  /** Human-readable schedule string for UI display (e.g. "daily 00:00", "every 5 min") */
-  scheduleDisplay: z.string(),
   /** launchd schedule — absent means on-demand */
   schedule: agentScheduleSchema.optional(),
   /** Whether to run immediately when launchd loads the plist */
@@ -105,7 +126,6 @@ export const agentFileSchema = agentConfigEntrySchema
     alias: z.string(),
     displayName: z.string(),
     description: z.string(),
-    scheduleDisplay: z.string(),
   });
 
 export type AgentFile = z.infer<typeof agentFileSchema>;

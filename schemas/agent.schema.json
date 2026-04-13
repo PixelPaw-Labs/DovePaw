@@ -4,16 +4,7 @@
   "title": "DovePaw Agent Definition",
   "description": "Schema for agent.json — the metadata file that defines a DovePaw agent inside a plugin repo (agents/<name>/agent.json). When installed, DovePaw merges this file into ~/.dovepaw/settings.agents/<name>/agent.json, adding runtime fields (repos, envVars, locked). To create a new agent, produce a valid agent.json that satisfies this schema, then pair it with a main.ts entry point and register the agent name in dovepaw-plugin.json.",
   "type": "object",
-  "required": [
-    "version",
-    "name",
-    "alias",
-    "displayName",
-    "description",
-    "scheduleDisplay",
-    "doveCard",
-    "suggestions"
-  ],
+  "required": ["version", "name", "alias", "displayName", "description", "doveCard", "suggestions"],
   "additionalProperties": false,
   "properties": {
     "version": {
@@ -52,12 +43,6 @@
         "Picks up the next open ticket and implements it end-to-end.",
         "Reviews open pull requests and posts actionable code review comments."
       ]
-    },
-
-    "scheduleDisplay": {
-      "description": "Human-readable schedule string shown in the UI (e.g. in the Scheduled Agents panel). Use an empty string for on-demand-only agents. Format suggestions: 'daily HH:MM', 'every N min', 'every N sec', 'Mon–Fri HH:MM'.",
-      "type": "string",
-      "examples": ["daily 00:00", "every 5 min", "Mon–Fri 09:00", ""]
     },
 
     "schedule": {
@@ -100,11 +85,11 @@
               "examples": [0, 15, 30]
             },
             "weekday": {
-              "description": "Optional: day of week (0 = Sunday … 6 = Saturday). Omit to run every day.",
+              "description": "Optional: ISO day of week (1 = Monday … 7 = Sunday). Omit to run every day.",
               "type": "integer",
-              "minimum": 0,
-              "maximum": 6,
-              "examples": [1, 5]
+              "minimum": 1,
+              "maximum": 7,
+              "examples": [1, 5, 7]
             }
           }
         }
@@ -420,7 +405,6 @@
       "alias": "mdr",
       "displayName": "Memory Dream",
       "description": "Consolidates short-term observations into long-term memory snapshots while the system idles.",
-      "scheduleDisplay": "daily 00:00",
       "schedule": { "type": "calendar", "hour": 0, "minute": 0 },
       "runAtLoad": false,
       "iconName": "Moon",
@@ -453,7 +437,6 @@
       "alias": "gsd",
       "displayName": "Get Shit Done",
       "description": "Picks up the next open ticket from the backlog and implements it end-to-end in an isolated git worktree.",
-      "scheduleDisplay": "every 5 min",
       "schedule": { "type": "interval", "seconds": 300 },
       "iconName": "Zap",
       "iconBg": "bg-yellow-100 group-hover:bg-primary",

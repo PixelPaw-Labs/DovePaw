@@ -64,7 +64,6 @@ const AGENT: AgentDef = {
   manifestKey: "test_agent",
   toolName: "yolo_test_agent",
   description: "A test agent for unit tests",
-  scheduleDisplay: "daily 00:00",
   icon: {} as any,
   iconBg: "",
   iconColor: "",

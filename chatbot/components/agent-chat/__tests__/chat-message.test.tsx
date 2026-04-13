@@ -23,8 +23,6 @@ const agentConfigs: AgentConfigEntry[] = [
     iconColor: "text-blue-600",
     doveCard: { title: "Triage", description: "", prompt: "", iconName: "MessageSquare" },
     suggestions: [],
-
-    scheduleDisplay: "on demand",
   },
 ];
 

@@ -135,7 +135,6 @@ export async function patchAgentFile(
     alias: agentName.slice(0, 3),
     displayName: agentName,
     description: "",
-    scheduleDisplay: "",
     doveCard: { title: agentName, description: "", prompt: "" },
     suggestions: [],
     repos: [],

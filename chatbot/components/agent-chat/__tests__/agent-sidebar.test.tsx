@@ -28,7 +28,6 @@ vi.mock("@@/lib/agents", () => ({
     manifestKey: entry.name.replaceAll("-", "_"),
     icon: () => null,
     schedule: undefined,
-    scheduleDisplay: "on demand",
   }),
 }));
 
@@ -52,7 +51,6 @@ vi.mock("../agent-button", () => ({
 const agentConfig = {
   name: "get-shit-done",
   displayName: "Get Shit Done",
-  scheduleDisplay: "every 5 min",
   doveCard: { title: "", description: "", prompt: "" },
   suggestions: [],
 } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0];
@@ -78,7 +76,6 @@ describe("AgentSidebar", () => {
           {
             name: "get-shit-done",
             displayName: "Get Shit Done",
-            scheduleDisplay: "every 5 min",
             doveCard: { title: "", description: "", prompt: "" },
             suggestions: [],
           } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0],
@@ -96,7 +93,6 @@ describe("AgentSidebar", () => {
           {
             name: "get-shit-done",
             displayName: "Get Shit Done",
-            scheduleDisplay: "every 5 min",
             doveCard: { title: "", description: "", prompt: "" },
             suggestions: [],
           } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0],
@@ -118,7 +114,6 @@ describe("AgentSidebar", () => {
           {
             name: "get-shit-done",
             displayName: "Get Shit Done",
-            scheduleDisplay: "every 5 min",
             doveCard: { title: "", description: "", prompt: "" },
             suggestions: [],
           } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0],
@@ -139,7 +134,6 @@ describe("AgentSidebar", () => {
           {
             name: "get-shit-done",
             displayName: "Get Shit Done",
-            scheduleDisplay: "every 5 min",
             doveCard: { title: "", description: "", prompt: "" },
             suggestions: [],
           } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0],
@@ -160,7 +154,6 @@ describe("AgentSidebar", () => {
           {
             name: "get-shit-done",
             displayName: "Get Shit Done",
-            scheduleDisplay: "every 5 min",
             doveCard: { title: "", description: "", prompt: "" },
             suggestions: [],
           } as unknown as Parameters<typeof AgentSidebar>[0]["agentConfigs"][0],

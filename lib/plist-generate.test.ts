@@ -12,7 +12,6 @@ const BASE: AgentDef = {
   manifestKey: "test_agent",
   toolName: "run_test_agent",
   description: "A test agent",
-  scheduleDisplay: "daily 09:00",
   schedule: { type: "calendar", hour: 9, minute: 0 },
   icon: Brain,
   iconBg: "",
@@ -95,5 +94,45 @@ describe("generatePlist — structure", () => {
     expect(plist).toContain("<key>DOVEPAW_SCHEDULED</key>");
     expect(plist).toContain("<key>FOO</key>");
     expect(plist).toContain("<string>bar</string>");
+  });
+});
+
+describe("generatePlist — ISO weekday → launchd conversion", () => {
+  it("converts Mon (ISO 1) to launchd 1", () => {
+    const agent: AgentDef = {
+      ...BASE,
+      schedule: { type: "calendar", hour: 9, minute: 0, weekday: 1 },
+    };
+    const plist = generatePlist(agent, HOME);
+    expect(plist).toContain("<key>Weekday</key>");
+    expect(plist).toContain("<integer>1</integer>");
+  });
+
+  it("converts Sat (ISO 6) to launchd 6", () => {
+    const agent: AgentDef = {
+      ...BASE,
+      schedule: { type: "calendar", hour: 9, minute: 0, weekday: 6 },
+    };
+    const plist = generatePlist(agent, HOME);
+    expect(plist).toContain("<integer>6</integer>");
+  });
+
+  it("converts Sun (ISO 7) to launchd 0", () => {
+    const agent: AgentDef = {
+      ...BASE,
+      schedule: { type: "calendar", hour: 12, minute: 0, weekday: 7 },
+    };
+    const plist = generatePlist(agent, HOME);
+    expect(plist).toContain("<key>Weekday</key>");
+    expect(plist).toContain("<integer>0</integer>");
+  });
+
+  it("omits Weekday key when weekday is not set", () => {
+    const agent: AgentDef = {
+      ...BASE,
+      schedule: { type: "calendar", hour: 9, minute: 0 },
+    };
+    const plist = generatePlist(agent, HOME);
+    expect(plist).not.toContain("<key>Weekday</key>");
   });
 });

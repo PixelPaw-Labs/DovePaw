@@ -20,7 +20,10 @@ function nextRunMs(schedule: AgentDef["schedule"]): number | null {
   next.setSeconds(0, 0);
   next.setHours(schedule.hour, schedule.minute);
   if (schedule.weekday !== undefined) {
-    const diff = (schedule.weekday - next.getDay() + 7) % 7;
+    // Convert JS getDay() (0=Sun) to ISO (1=Mon…7=Sun) for comparison
+    const jsDay = next.getDay();
+    const currentIso = jsDay === 0 ? 7 : jsDay;
+    const diff = (schedule.weekday - currentIso + 7) % 7;
     next.setDate(next.getDate() + (diff === 0 && next.getTime() <= now ? 7 : diff));
   } else if (next.getTime() <= now) {
     next.setDate(next.getDate() + 1);

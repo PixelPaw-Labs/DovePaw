@@ -23,7 +23,9 @@ function scheduleBlock(config: AgentDef): string {
   ];
 
   if ("weekday" in schedule && schedule.weekday !== undefined) {
-    entries.push("        <key>Weekday</key>", `        <integer>${schedule.weekday}</integer>`);
+    // ISO weekday: 1=Mon…7=Sun → launchd: 0=Sun…6=Sat
+    const launchdWeekday = schedule.weekday % 7;
+    entries.push("        <key>Weekday</key>", `        <integer>${launchdWeekday}</integer>`);
   }
 
   return ["    <key>StartCalendarInterval</key>", "    <dict>", ...entries, "    </dict>"].join(

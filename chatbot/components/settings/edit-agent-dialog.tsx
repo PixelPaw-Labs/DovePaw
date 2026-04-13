@@ -29,7 +29,6 @@ interface FormState {
   iconName: string;
   iconBg: string;
   iconColor: string;
-  scheduleDisplay: string;
   scheduleType: ScheduleType;
   intervalSeconds: string;
   calendarHour: string;
@@ -57,7 +56,6 @@ function entryToForm(entry: AgentConfigEntry): FormState {
     iconName: entry.iconName ?? "Bot",
     iconBg: entry.iconBg ?? DEFAULT_ICON_STYLE.iconBg,
     iconColor: entry.iconColor ?? DEFAULT_ICON_STYLE.iconColor,
-    scheduleDisplay: entry.scheduleDisplay,
     scheduleType: schedType,
     intervalSeconds: entry.schedule?.type === "interval" ? String(entry.schedule.seconds) : "300",
     calendarHour: entry.schedule?.type === "calendar" ? String(entry.schedule.hour) : "0",
@@ -99,7 +97,6 @@ function buildPatch(name: string, f: FormState): AgentConfigEntry {
     iconName: f.iconName,
     iconBg: f.iconBg,
     iconColor: f.iconColor,
-    scheduleDisplay: f.scheduleDisplay.trim(),
     ...(schedule ? { schedule } : {}),
     ...(f.runAtLoad ? { runAtLoad: true } : {}),
     schedulingEnabled: f.schedulingEnabled,
@@ -288,26 +285,19 @@ export function EditAgentDialog({ agent, onSave, onClose }: EditAgentDialogProps
                         className="font-mono text-sm"
                       />
                     </Row>
-                    <Row label="Weekday (0–6, optional)">
+                    <Row label="Weekday (1=Mon…7=Sun, optional)">
                       <Input
                         type="number"
                         value={form.calendarWeekday}
                         onChange={(e) => set("calendarWeekday", e.target.value)}
-                        min={0}
-                        max={6}
+                        min={1}
+                        max={7}
                         placeholder="Leave blank for daily"
                         className="font-mono text-sm"
                       />
                     </Row>
                   </>
                 )}
-                <Row label="Schedule display">
-                  <Input
-                    value={form.scheduleDisplay}
-                    onChange={(e) => set("scheduleDisplay", e.target.value)}
-                    placeholder="e.g. daily 09:00"
-                  />
-                </Row>
                 <label className="flex items-center gap-2.5 cursor-pointer">
                   <input
                     type="checkbox"

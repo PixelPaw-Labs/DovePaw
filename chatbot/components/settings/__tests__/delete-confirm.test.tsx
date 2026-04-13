@@ -12,7 +12,6 @@ vi.mock("@@/lib/agents", () => ({
     icon: () => null,
     iconBg: "bg-primary/10",
     iconColor: "text-primary",
-    scheduleDisplay: "on demand",
   }),
 }));
 

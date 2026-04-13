@@ -7,7 +7,6 @@ const makeAgent = (name: string, pluginPath?: string): AgentConfigEntry => ({
   alias: name.slice(0, 3),
   displayName: name,
   description: "desc",
-  scheduleDisplay: "on demand",
   doveCard: { title: name, description: "", prompt: "" },
   suggestions: [],
   pluginPath,

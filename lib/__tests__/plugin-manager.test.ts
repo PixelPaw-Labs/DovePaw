@@ -124,7 +124,6 @@ const BASE_AGENT_ENTRY = {
   alias: "ma",
   displayName: "My Agent",
   description: "A test agent",
-  scheduleDisplay: "on demand",
   doveCard: { title: "My Agent", description: "What does it do?", prompt: "What does it do?" },
   suggestions: [],
 };

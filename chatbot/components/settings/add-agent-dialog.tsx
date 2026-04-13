@@ -26,7 +26,6 @@ interface FormState {
   iconName: string;
   iconBg: string;
   iconColor: string;
-  scheduleDisplay: string;
   scheduleType: ScheduleType;
   intervalSeconds: string;
   calendarHour: string;
@@ -49,7 +48,6 @@ function emptyForm(): FormState {
     iconName: "Bot",
     iconBg: DEFAULT_ICON_STYLE.iconBg,
     iconColor: DEFAULT_ICON_STYLE.iconColor,
-    scheduleDisplay: "on demand",
     scheduleType: "none",
     intervalSeconds: "300",
     calendarHour: "0",
@@ -85,7 +83,6 @@ function buildEntry(f: FormState): AgentConfigEntry {
     iconName: f.iconName,
     iconBg: f.iconBg,
     iconColor: f.iconColor,
-    scheduleDisplay: f.scheduleDisplay.trim(),
     ...(schedule ? { schedule } : {}),
     ...(f.runAtLoad ? { runAtLoad: true } : {}),
     schedulingEnabled: f.schedulingEnabled,
@@ -289,26 +286,19 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
                       className="font-mono text-sm"
                     />
                   </Row>
-                  <Row label="Weekday (0=Sun…6=Sat, optional)">
+                  <Row label="Weekday (1=Mon…7=Sun, optional)">
                     <Input
                       type="number"
                       value={form.calendarWeekday}
                       onChange={(e) => set("calendarWeekday", e.target.value)}
-                      min={0}
-                      max={6}
+                      min={1}
+                      max={7}
                       placeholder="Leave blank for daily"
                       className="font-mono text-sm"
                     />
                   </Row>
                 </>
               )}
-              <Row label="Schedule display">
-                <Input
-                  value={form.scheduleDisplay}
-                  onChange={(e) => set("scheduleDisplay", e.target.value)}
-                  placeholder="e.g. daily 09:00"
-                />
-              </Row>
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"

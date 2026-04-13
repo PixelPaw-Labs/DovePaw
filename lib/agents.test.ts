@@ -9,7 +9,6 @@ const BASE_ENTRY: AgentConfigEntry = {
   alias: "ma",
   displayName: "My Agent",
   description: "A test agent",
-  scheduleDisplay: "on demand",
   doveCard: { title: "My Agent", description: "What does it do?", prompt: "What does it do?" },
   suggestions: [{ title: "Run now", description: "Run it", prompt: "Run my-agent now" }],
 };

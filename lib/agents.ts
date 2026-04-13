@@ -32,8 +32,6 @@ export interface AgentDef {
   toolName: string;
   /** Short description for MCP tool and system prompt */
   description: string;
-  /** Human-readable schedule string for UI display */
-  scheduleDisplay: string;
   /** launchd schedule */
   schedule?:
     | { type: "interval"; seconds: number }
@@ -92,7 +90,6 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
     manifestKey,
     toolName: `${TOOL_PREFIX}_${manifestKey}`,
     description: entry.description,
-    scheduleDisplay: entry.scheduleDisplay,
     schedule: entry.schedule,
     icon,
     iconBg,

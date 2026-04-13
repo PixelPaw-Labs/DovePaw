@@ -1,7 +1,7 @@
 "use client";
 
 import { buildAgentDef } from "@@/lib/agents";
-import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import { type AgentConfigEntry, formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import { DOVE_AVATAR } from "@/lib/avatars";
 import { SuggestionChips } from "./suggestion-chips";
 import { AgentSuggestionChips } from "./agent-suggestion-chips";
@@ -85,7 +85,7 @@ function AgentIntro({
             </h2>
             <p className="text-muted-foreground leading-relaxed max-w-2xl">{agent.description}</p>
             <p className="text-xs text-muted-foreground/60 mt-2 uppercase tracking-wider">
-              Schedule: {agent.scheduleDisplay}
+              Schedule: {formatScheduleDisplay(agent.schedule)}
             </p>
           </div>
         </div>

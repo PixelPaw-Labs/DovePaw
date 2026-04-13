@@ -18,7 +18,7 @@ import {
 } from "./data-table";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { buildAgentDef } from "@@/lib/agents";
-import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import { type AgentConfigEntry, formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import { z } from "zod";
 import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings-schemas";
 
@@ -667,7 +667,7 @@ export function AgentSettingsContent({
                 <p className="text-[10px] font-bold uppercase tracking-tighter opacity-70">
                   Schedule
                 </p>
-                <p className="text-sm font-semibold">{agent.scheduleDisplay}</p>
+                <p className="text-sm font-semibold">{formatScheduleDisplay(agent.schedule)}</p>
               </div>
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-tighter opacity-70">

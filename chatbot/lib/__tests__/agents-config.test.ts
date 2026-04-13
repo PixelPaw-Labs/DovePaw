@@ -45,7 +45,6 @@ const FIXTURE_AGENT: AgentConfigEntry = {
   alias: "mdr",
   displayName: "Memory Dream",
   description: "Dream and consolidate memories",
-  scheduleDisplay: "daily 00:00",
   schedule: { type: "calendar", hour: 0, minute: 0 },
   doveCard: {
     title: "Memory Dream",
@@ -62,7 +61,6 @@ const FIXTURE_AGENT_2: AgentConfigEntry = {
   alias: "gsd",
   displayName: "Get Shit Done",
   description: "Automated ticket implementer",
-  scheduleDisplay: "every 5 min",
   schedule: { type: "interval", seconds: 300 },
   doveCard: {
     title: "Get Shit Done",
@@ -265,7 +263,6 @@ describe("buildAgentDef", () => {
       alias: "ua",
       displayName: "Unknown",
       description: "desc",
-      scheduleDisplay: "on demand",
       doveCard: { title: "t", description: "d", prompt: "p" },
       suggestions: [],
     };
@@ -316,7 +313,6 @@ describe("agentConfigEntrySchema validation", () => {
       alias: "ma",
       displayName: "My Agent",
       description: "desc",
-      scheduleDisplay: "on demand",
       doveCard: { title: "t", description: "d", prompt: "p" },
       suggestions: [],
     });
@@ -330,7 +326,6 @@ describe("agentConfigEntrySchema validation", () => {
       alias: "ma",
       displayName: "My Agent",
       description: "desc",
-      scheduleDisplay: "on demand",
       doveCard: { title: "t", description: "d", prompt: "p" },
       suggestions: [],
     });
@@ -344,7 +339,6 @@ describe("agentConfigEntrySchema validation", () => {
       alias: "ma",
       displayName: "My Agent",
       description: "desc",
-      scheduleDisplay: "daily",
       schedule: { type: "invalid" },
       doveCard: { title: "t", description: "d", prompt: "p" },
       suggestions: [],

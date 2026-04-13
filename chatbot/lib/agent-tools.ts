@@ -17,6 +17,7 @@ import {
 } from "@/lib/launchd";
 import { cancelProcessing } from "@/a2a/lib/processing-registry";
 import type { AgentDef } from "@@/lib/agents";
+import { formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import {
   agentEntryPath,
   agentPersistentLogDir,
@@ -308,7 +309,7 @@ ${agent.description}
 - What env vars it needs
 - What inputs it requires
 - What the workflow is
-- When it normally runs: ${agent.scheduleDisplay}
+- When it normally runs: ${formatScheduleDisplay(agent.schedule)}
 - Whether it is already loaded in launchd
 - Any other dependencies
 
@@ -316,7 +317,7 @@ ${
   agent.schedule && agent.schedulingEnabled
     ? `**Infer intent before acting — read existing output before running anything:**
 
-This agent runs on a schedule (${agent.scheduleDisplay}) and produces output (files, logs, state) during those runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
+This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and produces output (files, logs, state) during those runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
 
 - Clearly asking about past/existing state (e.g. past tense, "what happened", "show me logs", "last night's output") → look for existing output first; only run if nothing useful is found
 - Everything else → call \`${START_SCRIPT_TOOL}\` with the instruction as-is; do not ask for clarification`
@@ -326,7 +327,7 @@ This agent runs on a schedule (${agent.scheduleDisplay}) and produces output (fi
 **Managing this agent (launchd):**
 
 Label: \`${agent.label}\`
-Schedule: ${agent.scheduleDisplay}
+Schedule: ${formatScheduleDisplay(agent.schedule)}
 
 You are responsible for installing and uninstalling ONLY yourself (\`${agent.label}\`).
 - Install means: build only YOUR TypeScript entry, then load YOUR plist — do not touch other agents.

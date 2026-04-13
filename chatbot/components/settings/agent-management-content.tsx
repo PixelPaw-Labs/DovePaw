@@ -3,6 +3,7 @@
 import * as React from "react";
 import { ChevronDown, Package } from "lucide-react";
 import type { AgentDef } from "@@/lib/agents";
+import { formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import { resolvePluginName } from "@@/lib/agent-groups";
 import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { cn } from "@/lib/utils";
@@ -238,7 +239,9 @@ function AgentCard({ agent, status, isBusy, onAction }: AgentCardProps) {
           </div>
           <div>
             <h3 className="font-bold text-on-surface text-sm leading-tight">{agent.displayName}</h3>
-            <p className="text-xs text-on-surface-variant mt-0.5">{agent.scheduleDisplay}</p>
+            <p className="text-xs text-on-surface-variant mt-0.5">
+              {formatScheduleDisplay(agent.schedule)}
+            </p>
           </div>
         </div>
 
