@@ -494,6 +494,8 @@ export function makeStartChatToTool(
         signal,
         registry,
         `await_chat_to_${manifestKey}`,
+        undefined,
+        targetDef.name,
       ).start(instruction, { contextId, backgroundTasks }),
   );
 }
@@ -524,6 +526,8 @@ export function makeAwaitChatToTool(
         signal,
         registry,
         `await_chat_to_${manifestKey}`,
+        undefined,
+        targetDef.name,
       ).poll(taskId),
   );
 }

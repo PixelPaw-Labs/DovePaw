@@ -14,10 +14,20 @@ import type { A2AStreamEvent } from "@@/lib/a2a-client";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import type { PortsManifest } from "@/a2a/lib/ports-manifest";
 import { TRANSIENT_ARTIFACT_NAMES, ARTIFACT } from "@/lib/query-dispatcher";
+import { agentPersistentLogDir, DOVEPAW_AGENT_LOGS } from "@/lib/paths";
 import type { ProgressEntry } from "@/lib/progress";
 export type { ProgressEntry } from "@/lib/progress";
 export { createAgentClient, startAgentStream } from "@@/lib/a2a-client";
 export type { A2AStreamEvent, AgentStreamHandle } from "@@/lib/a2a-client";
+
+/**
+ * Fallback message when an agent produces no output.
+ * Includes the agent-specific log path when agentName is provided.
+ */
+export const noAgentOutput = (agentName?: string): string => {
+  const logPath = agentName ? agentPersistentLogDir(agentName) : DOVEPAW_AGENT_LOGS;
+  return `Something wrong with agent. Check agent logs at ${logPath}.`;
+};
 
 /** The collected output of a completed A2A task stream. */
 export type CollectedStream = {
@@ -63,6 +73,7 @@ export function subscribeTaskStream(
   signal: AbortSignal | undefined,
   onProgress: (result: StreamedResult) => void,
   onArtifact?: (name: string, text: string) => void,
+  agentName?: string,
 ): Promise<CollectedStream> {
   const ac = new AbortController();
   signal?.addEventListener(
@@ -77,6 +88,8 @@ export function subscribeTaskStream(
     client.resubscribeTask({ id: taskId }, { signal: ac.signal }),
     onProgress,
     onArtifact,
+    undefined,
+    agentName,
   );
 }
 
@@ -94,6 +107,7 @@ export async function collectStreamResult(
   onSnapshot?: (result: StreamedResult) => void,
   onArtifact?: (name: string, text: string) => void,
   onComplete?: (result: StreamedResult) => void,
+  agentName?: string,
 ): Promise<CollectedStream> {
   let taskId: string | undefined;
   let finalState: string | undefined;
@@ -113,7 +127,7 @@ export async function collectStreamResult(
       .join("\n")
       .trim();
     return {
-      output: output || "Something wrong with agent.",
+      output: output || noAgentOutput(agentName),
       progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),
       thinking: thinkingChunks.join("").trim(),
       finalState,
@@ -121,9 +135,29 @@ export async function collectStreamResult(
     };
   };
 
+  const TERMINAL_STATES = new Set(["completed", "failed", "canceled", "rejected"]);
+
   for await (const event of stream) {
     if (event.kind === "task") {
       taskId = event.id;
+      // When resubscribeTask is called for an already-completed task the A2A SDK yields
+      // only this Task snapshot and returns immediately — no artifact-update or
+      // status-update events follow (the EventQueue was destructively consumed by the
+      // initial stream in start_*). Extract the output from the task's stored artifacts,
+      // which ResultManager populated during execution.
+      if (event.status?.state && TERMINAL_STATES.has(event.status.state)) {
+        finalState = event.status.state;
+        const stored = extractArtifactResult(event.artifacts, agentName);
+        if (stored.thinking) thinkingChunks.push(stored.thinking);
+        if (stored.output !== noAgentOutput(agentName)) {
+          const entry: ProgressEntry = {
+            message: "",
+            artifacts: { [ARTIFACT.FINAL_OUTPUT]: stored.output },
+          };
+          progress.push(entry);
+          pendingEntry = entry;
+        }
+      }
     } else if (event.kind === "artifact-update") {
       const name = event.artifact.name ?? "";
       for (const p of event.artifact.parts) {
@@ -194,7 +228,10 @@ export function formatAgentStreamContext(
 }
 
 /** Build a StreamedResult from terminal task artifacts (no live stream needed). */
-export function extractArtifactResult(rawArtifacts: Artifact[] | undefined): StreamedResult {
+export function extractArtifactResult(
+  rawArtifacts: Artifact[] | undefined,
+  agentName?: string,
+): StreamedResult {
   const artifacts: Record<string, string> = {};
   for (const a of rawArtifacts ?? []) {
     const name = a.name ?? "";
@@ -207,6 +244,6 @@ export function extractArtifactResult(rawArtifacts: Artifact[] | undefined): Str
   // Never include tool-call, tool-input, or thinking in the text output.
   const output =
     (artifacts[ARTIFACT.FINAL_OUTPUT] || artifacts[ARTIFACT.STREAM] || "").trim() ||
-    "Something wrong with agent.";
+    noAgentOutput(agentName);
   return { output, progress: [], thinking: artifacts[ARTIFACT.THINKING] ?? "", toolCalls: [] };
 }

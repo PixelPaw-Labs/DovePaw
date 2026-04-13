@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { makeProgressSender } from "@/lib/chat-sse";
-import type { StreamedResult } from "@/lib/a2a-client";
+import { noAgentOutput, type StreamedResult } from "@/lib/a2a-client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -12,7 +12,7 @@ function makeResult(
     progress
       .flatMap((e) => Object.values(e.artifacts))
       .join("\n")
-      .trim() || "Something wrong with agent.";
+      .trim() || noAgentOutput();
   return { output, progress };
 }
 

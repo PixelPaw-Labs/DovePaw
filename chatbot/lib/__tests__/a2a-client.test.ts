@@ -18,6 +18,7 @@ import {
   collectStreamResult,
   extractArtifactResult,
   formatAgentStreamContext,
+  noAgentOutput,
   type A2AStreamEvent,
 } from "@/lib/a2a-client";
 
@@ -258,12 +259,12 @@ describe("extractArtifactResult", () => {
       { name: "tool-input", parts: [{ kind: "text", text: '{"cmd":"ls"}' }] } as never,
       { name: "thinking", parts: [{ kind: "text", text: "reasoning" }] } as never,
     ]);
-    expect(result.output).toBe("Something wrong with agent.");
+    expect(result.output).toBe(noAgentOutput());
   });
 
   it("returns 'Something wrong with agent.' for empty artifacts", () => {
-    expect(extractArtifactResult([]).output).toBe("Something wrong with agent.");
-    expect(extractArtifactResult(undefined).output).toBe("Something wrong with agent.");
+    expect(extractArtifactResult([]).output).toBe(noAgentOutput());
+    expect(extractArtifactResult(undefined).output).toBe(noAgentOutput());
   });
 });
 

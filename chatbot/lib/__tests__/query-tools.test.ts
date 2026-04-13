@@ -25,6 +25,7 @@ vi.mock("@/lib/paths", () => ({
   AGENTS_ROOT: "/mock/agents",
   DOVEPAW_AGENT_LOGS: "/mock/logs",
   DOVEPAW_AGENT_STATE: "/mock/state",
+  agentPersistentLogDir: (name: string) => `/mock/logs/.${name}`,
 }));
 
 vi.mock("@@/lib/paths", () => ({
@@ -50,6 +51,7 @@ import {
   doveStartToolName,
   doveAwaitToolName,
 } from "@/lib/query-tools";
+import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
 import type { AgentDef } from "@@/lib/agents";
 
@@ -412,7 +414,7 @@ describe("makeAwaitTool", () => {
       return { createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }) };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(result.structuredContent.result.output).toBe("Something wrong with agent.");
+    expect(result.structuredContent.result.output).toBe(noAgentOutput(AGENT.name));
   });
 
   it("resubscribes and collects chunks", async () => {
@@ -545,7 +547,7 @@ describe("makeAwaitTool", () => {
           .mockResolvedValue({ getTask: mockGetTask, resubscribeTask: mockResubscribe }),
       };
     } as any);
-    // Stream ends immediately → collected result is "Something wrong with agent." (not still_running)
+    // Stream ends immediately → collected result is noAgentOutput() (not still_running)
     // This verifies the progress tracking path doesn't interfere with normal completion
     const result = await handler({ taskId: "task-123" });
     expect(result.structuredContent).toMatchObject({ status: "completed" });

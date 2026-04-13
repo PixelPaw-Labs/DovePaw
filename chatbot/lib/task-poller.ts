@@ -89,6 +89,7 @@ export class TaskPoller {
     private readonly registry?: PendingRegistry,
     private readonly awaitTool?: string,
     private readonly timeoutMs = AWAIT_POLL_TIMEOUT_MS,
+    private readonly agentName?: string,
   ) {}
 
   /**
@@ -179,19 +180,26 @@ export class TaskPoller {
     try {
       const client = await createAgentClient(port);
 
-      // Always collect via resubscribeTask — InMemoryTaskStore does not populate
-      // task.artifacts from artifact-update events, so getTask returns empty
-      // artifacts for fast tasks (e.g. resumed sessions). The stream replay log
-      // always has the full output regardless of terminal state.
+      // Always collect via resubscribeTask. For a still-running task this streams
+      // live events; for an already-completed task the A2A SDK yields only the Task
+      // snapshot — collectStreamResult extracts the output from task.artifacts, which
+      // ResultManager populated during execution.
       let latestSnapshot: StreamedResult | undefined;
       const timeoutAc = new AbortController();
       const timeoutResult = Symbol("timeout");
       const timer = setTimeout(() => timeoutAc.abort(), this.timeoutMs);
       const result: CollectedStream | typeof timeoutResult = await Promise.race([
-        subscribeTaskStream(client, taskId, this.signal, (snapshot) => {
-          latestSnapshot = snapshot;
-          onProgress?.(snapshot);
-        }).finally(() => clearTimeout(timer)),
+        subscribeTaskStream(
+          client,
+          taskId,
+          this.signal,
+          (snapshot) => {
+            latestSnapshot = snapshot;
+            onProgress?.(snapshot);
+          },
+          undefined,
+          this.agentName,
+        ).finally(() => clearTimeout(timer)),
         new Promise<typeof timeoutResult>((resolve) =>
           timeoutAc.signal.addEventListener("abort", () => resolve(timeoutResult), { once: true }),
         ),

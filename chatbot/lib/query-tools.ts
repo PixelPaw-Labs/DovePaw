@@ -166,6 +166,8 @@ export function makeStartTool(
         signal,
         registry,
         doveAwaitToolName(agent),
+        undefined,
+        agent.name,
       ).start(instruction, { onProgress, backgroundTasks }),
   );
 }
@@ -197,6 +199,8 @@ export function makeAwaitTool(
         signal,
         registry,
         doveAwaitToolName(agent),
+        undefined,
+        agent.name,
       ).poll(taskId, { onProgress }),
   );
 }
