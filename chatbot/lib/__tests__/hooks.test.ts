@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAgentHooks } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
-import { hasPendingScripts } from "@/a2a/lib/spawn";
+import { PendingRegistry } from "../pending-registry";
 
 const signal = new AbortController().signal;
 const callHook = (fn: Function, input: unknown) => fn(input, undefined, { signal });
 
 function makeConfig(overrides?: {
   hasPendingWork?: () => boolean;
-  getPendingIds?: () => string[];
+  getPendingDescriptions?: () => string[];
   getStillRunningId?: (s: unknown) => string | undefined;
   userPromptReminder?: string;
   allowedDirectories?: string[];
@@ -16,11 +16,17 @@ function makeConfig(overrides?: {
   return {
     postToolUseMatcher: "test_tool",
     hasPendingWork: overrides?.hasPendingWork ?? (() => false),
-    getPendingIds: overrides?.getPendingIds ?? (() => []),
+    getPendingDescriptions: overrides?.getPendingDescriptions ?? (() => []),
     getStillRunningId: overrides?.getStillRunningId ?? (() => undefined),
     userPromptReminder: overrides?.userPromptReminder,
     allowedDirectories: overrides?.allowedDirectories,
   };
+}
+
+function makeRegistry(entries: { awaitTool: string; idKey: string; id: string }[] = []) {
+  const r = new PendingRegistry();
+  for (const e of entries) r.register(e);
+  return r;
 }
 
 function preToolUseInput(toolName: string, toolInput: unknown) {
@@ -64,19 +70,17 @@ describe("buildAgentHooks — Stop hook", () => {
     expect(result).toEqual({ continue: true });
   });
 
-  it("blocks stop with MUST message when pending work exists", async () => {
+  it("blocks stop with per-tool instructions when pending work exists", async () => {
     const hooks = buildAgentHooks(
       makeConfig({
         hasPendingWork: () => true,
-        getPendingIds: () => ["abc-123"],
+        getPendingDescriptions: () => ['call `await_run_script` with runId: "abc-123"'],
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
     const result = await callHook(fn, stopInput());
     expect(result).toMatchObject({ decision: "block" });
-    expect((result as { reason: string }).reason).toContain(
-      "You MUST call the await tool yourself with the id",
-    );
+    expect((result as { reason: string }).reason).toContain("await_run_script");
     expect((result as { reason: string }).reason).toContain("abc-123");
   });
 
@@ -84,7 +88,7 @@ describe("buildAgentHooks — Stop hook", () => {
     const hooks = buildAgentHooks(
       makeConfig({
         hasPendingWork: () => true,
-        getPendingIds: () => ["abc-123"],
+        getPendingDescriptions: () => ['call `await_run_script` with runId: "abc-123"'],
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
@@ -93,17 +97,20 @@ describe("buildAgentHooks — Stop hook", () => {
     expect(result.reason).toContain("Never give up or stop polling");
   });
 
-  it("lists all pending ids in the Stop message", async () => {
+  it("lists all pending descriptions as bullets in the Stop message", async () => {
     const hooks = buildAgentHooks(
       makeConfig({
         hasPendingWork: () => true,
-        getPendingIds: () => ["id-1", "id-2"],
+        getPendingDescriptions: () => [
+          'call `await_run_script` with runId: "id-1"',
+          'call `await_chat_to_fixer` with taskId: "id-2"',
+        ],
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
     const result = (await callHook(fn, stopInput())) as { reason: string };
-    expect(result.reason).toContain("id-1");
-    expect(result.reason).toContain("id-2");
+    expect(result.reason).toContain('- call `await_run_script` with runId: "id-1"');
+    expect(result.reason).toContain('- call `await_chat_to_fixer` with taskId: "id-2"');
   });
 });
 
@@ -271,14 +278,9 @@ describe("buildAgentHooks — UserPromptSubmit hook", () => {
 
 // ─── buildSubAgentHooks — self-reflection gate ────────────────────────────────
 
-vi.mock("@/a2a/lib/spawn", () => ({
-  hasPendingScripts: vi.fn().mockReturnValue(false),
-  getPendingRunIds: vi.fn().mockReturnValue([]),
-}));
-
 describe("buildSubAgentHooks — chat_to reflection gate", () => {
   function getReflectionHook() {
-    const hooks = buildSubAgentHooks("/cwd", [], true);
+    const hooks = buildSubAgentHooks("/cwd", [], true, makeRegistry());
     // The reflection matcher is the last PreToolUse matcher
     const matchers = hooks.PreToolUse!;
     const reflectionMatcher = matchers[matchers.length - 1]!;
@@ -431,14 +433,14 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
 // ─── buildSubAgentHooks — handoff consideration stop hook ─────────────────────
 
 describe("buildSubAgentHooks — handoff consideration stop hook", () => {
-  function getHandoffStopHook() {
-    const hooks = buildSubAgentHooks("/cwd", [], true);
+  function getHandoffStopHook(registry = makeRegistry()) {
+    const hooks = buildSubAgentHooks("/cwd", [], true, registry);
     // The handoff hook is the last Stop matcher (base pending-work hook is first)
     const matchers = hooks.Stop!;
     return matchers[matchers.length - 1]!.hooks[0]!;
   }
 
-  it("blocks on first stop with handoff reminder when no pending scripts", async () => {
+  it("blocks on first stop with handoff reminder when registry is empty", async () => {
     const fn = getHandoffStopHook();
     const result = await callHook(fn, stopInput());
     expect(result).toMatchObject({ decision: "block" });
@@ -451,9 +453,9 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     expect(result).toEqual({ continue: true });
   });
 
-  it("allows when pending scripts exist (defers to base stop hook)", async () => {
-    vi.mocked(hasPendingScripts).mockReturnValueOnce(true);
-    const fn = getHandoffStopHook();
+  it("allows when registry has pending entries (defers to base stop hook)", async () => {
+    const registry = makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "run-1" }]);
+    const fn = getHandoffStopHook(registry);
     const result = await callHook(fn, stopInput());
     expect(result).toEqual({ continue: true });
   });
@@ -470,7 +472,7 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
   });
 
   it("is absent when hasAgentLinks is false", () => {
-    const hooks = buildSubAgentHooks("/cwd", [], false);
+    const hooks = buildSubAgentHooks("/cwd", [], false, makeRegistry());
     // Stop array should only contain the base pending-work hook, not the handoff hook
     expect(hooks.Stop).toHaveLength(1);
   });

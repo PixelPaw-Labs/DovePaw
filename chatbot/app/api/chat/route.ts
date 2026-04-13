@@ -27,7 +27,7 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { makeProgressSender } from "@/lib/chat-sse";
-import type { StreamedResult } from "@/lib/query-tools";
+import type { CollectedStream, StreamedResult } from "@/lib/query-tools";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { createSseResponse } from "@/lib/sse-response";
 import {
@@ -39,6 +39,7 @@ import {
   doveAwaitToolName,
 } from "@/lib/query-tools";
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
+import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession, closeStaleSessions, setSessionStatus, upsertSession } from "@/lib/db";
@@ -146,8 +147,8 @@ export async function POST(request: Request) {
     //   1. Explicit DELETE /api/chat  → sessionRunner.abort()
     //   2. Process exit / SIGTERM    → sessionRunner.abortAll()
 
-    const backgroundTasks: Promise<unknown>[] = [];
-    const pendingTaskSet = new Set<string>();
+    const backgroundTasks: Promise<CollectedStream>[] = [];
+    const doveRegistry = new PendingRegistry();
     const agents = await readAgentsConfig();
 
     // Accumulates inner-agent progress for the final SessionManager.save.
@@ -190,12 +191,13 @@ export async function POST(request: Request) {
           subprocessController.signal,
           makeProgressSender(dispatcher.publish, onInnerProgress),
           backgroundTasks,
+          doveRegistry,
         ),
         makeAwaitTool(
           agent,
           subprocessController.signal,
           makeProgressSender(dispatcher.publish, onInnerProgress),
-          pendingTaskSet,
+          doveRegistry,
         ),
       ];
     });
@@ -246,7 +248,7 @@ export async function POST(request: Request) {
                 // Stream text tokens as they are generated
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
-                hooks: buildDoveHooks(agents, pendingTaskSet, AGENTS_ROOT, additionalDirectories),
+                hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories),
                 canUseTool: doveCanUseTool,
               },
             }),

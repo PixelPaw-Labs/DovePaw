@@ -10,55 +10,41 @@
  */
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
-import { TaskNotFoundError } from "@a2a-js/sdk/client";
 import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";
 import { z } from "zod";
+import { resolveAgentPort, createAgentClient } from "@/lib/a2a-client";
+import type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 import {
-  resolveAgentPort,
-  createAgentClient,
-  startAgentStream,
-  subscribeTaskStream,
-  collectStreamResult,
-  formatAgentStreamContext,
-} from "@/lib/a2a-client";
-import type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
+  TaskPoller,
+  noServersMessage,
+  unreachableMessage,
+  isConnectionError,
+} from "@/lib/task-poller";
+import type { PendingRegistry } from "@/lib/pending-registry";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
-/** Returned by ask_* and start_* tools when a task is successfully submitted. */
+/** Returned by ask_* tools when a task is successfully submitted. */
 export type TaskStartedContent = {
   taskId: string;
   /** A2A context ID — pass this back on the next ask_* call to resume the same session. */
   contextId: string;
 };
 
-/** Returned by start_* tools (includes manifestKey for agent identification). */
-export type TaskStartedWithKeyContent = TaskStartedContent & {
-  manifestKey: string;
-};
+export type { TaskStartedWithKeyContent } from "@/lib/task-poller";
 
 /**
  * Structured result collected from a completed A2A task stream.
  * Separates content by type so the UI can render each category appropriately.
  */
-export type { ProgressEntry, StreamedResult } from "@/lib/a2a-client";
+export type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 
-/** Returned by await_* when the agent task has reached a terminal state. */
-export type TaskCompletedContent = {
-  status: "completed" | "canceled" | "failed" | "rejected";
-  taskId: string;
-  result: StreamedResult;
-};
-
-/** Returned by await_* when the poll window expired before the task finished. */
-export type TaskStillRunningContent = {
-  status: "still_running";
-  taskId: string;
-};
-
-/** Union of all possible await_* structured content payloads. */
-export type AwaitToolContent = TaskCompletedContent | TaskStillRunningContent;
+export type {
+  TaskCompletedContent,
+  TaskStillRunningContent,
+  AwaitToolContent,
+} from "@/lib/task-poller";
 
 /** Shape of an MCP CallToolResult as returned in PostToolUseHookInput.tool_response. */
 export type ToolResponse<T = Record<string, unknown>> = {
@@ -75,24 +61,6 @@ export interface AgentContextStore {
   set(manifestKey: string, contextId: string): void;
 }
 
-// ─── Pending task registry ────────────────────────────────────────────────────
-
-export function markTaskPending(set: Set<string>, taskId: string): void {
-  set.add(taskId);
-}
-
-export function markTaskResolved(set: Set<string>, taskId: string): void {
-  set.delete(taskId);
-}
-
-export function hasPendingTasks(set: Set<string>): boolean {
-  return set.size > 0;
-}
-
-export function getPendingTaskIds(set: Set<string>): string[] {
-  return [...set];
-}
-
 // ─── Tool name helpers ────────────────────────────────────────────────────────
 
 /** Returns when the full task result is available */
@@ -101,34 +69,6 @@ export const doveAskToolName = (agent: AgentDef) => `ask_${agent.manifestKey}`;
 export const doveStartToolName = (agent: AgentDef) => `start_${agent.manifestKey}`;
 /** Returns when the referenced task completes */
 export const doveAwaitToolName = (agent: AgentDef) => `await_${agent.manifestKey}`;
-
-// ─── Shared helpers ───────────────────────────────────────────────────────────
-
-function noServersMessage() {
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: "⚠️ A2A servers are not running. Start them with: **npm run chatbot:servers**",
-      },
-    ],
-  };
-}
-
-function unreachableMessage(port: number | string) {
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: `⚠️ Agent server on port ${port} is unreachable.\nRestart servers: **npm run chatbot:servers**`,
-      },
-    ],
-  };
-}
-
-function isConnectionError(msg: string) {
-  return msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
-}
 
 // ─── makeAskTool ──────────────────────────────────────────────────────────────
 
@@ -206,7 +146,8 @@ export function makeStartTool(
   agent: AgentDef,
   signal?: AbortSignal,
   onProgress?: (result: StreamedResult) => void,
-  backgroundTasks?: Promise<unknown>[],
+  backgroundTasks?: Promise<CollectedStream>[],
+  registry?: PendingRegistry,
 ) {
   return tool(
     doveStartToolName(agent),
@@ -218,59 +159,21 @@ export function makeStartTool(
           "Instruction to pass to the agent, synthesized from conversation context. Must open with a self-introduction of the orchestrator, e.g. 'I am Dove, your orchestrator. ' followed by the task instruction.",
         ),
     },
-    async ({ instruction }) => {
-      const port = resolveAgentPort(agent.manifestKey);
-      if (!port) return noServersMessage();
-      try {
-        // Use startAgentStream so the EventQueue is created before execute() runs —
-        // this captures workspace/setup events that fire synchronously during execute()
-        // before any resubscribeTask connection could be opened.
-        const handle = await startAgentStream(port, instruction, signal);
-        if (!handle) {
-          return {
-            content: [
-              { type: "text" as const, text: "Error: task ID not received from agent server." },
-            ],
-          };
-        }
-        const { taskId, contextId, stream } = handle;
-
-        // Continue consuming the stream in the background, forwarding events via onProgress.
-        if (onProgress) {
-          const task = collectStreamResult(stream, onProgress).catch(() => {});
-          backgroundTasks?.push(task);
-        }
-
-        const started: TaskStartedWithKeyContent = {
-          taskId,
-          contextId,
-          manifestKey: agent.manifestKey,
-        };
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Task started (taskId: ${taskId}, contextId: ${contextId})`,
-            },
-          ],
-          structuredContent: started,
-        };
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (isConnectionError(msg)) return unreachableMessage(port);
-        return { content: [{ type: "text" as const, text: `Error: ${msg}` }] };
-      }
-    },
+    ({ instruction }) =>
+      new TaskPoller(
+        agent.manifestKey,
+        agent.displayName,
+        signal,
+        registry,
+        doveAwaitToolName(agent),
+      ).start(instruction, { onProgress, backgroundTasks }),
   );
 }
 
 // ─── makeAwaitTool ────────────────────────────────────────────────────────────
 
-/** How long to wait for task completion before returning a still_running status. */
-const AWAIT_POLL_TIMEOUT_MS = 30_000;
-
 /**
- * Polls a previously started task for up to AWAIT_POLL_TIMEOUT_MS.
+ * Polls a previously started task for up to TaskPoller's timeout window.
  * Returns the result if the task completes within the window, or a
  * { status: "still_running", taskId } payload if it does not — so Dove
  * can call await_* again with the same taskId instead of starting a new task.
@@ -279,7 +182,7 @@ export function makeAwaitTool(
   agent: AgentDef,
   signal?: AbortSignal,
   onProgress?: (result: StreamedResult) => void,
-  pendingTaskSet?: Set<string>,
+  registry?: PendingRegistry,
 ) {
   return tool(
     doveAwaitToolName(agent),
@@ -287,82 +190,13 @@ export function makeAwaitTool(
     {
       taskId: z.string().describe("The taskId returned by the corresponding start_* or ask_* tool"),
     },
-    async ({ taskId }) => {
-      const port = resolveAgentPort(agent.manifestKey);
-      if (!port) return noServersMessage();
-      try {
-        const client = await createAgentClient(port);
-
-        // Always collect via resubscribeTask — InMemoryTaskStore does not populate
-        // task.artifacts from artifact-update events, so getTask returns empty
-        // artifacts for fast tasks (e.g. resumed sessions). The stream replay log
-        // always has the full output regardless of terminal state.
-        // Collect output for up to AWAIT_POLL_TIMEOUT_MS,
-        // then return still_running so Dove retries instead of spawning a new task.
-        let latestSnapshot: StreamedResult | undefined;
-        const timeoutAc = new AbortController();
-        const timeoutResult = Symbol("timeout");
-        const timer = setTimeout(() => timeoutAc.abort(), AWAIT_POLL_TIMEOUT_MS);
-        const result = await Promise.race([
-          subscribeTaskStream(client, taskId, signal, (snapshot) => {
-            latestSnapshot = snapshot;
-            onProgress?.(snapshot);
-          }).finally(() => clearTimeout(timer)),
-          new Promise<typeof timeoutResult>((resolve) =>
-            timeoutAc.signal.addEventListener("abort", () => resolve(timeoutResult), {
-              once: true,
-            }),
-          ),
-        ]);
-
-        if (result === timeoutResult) {
-          if (pendingTaskSet) markTaskPending(pendingTaskSet, taskId);
-          const progressLines: string[] = ["Agent is still working..."];
-          const lastArtifacts = latestSnapshot?.progress.at(-1)?.artifacts ?? {};
-          const lastToolCall = lastArtifacts["tool-call"];
-          const streamBuffer = lastArtifacts["stream"] ?? "";
-          if (lastToolCall) progressLines.push(`  Running: ${lastToolCall}`);
-          if (streamBuffer) {
-            const tail = streamBuffer.trim().slice(-200);
-            progressLines.push(`  Latest output: …${tail}`);
-          }
-          const stillRunning: TaskStillRunningContent = { status: "still_running", taskId };
-          return {
-            content: [{ type: "text" as const, text: progressLines.join("\n") }],
-            structuredContent: stillRunning,
-          };
-        }
-
-        if (pendingTaskSet) markTaskResolved(pendingTaskSet, taskId);
-        const completed: TaskCompletedContent = {
-          status: "completed",
-          taskId: result.taskId ?? taskId,
-          result: result.result,
-        };
-        const formatted = formatAgentStreamContext(
-          result.result,
-          result.taskId ?? taskId,
-          agent.displayName,
-        );
-        return {
-          content: [{ type: "text" as const, text: formatted }],
-          structuredContent: completed,
-        };
-      } catch (err: unknown) {
-        if (err instanceof TaskNotFoundError) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `⚠️ Task \`${taskId}\` not found — it may have expired or the server restarted.`,
-              },
-            ],
-          };
-        }
-        const msg = err instanceof Error ? err.message : String(err);
-        if (isConnectionError(msg)) return unreachableMessage(port);
-        return { content: [{ type: "text" as const, text: `Error: ${msg}` }] };
-      }
-    },
+    ({ taskId }) =>
+      new TaskPoller(
+        agent.manifestKey,
+        agent.displayName,
+        signal,
+        registry,
+        doveAwaitToolName(agent),
+      ).poll(taskId, { onProgress }),
   );
 }

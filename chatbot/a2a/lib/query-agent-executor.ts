@@ -22,6 +22,8 @@ import { extractInstruction } from "./message-parts";
 import { buildAgentConfig } from "./agent-config-builder";
 import { PipelineTrigger } from "./pipeline-trigger";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
+import { PendingRegistry } from "@/lib/pending-registry";
+import type { CollectedStream } from "@/lib/a2a-client";
 import {
   createAgentWorkspace,
   agentSourceDirFromEntry,
@@ -80,7 +82,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
     let workspace: AgentWorkspace | null = null;
     const userMsgId = randomUUID();
-    const backgroundTasks: Promise<unknown>[] = [];
+    const backgroundTasks: Promise<CollectedStream>[] = [];
 
     // Track direct publishStatusToUI calls (workspace setup, clone progress, etc.)
     // so sub-agent history sessions show these entries alongside the tool-call entries
@@ -139,10 +141,13 @@ export class QueryAgentExecutor implements AgentExecutor {
 
       const agentConfig = buildAgentConfig(this.def, workspace, extraEnv, repoSlugs);
 
+      const registry = new PendingRegistry();
+
       const chatToTools = await this.agentConfigReader.resolveLinkedTools(
         this.def.name,
         this.abortController.signal,
         backgroundTasks,
+        registry,
       );
 
       await withMcpQuery(
@@ -154,8 +159,9 @@ export class QueryAgentExecutor implements AgentExecutor {
             this.abortController.signal,
             publishProgress,
             taskId,
+            registry,
           ),
-          makeAwaitScriptTool(this.def),
+          makeAwaitScriptTool(this.def, registry),
           ...makeAgentMgmtTools(this.def),
           ...chatToTools,
         ],
@@ -193,6 +199,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                   workspace!.path,
                   additionalDirectories,
                   chatToTools.length > 0,
+                  registry,
                 ),
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",

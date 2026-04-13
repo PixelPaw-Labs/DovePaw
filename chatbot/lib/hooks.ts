@@ -17,7 +17,8 @@ import type {
   CanUseTool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
-import { doveAwaitToolName, hasPendingTasks, getPendingTaskIds } from "@/lib/query-tools";
+import { doveAwaitToolName } from "@/lib/query-tools";
+import { PendingRegistry } from "@/lib/pending-registry";
 import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
@@ -29,8 +30,8 @@ export interface AgentHooksConfig {
   postToolUseMatcher: string;
   /** Returns true when there is at least one pending in-flight operation. */
   hasPendingWork: () => boolean;
-  /** Returns the IDs of all currently pending operations. */
-  getPendingIds: () => string[];
+  /** Returns a human-readable description for each pending operation (one per entry). */
+  getPendingDescriptions: () => string[];
   /** Extracts the operation ID from a still_running structuredContent payload. */
   getStillRunningId: (structured: unknown) => string | undefined;
   /** Appended to every user prompt via UserPromptSubmit hook. */
@@ -52,7 +53,7 @@ export function buildAgentHooks(
   const {
     postToolUseMatcher,
     hasPendingWork,
-    getPendingIds,
+    getPendingDescriptions,
     getStillRunningId,
     userPromptReminder,
     allowedDirectories,
@@ -113,16 +114,16 @@ export function buildAgentHooks(
           async (input) => {
             if (input.hook_event_name !== "Stop") return { continue: true };
             if (input.stop_hook_active || !hasPendingWork()) return { continue: true };
-            const ids = getPendingIds();
+            const descriptions = getPendingDescriptions();
             return {
               decision: "block",
               reason: [
-                `⚠️ You have ${ids.length} pending operation(s) still running (id: ${ids.join(", ")}).`,
-                `You MUST call the await tool yourself with the id.`,
+                `⚠️ You have ${descriptions.length} pending operation(s) still running:`,
+                ...descriptions.map((d) => `- ${d}`),
                 `These operations can run for a long time (minutes to hours) — decide an appropriate sleep interval based on the task type.`,
                 `Keep calling await in a loop until the operation completes.`,
                 `Never give up or stop polling; you are responsible for retrieving the final result.`,
-              ].join(" "),
+              ].join("\n"),
             };
           },
         ],
@@ -173,14 +174,15 @@ When the user's intent is resolved by SOMETHING BEING DONE — for one agent or 
 /** Hooks for Dove's top-level query() in route.ts. */
 export function buildDoveHooks(
   agents: AgentDef[],
-  pendingTaskSet: Set<string>,
+  registry: PendingRegistry,
   cwd: string,
   additionalDirectories: string[],
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
-    hasPendingWork: () => hasPendingTasks(pendingTaskSet),
-    getPendingIds: () => getPendingTaskIds(pendingTaskSet),
+    hasPendingWork: () => registry.hasPending(),
+    getPendingDescriptions: () =>
+      registry.getPending().map((e) => `call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
     getStillRunningId: (s) => {
       if (typeof s !== "object" || s === null || !("taskId" in s)) return undefined;
       const val: unknown = Reflect.get(s, "taskId");

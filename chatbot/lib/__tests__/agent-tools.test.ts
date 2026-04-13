@@ -48,6 +48,7 @@ import {
   makeStartChatToTool,
   START_SCRIPT_TOOL,
 } from "@/lib/agent-tools";
+import type { CollectedStream } from "@/lib/a2a-client";
 import { resolveAgentPort, startAgentStream, collectStreamResult } from "@/lib/a2a-client";
 import type { AgentDef } from "@@/lib/agents";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -269,7 +270,7 @@ describe("makeStartChatToTool", () => {
     /* empty stream */
   }
 
-  function captureStartChatToHandler(backgroundTasks?: Promise<unknown>[]) {
+  function captureStartChatToHandler(backgroundTasks?: Promise<CollectedStream>[]) {
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     return makeStartChatToTool(AGENT, undefined, backgroundTasks) as any;
   }
@@ -298,7 +299,11 @@ describe("makeStartChatToTool", () => {
   it("returns taskId and contextId from the stream handle", async () => {
     const handler = captureStartChatToHandler();
     const result = (await handler({ instruction: "do something" })) as any;
-    expect(result.structuredContent).toEqual({ taskId: "task-123", contextId: "ctx-456" });
+    expect(result.structuredContent).toEqual({
+      taskId: "task-123",
+      contextId: "ctx-456",
+      manifestKey: "test_agent",
+    });
   });
 
   it("drains stream via collectStreamResult in background", async () => {
@@ -308,7 +313,7 @@ describe("makeStartChatToTool", () => {
   });
 
   it("pushes drain task into backgroundTasks when provided", async () => {
-    const backgroundTasks: Promise<unknown>[] = [];
+    const backgroundTasks: Promise<CollectedStream>[] = [];
     const handler = captureStartChatToHandler(backgroundTasks);
     await handler({ instruction: "do something" });
     expect(backgroundTasks).toHaveLength(1);
@@ -318,7 +323,7 @@ describe("makeStartChatToTool", () => {
     vi.mocked(resolveAgentPort).mockReturnValue(null);
     const handler = captureStartChatToHandler();
     const result = (await handler({ instruction: "do something" })) as any;
-    expect(result.content[0].text).toContain("not reachable");
+    expect(result.content[0].text).toContain("A2A servers are not running");
     expect(startAgentStream).not.toHaveBeenCalled();
   });
 

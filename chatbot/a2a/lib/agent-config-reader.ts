@@ -13,8 +13,10 @@ import {
   makeReviewTool,
   makeEscalateTool,
 } from "@/lib/agent-tools";
+import type { PendingRegistry } from "@/lib/pending-registry";
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { isAgentOnline, isHeartbeatReady } from "@/a2a/heartbeat-server";
+import type { CollectedStream } from "@/lib/a2a-client";
 import { resolveAgentPort } from "@/lib/a2a-client";
 
 export class AgentConfigReader {
@@ -49,7 +51,8 @@ export class AgentConfigReader {
   async resolveLinkedTools(
     agentName: string,
     signal?: AbortSignal,
-    backgroundTasks?: Promise<unknown>[],
+    backgroundTasks?: Promise<CollectedStream>[],
+    registry?: PendingRegistry,
   ) {
     const [links, allAgents] = await Promise.all([
       Promise.resolve(readAgentLinks()),
@@ -78,8 +81,8 @@ export class AgentConfigReader {
           tools.push(makeEscalateTool(targetDef, signal));
           break;
         default: // "parallel" and any future strategies default to start + await
-          tools.push(makeStartChatToTool(targetDef, signal, backgroundTasks));
-          tools.push(makeAwaitChatToTool(targetDef, signal));
+          tools.push(makeStartChatToTool(targetDef, signal, backgroundTasks, registry));
+          tools.push(makeAwaitChatToTool(targetDef, signal, registry));
       }
     }
 

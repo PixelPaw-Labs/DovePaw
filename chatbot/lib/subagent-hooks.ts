@@ -12,7 +12,6 @@ import type {
   HookEvent,
 } from "@anthropic-ai/claude-agent-sdk";
 import { HANDOFF_PATTERNS } from "@/lib/agent-link-patterns";
-import { hasPendingScripts, getPendingRunIds } from "@/a2a/lib/spawn";
 import {
   START_SCRIPT_TOOL,
   AWAIT_SCRIPT_TOOL,
@@ -21,6 +20,7 @@ import {
   thresholdClause,
 } from "@/lib/agent-tools";
 import { buildAgentHooks } from "@/lib/hooks";
+import type { PendingRegistry } from "@/lib/pending-registry";
 
 // ─── Script reminder ──────────────────────────────────────────────────────────
 
@@ -146,19 +146,6 @@ If yes: call the appropriate chat_to_*, review_with_*, or escalate_to_* tool bef
 If no: you may stop.
 </reminder>`;
 
-const handoffConsiderationStop: HookCallbackMatcher = {
-  hooks: [
-    async (input) => {
-      if (input.hook_event_name !== "Stop") return { continue: true };
-      // Already reminded once this turn — let the agent stop.
-      if (input.stop_hook_active) return { continue: true };
-      // Pending scripts exist — the base Stop hook handles that case.
-      if (hasPendingScripts()) return { continue: true };
-      return { decision: "block", reason: HANDOFF_CONSIDERATION_PROMPT };
-    },
-  ],
-};
-
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
 /** Hooks for the QueryAgentExecutor sub-agent query(). */
@@ -166,11 +153,26 @@ export function buildSubAgentHooks(
   cwd: string,
   additionalDirectories: string[],
   hasAgentLinks: boolean,
+  registry: PendingRegistry,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const handoffConsiderationStop: HookCallbackMatcher = {
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "Stop") return { continue: true };
+        // Already reminded once this turn — let the agent stop.
+        if (input.stop_hook_active) return { continue: true };
+        // Pending operations exist — the base Stop hook handles that case.
+        if (registry.hasPending()) return { continue: true };
+        return { decision: "block", reason: HANDOFF_CONSIDERATION_PROMPT };
+      },
+    ],
+  };
+
   const base = buildAgentHooks({
     postToolUseMatcher: "mcp__agents__await_.*",
-    hasPendingWork: hasPendingScripts,
-    getPendingIds: getPendingRunIds,
+    hasPendingWork: () => registry.hasPending(),
+    getPendingDescriptions: () =>
+      registry.getPending().map((e) => `call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
     getStillRunningId: (s) => {
       if (typeof s !== "object" || s === null) return undefined;
       // await_run_script returns { runId }, await_chat_to_* returns { taskId }

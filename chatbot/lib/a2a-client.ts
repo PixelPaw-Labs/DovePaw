@@ -3,8 +3,8 @@
  *
  *   resolveAgentPort      — port lookup from the ports manifest
  *   createAgentClient     — create A2A Client for a port
- *   subscribeTaskStream   — resubscribe + collect stream, cancels on abort
- *   collectStreamResult   — consume A2A event stream → StreamedResult
+ *   subscribeTaskStream   — resubscribe + collect stream → CollectedStream, cancels on abort
+ *   collectStreamResult   — consume A2A event stream → CollectedStream
  *   extractArtifactResult — build StreamedResult from terminal task artifacts
  */
 
@@ -18,6 +18,14 @@ import type { ProgressEntry } from "@/lib/progress";
 export type { ProgressEntry } from "@/lib/progress";
 export { createAgentClient, startAgentStream } from "@@/lib/a2a-client";
 export type { A2AStreamEvent, AgentStreamHandle } from "@@/lib/a2a-client";
+
+/** The collected output of a completed A2A task stream. */
+export type CollectedStream = {
+  /** A2A task ID, present when the stream included a task event. */
+  taskId?: string;
+  /** Full result built from the stream's artifact and status events. */
+  result: StreamedResult;
+};
 
 export type StreamedResult = {
   /** Primary text output (from artifact-update events), joined for readability. */
@@ -55,7 +63,7 @@ export function subscribeTaskStream(
   signal: AbortSignal | undefined,
   onProgress: (result: StreamedResult) => void,
   onArtifact?: (name: string, text: string) => void,
-): Promise<{ taskId?: string; result: StreamedResult }> {
+): Promise<CollectedStream> {
   const ac = new AbortController();
   signal?.addEventListener(
     "abort",
@@ -86,7 +94,7 @@ export async function collectStreamResult(
   onSnapshot?: (result: StreamedResult) => void,
   onArtifact?: (name: string, text: string) => void,
   onComplete?: (result: StreamedResult) => void,
-): Promise<{ taskId?: string; result: StreamedResult }> {
+): Promise<CollectedStream> {
   let taskId: string | undefined;
   let finalState: string | undefined;
   const progress: ProgressEntry[] = [];

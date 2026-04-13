@@ -26,16 +26,17 @@ import {
 import { z } from "zod";
 import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
+import type { CollectedStream } from "@/lib/a2a-client";
 import {
   collectStreamResult,
   formatAgentStreamContext,
   resolveAgentPort,
-  createAgentClient,
   startAgentStream,
-  subscribeTaskStream,
 } from "@/lib/a2a-client";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { HANDOFF_PATTERNS } from "@/lib/agent-link-patterns";
+import { TaskPoller } from "@/lib/task-poller";
+import type { PendingRegistry } from "@/lib/pending-registry";
 
 // ─── Delegation thresholds ────────────────────────────────────────────────────
 
@@ -225,6 +226,7 @@ export function makeStartScriptTool(
   signal?: AbortSignal,
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
   taskId?: string,
+  registry?: PendingRegistry,
 ) {
   return tool(
     START_SCRIPT_TOOL,
@@ -248,6 +250,7 @@ export function makeStartScriptTool(
           ? { ...config, extraEnv: { ...config.extraEnv, REPO_LIST: clonedPaths.join(",") } }
           : config;
       const { runId } = startScript(finalConfig, instruction, signal, onProgress, taskId);
+      registry?.register({ awaitTool: AWAIT_SCRIPT_TOOL, idKey: "runId", id: runId });
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },
@@ -257,13 +260,16 @@ export function makeStartScriptTool(
 }
 
 /** Polls a previously started script run; returns output or still_running. */
-export function makeAwaitScriptTool(agent: AgentDef) {
+export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry) {
   return tool(
     AWAIT_SCRIPT_TOOL,
     `Await a previously started ${agent.displayName} script run. Returns the output when complete, or { status: "still_running", runId } if still in progress.`,
     { runId: z.string().describe("The runId returned by start_run_script") },
     async ({ runId }) => {
       const result = await awaitScript(runId);
+      if (result.status === "completed" || result.status === "not_found") {
+        registry?.resolve(runId);
+      }
       return {
         content: [
           {
@@ -467,7 +473,8 @@ ${HANDOFF_PATTERNS}
 export function makeStartChatToTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
-  backgroundTasks?: Promise<unknown>[],
+  backgroundTasks?: Promise<CollectedStream>[],
+  registry?: PendingRegistry,
 ) {
   const { displayName, manifestKey } = targetDef;
   return tool(
@@ -479,62 +486,44 @@ export function makeStartChatToTool(
       instruction: z.string().describe(`Task to delegate to ${displayName}.`),
       contextId: z.string().optional().describe("Continue a prior session. Omit to start fresh."),
     },
-    async ({ instruction, contextId }) => {
-      const port = resolveAgentPort(manifestKey);
-      if (!port)
-        return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-
-      // Use startAgentStream (sendMessageStream) so the EventQueue is created before
-      // execute() runs — same reason as makeStartTool. Abort signal is wired internally.
-      const handle = await startAgentStream(port, instruction, signal, contextId);
-      if (!handle)
-        return {
-          content: [{ type: "text" as const, text: "Error: task ID not received from agent." }],
-        };
-
-      const { taskId, contextId: sessionContextId, stream } = handle;
-
-      // Drain stream in background so the EventQueue doesn't stall.
-      // Results are collected later by await_chat_to_* via resubscribeTask.
-      const drainTask = collectStreamResult(stream).catch(() => {});
-      backgroundTasks?.push(drainTask);
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `${displayName} started (taskId: ${taskId}, contextId: ${sessionContextId})`,
-          },
-        ],
-        structuredContent: { taskId, contextId: sessionContextId },
-      };
-    },
+    ({ instruction, contextId }) =>
+      new TaskPoller(
+        manifestKey,
+        displayName,
+        signal,
+        registry,
+        `await_chat_to_${manifestKey}`,
+      ).start(instruction, { contextId, backgroundTasks }),
   );
 }
 
 /**
  * Await tool for parallel fan-out — polls a task started by start_chat_to_*.
- * Returns the full agent context (thinking + actions + response) when complete.
+ * Returns the full agent context (thinking + actions + response) when complete,
+ * or { status: "still_running", taskId } if the poll window expired.
+ *
+ * Mirrors Dove's makeAwaitTool pattern: races subscribeTaskStream against
+ * AWAIT_POLL_TIMEOUT_MS so the PostToolUse still_running hook can enforce retries.
  */
-export function makeAwaitChatToTool(targetDef: AgentDef, signal?: AbortSignal) {
+export function makeAwaitChatToTool(
+  targetDef: AgentDef,
+  signal?: AbortSignal,
+  registry?: PendingRegistry,
+) {
   const { displayName, manifestKey } = targetDef;
   return tool(
     `await_chat_to_${manifestKey}`,
     `Collect the result of a previously started ${displayName} task.\n` +
       `Call this after start_chat_to_${manifestKey} to retrieve the agent's output.`,
     { taskId: z.string().describe("The taskId returned by start_chat_to_" + manifestKey) },
-    async ({ taskId }) => {
-      const port = resolveAgentPort(manifestKey);
-      if (!port)
-        return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-      const client = await createAgentClient(port);
-      const { result } = await subscribeTaskStream(client, taskId, signal, () => {});
-      const formatted = formatAgentStreamContext(result, taskId, displayName);
-      return {
-        content: [{ type: "text" as const, text: formatted }],
-        structuredContent: { ...result, contextId: taskId },
-      };
-    },
+    ({ taskId }) =>
+      new TaskPoller(
+        manifestKey,
+        displayName,
+        signal,
+        registry,
+        `await_chat_to_${manifestKey}`,
+      ).poll(taskId),
   );
 }
 
