@@ -1,0 +1,50 @@
+[
+  {
+    "id": "simple-ondemand",
+    "prompt": "Create a new DovePaw agent called standup-writer that writes a daily standup summary from my git commits. It runs on demand, no schedule.",
+    "expected_output": "Creates ~/.dovepaw/tmp/standup-writer/main.ts (Type 1 template) and ~/.dovepaw/tmp/standup-writer/agent.json. Imports from @dovepaw/agent-sdk. Uses AGENT_WORKSPACE! with no fallback. Calls publishStatusToUI (not emitProgress). agent.json has schedulingEnabled: false with no schedule block. Does not modify lib/agents.ts or any plugin repo file.",
+    "files": [],
+    "assertions": [
+      "main.ts imports from @dovepaw/agent-sdk",
+      "AGENT_WORKSPACE! has no fallback (no ?? or ||)",
+      "publishStatusToUI is called, not emitProgress",
+      "agent.json does not contain pluginPath",
+      "agent.json schedulingEnabled is false",
+      "no schedule block in agent.json",
+      "lib/agents.ts is not modified",
+      "dovepaw-plugin.json is not modified"
+    ]
+  },
+  {
+    "id": "scheduled-stateful",
+    "prompt": "Add a new agent inbox-triager that runs every morning at 9am, checks my email, and files urgent items to Jira. It needs JIRA_API_KEY and GMAIL_TOKEN env vars.",
+    "expected_output": "Creates ~/.dovepaw/tmp/inbox-triager/main.ts (Type 3 template with acquireLock/releaseLock/retainLock) and agent.json with schedulingEnabled: true and calendar schedule {type: calendar, hour: 9, minute: 0}. envVars includes JIRA_API_KEY and GMAIL_TOKEN. Uses agentPersistentStateDir for lock file. DOVEPAW_SCHEDULED check present.",
+    "files": [],
+    "assertions": [
+      "main.ts imports acquireLock, releaseLock, retainLock from @dovepaw/agent-sdk",
+      "agentPersistentStateDir is used",
+      "DOVEPAW_SCHEDULED check is present",
+      "agent.json schedulingEnabled is true",
+      "agent.json schedule.type is calendar",
+      "agent.json schedule.hour is 9",
+      "agent.json envVars contains JIRA_API_KEY",
+      "agent.json envVars contains GMAIL_TOKEN",
+      "AGENT_WORKSPACE! has no fallback"
+    ]
+  },
+  {
+    "id": "skill-based",
+    "prompt": "Build a release-drafter agent that dynamically builds a skill from the current changelog and runs it to draft release notes.",
+    "expected_output": "Creates ~/.dovepaw/tmp/release-drafter/main.ts (Type 2 template) with randomBytes skill name, mkdirSync for skill dir, writeFileSync for SKILL.md, spawnClaudeWithSignals, and rmSync in finally block. No static skill file is created. publishStatusToUI called for progress updates.",
+    "files": [],
+    "assertions": [
+      "main.ts imports randomBytes from node:crypto",
+      "main.ts imports writeFileSync, mkdirSync, rmSync from node:fs",
+      "rmSync is called inside a finally block",
+      "skillDir is cleaned up even on error",
+      "publishStatusToUI is called",
+      "AGENT_WORKSPACE! has no fallback",
+      "no separate SKILL.md created for the agent itself"
+    ]
+  }
+]

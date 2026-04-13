@@ -167,8 +167,9 @@ export function buildAgentHooks(
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
 
 const DOVE_PROMPT_REMINDER = `<reminder>
-When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS ASK the agent. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
-When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS START the agent first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
+- When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS ASK the agent. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
+- When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS START the agent first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
+- When the user's intent is to **CREATE or SCAFFOLD a new DovePaw agent**, ALWAYS invoke the \`/sub-agent-builder\` skill first — never write agent files manually.
 </reminder>`;
 
 /** Hooks for Dove's top-level query() in route.ts. */
