@@ -29,19 +29,29 @@ export {
 
 // ─── Read / Write ─────────────────────────────────────────────────────────────
 
-export function readAgentLinks(): AgentLink[] {
+export function readAgentLinksFile(): AgentLinksFile {
   try {
     const raw: unknown = JSON.parse(readFileSync(AGENT_LINKS_FILE, "utf-8"));
     const result = agentLinksFileSchema.safeParse(raw);
-    return result.success ? result.data.links : [];
+    return result.success ? result.data : { version: 1, groups: [], links: [] };
   } catch {
-    return [];
+    return { version: 1, groups: [], links: [] };
   }
 }
 
-export function writeAgentLinks(links: AgentLink[]): void {
-  const file: AgentLinksFile = { version: 1, links };
+/** Returns only the links array. Existing callers remain unchanged. */
+export function readAgentLinks(): AgentLink[] {
+  return readAgentLinksFile().links;
+}
+
+export function writeAgentLinksFile(file: AgentLinksFile): void {
   writeFileSync(AGENT_LINKS_FILE, JSON.stringify(file, null, 2), "utf-8");
+}
+
+/** Updates only the links array, preserving the existing groups list. */
+export function writeAgentLinks(links: AgentLink[]): void {
+  const existing = readAgentLinksFile();
+  writeAgentLinksFile({ ...existing, links });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

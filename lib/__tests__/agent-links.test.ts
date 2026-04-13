@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { resolveLinkedTargets } from "../agent-links";
 import type { AgentLink } from "../agent-links-schemas";
-import { agentLinkSchema, AGENT_LINK_STRATEGIES } from "../agent-links-schemas";
+import {
+  agentLinkSchema,
+  agentLinksFileSchema,
+  AGENT_LINK_STRATEGIES,
+} from "../agent-links-schemas";
 
 // ─── agentLinkSchema ──────────────────────────────────────────────────────────
 
@@ -31,6 +35,55 @@ describe("agentLinkSchema", () => {
       strategy: "sequential",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts optional group field", () => {
+    const result = agentLinkSchema.parse({
+      source: "a",
+      target: "b",
+      direction: "single",
+      group: "Data Pipeline",
+    });
+    expect(result.group).toBe("Data Pipeline");
+  });
+
+  it("omits group when not provided", () => {
+    const result = agentLinkSchema.parse({ source: "a", target: "b", direction: "single" });
+    expect(result.group).toBeUndefined();
+  });
+});
+
+// ─── agentLinksFileSchema ─────────────────────────────────────────────────────
+
+describe("agentLinksFileSchema", () => {
+  it("defaults groups to empty array when absent", () => {
+    const result = agentLinksFileSchema.parse({ version: 1, links: [] });
+    expect(result.groups).toEqual([]);
+  });
+
+  it("preserves groups when provided", () => {
+    const result = agentLinksFileSchema.parse({
+      version: 1,
+      groups: ["Review Chain", "Data Pipeline"],
+      links: [],
+    });
+    expect(result.groups).toEqual(["Review Chain", "Data Pipeline"]);
+  });
+
+  it("parses old files without groups field (backward compat)", () => {
+    const oldFile = JSON.parse(JSON.stringify({ version: 1, links: [] }));
+    const result = agentLinksFileSchema.safeParse(oldFile);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.groups).toEqual([]);
+  });
+
+  it("parses links with group field", () => {
+    const result = agentLinksFileSchema.parse({
+      version: 1,
+      groups: ["G1"],
+      links: [{ source: "a", target: "b", direction: "single", group: "G1" }],
+    });
+    expect(result.links[0]?.group).toBe("G1");
   });
 });
 

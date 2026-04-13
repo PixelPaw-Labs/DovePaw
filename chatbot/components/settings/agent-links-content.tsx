@@ -1,7 +1,20 @@
 "use client";
 
 import * as React from "react";
-import { ArrowRight, ArrowLeftRight, Network, Pencil, Plus, Trash2, WifiOff } from "lucide-react";
+import {
+  ArrowLeftRight,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  FolderPlus,
+  Network,
+  Pencil,
+  Plus,
+  Trash2,
+  WifiOff,
+  X,
+} from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { z } from "zod";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import type { AgentLink, AgentLinkStrategy } from "@@/lib/agent-links-schemas";
@@ -57,7 +70,7 @@ function Badge({ children, variant }: { children: React.ReactNode; variant: Badg
   );
 }
 
-// ─── Strategy descriptions ────────────────────────────────────────────────────
+// ─── Strategy helpers ─────────────────────────────────────────────────────────
 
 const STRATEGY_LABELS: Record<AgentLinkStrategy, string> = {
   parallel: "Start & Await",
@@ -108,11 +121,18 @@ function StrategySelect({ value, onChange, disabled }: StrategySelectProps) {
 interface AddLinkFormProps {
   agentConfigs: AgentConfigEntry[];
   existingLinks: AgentLink[];
+  defaultGroup?: string;
   onAdded: (link: AgentLink) => void;
   onCancel: () => void;
 }
 
-function AddLinkForm({ agentConfigs, existingLinks, onAdded, onCancel }: AddLinkFormProps) {
+function AddLinkForm({
+  agentConfigs,
+  existingLinks,
+  defaultGroup,
+  onAdded,
+  onCancel,
+}: AddLinkFormProps) {
   const [source, setSource] = React.useState(agentConfigs[0]?.name ?? "");
   const [target, setTarget] = React.useState("");
   const [direction, setDirection] = React.useState<"single" | "dual">("single");
@@ -156,14 +176,14 @@ function AddLinkForm({ agentConfigs, existingLinks, onAdded, onCancel }: AddLink
       const res = await fetch("/api/settings/agent-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source, target, direction, strategy }),
+        body: JSON.stringify({ source, target, direction, strategy, group: defaultGroup }),
         signal: abortRef.current.signal,
       });
       const data: unknown = await res.json();
       if (!res.ok) {
         throw new Error(errorResponseSchema.parse(data).error ?? "Failed to add link");
       }
-      onAdded({ source, target, direction, strategy });
+      onAdded({ source, target, direction, strategy, group: defaultGroup });
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Failed to add link");
@@ -176,7 +196,7 @@ function AddLinkForm({ agentConfigs, existingLinks, onAdded, onCancel }: AddLink
     <div className="border border-border rounded-xl p-5 bg-muted/30 flex flex-col gap-4">
       <h3 className="text-sm font-semibold text-foreground">New Link</h3>
 
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-3 flex-wrap">
         <div className="flex flex-col gap-1">
           <label className="text-xs text-muted-foreground">From</label>
           <select
@@ -271,12 +291,20 @@ function AddLinkForm({ agentConfigs, existingLinks, onAdded, onCancel }: AddLink
 interface LinkCardProps {
   link: AgentLink;
   agentConfigs: AgentConfigEntry[];
+  allGroups: string[];
   statuses: Record<string, { online: boolean }>;
   onUpdated: (old: AgentLink, next: AgentLink) => void;
   onDeleted: (link: AgentLink) => void;
 }
 
-function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCardProps) {
+function LinkCard({
+  link,
+  agentConfigs,
+  allGroups,
+  statuses,
+  onUpdated,
+  onDeleted,
+}: LinkCardProps) {
   const [editing, setEditing] = React.useState(false);
   const [editSource, setEditSource] = React.useState(link.source);
   const [editTarget, setEditTarget] = React.useState(link.target);
@@ -284,6 +312,7 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
   const [editStrategy, setEditStrategy] = React.useState<AgentLinkStrategy>(
     link.strategy ?? "parallel",
   );
+  const [editGroup, setEditGroup] = React.useState(link.group ?? "");
   const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -312,6 +341,7 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
     setEditTarget(link.target);
     setEditDirection(link.direction);
     setEditStrategy(link.strategy ?? "parallel");
+    setEditGroup(link.group ?? "");
     setError(null);
     setEditing(true);
   }
@@ -335,6 +365,7 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
           newTarget: editTarget,
           direction: editDirection,
           strategy: editStrategy,
+          group: editGroup || undefined,
         }),
         signal: abortRef.current.signal,
       });
@@ -348,6 +379,7 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
         target: editTarget,
         direction: editDirection,
         strategy: editStrategy,
+        group: editGroup || undefined,
       });
       setEditing(false);
     } catch (e) {
@@ -391,7 +423,7 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
     const availableTargets = agentConfigs.filter((c) => c.name !== editSource);
     return (
       <div className="border border-primary/40 rounded-xl p-5 bg-muted/30 flex flex-col gap-4">
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 flex-wrap">
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">From</label>
             <select
@@ -457,6 +489,23 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
           </div>
 
           <StrategySelect value={editStrategy} onChange={setEditStrategy} disabled={busy} />
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Group</label>
+            <select
+              value={editGroup}
+              onChange={(e) => setEditGroup(e.target.value)}
+              disabled={busy}
+              className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            >
+              <option value="">Ungrouped</option>
+              {allGroups.map((g) => (
+                <option key={g} value={g}>
+                  {g}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {error && <p className="text-xs text-destructive">{error}</p>}
@@ -491,13 +540,11 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
         isActive ? "border-border hover:border-border/80" : "border-border/50 opacity-70",
       )}
     >
-      {/* Source */}
       <div className="flex items-center gap-1.5 min-w-0">
         {!sourceOnline && <WifiOff className="w-3 h-3 text-destructive shrink-0" />}
-        <span className="text-sm font-medium text-foreground truncate">{sourceName}</span>
+        <span className="text-xs font-medium text-foreground/80 truncate">{sourceName}</span>
       </div>
 
-      {/* Arrow */}
       <span className="shrink-0 text-muted-foreground">
         {link.direction === "dual" ? (
           <ArrowLeftRight className="w-4 h-4" />
@@ -506,10 +553,9 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
         )}
       </span>
 
-      {/* Target */}
       <div className="flex items-center gap-1.5 min-w-0 flex-1">
         {!targetOnline && <WifiOff className="w-3 h-3 text-destructive shrink-0" />}
-        <span className="text-sm font-medium text-foreground truncate">{targetName}</span>
+        <span className="text-xs font-medium text-foreground/80 truncate">{targetName}</span>
       </div>
 
       <Badge variant={link.direction}>{link.direction}</Badge>
@@ -520,7 +566,6 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
 
       {!isActive && <Badge variant="inactive">inactive</Badge>}
 
-      {/* Edit */}
       <button
         onClick={openEdit}
         disabled={busy}
@@ -530,7 +575,6 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
         Edit
       </button>
 
-      {/* Delete */}
       <button
         onClick={handleDeleteClick}
         disabled={busy}
@@ -548,24 +592,374 @@ function LinkCard({ link, agentConfigs, statuses, onUpdated, onDeleted }: LinkCa
   );
 }
 
+// ─── Group Section ────────────────────────────────────────────────────────────
+
+interface GroupSectionProps {
+  /** null = ungrouped section */
+  groupName: string | null;
+  links: AgentLink[];
+  allLinks: AgentLink[];
+  allGroups: string[];
+  agentConfigs: AgentConfigEntry[];
+  statuses: Record<string, { online: boolean }>;
+  onAdded: (link: AgentLink) => void;
+  onUpdated: (old: AgentLink, next: AgentLink) => void;
+  onDeleted: (link: AgentLink) => void;
+  onGroupRenamed: (name: string, newName: string) => void;
+  onGroupDeleted: (name: string) => void;
+}
+
+function GroupSection({
+  groupName,
+  links,
+  allLinks,
+  allGroups,
+  agentConfigs,
+  statuses,
+  onAdded,
+  onUpdated,
+  onDeleted,
+  onGroupRenamed,
+  onGroupDeleted,
+}: GroupSectionProps) {
+  const [showForm, setShowForm] = React.useState(false);
+  const [renaming, setRenaming] = React.useState(false);
+  const [renameValue, setRenameValue] = React.useState(groupName ?? "");
+  const [renameError, setRenameError] = React.useState<string | null>(null);
+  const [renameBusy, setRenameBusy] = React.useState(false);
+  const [deleteBusy, setDeleteBusy] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const renameInputRef = React.useRef<HTMLInputElement>(null);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (renaming) renameInputRef.current?.focus();
+  }, [renaming]);
+
+  async function handleRenameSubmit() {
+    if (!groupName) return;
+    const trimmed = renameValue.trim();
+    if (!trimmed || trimmed === groupName) {
+      setRenaming(false);
+      return;
+    }
+    setRenameBusy(true);
+    setRenameError(null);
+    abortRef.current = new AbortController();
+    try {
+      const res = await fetch("/api/settings/agent-links/groups", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: groupName, newName: trimmed }),
+        signal: abortRef.current.signal,
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        setRenameError(errorResponseSchema.parse(data).error ?? "Failed to rename");
+        return;
+      }
+      onGroupRenamed(groupName, trimmed);
+      setRenaming(false);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setRenameError(e instanceof Error ? e.message : "Failed to rename");
+    } finally {
+      setRenameBusy(false);
+    }
+  }
+
+  async function handleDeleteGroup() {
+    if (!groupName) return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      confirmTimerRef.current = setTimeout(() => setConfirmDelete(false), 3000);
+      return;
+    }
+    if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+    setConfirmDelete(false);
+    setDeleteBusy(true);
+    abortRef.current = new AbortController();
+    try {
+      await fetch("/api/settings/agent-links/groups", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: groupName }),
+        signal: abortRef.current.signal,
+      });
+      onGroupDeleted(groupName);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  function handleAdded(link: AgentLink) {
+    onAdded(link);
+    setShowForm(false);
+  }
+
+  const isUngrouped = groupName === null;
+  const [open, setOpen] = React.useState(true);
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col">
+      {/* Section header — acts as the collapsible trigger row */}
+      <div className="flex items-center gap-2 border-t border-border/40 pt-4 pb-2">
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-2 min-w-0 flex-1 group text-left">
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                open ? "rotate-0" : "-rotate-90",
+              )}
+            />
+            {isUngrouped ? (
+              <span className="text-sm font-semibold text-muted-foreground/60 truncate">
+                Ungrouped
+              </span>
+            ) : (
+              <span className="text-sm font-semibold text-foreground truncate">{groupName}</span>
+            )}
+          </button>
+        </CollapsibleTrigger>
+
+        {/* Rename input (replaces the group name text while active) */}
+        {!isUngrouped && renaming && (
+          <div className="flex items-center gap-1.5 flex-1 -ml-6">
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void handleRenameSubmit();
+                if (e.key === "Escape") setRenaming(false);
+              }}
+              disabled={renameBusy}
+              className="text-sm font-semibold bg-transparent border-b border-primary outline-none text-foreground w-40"
+            />
+            <button
+              onClick={() => void handleRenameSubmit()}
+              disabled={renameBusy}
+              className="text-primary hover:text-primary/80"
+            >
+              <Check className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => setRenaming(false)}
+              disabled={renameBusy}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+            {renameError && <span className="text-xs text-destructive">{renameError}</span>}
+          </div>
+        )}
+
+        {/* Per-group actions (only for named groups, not while renaming) */}
+        {!isUngrouped && !renaming && (
+          <>
+            <button
+              onClick={() => {
+                setRenameValue(groupName);
+                setRenameError(null);
+                setRenaming(true);
+              }}
+              className="text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              title="Rename group"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => void handleDeleteGroup()}
+              disabled={deleteBusy}
+              className={cn(
+                "transition-colors",
+                confirmDelete
+                  ? "text-destructive"
+                  : "text-muted-foreground/50 hover:text-destructive",
+              )}
+              title={confirmDelete ? "Click again to confirm" : "Delete group"}
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </>
+        )}
+
+        {!showForm && agentConfigs.length >= 2 && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors ml-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Add Link
+          </button>
+        )}
+      </div>
+
+      <CollapsibleContent className="flex flex-col gap-2">
+        {showForm && (
+          <AddLinkForm
+            agentConfigs={agentConfigs}
+            existingLinks={allLinks}
+            defaultGroup={groupName ?? undefined}
+            onAdded={handleAdded}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
+
+        {links.map((link) => (
+          <LinkCard
+            key={`${link.source}→${link.target}`}
+            link={link}
+            agentConfigs={agentConfigs}
+            allGroups={allGroups}
+            statuses={statuses}
+            onUpdated={onUpdated}
+            onDeleted={onDeleted}
+          />
+        ))}
+
+        {links.length === 0 && !showForm && (
+          <p className="text-xs text-muted-foreground/50 py-1 pl-6">
+            No links.{" "}
+            {agentConfigs.length >= 2 && (
+              <button onClick={() => setShowForm(true)} className="text-primary hover:underline">
+                Add one
+              </button>
+            )}
+          </p>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// ─── Create Group Form ────────────────────────────────────────────────────────
+
+interface CreateGroupFormProps {
+  existingGroups: string[];
+  onCreated: (name: string) => void;
+  onCancel: () => void;
+}
+
+function CreateGroupForm({ existingGroups, onCreated, onCancel }: CreateGroupFormProps) {
+  const [name, setName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const abortRef = React.useRef<AbortController | null>(null);
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    inputRef.current?.focus();
+    return () => abortRef.current?.abort();
+  }, []);
+
+  async function handleCreate() {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (existingGroups.includes(trimmed)) {
+      setError(`Group "${trimmed}" already exists`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    abortRef.current = new AbortController();
+    try {
+      const res = await fetch("/api/settings/agent-links/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+        signal: abortRef.current.signal,
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        throw new Error(errorResponseSchema.parse(data).error ?? "Failed to create group");
+      }
+      onCreated(trimmed);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setError(e instanceof Error ? e.message : "Failed to create group");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        ref={inputRef}
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") void handleCreate();
+          if (e.key === "Escape") onCancel();
+        }}
+        placeholder="Group name…"
+        disabled={busy}
+        className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-48"
+      />
+      <button
+        onClick={() => void handleCreate()}
+        disabled={busy || !name.trim()}
+        className="text-sm px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        {busy ? "Creating…" : "Create"}
+      </button>
+      <button
+        onClick={onCancel}
+        disabled={busy}
+        className="text-sm px-3 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
+      >
+        Cancel
+      </button>
+      {error && <span className="text-xs text-destructive">{error}</span>}
+    </div>
+  );
+}
+
 // ─── Main Content ─────────────────────────────────────────────────────────────
 
 interface AgentLinksContentProps {
   agentConfigs: AgentConfigEntry[];
+  tmpAgentConfigs?: AgentConfigEntry[];
   initialLinks: AgentLink[];
+  initialGroups: string[];
 }
 
-export function AgentLinksContent({ agentConfigs, initialLinks }: AgentLinksContentProps) {
+export function AgentLinksContent({
+  agentConfigs,
+  tmpAgentConfigs = [],
+  initialLinks,
+  initialGroups,
+}: AgentLinksContentProps) {
   const [links, setLinks] = React.useState(initialLinks);
-  const [showForm, setShowForm] = React.useState(false);
+  const [groups, setGroups] = React.useState(initialGroups);
+  const [showCreateForm, setShowCreateForm] = React.useState(false);
   const statuses = useAgentHeartbeat();
+
+  const allConfigs = [...agentConfigs, ...tmpAgentConfigs];
+
+  function getLinksForGroup(groupName: string | null): AgentLink[] {
+    if (groupName === null) {
+      return links.filter((l) => !l.group || !groups.includes(l.group));
+    }
+    return links.filter((l) => l.group === groupName);
+  }
 
   function handleAdded(link: AgentLink) {
     setLinks((prev) => {
       const exists = prev.some((l) => l.source === link.source && l.target === link.target);
       return exists ? prev : [...prev, link];
     });
-    setShowForm(false);
   }
 
   function handleUpdated(old: AgentLink, next: AgentLink) {
@@ -578,11 +972,27 @@ export function AgentLinksContent({ agentConfigs, initialLinks }: AgentLinksCont
     setLinks((prev) => prev.filter((l) => !(l.source === link.source && l.target === link.target)));
   }
 
-  const hasAgents = agentConfigs.length >= 2;
+  function handleGroupCreated(name: string) {
+    setGroups((prev) => [...prev, name]);
+    setShowCreateForm(false);
+  }
+
+  function handleGroupRenamed(name: string, newName: string) {
+    setGroups((prev) => prev.map((g) => (g === name ? newName : g)));
+    setLinks((prev) => prev.map((l) => (l.group === name ? { ...l, group: newName } : l)));
+  }
+
+  function handleGroupDeleted(name: string) {
+    setGroups((prev) => prev.filter((g) => g !== name));
+    setLinks((prev) => prev.map((l) => (l.group === name ? { ...l, group: undefined } : l)));
+  }
+
+  const ungroupedLinks = getLinksForGroup(null);
+  const showUngrouped = ungroupedLinks.length > 0 || groups.length === 0;
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <div className="flex items-center gap-2">
             <Network className="w-5 h-5 text-primary" />
@@ -591,62 +1001,71 @@ export function AgentLinksContent({ agentConfigs, initialLinks }: AgentLinksCont
           <p className="text-sm text-muted-foreground max-w-xl">
             Configure which agents can message each other. A linked agent gains a{" "}
             <code className="text-xs bg-muted px-1 py-0.5 rounded">chat_to_*</code> MCP tool at
-            runtime. Tools are only active when both agents are connected.
+            runtime. Organise links into groups — each link belongs to one group only.
           </p>
         </div>
 
-        {hasAgents && !showForm && (
+        {!showCreateForm && (
           <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0"
+            onClick={() => setShowCreateForm(true)}
+            className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shrink-0"
           >
-            <Plus className="w-4 h-4" />
-            Add Link
+            <FolderPlus className="w-4 h-4" />
+            New Group
           </button>
         )}
       </div>
 
-      {showForm && (
-        <AddLinkForm
-          agentConfigs={agentConfigs}
-          existingLinks={links}
-          onAdded={handleAdded}
-          onCancel={() => setShowForm(false)}
+      {showCreateForm && (
+        <CreateGroupForm
+          existingGroups={groups}
+          onCreated={handleGroupCreated}
+          onCancel={() => setShowCreateForm(false)}
         />
       )}
 
-      {links.length === 0 ? (
+      {allConfigs.length < 2 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center">
           <Network className="w-10 h-10 text-muted-foreground/30" />
           <p className="text-sm text-muted-foreground">
-            No links configured. Agents operate independently.
+            Install at least two agents via Plugins to create links.
           </p>
-          {hasAgents && !showForm && (
-            <button
-              onClick={() => setShowForm(true)}
-              className="text-sm text-primary hover:underline mt-1"
-            >
-              Add your first link
-            </button>
-          )}
-          {!hasAgents && (
-            <p className="text-xs text-muted-foreground/60">
-              Install at least two agents via Plugins to create links.
-            </p>
-          )}
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {links.map((link) => (
-            <LinkCard
-              key={`${link.source}→${link.target}`}
-              link={link}
-              agentConfigs={agentConfigs}
+        <div className="flex flex-col gap-4">
+          {groups.map((groupName) => (
+            <GroupSection
+              key={groupName}
+              groupName={groupName}
+              links={getLinksForGroup(groupName)}
+              allLinks={links}
+              allGroups={groups}
+              agentConfigs={allConfigs}
               statuses={statuses}
+              onAdded={handleAdded}
               onUpdated={handleUpdated}
               onDeleted={handleDeleted}
+              onGroupRenamed={handleGroupRenamed}
+              onGroupDeleted={handleGroupDeleted}
             />
           ))}
+
+          {showUngrouped && (
+            <GroupSection
+              key="__ungrouped__"
+              groupName={null}
+              links={ungroupedLinks}
+              allLinks={links}
+              allGroups={groups}
+              agentConfigs={allConfigs}
+              statuses={statuses}
+              onAdded={handleAdded}
+              onUpdated={handleUpdated}
+              onDeleted={handleDeleted}
+              onGroupRenamed={handleGroupRenamed}
+              onGroupDeleted={handleGroupDeleted}
+            />
+          )}
         </div>
       )}
     </div>

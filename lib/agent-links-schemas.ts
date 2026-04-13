@@ -14,10 +14,14 @@ export const agentLinkSchema = z.object({
   target: z.string(),
   direction: z.enum(["single", "dual"]),
   strategy: z.enum(AGENT_LINK_STRATEGIES).default("parallel"),
+  /** User-defined group name this link belongs to */
+  group: z.string().optional(),
 });
 
 export const agentLinksFileSchema = z.object({
   version: z.literal(1),
+  /** Ordered list of user-defined group names */
+  groups: z.array(z.string()).default([]),
   links: z.array(agentLinkSchema),
 });
 
