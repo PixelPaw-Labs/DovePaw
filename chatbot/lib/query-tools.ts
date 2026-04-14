@@ -159,8 +159,8 @@ export function makeStartTool(
           "Instruction to pass to the agent, synthesized from conversation context. Must open with a self-introduction of the orchestrator, e.g. 'I am Dove, your orchestrator. ' followed by the task instruction.",
         ),
     },
-    ({ instruction }) =>
-      new TaskPoller(
+    async ({ instruction }) => {
+      return await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
         signal,
@@ -168,7 +168,8 @@ export function makeStartTool(
         doveAwaitToolName(agent),
         undefined,
         agent.name,
-      ).start(instruction, { onProgress, backgroundTasks }),
+      ).start(instruction, { onProgress, backgroundTasks });
+    },
   );
 }
 
@@ -192,8 +193,8 @@ export function makeAwaitTool(
     {
       taskId: z.string().describe("The taskId returned by the corresponding start_* or ask_* tool"),
     },
-    ({ taskId }) =>
-      new TaskPoller(
+    async ({ taskId }) => {
+      return await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
         signal,
@@ -201,6 +202,7 @@ export function makeAwaitTool(
         doveAwaitToolName(agent),
         undefined,
         agent.name,
-      ).poll(taskId, { onProgress }),
+      ).poll(taskId, { onProgress });
+    },
   );
 }

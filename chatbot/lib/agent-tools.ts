@@ -490,8 +490,8 @@ export function makeStartChatToTool(
       instruction: z.string().describe(`Task to delegate to ${displayName}.`),
       contextId: z.string().optional().describe("Continue a prior session. Omit to start fresh."),
     },
-    ({ instruction, contextId }) =>
-      new TaskPoller(
+    async ({ instruction, contextId }) => {
+      return await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -499,7 +499,8 @@ export function makeStartChatToTool(
         `await_chat_to_${manifestKey}`,
         undefined,
         targetDef.name,
-      ).start(instruction, { contextId, backgroundTasks }),
+      ).start(instruction, { contextId, backgroundTasks });
+    },
   );
 }
 
@@ -522,8 +523,8 @@ export function makeAwaitChatToTool(
     `Collect the result of a previously started ${displayName} task.\n` +
       `Call this after start_chat_to_${manifestKey} to retrieve the agent's output.`,
     { taskId: z.string().describe("The taskId returned by start_chat_to_" + manifestKey) },
-    ({ taskId }) =>
-      new TaskPoller(
+    async ({ taskId }) => {
+      return await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -531,7 +532,8 @@ export function makeAwaitChatToTool(
         `await_chat_to_${manifestKey}`,
         undefined,
         targetDef.name,
-      ).poll(taskId),
+      ).poll(taskId);
+    },
   );
 }
 
