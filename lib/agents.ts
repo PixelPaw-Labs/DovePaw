@@ -54,6 +54,9 @@ export interface AgentDef {
   schedulingEnabled?: boolean;
   /** Absolute path to the plugin repo root. Absent = agent lives in DovePaw/agents/. */
   pluginPath?: string;
+  /** Personality paragraph injected at the top of the sub-agent system prompt.
+   *  Replaces the generic "You are one of Dove's mice…" line. */
+  personality?: string;
 }
 
 /** Build a full AgentDef (including icon and derived fields) from a serializable config entry. */
@@ -102,5 +105,6 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
       : undefined,
     schedulingEnabled: entry.schedulingEnabled ?? true,
     pluginPath: entry.pluginPath,
+    personality: entry.personality,
   };
 }

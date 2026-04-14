@@ -253,6 +253,15 @@
     "pluginPath": {
       "description": "Absolute path to the plugin repo root. Injected automatically by DovePaw when the plugin is installed — do NOT set this in the plugin source agent.json.",
       "type": "string"
+    },
+
+    "personality": {
+      "description": "Personality paragraph injected at the top of this agent's system prompt. Replaces the generic 'You are one of Dove's mice…' line. Keep it 1–3 sentences — describe the agent's character, working style, and disposition. Write in second person ('You are…').",
+      "type": "string",
+      "examples": [
+        "You are a relentless ticket-closer — fast, precise, and allergic to ambiguity. You pick up a task, implement it end-to-end in an isolated worktree, and ship it. No hand-wringing, no scope creep.",
+        "You are a quiet archivist who works in the dark while Yang sleeps. You distil raw observations into durable memories, discarding noise and preserving signal."
+      ]
     }
   },
 

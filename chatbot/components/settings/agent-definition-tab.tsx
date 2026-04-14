@@ -30,6 +30,7 @@ interface FormState {
   calendarWeekday: string;
   runAtLoad: boolean;
   schedulingEnabled: boolean;
+  personality: string;
   doveCardTitle: string;
   doveCardDescription: string;
   doveCardPrompt: string;
@@ -60,6 +61,7 @@ function entryToForm(entry: AgentConfigEntry): FormState {
         : "",
     runAtLoad: entry.runAtLoad ?? false,
     schedulingEnabled: entry.schedulingEnabled !== false,
+    personality: entry.personality ?? "",
     doveCardTitle: entry.doveCard.title,
     doveCardDescription: entry.doveCard.description,
     doveCardPrompt: entry.doveCard.prompt,
@@ -94,6 +96,7 @@ function buildPatch(name: string, f: FormState): AgentConfigEntry {
     ...(schedule ? { schedule } : {}),
     ...(f.runAtLoad ? { runAtLoad: true } : {}),
     schedulingEnabled: f.schedulingEnabled,
+    ...(f.personality.trim() ? { personality: f.personality.trim() } : {}),
     doveCard: {
       title: f.doveCardTitle.trim(),
       description: f.doveCardDescription.trim(),
@@ -230,6 +233,14 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
             value={form.description}
             onChange={(e) => set("description", e.target.value)}
             rows={4}
+          />
+        </Row>
+        <Row label="Personality" hint="Replaces the generic 'You are one of Dove's mice…' line">
+          <Textarea
+            value={form.personality}
+            onChange={(e) => set("personality", e.target.value)}
+            rows={3}
+            placeholder="You are a… (leave blank to use the default)"
           />
         </Row>
         <Row label="Icon">

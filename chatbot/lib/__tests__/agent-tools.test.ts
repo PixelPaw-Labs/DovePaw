@@ -105,10 +105,20 @@ function captureToolHandler(
 // ─── buildSubAgentPrompt ──────────────────────────────────────────────────────
 
 describe("buildSubAgentPrompt", () => {
-  it("opens with the Dove's mice character", () => {
+  it("opens with the Dove's mice character when no personality is set", () => {
     const prompt = buildSubAgentPrompt(AGENT);
     expect(prompt).toMatch(/one of Dove's mice/i);
     expect(prompt).toMatch(/Dove, the orchestrator/i);
+  });
+
+  it("uses the agent personality instead of the mice line when personality is set", () => {
+    const withPersonality: AgentDef = {
+      ...AGENT,
+      personality: "You are a relentless ticket-closer.",
+    };
+    const prompt = buildSubAgentPrompt(withPersonality);
+    expect(prompt).toMatch(/relentless ticket-closer/i);
+    expect(prompt).not.toMatch(/one of Dove's mice/i);
   });
 
   it("includes the agent display name as assigned role", () => {

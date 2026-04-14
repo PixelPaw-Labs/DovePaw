@@ -298,7 +298,10 @@ export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry)
 
 /** Builds the system prompt appended to the query() sub-agent inside QueryAgentExecutor. */
 export function buildSubAgentPrompt(agent: AgentDef): string {
-  return `You are one of Dove's mice — a small, focused agent working on behalf of Dove, the orchestrator. Dove delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.
+  const opening =
+    agent.personality ??
+    "You are one of Dove's mice — a small, focused agent working on behalf of Dove, the orchestrator. Dove delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.";
+  return `${opening}
 
 Your assigned role: **${agent.displayName}**
 ${agent.description}

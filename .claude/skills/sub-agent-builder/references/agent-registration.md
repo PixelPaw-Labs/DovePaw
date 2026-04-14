@@ -11,6 +11,7 @@ Write to `~/.dovepaw/tmp/<name>/agent.json`. Do NOT include `pluginPath` — it 
   "alias": "{{ALIAS}}",
   "displayName": "{{DISPLAY_NAME}}",
   "description": "{{MCP_TOOL_DESCRIPTION}}",
+  "personality": "{{PERSONALITY}}",
   "schedulingEnabled": false,
   "iconName": "{{LUCIDE_ICON_NAME}}",
   "iconBg": "{{ICON_BG}}",
@@ -74,31 +75,78 @@ UUID strings from `~/.dovepaw/settings.json`. Match user's selected repo paths t
 
 ## Icon Catalog (Lucide names)
 
-Pick the icon that best matches the agent's purpose:
+Pick the icon that best matches the agent's purpose. All values below are valid `iconName` entries.
 
-| Icon             | Purpose                          |
-| ---------------- | -------------------------------- |
-| `Brain`          | reasoning, analysis, AI          |
-| `Zap`            | automation, fast actions         |
-| `Radar`          | monitoring, detection            |
-| `FlaskConical`   | research, experimentation        |
-| `BellRing`       | alerts, notifications, incidents |
-| `LifeBuoy`       | support, help, triage            |
-| `GitMerge`       | git, PRs, code review            |
-| `Play`           | run, execute, trigger            |
-| `FileText`       | documents, writing, reports      |
-| `BookOpen`       | reading, notes, knowledge        |
-| `ListTodo`       | tasks, tickets, backlog          |
-| `GitPullRequest` | PRs, review, merge               |
-| `AlertTriangle`  | warnings, errors, security       |
-| `RefreshCw`      | sync, refresh, update            |
-| `TrendingUp`     | metrics, growth, analytics       |
-| `Clock`          | scheduling, time, history        |
-| `Search`         | discovery, search, indexing      |
-| `CheckCircle`    | validation, approval, done       |
-| `Eye`            | monitoring, watching             |
-| `Info`           | information, status              |
-| `Hammer`         | build, scaffolding, tooling      |
+| Icon             | Purpose                               |
+| ---------------- | ------------------------------------- |
+| `Activity`       | live feed, events, health checks      |
+| `AlertCircle`    | errors, issues, problem detection     |
+| `AlertTriangle`  | warnings, errors, security alerts     |
+| `Archive`        | archiving, storage, history           |
+| `BarChart3`      | charts, dashboards, reporting         |
+| `Bell`           | notifications, reminders              |
+| `BellRing`       | urgent alerts, incidents, on-call     |
+| `Bookmark`       | saved items, favourites               |
+| `Bot`            | bots, automation agents               |
+| `Brain`          | reasoning, analysis, AI               |
+| `Bug`            | bugs, debugging, issue fixing         |
+| `Calendar`       | scheduling, events, dates             |
+| `Clock`          | time tracking, history, scheduling    |
+| `Cloud`          | cloud services, remote resources      |
+| `Code2`          | code generation, development          |
+| `Compass`        | navigation, discovery, orientation    |
+| `Cpu`            | performance, compute, infrastructure  |
+| `Database`       | data storage, queries, migrations     |
+| `Download`       | fetching, pulling, importing          |
+| `Eye`            | monitoring, watching, observability   |
+| `File`           | files, documents (generic)            |
+| `FileText`       | writing, reports, docs generation     |
+| `Filter`         | filtering, processing, triage         |
+| `Flag`           | markers, priorities, release flags    |
+| `FlaskConical`   | research, experimentation, testing    |
+| `Folder`         | directories, repos, workspaces        |
+| `GitBranch`      | branching, versioning, worktrees      |
+| `GitMerge`       | merging, PRs, code review             |
+| `GitPullRequest` | PR management, review workflows       |
+| `Globe`          | web, internet, cross-region           |
+| `Hammer`         | build, scaffolding, tooling           |
+| `Heart`          | health, favourites, wellbeing         |
+| `Key`            | authentication, secrets, API keys     |
+| `Layers`         | stacks, architecture, layering        |
+| `Leaf`           | growth, lightweight, eco              |
+| `LifeBuoy`       | support, help, triage, rescue         |
+| `Lock`           | security, locking, access control     |
+| `Mail`           | email, notifications, messaging       |
+| `Map`            | mapping, navigation, planning         |
+| `MessageCircle`  | chat, conversation, communication     |
+| `Moon`           | night jobs, sleep-time, off-hours     |
+| `Network`        | networking, topology, connections     |
+| `Package`        | packages, dependencies, releases      |
+| `Play`           | run, execute, trigger, launch         |
+| `Radar`          | scanning, detection, monitoring       |
+| `Radio`          | broadcasting, signals, pub/sub        |
+| `RefreshCw`      | sync, refresh, update, retry          |
+| `RotateCw`       | rotation, cycling, recurring tasks    |
+| `Search`         | search, indexing, discovery           |
+| `Server`         | servers, infra, backend services      |
+| `Settings`       | configuration, setup, management      |
+| `Share2`         | sharing, distribution, publishing     |
+| `Shield`         | security, protection, compliance      |
+| `ShieldCheck`    | verified security, auditing           |
+| `Sparkles`       | AI magic, highlights, special output  |
+| `Star`           | favourites, rating, top picks         |
+| `Tag`            | tagging, labelling, categorisation    |
+| `Terminal`       | CLI, shell commands, scripts          |
+| `Timer`          | countdowns, timeouts, deadlines       |
+| `TrendingUp`     | metrics, growth, analytics            |
+| `Upload`         | uploading, publishing, deploying      |
+| `User`           | user profiles, identity               |
+| `UserCheck`      | user verification, approvals          |
+| `Users`          | teams, multi-user, collaboration      |
+| `Wand2`          | transformation, magic, generation     |
+| `Wifi`           | connectivity, wireless, online checks |
+| `Wrench`         | tools, maintenance, configuration     |
+| `Zap`            | automation, speed, fast actions       |
 
 ---
 

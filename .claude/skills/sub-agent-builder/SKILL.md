@@ -86,6 +86,7 @@ Fill in all fields:
 - `alias` — 2–3 char shorthand (make it unique)
 - `displayName` — human-readable title
 - `description` — MCP tool description Dove uses to route requests
+- `personality` — 1–3 sentence character paragraph; write in second person ("You are…"); replaces the generic "You are one of Dove's mice…" opening in the sub-agent system prompt
 - `schedulingEnabled` — `true` only if interval/calendar
 - `schedule` — include only when schedulingEnabled; use `"interval"` or `"calendar"` type
 - `repos` — UUIDs from settings.json matching selected repo paths
