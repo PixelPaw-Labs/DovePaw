@@ -1,43 +1,11 @@
 #!/usr/bin/env bash
-# PreToolUse hook for Edit/Write — blocks repo code file edits once per session
-# with the full Karpathy guidelines as permissionDecisionReason, forcing the model
-# to review and acknowledge before retrying.
+# SessionStart hook — injects Karpathy coding guidelines as additionalContext
 # sourced from https://github.com/forrestchang/andrej-karpathy-skills
-
-
-set -uo pipefail
-
-cd "$CLAUDE_PROJECT_DIR"
-
-INPUT=$(cat)
-
-FILE_PATH=$(printf '%s' "$INPUT" | python3 -c \
-  "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null || true)
-
-# Only act on files inside the repo
-[[ -z "$FILE_PATH" || "$FILE_PATH" != "$CLAUDE_PROJECT_DIR"* ]] && exit 0
-
-# Only trigger on code files (covers major stacks)
-case "$FILE_PATH" in
-  *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|\
-  *.py|*.rb|*.go|*.rs|*.java|*.kt|*.kts|*.swift|*.cs|\
-  *.cpp|*.cc|*.cxx|*.c|*.h|*.hpp|*.php|*.scala|\
-  *.ex|*.exs|*.css|*.scss|*.sass|*.less|\
-  *.html|*.htm|*.vue|*.svelte|*.sql|*.graphql|*.gql|*.tf|*.sh) ;;
-  *) exit 0 ;;
-esac
-
-# Once per session: if already shown, allow
-SESSION_KEY=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || true)
-SESSION_KEY="${SESSION_KEY:-$$}"
-SHOWN="/tmp/karpathy_shown_${SESSION_KEY}"
-[ -f "$SHOWN" ] && exit 0
-touch "$SHOWN"
 
 python3 -c "
 import json
 
-reason = '''# Karpathy Guidelines
+context = '''# Karpathy Guidelines
 
 Behavioral guidelines to reduce common LLM coding mistakes.
 
@@ -45,13 +13,13 @@ Behavioral guidelines to reduce common LLM coding mistakes.
 
 ## 1. Think Before Coding
 
-**Don\'t assume. Don\'t hide confusion. Surface tradeoffs.**
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
 Before implementing:
 - State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don\'t pick silently.
+- If multiple interpretations exist, present them - don't pick silently.
 - If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what\'s confusing. Ask.
+- If something is unclear, stop. Name what's confusing. Ask.
 
 ## 2. Simplicity First
 
@@ -59,7 +27,7 @@ Before implementing:
 
 - No features beyond what was asked.
 - No abstractions for single-use code.
-- No \"flexibility\" or \"configurability\" that wasn\'t requested.
+- No \"flexibility\" or \"configurability\" that wasn't requested.
 - No error handling for impossible scenarios.
 - If you write 200 lines and it could be 50, rewrite it.
 
@@ -70,16 +38,16 @@ Ask yourself: \"Would a senior engineer say this is overcomplicated?\" If yes, s
 **Touch only what you must. Clean up only your own mess.**
 
 When editing existing code:
-- Don\'t \"improve\" adjacent code, comments, or formatting.
-- Don\'t refactor things that aren\'t broken.
-- Match existing style, even if you\'d do it differently.
-- If you notice unrelated dead code, mention it - don\'t delete it.
+- Don't \"improve\" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
 
 When your changes create orphans:
 - Remove imports/variables/functions that YOUR changes made unused.
-- Don\'t remove pre-existing dead code unless asked.
+- Don't remove pre-existing dead code unless asked.
 
-The test: Every changed line should trace directly to the user\'s request.
+The test: Every changed line should trace directly to the user's request.
 
 ## 4. Goal-Driven Execution
 
@@ -95,16 +63,12 @@ For multi-step tasks, state a brief plan:
 2. [Step] → verify: [check]
 3. [Step] → verify: [check]
 
-Strong success criteria let you loop independently. Weak criteria (\"make it work\") require constant clarification.
-
----
-
-Note: Review your intended edit against these guidelines, then retry when necessary.'''
+Strong success criteria let you loop independently. Weak criteria (\"make it work\") require constant clarification.'''
 
 print(json.dumps({
     'hookSpecificOutput': {
-        'permissionDecision': 'block',
-        'permissionDecisionReason': reason
+        'hookEventName': 'SessionStart',
+        'additionalContext': context
     }
 }))
 "
