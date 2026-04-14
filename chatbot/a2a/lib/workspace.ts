@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import {
-  mkdirSync,
   rmdirSync,
   rmSync,
   symlinkSync,
@@ -17,7 +16,7 @@ import {
   KARPATHY_HOOK_SRC,
   workspaceKarpathyHook,
   agentConfigDir,
-  agentWorkspaceDir,
+  agentWorkspacePath,
 } from "@@/lib/paths";
 
 export interface AgentWorkspace {
@@ -42,7 +41,6 @@ export function ensureAgentSourceSymlink(
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ): void {
   const configDir = agentConfigDir(agentName);
-  mkdirSync(configDir, { recursive: true });
   const symlinkPath = join(configDir, `source`);
   if (existsSync(symlinkPath) || lstatSync(symlinkPath, { throwIfNoEntry: false })) {
     // Already exists (or is a broken symlink or a leftover directory) — remove so
@@ -80,16 +78,14 @@ export function createAgentWorkspace(
   taskId?: string,
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ): AgentWorkspace {
-  const root = workspaceRoot ?? agentWorkspaceDir(agentName);
   const shortId = taskId
     ? taskId.replace(/-/g, "").slice(0, 8)
     : randomUUID().replace(/-/g, "").slice(0, 8);
-  const workspacePath = join(root, `${alias}-${shortId}`);
+  const workspacePath = agentWorkspacePath(agentName, alias, shortId, workspaceRoot);
 
-  mkdirSync(workspacePath, { recursive: true });
   onProgress?.(`Creating workspace`, { workspace: workspacePath });
 
-  return { path: workspacePath, cleanup: buildCleanup(workspacePath, root) };
+  return { path: workspacePath, cleanup: buildCleanup(workspacePath, dirname(workspacePath)) };
 }
 
 function buildCleanup(workspacePath: string, parentDir: string): () => void {
@@ -193,8 +189,6 @@ export async function cloneReposIntoWorkspace(
  * See: https://github.com/anthropics/claude-code/issues/37765
  */
 function writeWorkspacePermissions(clonePath: string): void {
-  mkdirSync(join(clonePath, ".claude"), { recursive: true });
-
   const dest = workspaceKarpathyHook(clonePath);
   copyFileSync(KARPATHY_HOOK_SRC, dest);
   chmodSync(dest, 0o755);
@@ -202,13 +196,12 @@ function writeWorkspacePermissions(clonePath: string): void {
   const settings = {
     permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
     hooks: {
-      PreToolUse: [
+      SessionStart: [
         {
-          matcher: "Edit|Write",
           hooks: [
             {
               type: "command",
-              command: "bash .claude/karpathy-guidelines.sh",
+              command: '"$CLAUDE_PROJECT_DIR"/.claude/hooks/karpathy-guidelines.sh',
               timeout: 10,
             },
           ],

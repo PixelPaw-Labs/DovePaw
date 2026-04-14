@@ -17,10 +17,29 @@ vi.mock("@@/lib/paths", () => ({
   DOVEPAW_DIR: join(TMP_ROOT, ".dovepaw"),
   WORKSPACES_DIR: join(TMP_ROOT, ".dovepaw", "workspaces"),
   KARPATHY_HOOK_SRC: join(TMP_ROOT, ".claude/hooks/karpathy-guidelines.sh"),
-  agentWorkspaceDir: (alias: string) => join(TMP_ROOT, ".dovepaw", "workspaces", `.${alias}`),
-  agentConfigDir: (agentName: string) => join(TMP_ROOT, ".dovepaw", "settings.agents", agentName),
-  workspaceKarpathyHook: (clonePath: string) =>
-    join(clonePath, ".claude", "karpathy-guidelines.sh"),
+  agentWorkspaceDir: (agentName: string) =>
+    join(TMP_ROOT, ".dovepaw", "workspaces", `.${agentName}`),
+  agentWorkspacePath: (
+    agentName: string,
+    alias: string,
+    shortId: string,
+    workspaceRoot?: string,
+  ) => {
+    const root = workspaceRoot ?? join(TMP_ROOT, ".dovepaw", "workspaces", `.${agentName}`);
+    const path = join(root, `${alias}-${shortId}`);
+    mkdirSync(path, { recursive: true });
+    return path;
+  },
+  agentConfigDir: (agentName: string) => {
+    const dir = join(TMP_ROOT, ".dovepaw", "settings.agents", agentName);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  },
+  workspaceKarpathyHook: (clonePath: string) => {
+    const dest = join(clonePath, ".claude", "hooks", "karpathy-guidelines.sh");
+    mkdirSync(join(clonePath, ".claude", "hooks"), { recursive: true });
+    return dest;
+  },
 }));
 
 const {
@@ -246,10 +265,9 @@ describe("cloneReposIntoWorkspace", () => {
     expect(settings.hooks.PermissionRequest[0].matcher).toBe("Edit|Write");
     expect(settings.hooks.PermissionRequest[0].hooks[0].type).toBe("command");
     expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
-    expect(settings.hooks?.PreToolUse).toHaveLength(1);
-    expect(settings.hooks.PreToolUse[0].matcher).toBe("Edit|Write");
-    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe(
-      "bash .claude/karpathy-guidelines.sh",
+    expect(settings.hooks?.SessionStart).toHaveLength(1);
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe(
+      '"$CLAUDE_PROJECT_DIR"/.claude/hooks/karpathy-guidelines.sh',
     );
   });
 
@@ -258,7 +276,7 @@ describe("cloneReposIntoWorkspace", () => {
 
     await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
 
-    const hookPath = join(TMP_ROOT, "my-app", ".claude", "karpathy-guidelines.sh");
+    const hookPath = join(TMP_ROOT, "my-app", ".claude", "hooks", "karpathy-guidelines.sh");
     expect(existsSync(hookPath)).toBe(true);
     expect(readFileSync(hookPath, "utf8")).toContain("#!/usr/bin/env bash");
   });

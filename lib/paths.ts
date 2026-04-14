@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,7 +31,23 @@ export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
 /** ~/.dovepaw/workspaces/ — isolated execution workspace roots for all agents */
 export const WORKSPACES_DIR = join(DOVEPAW_DIR, "workspaces");
 /** ~/.dovepaw/workspaces/.{agentName}/ — per-agent workspace root */
-export const agentWorkspaceDir = (agentName: string) => join(WORKSPACES_DIR, `.${agentName}`);
+export const agentWorkspaceDir = (agentName: string): string => {
+  const dir = join(WORKSPACES_DIR, `.${agentName}`);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
+/** {workspaceRoot ?? agentWorkspaceDir}/{alias}-{shortId} — single agent execution workspace. Creates the directory. */
+export const agentWorkspacePath = (
+  agentName: string,
+  alias: string,
+  shortId: string,
+  workspaceRoot?: string,
+): string => {
+  const root = workspaceRoot ?? agentWorkspaceDir(agentName);
+  const path = join(root, `${alias}-${shortId}`);
+  mkdirSync(path, { recursive: true });
+  return path;
+};
 /** ~/.dovepaw/agents/state — persistent agent state root */
 export const DOVEPAW_AGENT_STATE = join(DOVEPAW_DIR, "agents/state");
 /** ~/.dovepaw/agents/state/.<agentName> — persistent per-agent state directory */
@@ -42,7 +59,11 @@ export const DOVEPAW_AGENT_LOGS = join(DOVEPAW_DIR, "agents/logs");
 export const agentPersistentLogDir = (agentName: string) =>
   join(DOVEPAW_AGENT_LOGS, `.${agentName}`);
 /** ~/.dovepaw/settings.agents/<agentName>/ — per-agent config files directory */
-export const agentConfigDir = (agentName: string) => join(AGENT_SETTINGS_DIR, agentName);
+export const agentConfigDir = (agentName: string): string => {
+  const dir = join(AGENT_SETTINGS_DIR, agentName);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
 /** ~/.dovepaw/settings.agents/<agentName>/agent.json — combined definition + runtime settings */
 export const agentDefinitionFile = (agentName: string) =>
   join(agentConfigDir(agentName), "agent.json");
@@ -90,8 +111,11 @@ export const PLUGINS_REGISTRY_FILE = join(DOVEPAW_DIR, "plugins.json");
 export const AGENT_SDK_DIR = join(DOVEPAW_DIR, "sdk");
 /** DovePaw/packages/agent-sdk — SDK source in the monorepo */
 export const AGENT_SDK_SRC = join(AGENTS_ROOT, "packages/agent-sdk");
-/** DovePaw/.claude/hooks/karpathy-guidelines.sh — PreToolUse hook injected into agent workspaces */
+/** DovePaw/.claude/hooks/karpathy-guidelines.sh — SessionStart hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
-/** <clonePath>/.claude/karpathy-guidelines.sh — Karpathy hook destination in an agent workspace clone */
-export const workspaceKarpathyHook = (clonePath: string) =>
-  join(clonePath, ".claude", "karpathy-guidelines.sh");
+/** <clonePath>/.claude/hooks/karpathy-guidelines.sh — Karpathy hook destination in an agent workspace clone. Creates the directory if it does not exist. */
+export const workspaceKarpathyHook = (clonePath: string): string => {
+  const dest = join(clonePath, ".claude", "hooks", "karpathy-guidelines.sh");
+  mkdirSync(dirname(dest), { recursive: true });
+  return dest;
+};

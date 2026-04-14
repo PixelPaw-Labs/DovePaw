@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const HOME = process.env.HOME!;
@@ -11,9 +12,12 @@ export const agentPersistentLogDir = (agentName: string) =>
 export const agentPersistentStateDir = (agentName: string) =>
   join(DOVEPAW_DIR, "agents/state", `.${agentName}`);
 
-/** ~/.dovepaw/settings.agents/<agentName>/ — per-agent config files directory */
-export const agentConfigDir = (agentName: string) =>
-  join(DOVEPAW_DIR, "settings.agents", agentName);
+/** ~/.dovepaw/settings.agents/<agentName>/ — per-agent config files directory. Creates the directory if it does not exist. */
+export const agentConfigDir = (agentName: string): string => {
+  const dir = join(DOVEPAW_DIR, "settings.agents", agentName);
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
 
 /** <repoPath>/.claude/worktrees/<wtName> — Claude Code worktree directory */
 export const claudeWorktreePath = (repoPath: string, wtName: string) =>

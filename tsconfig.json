@@ -29,6 +29,7 @@
   },
   "include": [
     "agents/**/*.ts",
+    "packages/**/*.ts",
     "lib/**/*.ts",
     "plist/**/*.ts",
     "build.ts",
