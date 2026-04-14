@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync } from "node:fs";
+import { createWriteStream } from "node:fs";
 import { join } from "node:path";
 import { registerChildPid, unregisterChildPid } from "./lock.js";
 
@@ -88,10 +88,11 @@ export function spawnClaude(args: string[], opts: SpawnClaudeOptions): SpawnClau
 
     const chunks: Buffer[] = [];
     const stderrChunks: Buffer[] = [];
+    const logStream = stderrToLog ? createWriteStream(stderrToLog, { flags: "a" }) : null;
 
     child.stdout.on("data", (data: Buffer) => chunks.push(data));
     child.stderr.on("data", (data: Buffer) => {
-      if (stderrToLog) appendFileSync(stderrToLog, data);
+      if (logStream) logStream.write(data);
       else stderrChunks.push(data);
     });
 
@@ -102,6 +103,7 @@ export function spawnClaude(args: string[], opts: SpawnClaudeOptions): SpawnClau
     child.on("close", (code) => {
       closed = true;
       clearTimeout(timer);
+      logStream?.end();
       if (child.pid) unregisterChildPid(child.pid);
       const stdout = Buffer.concat(chunks).toString();
       const stderr = Buffer.concat(stderrChunks).toString();

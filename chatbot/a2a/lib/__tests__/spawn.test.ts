@@ -1,5 +1,7 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 
 /**
  * Tests for spawnAndCollect signal handling.
@@ -69,13 +71,13 @@ async function flushMicrotasks() {
 function makeProc() {
   const proc = new EventEmitter() as EventEmitter & {
     pid: number;
-    stdout: EventEmitter;
-    stderr: EventEmitter;
+    stdout: PassThrough;
+    stderr: PassThrough;
     kill: ReturnType<typeof vi.fn>;
   };
   proc.pid = 99999;
-  proc.stdout = new EventEmitter();
-  proc.stderr = new EventEmitter();
+  proc.stdout = new PassThrough();
+  proc.stderr = new PassThrough();
   proc.kill = vi.fn();
   mockSpawn.mockReturnValue(proc);
   return proc;
@@ -178,6 +180,63 @@ describe("spawnAndCollect", () => {
     const output = await promise;
     expect(typeof output).toBe("string");
     expect(Array.isArray(lines)).toBe(true);
+  });
+});
+
+describe("spawnAndCollect — readline line collection", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("collects stdout lines", async () => {
+    const proc = makeProc();
+    const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run");
+
+    proc.stdout.write("hello\nworld\n");
+    proc.emit("close", 0);
+    await promise;
+
+    expect(lines).toEqual(["hello", "world"]);
+  });
+
+  it("prefixes stderr lines with [stderr]", async () => {
+    const proc = makeProc();
+    const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run");
+
+    proc.stderr.write("error message\n");
+    proc.emit("close", 0);
+    await promise;
+
+    expect(lines).toContain("[stderr] error message");
+  });
+
+  it("strips __PROGRESS__ lines and fires onProgress", async () => {
+    const proc = makeProc();
+    const onProgress = vi.fn();
+    const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run", undefined, onProgress);
+
+    proc.stdout.write(`${PROGRESS_PREFIX}Fetching data\nnormal line\n`);
+    proc.emit("close", 0);
+    await promise;
+
+    expect(onProgress).toHaveBeenCalledWith("Fetching data", {});
+    expect(lines).not.toContain(`${PROGRESS_PREFIX}Fetching data`);
+    expect(lines).toContain("normal line");
+  });
+
+  it("caps lines at 200 and keeps the most recent", async () => {
+    const proc = makeProc();
+    const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run");
+
+    const data = Array.from({ length: 250 }, (_, i) => `line-${i}`).join("\n") + "\n";
+    proc.stdout.write(data);
+    proc.emit("close", 0);
+    await promise;
+
+    expect(lines.length).toBe(200);
+    expect(lines[0]).toBe("line-50"); // first 50 dropped
+    expect(lines[199]).toBe("line-249"); // last 200 kept
   });
 });
 

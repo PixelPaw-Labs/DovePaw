@@ -7,6 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN } from "@/lib/paths";
 import type { AgentConfig } from "./agent-config-builder";
@@ -90,6 +91,9 @@ export type AwaitScriptContent =
 /** How long to wait for script completion before returning still_running. */
 export const SCRIPT_POLL_TIMEOUT_MS = 30_000;
 
+/** Maximum lines kept in the live progress buffer — prevents unbounded growth. */
+const LATEST_LINES_CAP = 200;
+
 type ScriptState =
   | { phase: "running"; promise: Promise<string>; latestLines: string[] }
   | { phase: "done"; output: string };
@@ -163,33 +167,20 @@ export function spawnAndCollect(
   const processor = new OutputLineProcessor();
 
   const promise = new Promise<string>((resolve) => {
-    let stdoutBuf = "";
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      stdoutBuf += chunk.toString();
-      const parts = stdoutBuf.split("\n");
-      stdoutBuf = parts.pop() ?? "";
-      for (const l of parts) {
-        const result = processor.process(l, lines);
-        if (result) onProgress?.(result.message, result.artifacts);
-      }
+    const rl = createInterface({ input: proc.stdout, crlfDelay: Infinity });
+    rl.on("line", (line) => {
+      const result = processor.process(line, lines);
+      if (result) onProgress?.(result.message, result.artifacts);
+      while (lines.length > LATEST_LINES_CAP) lines.shift();
     });
 
-    let stderrBuf = "";
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      stderrBuf += chunk.toString();
-      const parts = stderrBuf.split("\n");
-      stderrBuf = parts.pop() ?? "";
-      parts.forEach((l) => lines.push(`[stderr] ${l}`));
+    const rlErr = createInterface({ input: proc.stderr, crlfDelay: Infinity });
+    rlErr.on("line", (line) => {
+      lines.push(`[stderr] ${line}`);
+      while (lines.length > LATEST_LINES_CAP) lines.shift();
     });
 
     proc.on("close", (code) => {
-      // Flush any remaining buffered stdout through the processor so trailing
-      // __PROGRESS__ / __ARTIFACT__ sentinels are not silently dropped.
-      if (stdoutBuf) {
-        const result = processor.process(stdoutBuf, lines);
-        if (result) onProgress?.(result.message, result.artifacts);
-      }
-      if (stderrBuf) lines.push(`[stderr] ${stderrBuf}`);
       resolve(
         lines.length > 0
           ? lines.join("\n")
@@ -248,14 +239,15 @@ export async function awaitScript(runId: string): Promise<AwaitScriptContent> {
   }
 
   const timeoutResult = Symbol("timeout");
+  let timerId: ReturnType<typeof setTimeout>;
   const result = await Promise.race([
     state.promise.then(
       (output): ScriptCompletedContent => ({ status: "completed", runId, output }),
     ),
-    new Promise<typeof timeoutResult>((resolve) =>
-      setTimeout(() => resolve(timeoutResult), SCRIPT_POLL_TIMEOUT_MS),
-    ),
-  ]);
+    new Promise<typeof timeoutResult>((resolve) => {
+      timerId = setTimeout(() => resolve(timeoutResult), SCRIPT_POLL_TIMEOUT_MS);
+    }),
+  ]).finally(() => clearTimeout(timerId));
 
   if (result === timeoutResult) {
     const latestOutput = state.latestLines.slice(-10).join("\n") || undefined;
