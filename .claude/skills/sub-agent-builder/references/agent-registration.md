@@ -141,6 +141,7 @@ Pick the icon that best matches the agent's purpose. All values below are valid 
 | `Tag`            | tagging, labelling, categorisation    |
 | `Terminal`       | CLI, shell commands, scripts          |
 | `Timer`          | countdowns, timeouts, deadlines       |
+| `Trash2`         | cleanup, purging, data retention      |
 | `TrendingUp`     | metrics, growth, analytics            |
 | `Upload`         | uploading, publishing, deploying      |
 | `User`           | user profiles, identity               |

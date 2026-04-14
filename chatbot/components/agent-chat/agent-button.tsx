@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Settings } from "lucide-react";
+import { Settings, Trash2 } from "lucide-react";
 import { useAgentRunState } from "@/components/hooks/use-agent-run-state";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
 import type { AgentDef } from "@@/lib/agents";
@@ -107,6 +107,7 @@ export function AgentButton({
   onClick,
   settingsHref,
   isAgentSettings,
+  onDelete,
 }: {
   agent: AgentDef;
   isActive: boolean;
@@ -115,6 +116,7 @@ export function AgentButton({
   onClick: () => void;
   settingsHref?: string;
   isAgentSettings?: boolean;
+  onDelete?: () => void;
 }) {
   const Icon = agent.icon;
   const isOnline = status?.online ?? false;
@@ -122,6 +124,27 @@ export function AgentButton({
   const shimmerRef = useButtonShimmer(isRunning);
   // Keep the selected theme while running so switching away doesn't drop to unselected style.
   const isSelected = isActive || isRunning;
+
+  const [deleteConfirm, setDeleteConfirm] = React.useState(false);
+  const deleteTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+    };
+  }, []);
+
+  function handleDeleteClick(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (deleteConfirm) {
+      if (deleteTimerRef.current) clearTimeout(deleteTimerRef.current);
+      setDeleteConfirm(false);
+      onDelete?.();
+    } else {
+      setDeleteConfirm(true);
+      deleteTimerRef.current = setTimeout(() => setDeleteConfirm(false), 3000);
+    }
+  }
 
   return (
     <button
@@ -164,6 +187,21 @@ export function AgentButton({
           schedule={agent.schedule}
         />
       </div>
+      {onDelete && (
+        <span
+          role="button"
+          onClick={handleDeleteClick}
+          title={deleteConfirm ? "Confirm delete?" : `Delete ${agent.displayName}`}
+          className={cn(
+            "shrink-0 w-5 h-5 rounded flex items-center justify-center transition-colors relative z-10",
+            deleteConfirm
+              ? "text-destructive bg-destructive/10"
+              : "text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10",
+          )}
+        >
+          <Trash2 className="w-3 h-3" />
+        </span>
+      )}
       {settingsHref && (
         <Link
           href={settingsHref}

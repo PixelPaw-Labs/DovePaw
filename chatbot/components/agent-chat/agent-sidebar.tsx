@@ -300,26 +300,17 @@ function PluginGroup({
       pathname === `/settings/agents/${agent.name}` ||
       pathname === `/settings/agents/${agent.name}/repos`;
     return (
-      <div key={agent.manifestKey} className="flex items-center gap-1 pr-1">
-        <AgentButton
-          agent={agent}
-          isActive={!isSettings && !isAgentSettings && activeAgentId === agent.name}
-          status={statuses[agent.manifestKey]}
-          hasData={hasData}
-          onClick={() => onSelectAgent?.(agent.name)}
-          settingsHref={`/settings/agents/${agent.name}`}
-          isAgentSettings={isAgentSettings}
-        />
-        {onDeleteTmpAgent && (
-          <button
-            onClick={() => void onDeleteTmpAgent(agent.name)}
-            title={`Delete ${agent.displayName}`}
-            className="shrink-0 p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
-          >
-            <Trash2 className="w-3 h-3" />
-          </button>
-        )}
-      </div>
+      <AgentButton
+        key={agent.manifestKey}
+        agent={agent}
+        isActive={!isSettings && !isAgentSettings && activeAgentId === agent.name}
+        status={statuses[agent.manifestKey]}
+        hasData={hasData}
+        onClick={() => onSelectAgent?.(agent.name)}
+        settingsHref={`/settings/agents/${agent.name}`}
+        isAgentSettings={isAgentSettings}
+        onDelete={onDeleteTmpAgent ? () => void onDeleteTmpAgent(agent.name) : undefined}
+      />
     );
   });
 
