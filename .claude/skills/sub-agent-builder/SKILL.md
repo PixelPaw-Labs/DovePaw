@@ -118,6 +118,21 @@ Fill in all fields:
 
 Do NOT set `pluginPath` — that is added at publish time.
 
+After writing `agent.json`, bootstrap the agent's `node_modules` so `@dovepaw/agent-sdk` resolves at runtime:
+
+```bash
+python3 -c "
+import os
+base = os.path.expanduser('~/.dovepaw/tmp/<name>')
+pkg_dir = os.path.join(base, 'node_modules', '@dovepaw')
+os.makedirs(pkg_dir, exist_ok=True)
+sdk_target = os.path.expanduser('~/.dovepaw/sdk')
+link = os.path.join(pkg_dir, 'agent-sdk')
+if not os.path.exists(link):
+    os.symlink(sdk_target, link)
+"
+```
+
 ---
 
 ### Phase 4 — Associated Skill
