@@ -25,11 +25,26 @@ The agent is now visible in the **Kiln** sidebar group (Sparkles icon). Tmp agen
 
 Paths in the plugin repo after move:
 
-| Path                       | Purpose                                            |
-| -------------------------- | -------------------------------------------------- |
-| `agents/<name>/main.ts`    | Agent entry point                                  |
-| `agents/<name>/agent.json` | Agent metadata (with `pluginPath` field)           |
-| `dovepaw-plugin.json`      | Plugin manifest — `<name>` added to `agents` array |
+| Path                        | Purpose                                                         |
+| --------------------------- | --------------------------------------------------------------- |
+| `agents/<name>/main.ts`     | Agent entry point                                               |
+| `agents/<name>/agent.json`  | Agent metadata (with `pluginPath` field)                        |
+| `skills/<name>/SKILL.md`    | Associated skill (if created in Phase 4)                        |
+| `skills/<name>/scripts/`    | Helper scripts for the skill (optional)                         |
+| `skills/<name>/references/` | Reference docs read by the skill (optional)                     |
+| `skills/<name>/steps/`      | Sub-phase instructions for multi-phase skills (optional)        |
+| `dovepaw-plugin.json`       | Plugin manifest — `<name>` added to `agents` AND `skills` array |
+
+When a skill was created in Phase 4, update `dovepaw-plugin.json`:
+
+```json
+{
+  "agents": ["existing-agent", "<name>"],
+  "skills": ["existing-skill", "<name>"]
+}
+```
+
+Both arrays are independent — add to whichever apply.
 
 ### Install and restart
 

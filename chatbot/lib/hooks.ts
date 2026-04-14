@@ -101,7 +101,9 @@ export function buildAgentHooks(
                   hookEventName: "PreToolUse",
                   permissionDecision: allowed ? "allow" : "deny",
                   ...(!allowed && {
-                    permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}`,
+                    permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}. 
+                    You should stop and reconsider your approach, as allowing access to this path could be dangerous. 
+                    If you really need to access this path, ask the user for explicit permission.`,
                   }),
                 };
                 return { hookSpecificOutput };

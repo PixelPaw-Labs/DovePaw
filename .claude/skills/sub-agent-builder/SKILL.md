@@ -3,6 +3,11 @@ name: sub-agent-builder
 description: "Scaffold a new DovePaw background agent end-to-end. Creates agent files in ~/.dovepaw/tmp/ so the agent appears immediately in the Kiln sidebar group, ready to test. Optionally publishes to a plugin repo. Use when asked to 'create a new agent', 'scaffold an agent', 'add a new background agent', 'build a new daemon', or when the user wants to automate a recurring or on-demand task with a DovePaw agent."
 argument-hint: "Optional: agent name and/or purpose description"
 allowed-tools: Read, Write, Edit, Bash(mkdir *), Bash(ls *), Bash(cat *), Glob, Grep, AskUserQuestion
+hooks:
+  Stop:
+    - hooks:
+        - type: command
+          command: 'node "${CLAUDE_SKILL_DIR}/hooks/quality-gate.js"'
 ---
 
 ## Inputs
@@ -99,11 +104,80 @@ Do NOT set `pluginPath` — that is added at publish time.
 
 ---
 
-### Phase 4 — Associated Skill (Type 2 only)
+### Phase 4 — Associated Skill
 
-For **Skill-based** agents: the dynamic skill is generated at runtime inside main.ts — no static skill file needed. Skip this phase.
+Ask 2 questions in a single `AskUserQuestion` call:
 
-For **Simple** agents where the embedded prompt body is complex: optionally create `.claude/skills/<name>/SKILL.md` with detailed instructions separated from the TypeScript file.
+1. **Create a skill?** — "Should this agent have an associated skill?" — options:
+   - Yes — create a `SKILL.md` alongside the agent (Recommended for agents with multi-step Claude prompts)
+   - No — embed the logic in `main.ts` directly (for pure TypeScript orchestrators or trivial 3-line prompts)
+   - Skip for now — add later
+
+2. **Suggested skill name** — pre-fill with the agent name (kebab-case); ask the user to confirm or override. Note that skill name is also the `/skill-name` command users invoke directly.
+
+If the user selects **No** or **Skip**, end Phase 4 here.
+
+If the user selects **Yes**, proceed to create the skill:
+
+#### Skill file location
+
+When building a tmp agent:
+
+```
+~/.dovepaw/tmp/<name>/               ← agent draft lives here
+~/.claude/skills/<name>/SKILL.md     ← skill goes here (symlinked from ~/.dovepaw/plugins/)
+```
+
+When publishing to a plugin repo:
+
+```
+skills/<name>/SKILL.md               ← inside plugin repo
+```
+
+See `references/skill-authoring.md` for the complete SKILL.md schema, argument patterns, output contracts, subdirectory conventions, and hooks.
+
+#### Agent → skill invocation
+
+In `main.ts` (or `prompts.ts`), the agent embeds the skill call in the prompt string it passes to `spawnClaude`:
+
+```typescript
+// Positional args — simple single-value invocation
+const prompt = `Skill("/zendesk-triager ${INSTRUCTION}")`;
+
+// key="value" pairs — multi-param invocation
+const skillArgs = `package="${name}" ecosystem="${ecosystem}" fix="${fix}" manifest="${manifest}"`;
+const prompt = lines.join("\n");
+// lines includes: `Skill("/security-patcher ${skillArgs}")`
+
+// JSON args — multi-package batch
+const skillArgs = JSON.stringify({ manifest, ecosystem, ticket, packages });
+// lines includes: `Skill("/security-patcher ${skillArgs}")`
+```
+
+The skill receives these via `$ARGUMENTS` — parse them at the top of the SKILL.md.
+
+#### Output contract
+
+Skills that are called by agents in a loop (fix → test → retry) must emit a structured result as the **last line** of their response so the agent can parse it:
+
+```
+{"status": "patched"|"partial"|"failed", "summary": "...", "approach": "..."}
+```
+
+Skills called for their side effects only (write file, open PR) need no structured output — plain text completion is fine.
+
+#### Plugin manifest
+
+When publishing to a plugin repo, add the skill name to `dovepaw-plugin.json`:
+
+```json
+{
+  "agents": ["my-agent"],
+  "skills": ["my-agent"]
+}
+```
+
+Skills and agents are listed independently — a skill can exist without a same-named agent, and vice versa.
 
 ---
 
@@ -158,4 +232,5 @@ Always remind: restart `npm run chatbot:servers` to register the new A2A server.
 | `references/template-complex-stateful.md` | Phase 2 — Type 3 template                                              |
 | `references/agent-registration.md`        | Phase 3 — agent.json template + icon/color catalog                     |
 | `references/spawning-patterns.md`         | Phase 2 — Options A/B/C for how Claude spawns subprocesses (all types) |
+| `references/skill-authoring.md`           | Phase 4 — SKILL.md schema, argument patterns, output contracts, hooks  |
 | `references/integration-checklist.md`     | Phase 5 — lint/fmt commands + path reference                           |
