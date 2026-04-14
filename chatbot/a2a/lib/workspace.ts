@@ -7,10 +7,18 @@ import {
   existsSync,
   lstatSync,
   writeFileSync,
+  copyFileSync,
+  chmodSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { AGENTS_ROOT, agentConfigDir, agentWorkspaceDir } from "@@/lib/paths";
+import {
+  AGENTS_ROOT,
+  KARPATHY_HOOK_SRC,
+  workspaceKarpathyHook,
+  agentConfigDir,
+  agentWorkspaceDir,
+} from "@@/lib/paths";
 
 export interface AgentWorkspace {
   /** Absolute path to the UUID workspace directory. */
@@ -186,9 +194,26 @@ export async function cloneReposIntoWorkspace(
  */
 function writeWorkspacePermissions(clonePath: string): void {
   mkdirSync(join(clonePath, ".claude"), { recursive: true });
+
+  const dest = workspaceKarpathyHook(clonePath);
+  copyFileSync(KARPATHY_HOOK_SRC, dest);
+  chmodSync(dest, 0o755);
+
   const settings = {
     permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
     hooks: {
+      PreToolUse: [
+        {
+          matcher: "Edit|Write",
+          hooks: [
+            {
+              type: "command",
+              command: "bash .claude/karpathy-guidelines.sh",
+              timeout: 10,
+            },
+          ],
+        },
+      ],
       PermissionRequest: [
         {
           matcher: "Edit|Write",

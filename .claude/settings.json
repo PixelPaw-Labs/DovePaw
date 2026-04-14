@@ -11,6 +11,17 @@
             "statusMessage": "Checking format and lint..."
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/karpathy-guidelines.sh",
+            "timeout": 5,
+            "statusMessage": "Applying Karpathy guidelines..."
+          }
+        ]
       }
     ]
   }

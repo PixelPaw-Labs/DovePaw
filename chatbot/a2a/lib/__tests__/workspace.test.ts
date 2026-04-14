@@ -1,4 +1,12 @@
-import { existsSync, lstatSync, readlinkSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readlinkSync,
+  readFileSync,
+  rmSync,
+  mkdirSync,
+  writeFileSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -8,8 +16,11 @@ vi.mock("@@/lib/paths", () => ({
   AGENTS_ROOT: TMP_ROOT,
   DOVEPAW_DIR: join(TMP_ROOT, ".dovepaw"),
   WORKSPACES_DIR: join(TMP_ROOT, ".dovepaw", "workspaces"),
+  KARPATHY_HOOK_SRC: join(TMP_ROOT, ".claude/hooks/karpathy-guidelines.sh"),
   agentWorkspaceDir: (alias: string) => join(TMP_ROOT, ".dovepaw", "workspaces", `.${alias}`),
   agentConfigDir: (agentName: string) => join(TMP_ROOT, ".dovepaw", "settings.agents", agentName),
+  workspaceKarpathyHook: (clonePath: string) =>
+    join(clonePath, ".claude", "karpathy-guidelines.sh"),
 }));
 
 const {
@@ -182,7 +193,10 @@ describe("ensureAgentSourceSymlink", () => {
 // ─── cloneReposIntoWorkspace ──────────────────────────────────────────────────
 
 describe("cloneReposIntoWorkspace", () => {
-  beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
+  beforeEach(() => {
+    mkdirSync(join(TMP_ROOT, ".claude/hooks"), { recursive: true });
+    writeFileSync(join(TMP_ROOT, ".claude/hooks/karpathy-guidelines.sh"), "#!/usr/bin/env bash\n");
+  });
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
   it("returns empty array for empty slugs", async () => {
@@ -232,6 +246,21 @@ describe("cloneReposIntoWorkspace", () => {
     expect(settings.hooks.PermissionRequest[0].matcher).toBe("Edit|Write");
     expect(settings.hooks.PermissionRequest[0].hooks[0].type).toBe("command");
     expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
+    expect(settings.hooks?.PreToolUse).toHaveLength(1);
+    expect(settings.hooks.PreToolUse[0].matcher).toBe("Edit|Write");
+    expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe(
+      "bash .claude/karpathy-guidelines.sh",
+    );
+  });
+
+  it("copies karpathy-guidelines.sh into .claude/ of each cloned repo", async () => {
+    const ghClone = vi.fn().mockResolvedValue(undefined);
+
+    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
+
+    const hookPath = join(TMP_ROOT, "my-app", ".claude", "karpathy-guidelines.sh");
+    expect(existsSync(hookPath)).toBe(true);
+    expect(readFileSync(hookPath, "utf8")).toContain("#!/usr/bin/env bash");
   });
 
   it("writes settings.local.json for each cloned repo", async () => {
@@ -253,7 +282,10 @@ describe("cloneReposIntoWorkspace", () => {
 // ─── recloneReposIntoWorkspace ────────────────────────────────────────────────
 
 describe("recloneReposIntoWorkspace", () => {
-  beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
+  beforeEach(() => {
+    mkdirSync(join(TMP_ROOT, ".claude/hooks"), { recursive: true });
+    writeFileSync(join(TMP_ROOT, ".claude/hooks/karpathy-guidelines.sh"), "#!/usr/bin/env bash\n");
+  });
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
   it("clones repos when no previous clone exists", async () => {

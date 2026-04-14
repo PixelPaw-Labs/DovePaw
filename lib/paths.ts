@@ -52,7 +52,7 @@ export const SCHEDULER_ROOT = join(DOVEPAW_DIR, "cron");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 /** DovePaw/skills — project skills directory */
-export const SKILLS_DIR = join(resolveAgentsRoot(), "skills");
+export const SKILLS_DIR = join(AGENTS_ROOT, "skills");
 /** ~/Library/LaunchAgents — macOS launchd user agents directory */
 export const LAUNCH_AGENTS_DIR = join(process.env.HOME!, "Library/LaunchAgents");
 /** Resolve an agent's entry point to an absolute path under agents/ root */
@@ -90,3 +90,8 @@ export const PLUGINS_REGISTRY_FILE = join(DOVEPAW_DIR, "plugins.json");
 export const AGENT_SDK_DIR = join(DOVEPAW_DIR, "sdk");
 /** DovePaw/packages/agent-sdk — SDK source in the monorepo */
 export const AGENT_SDK_SRC = join(AGENTS_ROOT, "packages/agent-sdk");
+/** DovePaw/.claude/hooks/karpathy-guidelines.sh — PreToolUse hook injected into agent workspaces */
+export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
+/** <clonePath>/.claude/karpathy-guidelines.sh — Karpathy hook destination in an agent workspace clone */
+export const workspaceKarpathyHook = (clonePath: string) =>
+  join(clonePath, ".claude", "karpathy-guidelines.sh");
