@@ -35,11 +35,15 @@ vi.mock("node:util", () => ({
   }),
 }));
 
-const { deployTriggerScript } = await import("../installer.js");
-
 describe("deployTriggerScript", () => {
-  beforeEach(() => {
+  let deployTriggerScript: () => Promise<void>;
+
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // Reset module cache so the _deployTriggerScriptOnce singleton is cleared
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    deployTriggerScript = mod.deployTriggerScript;
   });
 
   it("copies the trigger script directly when dist file exists", async () => {
@@ -70,6 +74,15 @@ describe("deployTriggerScript", () => {
       expect.objectContaining({ cwd: expect.stringContaining("DovePaw") }),
       expect.any(Function),
     );
+    expect(copyFile).toHaveBeenCalledOnce();
+    expect(chmod).toHaveBeenCalledOnce();
+  });
+
+  it("concurrent calls run the underlying deploy only once", async () => {
+    vi.mocked(access).mockResolvedValue(undefined);
+
+    await Promise.all([deployTriggerScript(), deployTriggerScript(), deployTriggerScript()]);
+
     expect(copyFile).toHaveBeenCalledOnce();
     expect(chmod).toHaveBeenCalledOnce();
   });

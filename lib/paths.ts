@@ -80,8 +80,9 @@ export const LAUNCH_AGENTS_DIR = join(process.env.HOME!, "Library/LaunchAgents")
 export const agentEntryPath = (entryPath: string) => join(AGENTS_ROOT, entryPath);
 /** DovePaw/node_modules/<pkg> */
 export const agentNodeModule = (pkg: string) => join(AGENTS_ROOT, "node_modules", pkg);
-/** DovePaw/dist/<agentName>.mjs — compiled agent script */
-export const agentDistScript = (agentName: string) => join(AGENTS_DIST, `${agentName}.mjs`);
+/** DovePaw/dist/agents/<agentName>.mjs — compiled agent script */
+export const agentDistScript = (agentName: string) =>
+  join(AGENTS_DIST, "agents", `${agentName}.mjs`);
 /** ~/.dovepaw/cron/<agentName>.mjs — deployed agent script */
 export const schedulerScript = (agentName: string) => join(SCHEDULER_ROOT, `${agentName}.mjs`);
 /** ~/.dovepaw/cron/node_modules/<pkg> */
