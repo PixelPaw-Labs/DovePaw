@@ -89,9 +89,13 @@ export async function readAgentConfigEntries(): Promise<AgentConfigEntry[]> {
   );
 }
 
-/** Read agents config and hydrate each entry into a full AgentDef. */
+/** Read agents config and hydrate each entry into a full AgentDef. Includes tmp/Kiln agents. */
 export async function readAgentsConfig(): Promise<AgentDef[]> {
-  return (await readAgentConfigEntries()).map(buildAgentDef);
+  const [entries, tmpEntries] = await Promise.all([
+    readAgentConfigEntries(),
+    readTmpAgentConfigEntries(),
+  ]);
+  return [...entries, ...tmpEntries].map(buildAgentDef);
 }
 
 /** Read only agents with schedulingEnabled !== false. */

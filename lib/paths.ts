@@ -59,11 +59,7 @@ export const DOVEPAW_AGENT_LOGS = join(DOVEPAW_DIR, "agents/logs");
 export const agentPersistentLogDir = (agentName: string) =>
   join(DOVEPAW_AGENT_LOGS, `.${agentName}`);
 /** ~/.dovepaw/settings.agents/<agentName>/ — per-agent config files directory */
-export const agentConfigDir = (agentName: string): string => {
-  const dir = join(AGENT_SETTINGS_DIR, agentName);
-  mkdirSync(dir, { recursive: true });
-  return dir;
-};
+export const agentConfigDir = (agentName: string): string => join(AGENT_SETTINGS_DIR, agentName);
 /** ~/.dovepaw/settings.agents/<agentName>/agent.json — combined definition + runtime settings */
 export const agentDefinitionFile = (agentName: string) =>
   join(agentConfigDir(agentName), "agent.json");

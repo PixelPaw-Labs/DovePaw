@@ -80,6 +80,20 @@ function agentFile(name: string) {
   return join(tmpDir, name, "agent.json");
 }
 
+function tmpAgentDir(name: string) {
+  return join(tmpDir, "__tmp__", name);
+}
+
+function writeTmpAgentFile(entry: AgentConfigEntry) {
+  const dir = tmpAgentDir(entry.name);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, "agent.json"),
+    JSON.stringify({ ...entry, version: 1, repos: [], envVars: [] }, null, 2) + "\n",
+    "utf-8",
+  );
+}
+
 function cleanup() {
   if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true });
 }
@@ -302,6 +316,16 @@ describe("readAgentsConfig", () => {
       expect(def.toolName.startsWith("yolo_")).toBe(true);
       expect(def.icon).toBeTruthy();
     }
+  });
+
+  it("includes tmp/Kiln agents alongside installed agents", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    writeTmpAgentFile(FIXTURE_AGENT_2);
+    const defs = await readAgentsConfig();
+    expect(defs).toHaveLength(2);
+    const names = defs.map((d) => d.name);
+    expect(names).toContain(FIXTURE_AGENT.name);
+    expect(names).toContain(FIXTURE_AGENT_2.name);
   });
 });
 
