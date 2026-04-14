@@ -22,7 +22,7 @@ import {
   PORTS_FILE,
   AGENT_SETTINGS_DIR,
 } from "@/lib/paths";
-import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
+import { LAUNCH_AGENTS_DIR, DOVEPAW_TMP_DIR } from "@@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
@@ -227,7 +227,7 @@ export async function POST(request: Request) {
       await withMcpQuery(
         tools,
         async (mcpServer) => {
-          const additionalDirectories = [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT];
+          const additionalDirectories = [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT, DOVEPAW_TMP_DIR];
           const settings = await readSettings();
           resolvedSessionId = await consumeQueryEvents(
             query({

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildAgentHooks, buildDoveCanUseTool } from "../hooks";
+import { buildAgentHooks, buildDoveCanUseTool, buildDoveHooks } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
@@ -276,6 +276,42 @@ describe("buildAgentHooks — UserPromptSubmit hook", () => {
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "Stop" });
     expect(result).toEqual({ continue: true });
+  });
+});
+
+// ─── buildDoveHooks — allowed directories ─────────────────────────────────────
+
+describe("buildDoveHooks — PreToolUse allowed directories", () => {
+  const cwd = "/repo/dovepaw";
+  const tmpDir = "/home/user/.dovepaw/tmp";
+
+  function getPreToolUseHook() {
+    const hooks = buildDoveHooks([], new PendingRegistry(), cwd, [tmpDir]);
+    return hooks.PreToolUse![0]!.hooks[0]!;
+  }
+
+  it("allows writes inside cwd", async () => {
+    const fn = getPreToolUseHook();
+    const result = await callHook(fn, preToolUseInput("Write", { file_path: `${cwd}/src/foo.ts` }));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { permissionDecision: string } };
+    expect(hookSpecificOutput.permissionDecision).toBe("allow");
+  });
+
+  it("allows writes inside an additional directory (e.g. tmp agent files)", async () => {
+    const fn = getPreToolUseHook();
+    const result = await callHook(
+      fn,
+      preToolUseInput("Write", { file_path: `${tmpDir}/vibe-checker/main.ts` }),
+    );
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { permissionDecision: string } };
+    expect(hookSpecificOutput.permissionDecision).toBe("allow");
+  });
+
+  it("denies writes outside all allowed directories", async () => {
+    const fn = getPreToolUseHook();
+    const result = await callHook(fn, preToolUseInput("Write", { file_path: "/etc/passwd" }));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { permissionDecision: string } };
+    expect(hookSpecificOutput.permissionDecision).toBe("deny");
   });
 });
 
