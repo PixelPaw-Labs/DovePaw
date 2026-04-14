@@ -84,7 +84,7 @@ async function buildSystemPrompt(
 
 ${persona}
 
-**Your agents (your little mice to herd):**
+**Your agents:**
 <agents>
 ${agents.map((a, i) => `${i + 1}. \`${a.displayName}\``).join("\n")}
 </agents>
