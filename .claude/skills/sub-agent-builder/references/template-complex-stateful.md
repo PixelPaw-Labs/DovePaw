@@ -34,6 +34,7 @@ import {
 } from "@dovepaw/agent-sdk";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
+const INSTRUCTION = process.argv[2] || "";
 const WORK_DIR = process.env.AGENT_WORKSPACE!; // always set by executor — never add a fallback
 const STATE_DIR = agentPersistentStateDir("{{AGENT_NAME}}");
 // → ~/.dovepaw/agents/state/.{{AGENT_NAME}}/
@@ -79,6 +80,8 @@ async function main() {
   // --- Main work ---
   // {{MAIN_WORK_LOGIC}}
   // Read references/spawning-patterns.md for Options A / B / C.
+  // Include INSTRUCTION in the prompt so the user's message reaches Claude:
+  //   const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", `Instruction: ${INSTRUCTION}`].join("\n");
   // Stateful agents commonly combine:
   //   Pattern B (worktrees) for parallel repo writes — lock prevents races
   //   Pattern C (session chain) for scan → act workflows within a single run

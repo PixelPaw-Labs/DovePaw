@@ -56,6 +56,16 @@ Read the appropriate template from `references/`:
 
 Create `~/.dovepaw/tmp/<name>/main.ts` by substituting all `{{PLACEHOLDER}}` values.
 
+**Instruction passing:**
+
+The A2A executor spawns the agent as `tsx main.ts "<instruction>"`. The user's message arrives as `process.argv[2]`. Every agent template must read it at the top:
+
+```typescript
+const INSTRUCTION = process.argv[2] || "";
+```
+
+Then pass it through to Claude — either appended to the prompt string (`Instruction: ${INSTRUCTION}`) or as part of the skill invocation (`/${skillName}\n\n${INSTRUCTION}`). Never silently discard it; it is the user's intent for that specific run.
+
 **Spawning rules (use judgment):**
 
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
