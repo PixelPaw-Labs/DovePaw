@@ -158,6 +158,8 @@ This is the reason I built the plugin system this way. My agents are in private 
 
 > **macOS only.** DovePaw uses launchd for daemon scheduling and an Electron menubar app to keep the A2A servers alive. Linux and Windows are not supported.
 
+> **Prerequisites.** Dove and all agent scripts invoke Claude under the hood. You need either an Anthropic API key (`ANTHROPIC_API_KEY`) or the Claude Code CLI installed and authenticated on your machine. Without one of these, nothing runs.
+
 **First time setup:**
 
 ```bash
