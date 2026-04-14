@@ -95,6 +95,8 @@ main()          — orchestrate: gather data → call spawnClaudeWithSignals() �
 
 Agents are dual-mode. When the chatbot triggers one, the user's instruction arrives as `process.argv[2]` and the agent acts on it directly. When launchd fires the schedule with no argument, the agent runs in batch mode across all configured repos. Same script, two entry points.
 
+<img src="example2.png" width="600" />
+
 ---
 
 ## Settings — Global and Per-Agent
@@ -120,6 +122,8 @@ This is how I chain work across agents: one agent surfaces findings, another act
 ---
 
 ## Talking to Dove and the Agents
+
+<img src="example1.png" width="600" />
 
 There are two ways to interact.
 
