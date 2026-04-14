@@ -7,9 +7,8 @@ import { listPlugins } from "@@/lib/plugin-manager";
 export const metadata = { title: "Settings — DovePaw" };
 
 export default async function SettingsPage() {
-  const settings = readSettings();
-
-  const [allAgentEntries, tmpAgentConfigs, plugins] = await Promise.all([
+  const [settings, allAgentEntries, tmpAgentConfigs, plugins] = await Promise.all([
+    readSettings(),
     readAgentConfigEntries(),
     readTmpAgentConfigEntries(),
     listPlugins(),

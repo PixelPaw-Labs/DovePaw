@@ -24,10 +24,39 @@ export const envVarSchema = z.object({
   keychainAccount: z.string().optional(),
 });
 
+export const doveSettingsSchema = z.object({
+  /** Human-readable name shown in UI and system prompt. Defaults to "Dove". */
+  displayName: z.string().default("Dove"),
+  /** Landing page greeting title. Defaults to the hardcoded string when empty. */
+  landingTitle: z.string().default(""),
+  /** Landing page description. Defaults to the age-computed string when empty. */
+  landingDescription: z.string().default(""),
+  /** One-line tagline after the display name in the system prompt. Supports {agentCount}. Uses the built-in line when empty. */
+  tagline: z.string().default(""),
+  /** Personality paragraph appended to the system prompt. Uses the built-in cat persona when empty. */
+  persona: z.string().default(""),
+  /** URL or path to the avatar image served from public/. Defaults to "/dove-avatar.jpg". */
+  avatarUrl: z.string().default("/dove-avatar.jpg"),
+  /** Lucide icon name used as fallback when no photo avatar is set. */
+  iconName: z.string().default("Bot"),
+  /** Tailwind bg classes for the icon circle. */
+  iconBg: z.string().default("bg-purple-100"),
+  /** Tailwind text color classes for the icon. */
+  iconColor: z.string().default("text-purple-700"),
+});
+
+export type DoveSettings = z.infer<typeof doveSettingsSchema>;
+
+/** Returns effective Dove settings, filling in all defaults. Safe to call with undefined. */
+export function effectiveDoveSettings(s: { dove?: unknown }): DoveSettings {
+  return doveSettingsSchema.parse(s.dove ?? {});
+}
+
 export const globalSettingsSchema = z.object({
   version: z.literal(1),
   repositories: z.array(repositorySchema),
   envVars: z.array(envVarSchema).default([]),
+  dove: doveSettingsSchema.optional(),
 });
 
 export type Repository = z.infer<typeof repositorySchema>;

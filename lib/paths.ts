@@ -15,6 +15,8 @@ function resolveAgentsRoot(): string {
 
 /** DovePaw/ — root of the DovePaw monorepo */
 export const AGENTS_ROOT = resolveAgentsRoot();
+/** DovePaw/chatbot/public — Next.js static assets directory */
+export const CHATBOT_PUBLIC_DIR = join(AGENTS_ROOT, "chatbot", "public");
 /** DovePaw/dist — compiled agent scripts */
 export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
 /** ~/.dovepaw/ — user-scoped DovePaw data directory (outside the repo) */

@@ -47,6 +47,7 @@ import {
   defaultSettings,
   defaultAgentSettings,
 } from "@@/lib/settings";
+import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -83,60 +84,60 @@ describe("defaultAgentSettings", () => {
 // ─── readSettings ─────────────────────────────────────────────────────────────
 
 describe("readSettings", () => {
-  it("returns default when file does not exist", () => {
-    expect(readSettings()).toEqual(defaultSettings());
+  it("returns default when file does not exist", async () => {
+    expect(await readSettings()).toEqual(defaultSettings());
   });
 
-  it("returns default when file contains invalid JSON", () => {
+  it("returns default when file contains invalid JSON", async () => {
     writeFileSync(tmpFile, "not json", "utf-8");
-    expect(readSettings()).toEqual(defaultSettings());
+    expect(await readSettings()).toEqual(defaultSettings());
   });
 
-  it("returns default when schema validation fails", () => {
+  it("returns default when schema validation fails", async () => {
     writeRaw(tmpFile, { version: 2, repositories: [] });
-    expect(readSettings()).toEqual(defaultSettings());
+    expect(await readSettings()).toEqual(defaultSettings());
   });
 
-  it("reads a valid settings file", () => {
+  it("reads a valid settings file", async () => {
     const settings = {
       version: 1 as const,
       repositories: [{ id: "abc", githubRepo: "org/bar", name: "bar" }],
       envVars: [{ id: "ev1", key: "MY_TOKEN", value: "secret", isSecret: false }],
     };
     writeRaw(tmpFile, settings);
-    expect(readSettings()).toEqual(settings);
+    expect(await readSettings()).toEqual(settings);
   });
 
-  it("defaults envVars to [] when field is absent", () => {
+  it("defaults envVars to [] when field is absent", async () => {
     writeRaw(tmpFile, { version: 1, repositories: [] });
-    expect(readSettings().envVars).toEqual([]);
+    expect((await readSettings()).envVars).toEqual([]);
   });
 
   // ── bak fallback ───────────────────────────────────────────────────────────
 
-  it("falls back to .bak when primary is missing", () => {
+  it("falls back to .bak when primary is missing", async () => {
     const settings = {
       version: 1 as const,
       repositories: [{ id: "a", githubRepo: "org/a", name: "a" }],
       envVars: [],
     };
     writeRaw(`${tmpFile}.bak`, settings);
-    expect(readSettings()).toEqual(settings);
+    expect(await readSettings()).toEqual(settings);
   });
 
-  it("restores primary from .bak when primary is missing", () => {
+  it("restores primary from .bak when primary is missing", async () => {
     const settings = {
       version: 1 as const,
       repositories: [{ id: "a", githubRepo: "org/a", name: "a" }],
       envVars: [],
     };
     writeRaw(`${tmpFile}.bak`, settings);
-    readSettings();
+    await readSettings();
     expect(existsSync(tmpFile)).toBe(true);
-    expect(readSettings()).toEqual(settings);
+    expect(await readSettings()).toEqual(settings);
   });
 
-  it("falls back to .bak when primary has empty arrays", () => {
+  it("falls back to .bak when primary has empty arrays", async () => {
     const backup = {
       version: 1 as const,
       repositories: [{ id: "b", githubRepo: "org/b", name: "b" }],
@@ -144,10 +145,10 @@ describe("readSettings", () => {
     };
     writeRaw(tmpFile, { version: 1, repositories: [], envVars: [] });
     writeRaw(`${tmpFile}.bak`, backup);
-    expect(readSettings()).toEqual(backup);
+    expect(await readSettings()).toEqual(backup);
   });
 
-  it("restores primary from .bak when primary was empty", () => {
+  it("restores primary from .bak when primary was empty", async () => {
     const backup = {
       version: 1 as const,
       repositories: [{ id: "b", githubRepo: "org/b", name: "b" }],
@@ -155,11 +156,11 @@ describe("readSettings", () => {
     };
     writeRaw(tmpFile, { version: 1, repositories: [], envVars: [] });
     writeRaw(`${tmpFile}.bak`, backup);
-    readSettings();
-    expect(readSettings().repositories).toHaveLength(1);
+    await readSettings();
+    expect((await readSettings()).repositories).toHaveLength(1);
   });
 
-  it("does not fall back to .bak when primary has content", () => {
+  it("does not fall back to .bak when primary has content", async () => {
     const primary = {
       version: 1 as const,
       repositories: [{ id: "p", githubRepo: "org/p", name: "p" }],
@@ -175,52 +176,52 @@ describe("readSettings", () => {
     };
     writeRaw(tmpFile, primary);
     writeRaw(`${tmpFile}.bak`, bak);
-    expect(readSettings().repositories).toHaveLength(1);
+    expect((await readSettings()).repositories).toHaveLength(1);
   });
 
-  it("returns default when both primary and .bak are missing", () => {
-    expect(readSettings()).toEqual(defaultSettings());
+  it("returns default when both primary and .bak are missing", async () => {
+    expect(await readSettings()).toEqual(defaultSettings());
   });
 });
 
 // ─── writeSettings ────────────────────────────────────────────────────────────
 
 describe("writeSettings", () => {
-  it("writes and reads back", () => {
+  it("writes and reads back", async () => {
     const s = {
       version: 1 as const,
       repositories: [{ id: "xyz", githubRepo: "org/repo", name: "repo" }],
       envVars: [{ id: "ev1", key: "MY_TOKEN", value: "val", isSecret: false }],
     };
-    writeSettings(s);
-    expect(readSettings()).toEqual(s);
+    await writeSettings(s);
+    expect(await readSettings()).toEqual(s);
   });
 
-  it("creates a .bak file after write", () => {
-    writeSettings({ version: 1, repositories: [], envVars: [] });
+  it("creates a .bak file after write", async () => {
+    await writeSettings({ version: 1, repositories: [], envVars: [] });
     expect(existsSync(`${tmpFile}.bak`)).toBe(true);
   });
 
-  it(".bak matches primary after write", () => {
+  it(".bak matches primary after write", async () => {
     const s = {
       version: 1 as const,
       repositories: [{ id: "x", githubRepo: "org/x", name: "x" }],
       envVars: [],
     };
-    writeSettings(s);
+    await writeSettings(s);
     const bak = JSON.parse(require("node:fs").readFileSync(`${tmpFile}.bak`, "utf-8"));
     expect(bak.repositories).toEqual(s.repositories);
   });
 
-  it("overwrites existing settings", () => {
-    writeSettings({
+  it("overwrites existing settings", async () => {
+    await writeSettings({
       version: 1,
       repositories: [{ id: "a", githubRepo: "org/a", name: "a" }],
       envVars: [],
     });
-    writeSettings({ version: 1, repositories: [], envVars: [] });
+    await writeSettings({ version: 1, repositories: [], envVars: [] });
     // Both primary and .bak are now empty, so returns primary (empty)
-    expect(readSettings().repositories).toHaveLength(0);
+    expect((await readSettings()).repositories).toHaveLength(0);
   });
 });
 
@@ -356,5 +357,64 @@ describe("makeRepository", () => {
 
   it("generates a unique id", () => {
     expect(makeRepository("org/a").id).not.toBe(makeRepository("org/b").id);
+  });
+});
+
+// ─── effectiveDoveSettings ────────────────────────────────────────────────────
+
+describe("effectiveDoveSettings", () => {
+  it("returns defaults when dove is absent", () => {
+    const s = effectiveDoveSettings({ version: 1, repositories: [], envVars: [] });
+    expect(s.displayName).toBe("Dove");
+    expect(s.avatarUrl).toBe("/dove-avatar.jpg");
+    expect(s.persona).toBe("");
+    expect(s.tagline).toBe("");
+  });
+
+  it("returns stored values when dove is present", () => {
+    const s = effectiveDoveSettings({
+      version: 1,
+      repositories: [],
+      envVars: [],
+      dove: {
+        displayName: "Kitty",
+        tagline: "helper",
+        persona: "I am helpful.",
+        landingTitle: "Hi!",
+        landingDescription: "Ready.",
+        avatarUrl: "/uploads/custom.jpg",
+        iconName: "Cat",
+        iconBg: "bg-pink-100",
+        iconColor: "text-pink-700",
+      },
+    });
+    expect(s.displayName).toBe("Kitty");
+    expect(s.iconName).toBe("Cat");
+    expect(s.avatarUrl).toBe("/uploads/custom.jpg");
+  });
+
+  it("fills in missing dove fields with defaults", () => {
+    const s = effectiveDoveSettings({ version: 1, repositories: [], envVars: [], dove: {} });
+    expect(s.displayName).toBe("Dove");
+    expect(s.iconBg).toBe("bg-purple-100");
+  });
+
+  it("persists dove settings through write/read cycle", async () => {
+    const settings = defaultSettings();
+    settings.dove = {
+      displayName: "Meow",
+      tagline: "",
+      persona: "",
+      landingTitle: "",
+      landingDescription: "",
+      avatarUrl: "/dove-avatar.jpg",
+      iconName: "Cat",
+      iconBg: "bg-pink-100",
+      iconColor: "text-pink-700",
+    };
+    await writeSettings(settings);
+    const loaded = await readSettings();
+    expect(effectiveDoveSettings(loaded).displayName).toBe("Meow");
+    expect(effectiveDoveSettings(loaded).iconName).toBe("Cat");
   });
 });

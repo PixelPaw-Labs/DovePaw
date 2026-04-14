@@ -27,7 +27,7 @@ export class AgentConfigReader {
   async resolveAgentSettings(
     agentName: string,
   ): Promise<{ extraEnv: Record<string, string>; repoSlugs: string[] }> {
-    const settings = readSettings();
+    const settings = await readSettings();
     const agentSettings = await readAgentSettings(agentName);
     const extraEnv = resolveSettingsEnv(settings, agentSettings.envVars);
     const repoSlugs = agentSettings.repos

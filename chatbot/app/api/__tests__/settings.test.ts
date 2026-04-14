@@ -25,13 +25,13 @@ const SAMPLE_SETTINGS = {
 };
 
 beforeEach(() => {
-  vi.mocked(readSettings).mockReturnValue(SAMPLE_SETTINGS);
-  vi.mocked(writeSettings).mockImplementation(() => {});
+  vi.mocked(readSettings).mockResolvedValue(SAMPLE_SETTINGS);
+  vi.mocked(writeSettings).mockResolvedValue();
 });
 
 describe("GET /api/settings", () => {
   it("returns 200 with current settings", async () => {
-    const response = GET();
+    const response = await GET();
     expect(response.status).toBe(200);
 
     const body = await response.json();
@@ -39,7 +39,7 @@ describe("GET /api/settings", () => {
   });
 
   it("response contains version and repositories", async () => {
-    const body = await GET().json();
+    const body = await (await GET()).json();
     expect(body.version).toBe(1);
     expect(Array.isArray(body.repositories)).toBe(true);
   });

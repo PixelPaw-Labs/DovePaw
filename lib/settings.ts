@@ -42,7 +42,7 @@ function restoreFromBak(bak: string, dest: string): void {
   if (existsSync(bak)) copyFileSync(bak, dest);
 }
 
-export function readSettings(): GlobalSettings {
+export async function readSettings(): Promise<GlobalSettings> {
   const primary = tryParse(globalSettingsSchema, SETTINGS_FILE);
   const bak = `${SETTINGS_FILE}.bak`;
 
@@ -61,7 +61,7 @@ export function readSettings(): GlobalSettings {
   return primary;
 }
 
-export function writeSettings(settings: GlobalSettings): void {
+export async function writeSettings(settings: GlobalSettings): Promise<void> {
   mkdirSync(DOVEPAW_DIR, { recursive: true });
   writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   copyFileSync(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);

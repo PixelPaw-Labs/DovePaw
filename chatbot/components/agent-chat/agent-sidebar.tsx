@@ -13,6 +13,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { LUCIDE_ICON_REGISTRY } from "@@/lib/icon-registry";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { groupAgentsByPlugin, type AgentGroup } from "@@/lib/agent-groups";
@@ -21,6 +22,8 @@ import { cn } from "@/lib/utils";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { useConversationContext } from "@/components/hooks/use-conversation-context";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
+import { useDoveSettings } from "@/components/hooks/use-dove-settings";
+import type { DoveSettings } from "@@/lib/settings-schemas";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import type { AgentStatus } from "@/a2a/heartbeat-types";
 import { AgentButton } from "./agent-button";
@@ -30,6 +33,7 @@ interface AgentSidebarProps {
   tmpAgentConfigs?: AgentConfigEntry[];
   plugins?: readonly Pick<PluginRecord, "path" | "name">[];
   activeAgentId?: string;
+  initialDoveSettings?: DoveSettings;
   onSelectAgent?: (agentId: string) => void;
   onClearAllHistory?: () => void;
 }
@@ -39,6 +43,7 @@ export function AgentSidebar({
   tmpAgentConfigs = [],
   plugins = [],
   activeAgentId = "dove",
+  initialDoveSettings,
   onSelectAgent,
   onClearAllHistory,
 }: AgentSidebarProps) {
@@ -53,6 +58,9 @@ export function AgentSidebar({
   const hasData = Object.keys(statuses).length > 0;
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
   const anyOnline = onlineCount > 0;
+
+  const doveSettings = useDoveSettings(initialDoveSettings);
+  const DoveIcon = LUCIDE_ICON_REGISTRY[doveSettings.iconName] ?? Bot;
 
   const isDoveLoading = doveIsRunning;
   const doveShimmerRef = useButtonShimmer(isDoveLoading);
@@ -133,10 +141,18 @@ export function AgentSidebar({
               }}
             />
           )}
-          <Bot className={cn("w-4 h-4 shrink-0", isDoveSelected ? "text-primary" : "")} />
+          <div
+            className={cn(
+              "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
+              doveSettings.iconBg,
+              doveSettings.iconColor,
+            )}
+          >
+            <DoveIcon className="w-3 h-3" />
+          </div>
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
             <span className={cn("text-sm font-medium", !isDoveSelected && "text-foreground/80")}>
-              Dove
+              {doveSettings.displayName}
             </span>
             <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
               Orchestrator

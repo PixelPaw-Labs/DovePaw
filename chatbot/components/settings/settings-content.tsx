@@ -9,6 +9,7 @@ import { EnvVarTable } from "./env-var-table";
 import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { AgentManagementContent } from "./agent-management-content";
+import { DoveDefinitionTab } from "./dove-definition-tab";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
@@ -20,11 +21,12 @@ import {
   type EnvVar,
   globalSettingsSchema,
   envVarSchema,
+  effectiveDoveSettings,
 } from "@@/lib/settings-schemas";
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 
-type Tab = "repositories" | "env-vars" | "agent-management";
+type Tab = "dove" | "repositories" | "env-vars" | "agent-management";
 
 interface SettingsContentProps {
   initialSettings: GlobalSettings;
@@ -41,7 +43,7 @@ export function SettingsContent({
   scheduledAgentConfigs,
   plugins = [],
 }: SettingsContentProps) {
-  const [tab, setTab] = React.useState<Tab>("repositories");
+  const [tab, setTab] = React.useState<Tab>("dove");
   const [repositories, setRepositories] = React.useState(initialSettings.repositories);
   const [editingRepo, setEditingRepo] = React.useState<Repository | null>(null);
   // Fetch env vars from API on mount so secrets have their real keychain values
@@ -194,6 +196,17 @@ export function SettingsContent({
         <div className="flex gap-1 border-b border-outline-variant/20">
           <button
             type="button"
+            onClick={() => setTab("dove")}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              tab === "dove"
+                ? "border-primary text-primary"
+                : "border-transparent text-on-surface-variant hover:text-on-surface"
+            }`}
+          >
+            Dove
+          </button>
+          <button
+            type="button"
             onClick={() => setTab("repositories")}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === "repositories"
@@ -229,7 +242,9 @@ export function SettingsContent({
           </button>
         </div>
 
-        {tab === "repositories" ? (
+        {tab === "dove" ? (
+          <DoveDefinitionTab initialDove={effectiveDoveSettings(initialSettings)} />
+        ) : tab === "repositories" ? (
           <RepoTable
             agentConfigs={agentConfigs}
             repositories={repositories}

@@ -47,8 +47,8 @@ const SAMPLE_SETTINGS = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(readSettings).mockReturnValue(structuredClone(SAMPLE_SETTINGS));
-  vi.mocked(writeSettings).mockImplementation(() => {});
+  vi.mocked(readSettings).mockResolvedValue(structuredClone(SAMPLE_SETTINGS));
+  vi.mocked(writeSettings).mockResolvedValue();
   vi.mocked(getSecret).mockImplementation((_service, account) =>
     account === "GITHUB_TOKEN" ? "ghp_abc123" : null,
   );
@@ -268,7 +268,7 @@ describe("DELETE /api/settings/env-vars", () => {
   });
 
   it("does not delete linked external keychain entry on remove", async () => {
-    vi.mocked(readSettings).mockReturnValue({
+    vi.mocked(readSettings).mockResolvedValue({
       ...structuredClone(SAMPLE_SETTINGS),
       envVars: [
         {

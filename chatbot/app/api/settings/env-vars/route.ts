@@ -26,8 +26,8 @@ function withSecretValues(envVars: EnvVar[]) {
   });
 }
 
-export function GET() {
-  const settings = readSettings();
+export async function GET() {
+  const settings = await readSettings();
   return Response.json({ envVars: withSecretValues(settings.envVars) });
 }
 
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
   const parsed = await parseBody(request, postBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const settings = readSettings();
+  const settings = await readSettings();
   const { key, value, isSecret, keychainService, keychainAccount } = parsed.data;
 
   if (settings.envVars.some((v) => v.key === key)) {
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     ...settings.envVars,
     makeEnvVar(key, value, isSecret, keychainService, keychainAccount),
   ];
-  writeSettings(settings);
+  await writeSettings(settings);
 
   return Response.json({ envVars: withSecretValues(settings.envVars) }, { status: 201 });
 }
@@ -72,7 +72,7 @@ export async function PATCH(request: Request) {
   const parsed = await parseBody(request, patchBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const settings = readSettings();
+  const settings = await readSettings();
   const { id, key, value, isSecret, keychainService, keychainAccount } = parsed.data;
   const target = settings.envVars.find((v) => v.id === id);
 
@@ -103,7 +103,7 @@ export async function PATCH(request: Request) {
       ? buildUpdatedEnvVar(id, key, value, isSecret, keychainService, keychainAccount)
       : v,
   );
-  writeSettings(settings);
+  await writeSettings(settings);
 
   return Response.json({ envVars: withSecretValues(settings.envVars) });
 }
@@ -116,7 +116,7 @@ export async function DELETE(request: Request) {
   const parsed = await parseBody(request, deleteBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const settings = readSettings();
+  const settings = await readSettings();
   const target = settings.envVars.find((v) => v.id === parsed.data.id);
 
   if (!target) {
@@ -130,7 +130,7 @@ export async function DELETE(request: Request) {
   }
 
   settings.envVars = settings.envVars.filter((v) => v.id !== parsed.data.id);
-  writeSettings(settings);
+  await writeSettings(settings);
 
   return Response.json({ envVars: withSecretValues(settings.envVars) });
 }

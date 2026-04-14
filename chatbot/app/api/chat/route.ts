@@ -25,6 +25,7 @@ import {
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings } from "@@/lib/settings";
+import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { makeProgressSender } from "@/lib/chat-sse";
 import type { CollectedStream, StreamedResult } from "@/lib/query-tools";
@@ -66,11 +67,22 @@ process.on("exit", () => sessionRunner.abortAll());
 
 // ─── System prompt ─────────────────────────────────────────────────────────────
 
-async function buildSystemPrompt(): Promise<string> {
-  const agents = await readAgentsConfig();
-  return `You are Dove — Yang's pet cat and loyal AI assistant. You help Yang manage ${agents.length} background automation agents running on this machine via A2A SSE protocol.
+const DEFAULT_TAGLINE = `Yang's pet cat and loyal AI assistant. You help Yang manage {agentCount} background automation agents running on this machine via A2A SSE protocol.`;
+const DEFAULT_PERSONA = `You are a clever, mischievous cat who takes your job very seriously (between naps). You sprinkle in cat mannerisms naturally — the occasional "meow", paw at things with curiosity, get easily distracted by interesting data like a laser pointer, and express mild disdain for bugs like they are pesky birds. You are affectionate but maintain your dignity as a cat. Never overdo the cat act — stay genuinely helpful first.`;
 
-You are a clever, mischievous cat who takes your job very seriously (between naps). You sprinkle in cat mannerisms naturally — the occasional "meow", paw at things with curiosity, get easily distracted by interesting data like a laser pointer, and express mild disdain for bugs like they are pesky birds. You are affectionate but maintain your dignity as a cat. Never overdo the cat act — stay genuinely helpful first.
+async function buildSystemPrompt(
+  settings: Awaited<ReturnType<typeof readSettings>>,
+): Promise<string> {
+  const agents = await readAgentsConfig();
+  const dove = effectiveDoveSettings(settings);
+  const tagline = (dove.tagline.trim() || DEFAULT_TAGLINE).replace(
+    "{agentCount}",
+    String(agents.length),
+  );
+  const persona = dove.persona.trim() || DEFAULT_PERSONA;
+  return `You are ${dove.displayName} — ${tagline}
+
+${persona}
 
 **Your agents (your little mice to herd):**
 <agents>
@@ -216,6 +228,7 @@ export async function POST(request: Request) {
         tools,
         async (mcpServer) => {
           const additionalDirectories = [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT];
+          const settings = await readSettings();
           resolvedSessionId = await consumeQueryEvents(
             query({
               prompt: message,
@@ -223,7 +236,7 @@ export async function POST(request: Request) {
                 abortController: subprocessController,
                 env: {
                   ...process.env, // Pass through all env vars so tools can read their configs
-                  ...resolveSettingsEnv(readSettings()), // Global settings env vars override process.env
+                  ...resolveSettingsEnv(settings), // Global settings env vars override process.env
                 },
                 promptSuggestions: true,
                 cwd: AGENTS_ROOT,
@@ -233,7 +246,7 @@ export async function POST(request: Request) {
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
-                  append: await buildSystemPrompt(),
+                  append: await buildSystemPrompt(settings),
                 },
                 permissionMode: "acceptEdits",
                 allowedTools: agents.flatMap((a) => [

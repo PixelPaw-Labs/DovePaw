@@ -3,6 +3,7 @@
 import { buildAgentDef } from "@@/lib/agents";
 import { type AgentConfigEntry, formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import { DOVE_AVATAR } from "@/lib/avatars";
+import { useDoveSettings } from "@/components/hooks/use-dove-settings";
 import { SuggestionChips } from "./suggestion-chips";
 import { AgentSuggestionChips } from "./agent-suggestion-chips";
 
@@ -31,22 +32,24 @@ function DoveIntro({
   onSelect: (text: string) => void;
 }) {
   const age = getDoveAge();
+  const dove = useDoveSettings();
+  const avatarUrl = dove.avatarUrl || DOVE_AVATAR;
+  const title = dove.landingTitle.trim() || "Hello, I am Dove, your working pet!";
+  const description =
+    dove.landingDescription.trim() ||
+    `My cat, ${age}, and your agent wrangler. I've got agents napping until you need them. Just say the word — or a treat works too. 🐾`;
+
   return (
     <div className="flex flex-col gap-4 w-full max-w-3xl">
       <div className="relative group">
         <div className="absolute -inset-0.5 bg-linear-to-r from-accent to-secondary rounded-2xl blur opacity-20 group-hover:opacity-30 transition duration-1000" />
         <div className="relative bg-card rounded-2xl p-5 flex gap-4 items-start shadow-sm">
           <div className="w-12 h-12 rounded-2xl shrink-0 shadow-2xl ring-4 ring-white overflow-hidden">
-            <img src={DOVE_AVATAR} alt="Dove" className="w-full h-full object-cover" />
+            <img src={avatarUrl} alt={dove.displayName} className="w-full h-full object-cover" />
           </div>
           <div>
-            <h2 className="text-xl font-bold tracking-tight text-foreground mb-1.5">
-              Hello, I am Dove, your working pet!
-            </h2>
-            <p className="text-muted-foreground leading-relaxed max-w-2xl">
-              Yang&apos;s cat, {age}, and your agent wrangler. I&apos;ve got 5 agents napping until
-              you need them. Just say the word — or a treat works too. 🐾
-            </p>
+            <h2 className="text-xl font-bold tracking-tight text-foreground mb-1.5">{title}</h2>
+            <p className="text-muted-foreground leading-relaxed max-w-2xl">{description}</p>
           </div>
         </div>
       </div>

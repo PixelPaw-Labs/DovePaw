@@ -128,7 +128,7 @@ const MOCK_SETTINGS = { version: 1 as const, repositories: [], envVars: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(readSettings).mockReturnValue(MOCK_SETTINGS);
+  vi.mocked(readSettings).mockResolvedValue(MOCK_SETTINGS);
   vi.mocked(resolveSettingsEnv).mockReturnValue({});
   vi.mocked(query).mockReturnValue(
     (async function* () {})() as unknown as ReturnType<typeof query>,

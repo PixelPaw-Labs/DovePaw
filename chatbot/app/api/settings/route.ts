@@ -6,8 +6,8 @@
 import { z } from "zod";
 import { readSettings, writeSettings } from "@@/lib/settings";
 
-export function GET() {
-  return Response.json(readSettings());
+export async function GET() {
+  return Response.json(await readSettings());
 }
 
 const putBodySchema = z.object({
@@ -30,7 +30,7 @@ export async function PUT(request: Request) {
     );
   }
 
-  const settings = readSettings();
+  const settings = await readSettings();
 
   // Preserve existing IDs for repos that haven't changed (match by githubRepo slug).
   // Only generate a new UUID for genuinely new repos.
@@ -46,7 +46,7 @@ export async function PUT(request: Request) {
     );
   });
 
-  writeSettings(settings);
+  await writeSettings(settings);
 
   return Response.json(settings);
 }

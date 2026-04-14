@@ -26,13 +26,13 @@ export default async function AgentSettingsPage({ params }: Props) {
   const agentEntry = allEntries.find((a) => a.name === agentName);
   if (!agentEntry) notFound();
 
-  const [agentSettings, agentFile, tmpAgentConfigs, plugins] = await Promise.all([
+  const [agentSettings, agentFile, tmpAgentConfigs, plugins, globalSettings] = await Promise.all([
     readAgentSettings(agentName),
     readAgentFile(agentName),
     readTmpAgentConfigEntries(),
     listPlugins(),
+    readSettings(),
   ]);
-  const globalSettings = readSettings();
 
   return (
     <SettingsPageLayout
