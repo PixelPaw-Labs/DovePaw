@@ -73,8 +73,11 @@ export const agentConfigEntrySchema = z.object({
   schedule: agentScheduleSchema.optional(),
   /** Whether to run immediately when launchd loads the plist */
   runAtLoad: z.boolean().optional(),
-  /** Extra static env vars to embed in the launchd plist */
-  envVars: z.record(z.string(), z.string()).optional(),
+  /** Env vars to embed in the launchd plist and seed into user settings on fresh install.
+   *  Uses a simplified shape (no id) — id is assigned by makeEnvVar at install time. */
+  envVars: z
+    .array(z.object({ key: z.string(), value: z.string(), isSecret: z.boolean().default(false) }))
+    .optional(),
   /** Default repo IDs to seed into settings.agents on fresh install */
   repos: z.array(z.string()).optional(),
   /** When false, hidden from Scheduled Agents Management and A2A servers. Absent = true. */

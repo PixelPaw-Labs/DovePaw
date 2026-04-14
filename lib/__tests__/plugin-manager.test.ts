@@ -243,7 +243,12 @@ describe("addPlugin — local path", () => {
 
   it("seeds envVars from plugin source on fresh install", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"], {
-      "my-agent": { envVars: { PROJECTS: "foo,bar", API_KEY: "test-key" } },
+      "my-agent": {
+        envVars: [
+          { key: "PROJECTS", value: "foo,bar" },
+          { key: "API_KEY", value: "test-key" },
+        ],
+      },
     });
     await addPlugin(pluginDir);
 
@@ -329,7 +334,7 @@ describe("syncPlugin", () => {
 
   it("preserves existing envVars on sync — does not overwrite with plugin source defaults", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"], {
-      "my-agent": { envVars: { PROJECTS: "seed-value" } },
+      "my-agent": { envVars: [{ key: "PROJECTS", value: "seed-value" }] },
     });
     await addPlugin(pluginDir);
 

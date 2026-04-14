@@ -97,7 +97,9 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
     doveCard,
     suggestions,
     runAtLoad: entry.runAtLoad,
-    envVars: entry.envVars,
+    envVars: entry.envVars
+      ? Object.fromEntries(entry.envVars.map(({ key, value }) => [key, value]))
+      : undefined,
     schedulingEnabled: entry.schedulingEnabled ?? true,
     pluginPath: entry.pluginPath,
   };

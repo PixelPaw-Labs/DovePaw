@@ -82,10 +82,9 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
   const existing = await readAgentFile(agentName);
 
   // On fresh install (no existing file), seed envVars from the plugin source's
-  // static envVars (Record<string, string>). On update, always preserve the
-  // user's runtime config unchanged.
-  const seedEnvVars = Object.entries(entry.envVars ?? {}).map(([key, value]) =>
-    makeEnvVar(key, value),
+  // envVars. On update, always preserve the user's runtime config unchanged.
+  const seedEnvVars = (entry.envVars ?? []).map(({ key, value, isSecret }) =>
+    makeEnvVar(key, value, isSecret),
   );
 
   await writeAgentFile(agentName, {
