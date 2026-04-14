@@ -230,12 +230,19 @@ Skills and agents are listed independently — a skill can exist without a same-
 
 ### Phase 5 — Integration Check
 
-```bash
-npm run lint
-npm run fmt
+Read each created file back and verify against this checklist. Fix any issue found, then re-check until every item passes:
+
+- **main.ts** — all `{{PLACEHOLDER}}` values substituted; spawning pattern matches the chosen Option A/B/C; `INSTRUCTION` is passed through to Claude; no dead branches; `emitProgress` called at meaningful steps; subprocess env is correct (no `CLAUDECODE`, clean PATH)
+- **agent.json** — all required fields present; `pluginPath` is NOT set; every entry in `envVars` has an `id` UUID (missing `id` causes Zod to silently drop the agent from the Kiln group)
+- **SKILL.md** (if created) — frontmatter is valid for Claude Code; argument pattern is documented; output contract is defined
+
+End with a confidence score JSON on its own line:
+
+```json
+{"confidence": <0-100>, "issues": ["<any remaining issue>"]}
 ```
 
-Read `~/.dovepaw/tmp/<name>/main.ts` back to confirm no obvious syntax errors.
+The Stop hook requires `confidence >= 90` to proceed. Emit this only after all fixes are complete — it must reflect the post-fix state.
 
 Tell the user: "Your agent is ready. **Refresh the page** to see it appear under the **Kiln** group in the sidebar (Sparkles icon). No server restart needed."
 
