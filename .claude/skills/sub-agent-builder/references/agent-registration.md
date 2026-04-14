@@ -66,9 +66,12 @@ UUID strings from `~/.dovepaw/settings.json`. Match user's selected repo paths t
 
 ```json
 "envVars": [
-  { "key": "JIRA_API_KEY", "value": "", "isSecret": true },
-  { "key": "REPO_LIST", "value": "", "isSecret": false }
+  { "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890", "key": "JIRA_API_KEY", "value": "", "isSecret": true },
+  { "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901", "key": "REPO_LIST", "value": "", "isSecret": false }
 ]
+// ⚠️ id is REQUIRED — Zod's envVarSchema validates it as a UUID.
+// Without it, safeParse returns false and the agent silently disappears from the Kiln group.
+// Generate a fresh UUID (v4) for each entry.
 ```
 
 ---

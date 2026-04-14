@@ -49,7 +49,7 @@ hooks:
 
 ---
 
-### Phase 2 — Generate main.ts
+### Phase 2 — Design file structure, then generate source files
 
 Read the appropriate template from `references/`:
 
@@ -59,7 +59,23 @@ Read the appropriate template from `references/`:
 | Skill-based | `references/template-skill-based.md`      |
 | Stateful    | `references/template-complex-stateful.md` |
 
-Create `~/.dovepaw/tmp/<name>/main.ts` by substituting all `{{PLACEHOLDER}}` values.
+The template is a **starting point**, not a rigid layout. Before writing any files, analyse the agent's requirements and decide the file structure:
+
+**Apply SOLID principles to derive the file structure:**
+
+- **S — Single Responsibility:** `main.ts` owns only process lifecycle, config constants, and top-level flow. Each module owns exactly one concern. If a file is doing two things, split it.
+- **O — Open/Closed:** Put variable logic (prompts, discovery queries, state format) in modules that can be extended without touching `main.ts`.
+- **D — Dependency Inversion:** Infrastructure (log, dirs, instruction) flows **down as function params** into modules — modules never read from `process.env` directly.
+
+Practical rules:
+
+1. Identify each distinct logical concern (prompt building, data discovery, state management, skill lifecycle, parallel orchestration). For each:
+   - **Simple** (a few lines, no branching) → keep inline in `main.ts`
+   - **Substantial** (own logic, data types, or >~30 lines) → extract to a named module
+2. Name modules after **what they do**: `skill-builder.ts`, `state.ts`, `discover.ts`, `prompts.ts`, `run.ts`
+3. Do not over-split — three concerns in one file beats three files doing one line each.
+
+Substitute all `{{PLACEHOLDER}}` values in every file before writing.
 
 **Instruction passing:**
 
@@ -95,7 +111,7 @@ Fill in all fields:
 - `schedulingEnabled` — `true` only if interval/calendar
 - `schedule` — include only when schedulingEnabled; use `"interval"` or `"calendar"` type
 - `repos` — UUIDs from settings.json matching selected repo paths
-- `envVars` — `[{ "key": "VAR", "value": "", "isSecret": true }]` for each required var
+- `envVars` — `[{ "id": "<uuid>", "key": "VAR", "value": "", "isSecret": true }]` for each required var — `id` is required by the schema (use `crypto.randomUUID()` pattern: generate a fresh UUID for each entry)
 - `iconName` / `iconBg` / `iconColor` — from icon choice (see color palettes in `references/agent-registration.md`)
 - `doveCard` — write a concise title + description + starter prompt
 - `suggestions` — 3 realistic starter prompts based on agent purpose
@@ -121,18 +137,26 @@ If the user selects **Yes**, proceed to create the skill:
 
 #### Skill file location
 
-When building a tmp agent:
+When building a tmp agent, skill files live in a `skill/` subdirectory — separate from the agent source files:
 
 ```
-~/.dovepaw/tmp/<name>/SKILL.md       ← write SKILL.md here (inside tmp dir)
-~/.claude/skills/<name>/             ← symlink pointing to ~/.dovepaw/tmp/<name>/
+~/.dovepaw/tmp/<name>/               ← agent source (main.ts, agent.json, run.ts, etc.)
+~/.dovepaw/tmp/<name>/skill/         ← skill files (SKILL.md, references/, scripts/, etc.)
+~/.claude/skills/<name>/             ← symlink pointing to ~/.dovepaw/tmp/<name>/skill/
 ```
 
-Create the symlink with Python (bypasses shell permission checks):
+Create the `skill/` dir and symlink with Python (bypasses shell permission checks):
 
 ```bash
-python3 -c "import os; os.symlink(os.path.expanduser('~/.dovepaw/tmp/<name>'), os.path.expanduser('~/.claude/skills/<name>'))"
+python3 -c "
+import os
+skill_dir = os.path.expanduser('~/.dovepaw/tmp/<name>/skill')
+os.makedirs(skill_dir, exist_ok=True)
+os.symlink(skill_dir, os.path.expanduser('~/.claude/skills/<name>'))
+"
 ```
+
+Write `SKILL.md` (and any `references/`, `scripts/` subdirs) inside `~/.dovepaw/tmp/<name>/skill/`.
 
 When publishing to a plugin repo:
 
@@ -140,7 +164,9 @@ When publishing to a plugin repo:
 skills/<name>/SKILL.md               ← inside plugin repo
 ```
 
-See `references/skill-authoring.md` for the complete SKILL.md schema, argument patterns, output contracts, subdirectory conventions, and hooks.
+Read `references/skill-authoring.md` for the SKILL.md schema, argument patterns, output contracts, subdirectory conventions, and hooks.
+
+Read `references/skill-best-practices.md` before writing the SKILL.md body — apply every principle to the content you generate.
 
 #### Agent → skill invocation
 
@@ -196,7 +222,7 @@ npm run fmt
 
 Read `~/.dovepaw/tmp/<name>/main.ts` back to confirm no obvious syntax errors.
 
-Tell the user: the agent is now visible in the **Kiln** sidebar group (Sparkles icon). No server restart needed for tmp agents — they appear immediately.
+Tell the user: "Your agent is ready. **Refresh the page** to see it appear under the **Kiln** group in the sidebar (Sparkles icon). No server restart needed."
 
 ---
 
@@ -239,4 +265,5 @@ Always remind: restart `npm run chatbot:servers` to register the new A2A server.
 | `references/agent-registration.md`        | Phase 3 — agent.json template + icon/color catalog                     |
 | `references/spawning-patterns.md`         | Phase 2 — Options A/B/C for how Claude spawns subprocesses (all types) |
 | `references/skill-authoring.md`           | Phase 4 — SKILL.md schema, argument patterns, output contracts, hooks  |
+| `references/skill-best-practices.md`      | Phase 4 — Content quality principles (gotchas, defaults, procedures…)  |
 | `references/integration-checklist.md`     | Phase 5 — lint/fmt commands + path reference                           |
