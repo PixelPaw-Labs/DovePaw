@@ -51,6 +51,31 @@ export type ChatSsePermission = {
   title?: string;
 };
 
+/** A single question option inside a ChatSseQuestion event. */
+export type QuestionOption = {
+  label: string;
+  description: string;
+};
+
+/** A single question inside a ChatSseQuestion event. */
+export type Question = {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
+};
+
+/**
+ * AskUserQuestion request — Claude is asking the user clarifying questions.
+ * The browser should render a question form and POST the answers to
+ * /api/chat/question with { requestId, answers }.
+ */
+export type ChatSseQuestion = {
+  type: "question";
+  requestId: string;
+  questions: Question[];
+};
+
 export type ChatSseEvent =
   | ChatSseSession
   | ChatSseText
@@ -62,7 +87,8 @@ export type ChatSseEvent =
   | ChatSseProgress
   | ChatSseCancelled
   | ChatSseDone
-  | ChatSsePermission;
+  | ChatSsePermission
+  | ChatSseQuestion;
 
 /**
  * Returns an onSnapshot callback that delta-tracks a StreamedResult and

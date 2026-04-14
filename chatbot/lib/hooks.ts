@@ -22,6 +22,8 @@ import { PendingRegistry } from "@/lib/pending-registry";
 import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
+import { addPendingQuestion, abortPendingQuestions } from "@/lib/pending-questions";
+import type { Question } from "@/lib/chat-sse";
 
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 
@@ -211,15 +213,41 @@ export function buildDoveCanUseTool(send: (event: ChatSseEvent) => void): {
   canUseTool: CanUseTool;
   abortPermissions: () => void;
 } {
-  const activeIds = new Set<string>();
+  const activePermissionIds = new Set<string>();
+  const activeQuestionIds = new Set<string>();
 
   const canUseTool: CanUseTool = async (
     toolName,
     input,
     { title, displayName, blockedPath, signal },
   ) => {
+    // ── AskUserQuestion: surface questions to the browser and await answers ──
+    if (toolName === "AskUserQuestion") {
+      // input is Record<string, unknown> — index directly, no assertion needed.
+      const rawQuestions = input["questions"];
+      // After Array.isArray, TypeScript narrows to any[] (isArray's own signature).
+      // The SDK validates AskUserQuestion's schema before canUseTool fires, so
+      // the array really does contain Question objects.
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- SDK-validated schema
+      const questions = (Array.isArray(rawQuestions) ? rawQuestions : []) as Question[];
+      const requestId = randomUUID();
+      activeQuestionIds.add(requestId);
+      send({ type: "question", requestId, questions });
+      const abortPromise = new Promise<Record<string, string>>((resolve) => {
+        signal.addEventListener("abort", () => resolve({}), { once: true });
+      });
+      const answers = await Promise.race([addPendingQuestion(requestId), abortPromise]);
+      if (signal.aborted) abortPendingQuestions(new Set([requestId]));
+      activeQuestionIds.delete(requestId);
+      return {
+        behavior: "allow" as const,
+        updatedInput: { ...(input as object), answers },
+      };
+    }
+
+    // ── All other tools: permission approval flow ────────────────────────────
     const requestId = randomUUID();
-    activeIds.add(requestId);
+    activePermissionIds.add(requestId);
     send({
       type: "permission",
       requestId,
@@ -236,11 +264,17 @@ export function buildDoveCanUseTool(send: (event: ChatSseEvent) => void): {
     // If abort won the race the POST never arrived, so the resolver is still in the map.
     // (If the user responded, resolvePendingPermission already removed it — this is a no-op.)
     if (signal.aborted) abortPendingPermissions(new Set([requestId]));
-    activeIds.delete(requestId);
+    activePermissionIds.delete(requestId);
     return allowed
       ? { behavior: "allow" as const, updatedInput: input }
       : { behavior: "deny" as const, message: "User denied permission" };
   };
 
-  return { canUseTool, abortPermissions: () => abortPendingPermissions(activeIds) };
+  return {
+    canUseTool,
+    abortPermissions: () => {
+      abortPendingPermissions(activePermissionIds);
+      abortPendingQuestions(activeQuestionIds);
+    },
+  };
 }

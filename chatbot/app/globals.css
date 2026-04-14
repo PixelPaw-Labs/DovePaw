@@ -59,7 +59,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 
   /* Font */
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
 }
 
 @layer utilities {

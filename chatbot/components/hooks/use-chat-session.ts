@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ChatSsePermission } from "@/lib/chat-sse";
+import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 import { mergeProgressEntries } from "./use-messages";
 import type { ChatMessage } from "./use-messages";
 import type { ProgressEntry } from "@/lib/query-tools";
@@ -40,6 +40,7 @@ export function useChatSession(agentId: AgentId) {
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [pendingPermissions, setPendingPermissions] = useState<ChatSsePermission[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<ChatSseQuestion[]>([]);
   const [pendingQueue, setPendingQueue] = useState<string[]>([]);
 
   // ─── Refs ─────────────────────────────────────────────────────────────────────
@@ -98,6 +99,7 @@ export function useChatSession(agentId: AgentId) {
     animation,
     pendingToolNameRef,
     setPendingPermissions,
+    setPendingQuestions,
     setSessionCancelled,
   };
 
@@ -214,6 +216,7 @@ export function useChatSession(agentId: AgentId) {
       animation.reset();
       setSessionCancelled(false);
       setPendingPermissions([]);
+      setPendingQuestions([]);
 
       const abort = new AbortController();
       abortRef.current = abort;
@@ -348,6 +351,7 @@ export function useChatSession(agentId: AgentId) {
     setIsLoading(false);
     setCurrentSessionId(null);
     setPendingPermissions([]);
+    setPendingQuestions([]);
     void fetch(activeSessionUrl(agentId), {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -508,6 +512,7 @@ export function useChatSession(agentId: AgentId) {
       setIsLoading(false);
       setSessionCancelled(false);
       setPendingPermissions([]);
+      setPendingQuestions([]);
       void (async () => {
         try {
           const {
@@ -556,6 +561,24 @@ export function useChatSession(agentId: AgentId) {
       // Leave the banner visible so the user can retry.
     }
   }, []);
+
+  // ─── resolveQuestion ─────────────────────────────────────────────────────────
+  const resolveQuestion = useCallback(
+    async (requestId: string, answers: Record<string, string>) => {
+      try {
+        const res = await fetch("/api/chat/question", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ requestId, answers }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        setPendingQuestions((prev) => prev.filter((q) => q.requestId !== requestId));
+      } catch {
+        // Leave the banner visible so the user can retry.
+      }
+    },
+    [],
+  );
 
   // ─── removeFromQueue ──────────────────────────────────────────────────────────
   const removeFromQueue = useCallback((index: number) => {
@@ -639,6 +662,7 @@ export function useChatSession(agentId: AgentId) {
     isLoading,
     currentSessionId,
     pendingPermissions,
+    pendingQuestions,
     pendingQueue,
     sendMessage,
     cancelMessage,
@@ -646,6 +670,7 @@ export function useChatSession(agentId: AgentId) {
     deleteSession,
     setSessionId,
     resolvePermission,
+    resolveQuestion,
     removeFromQueue,
   };
 }

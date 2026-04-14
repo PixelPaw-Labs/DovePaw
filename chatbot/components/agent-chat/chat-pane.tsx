@@ -15,6 +15,7 @@ import {
 import { ChatInputBar } from "./chat-input-bar";
 import { ProcessingBar } from "./processing-bar";
 import { PermissionBanner } from "./permission-banner";
+import { QuestionBanner } from "./question-banner";
 import { ChatMessageItem } from "./chat-message";
 import { IntroCard } from "./intro-card";
 import { WorkflowPanel } from "@/components/workflow/workflow-panel";
@@ -22,7 +23,7 @@ import { SessionHistoryPanel } from "./session-history-panel";
 import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import type { ChatMessage } from "@/components/hooks/use-messages";
 import type { ProgressEntry } from "@/lib/query-tools";
-import type { ChatSsePermission } from "@/lib/chat-sse";
+import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 
 function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEntry[]) {
   if (activeAgentId === "dove") return { name: "Dove", Icon: Bot };
@@ -42,6 +43,7 @@ export interface ChatPaneProps {
   isLoading: boolean;
   currentSessionId: string | null;
   pendingPermissions: ChatSsePermission[];
+  pendingQuestions: ChatSseQuestion[];
   pendingQueue: string[];
   // session actions
   sendMessage: (content: string) => Promise<void>;
@@ -50,6 +52,7 @@ export interface ChatPaneProps {
   deleteSession: (id: string) => Promise<void>;
   setSessionId: (id: string | null) => Promise<void>;
   resolvePermission: (requestId: string, allowed: boolean) => Promise<void>;
+  resolveQuestion: (requestId: string, answers: Record<string, string>) => Promise<void>;
   removeFromQueue: (index: number) => void;
   // history
   sessions: AgentSession[];
@@ -65,6 +68,7 @@ export function ChatPane({
   isLoading,
   currentSessionId,
   pendingPermissions,
+  pendingQuestions,
   pendingQueue,
   sendMessage,
   cancelMessage,
@@ -72,6 +76,7 @@ export function ChatPane({
   deleteSession,
   setSessionId,
   resolvePermission,
+  resolveQuestion,
   removeFromQueue,
   sessions,
   runningSessionIds,
@@ -240,7 +245,7 @@ export function ChatPane({
         </Conversation>
 
         <footer className="px-6 pb-4 pt-0 w-full max-w-5xl mx-auto shrink-0">
-          {pendingPermissions.length > 0 && (
+          {(pendingPermissions.length > 0 || pendingQuestions.length > 0) && (
             <div className="mb-3 space-y-2">
               {pendingPermissions.map((req) => (
                 <PermissionBanner
@@ -248,6 +253,13 @@ export function ChatPane({
                   request={req}
                   onAllow={() => void resolvePermission(req.requestId, true)}
                   onDeny={() => void resolvePermission(req.requestId, false)}
+                />
+              ))}
+              {pendingQuestions.map((req) => (
+                <QuestionBanner
+                  key={req.requestId}
+                  request={req}
+                  onSubmit={(answers) => void resolveQuestion(req.requestId, answers)}
                 />
               ))}
             </div>

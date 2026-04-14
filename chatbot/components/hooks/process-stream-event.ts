@@ -1,7 +1,6 @@
 "use client";
 
-import type { ChatSseEvent } from "@/lib/chat-sse";
-import type { ChatSsePermission } from "@/lib/chat-sse";
+import type { ChatSseEvent, ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 import type { useTextAnimation } from "./use-text-animation";
 import type { ChatMessage } from "./use-messages";
 import type React from "react";
@@ -11,6 +10,7 @@ export interface StreamEventContext {
   animation: ReturnType<typeof useTextAnimation>;
   pendingToolNameRef: React.MutableRefObject<string | null>;
   setPendingPermissions: React.Dispatch<React.SetStateAction<ChatSsePermission[]>>;
+  setPendingQuestions: React.Dispatch<React.SetStateAction<ChatSseQuestion[]>>;
   setSessionCancelled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
@@ -52,11 +52,17 @@ export function processActiveStreamEvent(
     animation,
     pendingToolNameRef,
     setPendingPermissions,
+    setPendingQuestions,
     setSessionCancelled,
   } = ctx;
 
   if (event.type === "permission") {
     setPendingPermissions((prev) => [...prev, event]);
+    return;
+  }
+
+  if (event.type === "question") {
+    setPendingQuestions((prev) => [...prev, event]);
     return;
   }
 
@@ -173,6 +179,7 @@ export function processActiveStreamEvent(
 
   if (event.type === "cancelled") {
     setPendingPermissions([]);
+    setPendingQuestions([]);
     animation.flush(assistantId);
     updateActiveMessages((prev) =>
       prev.map((m) =>

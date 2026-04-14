@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { buildAgentHooks } from "../hooks";
+import { buildAgentHooks, buildDoveCanUseTool } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
 import { PendingRegistry } from "../pending-registry";
+import { resolvePendingPermission } from "../pending-permissions";
+import { resolvePendingQuestion } from "../pending-questions";
+import type { ChatSseEvent, ChatSsePermission, ChatSseQuestion } from "../chat-sse";
 
 const signal = new AbortController().signal;
 const callHook = (fn: Function, input: unknown) => fn(input, undefined, { signal });
@@ -475,5 +478,152 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     const hooks = buildSubAgentHooks("/cwd", [], false, makeRegistry());
     // Stop array should only contain the base pending-work hook, not the handoff hook
     expect(hooks.Stop).toHaveLength(1);
+  });
+});
+
+// ─── buildDoveCanUseTool ──────────────────────────────────────────────────────
+
+function makeCanUseToolCtx(overrides?: { signal?: AbortSignal }) {
+  return {
+    signal: overrides?.signal ?? new AbortController().signal,
+    title: undefined,
+    displayName: undefined,
+    blockedPath: undefined,
+  };
+}
+
+const sampleQuestion = {
+  question: "Which approach?",
+  header: "Approach",
+  options: [
+    { label: "Fast", description: "Quick and dirty" },
+    { label: "Clean", description: "Proper solution" },
+  ],
+  multiSelect: false,
+};
+
+describe("buildDoveCanUseTool — AskUserQuestion", () => {
+  it("sends a question SSE event with the questions from input", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool } = buildDoveCanUseTool((e) => sent.push(e));
+
+    const resultPromise = canUseTool(
+      "AskUserQuestion",
+      { questions: [sampleQuestion] },
+      makeCanUseToolCtx(),
+    );
+
+    expect(sent).toHaveLength(1);
+    const event = sent[0] as ChatSseQuestion;
+    expect(event.type).toBe("question");
+    expect(event.requestId).toBeTruthy();
+    expect(event.questions).toEqual([sampleQuestion]);
+
+    // Resolve so the promise settles (avoids unhandled-promise warnings)
+    resolvePendingQuestion(event.requestId, { "Which approach?": "Fast" });
+    await resultPromise;
+  });
+
+  it("returns allow with answers merged into updatedInput", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool } = buildDoveCanUseTool((e) => sent.push(e));
+    const answers = { "Which approach?": "Clean" };
+
+    const resultPromise = canUseTool(
+      "AskUserQuestion",
+      { questions: [sampleQuestion] },
+      makeCanUseToolCtx(),
+    );
+
+    const event = sent[0] as ChatSseQuestion;
+    resolvePendingQuestion(event.requestId, answers);
+    const result = await resultPromise;
+
+    expect(result.behavior).toBe("allow");
+    expect((result as { updatedInput: unknown }).updatedInput).toMatchObject({ answers });
+  });
+
+  it("returns allow with empty answers when the signal aborts", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool } = buildDoveCanUseTool((e) => sent.push(e));
+    const ctrl = new AbortController();
+
+    const resultPromise = canUseTool(
+      "AskUserQuestion",
+      { questions: [sampleQuestion] },
+      makeCanUseToolCtx({ signal: ctrl.signal }),
+    );
+
+    ctrl.abort();
+    const result = await resultPromise;
+    expect(result.behavior).toBe("allow");
+    expect((result as { updatedInput: Record<string, unknown> }).updatedInput.answers).toEqual({});
+  });
+
+  it("handles missing questions key gracefully (sends empty array)", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool } = buildDoveCanUseTool((e) => sent.push(e));
+
+    const resultPromise = canUseTool("AskUserQuestion", {}, makeCanUseToolCtx());
+
+    const event = sent[0] as ChatSseQuestion;
+    expect(event.questions).toEqual([]);
+    resolvePendingQuestion(event.requestId, {});
+    await resultPromise;
+  });
+});
+
+describe("buildDoveCanUseTool — permission flow", () => {
+  it("sends a permission SSE event for non-AskUserQuestion tools", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool } = buildDoveCanUseTool((e) => sent.push(e));
+
+    const resultPromise = canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+
+    expect(sent).toHaveLength(1);
+    const event = sent[0] as ChatSsePermission;
+    expect(event.type).toBe("permission");
+    expect(event.requestId).toBeTruthy();
+
+    resolvePendingPermission(event.requestId, true);
+    const result = await resultPromise;
+    expect(result.behavior).toBe("allow");
+  });
+
+  it("returns deny when user denies the permission", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool } = buildDoveCanUseTool((e) => sent.push(e));
+
+    const resultPromise = canUseTool("Write", { file_path: "/tmp/x" }, makeCanUseToolCtx());
+    const event = sent[0] as ChatSsePermission;
+    resolvePendingPermission(event.requestId, false);
+    const result = await resultPromise;
+    expect(result.behavior).toBe("deny");
+  });
+});
+
+describe("buildDoveCanUseTool — abortPermissions", () => {
+  it("denies all in-flight permission requests on abort", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool, abortPermissions } = buildDoveCanUseTool((e) => sent.push(e));
+
+    const p1 = canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    const p2 = canUseTool("Write", { file_path: "/tmp/x" }, makeCanUseToolCtx());
+
+    abortPermissions();
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1.behavior).toBe("deny");
+    expect(r2.behavior).toBe("deny");
+  });
+
+  it("resolves in-flight AskUserQuestion requests with empty answers on abort", async () => {
+    const sent: ChatSseEvent[] = [];
+    const { canUseTool, abortPermissions } = buildDoveCanUseTool((e) => sent.push(e));
+
+    const p = canUseTool("AskUserQuestion", { questions: [sampleQuestion] }, makeCanUseToolCtx());
+    abortPermissions();
+    const result = await p;
+    expect(result.behavior).toBe("allow");
+    expect((result as { updatedInput: Record<string, unknown> }).updatedInput.answers).toEqual({});
   });
 });

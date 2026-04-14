@@ -66,6 +66,7 @@ export function AgentChat({
       isLoading={session.isLoading}
       currentSessionId={session.currentSessionId}
       pendingPermissions={session.pendingPermissions}
+      pendingQuestions={session.pendingQuestions}
       pendingQueue={session.pendingQueue}
       sendMessage={session.sendMessage}
       cancelMessage={session.cancelMessage}
@@ -73,6 +74,7 @@ export function AgentChat({
       deleteSession={session.deleteSession}
       setSessionId={session.setSessionId}
       resolvePermission={session.resolvePermission}
+      resolveQuestion={session.resolveQuestion}
       removeFromQueue={session.removeFromQueue}
       sessions={sessions}
       runningSessionIds={runningSessionIds}
