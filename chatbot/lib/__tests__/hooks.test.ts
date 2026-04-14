@@ -149,25 +149,66 @@ describe("buildAgentHooks — PostToolUse hook", () => {
   });
 });
 
-describe("buildAgentHooks — PreToolUse hook", () => {
+describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => {
+  it("is always present even without allowedDirectories", () => {
+    const hooks = buildAgentHooks(makeConfig());
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PreToolUse![0]!.matcher).toBe("ScheduleWakeup");
+  });
+
+  it("allows ScheduleWakeup when no pending work", async () => {
+    const hooks = buildAgentHooks(makeConfig({ hasPendingWork: () => false }));
+    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const result = await callHook(fn, preToolUseInput("ScheduleWakeup", { delaySeconds: 90 }));
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("denies ScheduleWakeup when pending work exists", async () => {
+    const hooks = buildAgentHooks(
+      makeConfig({
+        hasPendingWork: () => true,
+        getPendingDescriptions: () => ['call `await_run_script` with runId: "abc-123"'],
+      }),
+    );
+    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const result = await callHook(fn, preToolUseInput("ScheduleWakeup", { delaySeconds: 90 }));
+    const { hookSpecificOutput } = result as {
+      hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string };
+    };
+    expect(hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("wakeup will not fire");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("await_run_script");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("abc-123");
+  });
+
+  it("passes through non-PreToolUse events", async () => {
+    const hooks = buildAgentHooks(makeConfig({ hasPendingWork: () => true }));
+    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const result = await callHook(fn, { hook_event_name: "Stop" });
+    expect(result).toEqual({ continue: true });
+  });
+});
+
+describe("buildAgentHooks — PreToolUse Edit|Write guard (index 1)", () => {
   it("is absent when allowedDirectories is not set", () => {
     const hooks = buildAgentHooks(makeConfig());
-    expect(hooks.PreToolUse).toBeUndefined();
+    // Only ScheduleWakeup guard — no Edit|Write entry
+    expect(hooks.PreToolUse).toHaveLength(1);
   });
 
   it("is absent when allowedDirectories is empty", () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: [] }));
-    expect(hooks.PreToolUse).toBeUndefined();
+    expect(hooks.PreToolUse).toHaveLength(1);
   });
 
-  it("has matcher Edit|Write", () => {
+  it("has matcher Edit|Write at index 1", () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp"] }));
-    expect(hooks.PreToolUse![0]!.matcher).toBe("Edit|Write");
+    expect(hooks.PreToolUse![1]!.matcher).toBe("Edit|Write");
   });
 
   it("allows when file_path is directly inside an allowed directory", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(
       fn,
       preToolUseInput("Edit", { file_path: "/tmp/workspace/foo.ts" }),
@@ -178,7 +219,7 @@ describe("buildAgentHooks — PreToolUse hook", () => {
 
   it("allows when file_path equals an allowed directory exactly", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(fn, preToolUseInput("Edit", { file_path: "/tmp/workspace" }));
     const { hookSpecificOutput } = result as { hookSpecificOutput: { permissionDecision: string } };
     expect(hookSpecificOutput.permissionDecision).toBe("allow");
@@ -186,7 +227,7 @@ describe("buildAgentHooks — PreToolUse hook", () => {
 
   it("allows when file_path is nested deeply inside an allowed directory", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(
       fn,
       preToolUseInput("Write", { file_path: "/tmp/workspace/a/b/c.ts" }),
@@ -199,7 +240,7 @@ describe("buildAgentHooks — PreToolUse hook", () => {
     const hooks = buildAgentHooks(
       makeConfig({ allowedDirectories: ["/tmp/workspace", "/home/agents/logs"] }),
     );
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(
       fn,
       preToolUseInput("Edit", { file_path: "/home/agents/logs/out.log" }),
@@ -210,7 +251,7 @@ describe("buildAgentHooks — PreToolUse hook", () => {
 
   it("denies when file_path is outside all allowed directories", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(fn, preToolUseInput("Edit", { file_path: "/etc/passwd" }));
     const { hookSpecificOutput } = result as {
       hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string };
@@ -222,7 +263,7 @@ describe("buildAgentHooks — PreToolUse hook", () => {
 
   it("denies a path that shares a prefix but is not a subpath", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/work"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     // /tmp/workspace starts with /tmp/work but is NOT inside /tmp/work/
     const result = await callHook(
       fn,
@@ -234,21 +275,21 @@ describe("buildAgentHooks — PreToolUse hook", () => {
 
   it("passes through when tool_input has no file_path", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(fn, preToolUseInput("Edit", { content: "hello" }));
     expect(result).toEqual({ continue: true });
   });
 
   it("passes through when tool_input is not an object", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(fn, preToolUseInput("Edit", null));
     expect(result).toEqual({ continue: true });
   });
 
   it("passes through non-PreToolUse events", async () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: ["/tmp/workspace"] }));
-    const fn = hooks.PreToolUse![0]!.hooks[0]!;
+    const fn = hooks.PreToolUse![1]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "Stop" });
     expect(result).toEqual({ continue: true });
   });
@@ -287,7 +328,8 @@ describe("buildDoveHooks — PreToolUse allowed directories", () => {
 
   function getPreToolUseHook() {
     const hooks = buildDoveHooks([], new PendingRegistry(), cwd, [tmpDir]);
-    return hooks.PreToolUse![0]!.hooks[0]!;
+    // index 0 = ScheduleWakeup guard, index 1 = Edit|Write directory guard
+    return hooks.PreToolUse![1]!.hooks[0]!;
   }
 
   it("allows writes inside cwd", async () => {

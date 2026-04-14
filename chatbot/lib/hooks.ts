@@ -63,6 +63,61 @@ export function buildAgentHooks(
   const retryCounter = new StillRunningRetryCounter();
   const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
 
+  const preToolUseHooks: HookCallbackMatcher[] = [
+    {
+      matcher: "ScheduleWakeup",
+      hooks: [
+        async (input) => {
+          if (input.hook_event_name !== "PreToolUse") return { continue: true };
+          if (!hasPendingWork()) return { continue: true };
+          const descriptions = getPendingDescriptions();
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: [
+              `⚠️ ScheduleWakeup cannot be used while await operations are pending — the wakeup will not fire in this session context.`,
+              `You still have ${descriptions.length} pending operation(s):`,
+              ...descriptions.map((d) => `- ${d}`),
+              `Keep calling the await tool directly in a loop until the operation completes.`,
+              `Never schedule a wakeup to defer polling — poll in-session.`,
+            ].join("\n"),
+          };
+          return { hookSpecificOutput };
+        },
+      ],
+    },
+  ];
+
+  if (resolvedAllowed && resolvedAllowed.length > 0) {
+    preToolUseHooks.push({
+      matcher: "Edit|Write",
+      hooks: [
+        async (input) => {
+          if (input.hook_event_name !== "PreToolUse") return { continue: true };
+          if (typeof input.tool_input !== "object" || input.tool_input === null)
+            return { continue: true };
+          const fp: unknown = Reflect.get(input.tool_input, "file_path");
+          const filePath = typeof fp === "string" ? fp : undefined;
+          if (!filePath) return { continue: true };
+          const resolved = path.resolve(filePath);
+          const allowed = resolvedAllowed.some(
+            (dir) => resolved === dir || resolved.startsWith(dir + path.sep),
+          );
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: allowed ? "allow" : "deny",
+            ...(!allowed && {
+              permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}.
+                    You should stop and reconsider your approach, as allowing access to this path could be dangerous.
+                    If you really need to access this path, ask the user for explicit permission.`,
+            }),
+          };
+          return { hookSpecificOutput };
+        },
+      ],
+    });
+  }
+
   return {
     ...(userPromptReminder && {
       UserPromptSubmit: [
@@ -80,38 +135,7 @@ export function buildAgentHooks(
         },
       ],
     }),
-    ...(resolvedAllowed &&
-      resolvedAllowed.length > 0 && {
-        PreToolUse: [
-          {
-            matcher: "Edit|Write",
-            hooks: [
-              async (input) => {
-                if (input.hook_event_name !== "PreToolUse") return { continue: true };
-                if (typeof input.tool_input !== "object" || input.tool_input === null)
-                  return { continue: true };
-                const fp: unknown = Reflect.get(input.tool_input, "file_path");
-                const filePath = typeof fp === "string" ? fp : undefined;
-                if (!filePath) return { continue: true };
-                const resolved = path.resolve(filePath);
-                const allowed = resolvedAllowed.some(
-                  (dir) => resolved === dir || resolved.startsWith(dir + path.sep),
-                );
-                const hookSpecificOutput: PreToolUseHookSpecificOutput = {
-                  hookEventName: "PreToolUse",
-                  permissionDecision: allowed ? "allow" : "deny",
-                  ...(!allowed && {
-                    permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}. 
-                    You should stop and reconsider your approach, as allowing access to this path could be dangerous. 
-                    If you really need to access this path, ask the user for explicit permission.`,
-                  }),
-                };
-                return { hookSpecificOutput };
-              },
-            ],
-          },
-        ],
-      }),
+    PreToolUse: preToolUseHooks,
     Stop: [
       {
         hooks: [

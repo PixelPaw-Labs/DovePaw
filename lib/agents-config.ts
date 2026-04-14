@@ -191,7 +191,7 @@ export { groupAgentsByPlugin, type AgentGroup } from "./agent-groups";
 
 /** Delete the agent's entire directory (settings.agents/ or tmp/ for session agents). */
 export async function deleteAgentDefinition(agentName: string): Promise<void> {
-  const settingsDir = agentConfigDir(agentName);
+  const settingsDir = join(AGENT_SETTINGS_DIR, agentName);
   if (await fileExists(settingsDir)) {
     await rm(settingsDir, { recursive: true });
     return;
