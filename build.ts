@@ -20,8 +20,8 @@ import {
   isAgentLoaded,
   linkAgents,
   linkAgentSdkToPlugin,
-  linkSkills,
-  unlinkSkills,
+  linkPluginSkills,
+  unlinkPluginSkills,
 } from "./lib/installer.js";
 import { listPlugins } from "./lib/plugin-manager.js";
 
@@ -34,8 +34,11 @@ const uninstall = process.argv.includes("--uninstall");
 if (uninstall) {
   console.log("Uninstalling all scheduler agents...\n");
   await Promise.all(agents.map((agent) => uninstallAgent(agent, uid)));
-  console.log("\nUnlinking skills...\n");
-  await unlinkSkills();
+  const pluginsToUnlink = await listPlugins();
+  if (pluginsToUnlink.length > 0) {
+    console.log("\nUnlinking skills...\n");
+    await Promise.all(pluginsToUnlink.map((p) => unlinkPluginSkills(p.skillNames)));
+  }
   console.log(`\nDone. Scripts remain in ${SCHEDULER_ROOT}/ for manual use.`);
   process.exit(0);
 }
@@ -49,10 +52,10 @@ execSync("npx tsup", { stdio: "inherit", cwd: import.meta.dirname });
 
 console.log("\nStep 2: Linking agents, skills, and deploying SDK...\n");
 await linkAgents();
-await linkSkills();
 await deployAgentSdk();
 const plugins = await listPlugins();
 await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
+await Promise.all(plugins.map((p) => linkPluginSkills(p.path, p.skillNames)));
 console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 
 console.log("\nStep 3: Installing and loading agents...\n");

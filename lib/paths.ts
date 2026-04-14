@@ -51,8 +51,6 @@ export const agentConfigFile = (agentName: string, filename: string) =>
 export const SCHEDULER_ROOT = join(DOVEPAW_DIR, "cron");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
-/** DovePaw/skills — project skills directory */
-export const SKILLS_DIR = join(AGENTS_ROOT, "skills");
 /** ~/Library/LaunchAgents — macOS launchd user agents directory */
 export const LAUNCH_AGENTS_DIR = join(process.env.HOME!, "Library/LaunchAgents");
 /** Resolve an agent's entry point to an absolute path under agents/ root */

@@ -9,6 +9,8 @@ export const pluginManifestSchema = z.object({
   version: z.string(),
   /** Names of agents this plugin provides (must match agents/{name}/ directories) */
   agents: z.array(z.string()),
+  /** Names of skills this plugin provides (must match skills/{name}/ directories) */
+  skills: z.array(z.string()).optional().default([]),
 });
 
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
@@ -26,6 +28,8 @@ export const pluginRecordSchema = z.object({
   installedAt: z.string(),
   /** Names of agents this plugin provides (kept in sync via sync/update) */
   agentNames: z.array(z.string()),
+  /** Names of skills this plugin provides (kept in sync via sync/update) */
+  skillNames: z.array(z.string()).optional().default([]),
 });
 
 export type PluginRecord = z.infer<typeof pluginRecordSchema>;

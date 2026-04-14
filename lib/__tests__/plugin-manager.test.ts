@@ -12,6 +12,7 @@ const {
   AGENT_SETTINGS_DIR,
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
+  SKILLS_ROOT,
 } = vi.hoisted(() => {
   const os = require("node:os") as typeof import("node:os");
   const path = require("node:path") as typeof import("node:path");
@@ -24,6 +25,7 @@ const {
     AGENT_SETTINGS_DIR: path.join(tmp, "dovepaw", "settings.agents"),
     AGENT_SDK_DIR: path.join(tmp, "dovepaw", "sdk"),
     AGENT_SDK_SRC: path.join(tmp, "dovepaw-repo", "packages", "agent-sdk"),
+    SKILLS_ROOT: path.join(tmp, "claude", "skills"),
   };
 });
 
@@ -36,6 +38,7 @@ vi.mock("../paths.js", () => ({
   AGENT_SETTINGS_DIR,
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
+  SKILLS_ROOT,
   agentConfigDir: (name: string) => join(AGENT_SETTINGS_DIR, name),
   agentDefinitionFile: (name: string) => join(AGENT_SETTINGS_DIR, name, "agent.json"),
 }));
@@ -69,6 +72,8 @@ vi.mock("../agents-config.js", async () => {
 
 vi.mock("../installer.js", () => ({
   linkAgentSdkToPlugin: vi.fn().mockResolvedValue(undefined),
+  linkPluginSkills: vi.fn().mockResolvedValue(undefined),
+  unlinkPluginSkills: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("node:child_process", () => ({ exec: vi.fn() }));
@@ -78,6 +83,7 @@ vi.mock("node:util", () => ({
 
 const { addPlugin, removePlugin, listPlugins, syncPlugin, isGitHubSlug, repoName } =
   await import("../plugin-manager.js");
+const { linkPluginSkills, unlinkPluginSkills } = await import("../installer.js");
 
 // ─── isGitHubSlug ─────────────────────────────────────────────────────────────
 
@@ -132,12 +138,13 @@ function makePluginDir(
   name: string,
   agents: string[],
   agentOverrides: Record<string, object> = {},
+  skills: string[] = [],
 ): string {
   const dir = join(TMP, "local-plugins", name);
   mkdirSync(join(dir, "agents"), { recursive: true });
   writeFileSync(
     join(dir, "dovepaw-plugin.json"),
-    JSON.stringify({ name, version: "1.0.0", agents }),
+    JSON.stringify({ name, version: "1.0.0", agents, skills }),
   );
   for (const agentName of agents) {
     mkdirSync(join(dir, "agents", agentName), { recursive: true });
@@ -145,6 +152,10 @@ function makePluginDir(
       join(dir, "agents", agentName, "agent.json"),
       JSON.stringify({ ...BASE_AGENT_ENTRY, name: agentName, ...agentOverrides[agentName] }),
     );
+  }
+  for (const skillName of skills) {
+    mkdirSync(join(dir, "skills", skillName), { recursive: true });
+    writeFileSync(join(dir, "skills", skillName, "SKILL.md"), `# ${skillName}`);
   }
   return dir;
 }
@@ -270,6 +281,22 @@ describe("addPlugin — local path", () => {
     ) as { envVars: unknown[] };
     expect(content.envVars).toEqual([]);
   });
+
+  it("calls linkPluginSkills with plugin dir and skill names", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr", "git-commit"]);
+    const record = await addPlugin(pluginDir);
+
+    expect(record.skillNames).toEqual(["create-pr", "git-commit"]);
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["create-pr", "git-commit"]);
+  });
+
+  it("stores empty skillNames when plugin has no skills", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    const record = await addPlugin(pluginDir);
+
+    expect(record.skillNames).toEqual([]);
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, []);
+  });
 });
 
 // ─── removePlugin ─────────────────────────────────────────────────────────────
@@ -289,6 +316,15 @@ describe("removePlugin", () => {
 
   it("throws when plugin is not installed", async () => {
     await expect(removePlugin("no-such-plugin")).rejects.toThrow("not installed");
+  });
+
+  it("calls unlinkPluginSkills with the plugin's skill names", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr"]);
+    await addPlugin(pluginDir);
+    vi.clearAllMocks();
+
+    await removePlugin("test-plugin");
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(["create-pr"]);
   });
 });
 
@@ -330,6 +366,48 @@ describe("syncPlugin", () => {
 
   it("throws when plugin is not installed", async () => {
     await expect(syncPlugin("no-such-plugin")).rejects.toThrow("not installed");
+  });
+
+  it("links newly added skills on sync", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["agent-a"], {}, ["create-pr"]);
+    await addPlugin(pluginDir);
+    vi.clearAllMocks();
+
+    mkdirSync(join(pluginDir, "skills", "git-commit"), { recursive: true });
+    writeFileSync(join(pluginDir, "skills", "git-commit", "SKILL.md"), "# git-commit");
+    writeFileSync(
+      join(pluginDir, "dovepaw-plugin.json"),
+      JSON.stringify({
+        name: "test-plugin",
+        version: "1.1.0",
+        agents: ["agent-a"],
+        skills: ["create-pr", "git-commit"],
+      }),
+    );
+
+    const updated = await syncPlugin("test-plugin");
+    expect(updated.skillNames).toEqual(["create-pr", "git-commit"]);
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["git-commit"]);
+  });
+
+  it("unlinks removed skills on sync", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["agent-a"], {}, ["create-pr", "git-commit"]);
+    await addPlugin(pluginDir);
+    vi.clearAllMocks();
+
+    writeFileSync(
+      join(pluginDir, "dovepaw-plugin.json"),
+      JSON.stringify({
+        name: "test-plugin",
+        version: "1.1.0",
+        agents: ["agent-a"],
+        skills: ["create-pr"],
+      }),
+    );
+
+    const updated = await syncPlugin("test-plugin");
+    expect(updated.skillNames).toEqual(["create-pr"]);
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(["git-commit"]);
   });
 
   it("preserves existing envVars on sync — does not overwrite with plugin source defaults", async () => {

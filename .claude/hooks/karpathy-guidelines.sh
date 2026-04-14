@@ -4,14 +4,18 @@
 # to review and acknowledge before retrying.
 # sourced from https://github.com/forrestchang/andrej-karpathy-skills
 
-REPO_ROOT="/Users/yang.liu/Envato/others/DovePaw"
+
+set -uo pipefail
+
+cd "$CLAUDE_PROJECT_DIR"
+
 INPUT=$(cat)
 
-FILE_PATH=$(echo "$INPUT" | python3 -c \
-  "import sys,json; print(json.load(sys.stdin).get('file_path',''))" 2>/dev/null || true)
+FILE_PATH=$(printf '%s' "$INPUT" | python3 -c \
+  "import sys,json; print(json.load(sys.stdin).get('tool_input',{}).get('file_path',''))" 2>/dev/null || true)
 
 # Only act on files inside the repo
-[[ -z "$FILE_PATH" || "$FILE_PATH" != "$REPO_ROOT"* ]] && exit 0
+[[ -z "$FILE_PATH" || "$FILE_PATH" != "$CLAUDE_PROJECT_DIR"* ]] && exit 0
 
 # Only trigger on code files (covers major stacks)
 case "$FILE_PATH" in
@@ -24,7 +28,8 @@ case "$FILE_PATH" in
 esac
 
 # Once per session: if already shown, allow
-SESSION_KEY="${CLAUDE_SESSION_ID:-$$}"
+SESSION_KEY=$(printf '%s' "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('session_id',''))" 2>/dev/null || true)
+SESSION_KEY="${SESSION_KEY:-$$}"
 SHOWN="/tmp/karpathy_shown_${SESSION_KEY}"
 [ -f "$SHOWN" ] && exit 0
 touch "$SHOWN"

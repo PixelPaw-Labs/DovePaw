@@ -13,6 +13,7 @@ const PLUGIN: PluginRecord = {
   gitUrl: "git@github.com:user/test-plugin",
   installedAt: "2026-01-01T00:00:00.000Z",
   agentNames: ["agent-a", "agent-b"],
+  skillNames: [],
 };
 
 // Pre-computed URL strings — avoid template literals as computed property keys.

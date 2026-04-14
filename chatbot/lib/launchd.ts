@@ -21,8 +21,6 @@ import {
   loadAgent as installerLoadAgent,
   unloadAgent as installerUnloadAgent,
   uninstallAgent as installerUninstallAgent,
-  linkSkills,
-  unlinkSkills,
 } from "@@/lib/installer";
 export { writePlistFile as writePlist, areAgentsLoaded } from "@@/lib/installer";
 import type { AgentStatusDetail } from "@@/lib/installer";
@@ -63,17 +61,14 @@ export async function installAgent(agent: AgentDef): Promise<{ loaded: boolean }
   });
 
   // Steps 2+3: Deploy, configure, unload, write plist, bootstrap
-  await Promise.all([
-    installerInstallAgent(agent, u, externalPackagesInBundle(agent.name)),
-    linkSkills(),
-  ]);
+  await installerInstallAgent(agent, u, externalPackagesInBundle(agent.name));
 
   return { loaded: await isAgentLoaded(agent.label) };
 }
 
 /** Unload and delete only this agent's plist. */
 export async function uninstallAgent(agent: AgentDef): Promise<void> {
-  await Promise.all([installerUninstallAgent(agent, getUid()), unlinkSkills()]);
+  await installerUninstallAgent(agent, getUid());
 }
 
 /** Return parsed state/pid/last-exit for a single agent via `launchctl print`. */

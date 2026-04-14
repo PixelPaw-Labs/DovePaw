@@ -12,7 +12,7 @@ import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
 import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
 import { makeEnvVar } from "./settings";
-import { linkAgentSdkToPlugin } from "./installer";
+import { linkAgentSdkToPlugin, linkPluginSkills, unlinkPluginSkills } from "./installer";
 import {
   pluginManifestSchema,
   pluginRecordSchema,
@@ -147,6 +147,7 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
   }
 
   await linkAgentSdkToPlugin(pluginDir);
+  await linkPluginSkills(pluginDir, manifest.skills);
 
   await Promise.all(manifest.agents.map((agentName) => upsertAgentSettings(agentName, pluginDir)));
 
@@ -160,6 +161,7 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     gitUrl,
     installedAt: existing?.installedAt ?? now,
     agentNames: manifest.agents,
+    skillNames: manifest.skills,
   });
 
   if (existing) {
@@ -182,12 +184,13 @@ export async function removePlugin(pluginName: string): Promise<void> {
   const plugin = registry.plugins.find((p) => p.name === pluginName);
   if (!plugin) throw new Error(`Plugin "${pluginName}" is not installed`);
 
-  await Promise.all(
-    plugin.agentNames.map(async (agentName) => {
+  await Promise.all([
+    ...plugin.agentNames.map(async (agentName) => {
       const dir = agentConfigDir(agentName);
       if (existsSync(dir)) await rm(dir, { recursive: true });
     }),
-  );
+    unlinkPluginSkills(plugin.skillNames),
+  ]);
 
   registry.plugins = registry.plugins.filter((p) => p.name !== pluginName);
   await writeRegistry(registry);
@@ -211,20 +214,31 @@ export async function syncPlugin(pluginName: string): Promise<PluginRecord> {
   const manifest = await readManifest(plugin.path);
 
   // Remove settings for agents no longer in the manifest
-  const removed = plugin.agentNames.filter((n) => !manifest.agents.includes(n));
-  await Promise.all(
-    removed.map(async (agentName) => {
+  const removedAgents = plugin.agentNames.filter((n) => !manifest.agents.includes(n));
+  // Unlink skills no longer in the manifest
+  const removedSkills = plugin.skillNames.filter((s) => !manifest.skills.includes(s));
+  // Link newly added skills
+  const addedSkills = manifest.skills.filter((s) => !plugin.skillNames.includes(s));
+
+  await Promise.all([
+    ...removedAgents.map(async (agentName) => {
       const dir = agentConfigDir(agentName);
       if (existsSync(dir)) await rm(dir, { recursive: true });
     }),
-  );
+    unlinkPluginSkills(removedSkills),
+  ]);
 
   // Upsert settings for current agents
-  await Promise.all(
-    manifest.agents.map((agentName) => upsertAgentSettings(agentName, plugin.path)),
-  );
+  await Promise.all([
+    ...manifest.agents.map((agentName) => upsertAgentSettings(agentName, plugin.path)),
+    linkPluginSkills(plugin.path, addedSkills),
+  ]);
 
-  const updated: PluginRecord = { ...plugin, agentNames: manifest.agents };
+  const updated: PluginRecord = {
+    ...plugin,
+    agentNames: manifest.agents,
+    skillNames: manifest.skills,
+  };
   const idx = registry.plugins.indexOf(plugin);
   registry.plugins[idx] = updated;
   await writeRegistry(registry);

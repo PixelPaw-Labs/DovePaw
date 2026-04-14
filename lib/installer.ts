@@ -28,7 +28,6 @@ import {
   AGENT_SDK_SRC,
   LAUNCH_AGENTS_DIR,
   PLUGINS_DIR,
-  SKILLS_DIR,
   SKILLS_ROOT,
   agentDistScript,
   agentPersistentLogDir,
@@ -265,23 +264,22 @@ export async function linkAgents(): Promise<void> {
   }
 }
 
-/** Symlink every skill in DovePaw/skills/ into ~/.claude/skills/. */
-export async function linkSkills(): Promise<void> {
+/** Symlink a plugin's skills into ~/.claude/skills/. */
+export async function linkPluginSkills(pluginDir: string, skillNames: string[]): Promise<void> {
+  if (skillNames.length === 0) return;
   await mkdir(SKILLS_ROOT, { recursive: true });
-  const skills = await readdir(SKILLS_DIR);
   await Promise.all(
-    skills.map(async (skill) => {
+    skillNames.map(async (skill) => {
       const link = join(SKILLS_ROOT, skill);
       await rm(link, { recursive: true, force: true });
-      await symlink(join(SKILLS_DIR, skill), link);
+      await symlink(join(pluginDir, "skills", skill), link);
     }),
   );
 }
 
-/** Remove ~/.claude/skills/ symlinks for every skill in DovePaw/skills/. */
-export async function unlinkSkills(): Promise<void> {
-  const skills = await readdir(SKILLS_DIR);
+/** Remove ~/.claude/skills/ symlinks for a plugin's skills. */
+export async function unlinkPluginSkills(skillNames: string[]): Promise<void> {
   await Promise.all(
-    skills.map((skill) => rm(join(SKILLS_ROOT, skill), { recursive: true, force: true })),
+    skillNames.map((skill) => rm(join(SKILLS_ROOT, skill), { recursive: true, force: true })),
   );
 }
