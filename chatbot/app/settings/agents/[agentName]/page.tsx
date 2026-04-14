@@ -15,24 +15,32 @@ interface Props {
 
 export async function generateMetadata({ params }: Props) {
   const { agentName } = await params;
-  const entry = (await readAgentConfigEntries()).find((a) => a.name === agentName);
+  const [entries, tmpEntries] = await Promise.all([
+    readAgentConfigEntries(),
+    readTmpAgentConfigEntries(),
+  ]);
+  const entry =
+    entries.find((a) => a.name === agentName) ?? tmpEntries.find((a) => a.name === agentName);
   if (!entry) return { title: "Not Found — DovePaw" };
   return { title: `${entry.displayName} Settings — DovePaw` };
 }
 
 export default async function AgentSettingsPage({ params }: Props) {
   const { agentName } = await params;
-  const allEntries = await readAgentConfigEntries();
-  const agentEntry = allEntries.find((a) => a.name === agentName);
-  if (!agentEntry) notFound();
+  const [allEntries, tmpAgentConfigs, agentSettings, agentFile, plugins, globalSettings] =
+    await Promise.all([
+      readAgentConfigEntries(),
+      readTmpAgentConfigEntries(),
+      readAgentSettings(agentName),
+      readAgentFile(agentName),
+      listPlugins(),
+      readSettings(),
+    ]);
 
-  const [agentSettings, agentFile, tmpAgentConfigs, plugins, globalSettings] = await Promise.all([
-    readAgentSettings(agentName),
-    readAgentFile(agentName),
-    readTmpAgentConfigEntries(),
-    listPlugins(),
-    readSettings(),
-  ]);
+  const agentEntry =
+    allEntries.find((a) => a.name === agentName) ??
+    tmpAgentConfigs.find((a) => a.name === agentName);
+  if (!agentEntry) notFound();
 
   return (
     <SettingsPageLayout
