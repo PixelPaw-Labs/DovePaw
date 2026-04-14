@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Bot, Clock, GitBranch, Settings, Trash2 } from "lucide-react";
+import {
+  Bell,
+  Bot,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  GitBranch,
+  Settings,
+  Trash2,
+} from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
@@ -86,6 +95,10 @@ export function ChatPane({
 
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(true);
+  const [activeQuestionIdx, setActiveQuestionIdx] = React.useState(0);
+
+  // Keep active index in bounds when questions are resolved
+  const clampedQuestionIdx = Math.min(activeQuestionIdx, Math.max(0, pendingQuestions.length - 1));
 
   // Auto-open workflow panel when a history session has progress but no visible chat messages
   // (e.g. scheduled sessions interrupted before the final assistant message was saved)
@@ -255,13 +268,56 @@ export function ChatPane({
                   onDeny={() => void resolvePermission(req.requestId, false)}
                 />
               ))}
-              {pendingQuestions.map((req) => (
-                <QuestionBanner
-                  key={req.requestId}
-                  request={req}
-                  onSubmit={(answers) => void resolveQuestion(req.requestId, answers)}
-                />
-              ))}
+              {pendingQuestions.length > 0 &&
+                (() => {
+                  const req = pendingQuestions[clampedQuestionIdx];
+                  return (
+                    <div className="space-y-1">
+                      {pendingQuestions.length > 1 && (
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-xs font-medium text-foreground">
+                            Question <span className="text-primary">{clampedQuestionIdx + 1}</span>
+                            <span className="text-muted-foreground">
+                              {" "}
+                              / {pendingQuestions.length}
+                            </span>
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setActiveQuestionIdx((i) => Math.max(0, i - 1))}
+                              disabled={clampedQuestionIdx === 0}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md border border-border/60 bg-muted/60 text-xs font-medium text-foreground hover:bg-muted hover:border-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              <ChevronLeft className="size-3.5" />
+                              Prev
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveQuestionIdx((i) =>
+                                  Math.min(pendingQuestions.length - 1, i + 1),
+                                )
+                              }
+                              disabled={clampedQuestionIdx === pendingQuestions.length - 1}
+                              className="flex items-center gap-1 px-2 py-1 rounded-md border border-border/60 bg-muted/60 text-xs font-medium text-foreground hover:bg-muted hover:border-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                              Next
+                              <ChevronRight className="size-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      <QuestionBanner
+                        key={req.requestId}
+                        request={req}
+                        onSubmit={(answers) => {
+                          void resolveQuestion(req.requestId, answers);
+                        }}
+                      />
+                    </div>
+                  );
+                })()}
             </div>
           )}
           <ChatInputBar
