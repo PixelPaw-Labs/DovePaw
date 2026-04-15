@@ -136,15 +136,30 @@ const chatToReflectionMatcher: HookCallbackMatcher = {
 
 // ─── Stop hook: handoff consideration ────────────────────────────────────────
 
-const HANDOFF_CONSIDERATION_PROMPT = `<reminder>
+function buildHandoffConsiderationPrompt(
+  tools: Array<{ name: string; description: string }>,
+): string {
+  const toolsXml = tools
+    .map(
+      (t) =>
+        `  <tool>\n    <name>${t.name}</name>\n    <description>${t.description}</description>\n  </tool>`,
+    )
+    .join("\n");
+  return `<reminder>
 Before you finish: have you considered whether to hand off your results to a linked agent?
 
-If you produced concrete output (findings, issues, report, IDs), check whether any of these patterns apply:
+<handoff_patterns>
 ${HANDOFF_PATTERNS}
+</handoff_patterns>
 
-If yes: call the appropriate chat_to_*, review_with_*, or escalate_to_* tool before stopping.
+<handoff_tools>
+${toolsXml}
+</handoff_tools>
+
+If yes: call the appropriate tool before stopping.
 If no: you may stop.
 </reminder>`;
+}
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
@@ -152,9 +167,10 @@ If no: you may stop.
 export function buildSubAgentHooks(
   cwd: string,
   additionalDirectories: string[],
-  hasAgentLinks: boolean,
+  agentLinkTools: Array<{ name: string; description: string }>,
   registry: PendingRegistry,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
     hooks: [
       async (input) => {
@@ -163,7 +179,10 @@ export function buildSubAgentHooks(
         if (input.stop_hook_active) return { continue: true };
         // Pending operations exist — the base Stop hook handles that case.
         if (registry.hasPending()) return { continue: true };
-        return { decision: "block", reason: HANDOFF_CONSIDERATION_PROMPT };
+        return {
+          decision: "block",
+          reason: buildHandoffConsiderationPrompt(agentLinkTools),
+        };
       },
     ],
   };

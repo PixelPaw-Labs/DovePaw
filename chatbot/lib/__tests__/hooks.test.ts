@@ -361,7 +361,12 @@ describe("buildDoveHooks — PreToolUse allowed directories", () => {
 
 describe("buildSubAgentHooks — chat_to reflection gate", () => {
   function getReflectionHook() {
-    const hooks = buildSubAgentHooks("/cwd", [], true, makeRegistry());
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+    );
     // The reflection matcher is the last PreToolUse matcher
     const matchers = hooks.PreToolUse!;
     const reflectionMatcher = matchers[matchers.length - 1]!;
@@ -515,7 +520,12 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
 
 describe("buildSubAgentHooks — handoff consideration stop hook", () => {
   function getHandoffStopHook(registry = makeRegistry()) {
-    const hooks = buildSubAgentHooks("/cwd", [], true, registry);
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      registry,
+    );
     // The handoff hook is the last Stop matcher (base pending-work hook is first)
     const matchers = hooks.Stop!;
     return matchers[matchers.length - 1]!.hooks[0]!;
@@ -552,8 +562,8 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     expect(result).toEqual({ continue: true });
   });
 
-  it("is absent when hasAgentLinks is false", () => {
-    const hooks = buildSubAgentHooks("/cwd", [], false, makeRegistry());
+  it("is absent when no agent link tools are provided", () => {
+    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry());
     // Stop array should only contain the base pending-work hook, not the handoff hook
     expect(hooks.Stop).toHaveLength(1);
   });

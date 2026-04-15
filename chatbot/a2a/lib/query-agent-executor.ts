@@ -198,7 +198,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                 hooks: buildSubAgentHooks(
                   workspace!.path,
                   additionalDirectories,
-                  chatToTools.length > 0,
+                  chatToTools,
                   registry,
                 ),
                 abortController: this.abortController ?? undefined,
