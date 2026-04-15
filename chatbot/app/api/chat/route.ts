@@ -14,6 +14,7 @@
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { consola } from "consola";
 import {
   AGENTS_ROOT,
   SCHEDULER_ROOT,
@@ -184,7 +185,9 @@ export async function POST(request: Request) {
         for (const entry of result.progress) {
           upsertProgressEntry(innerProgress, entry.message, entry.artifacts);
         }
-        if (registeredSessionId) {
+        // Only write to DB while the session is still running — don't resurrect
+        // a session that was stopped/aborted while background tasks wind down.
+        if (registeredSessionId && sessionRunner.isRunning(registeredSessionId)) {
           upsertSession({
             id: registeredSessionId,
             agentId: "dove",
@@ -318,6 +321,10 @@ export async function POST(request: Request) {
           }
         },
       );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      consola.error(`Error in Dove query: ${msg}`);
+      dispatcher.publish({ type: "error", content: msg });
     } finally {
       // Use registeredSessionId (set when sessionRunner.register was called mid-stream)
       // as fallback when resolvedSessionId is null (query() threw before completing).
@@ -362,11 +369,16 @@ export async function PATCH(request: Request) {
   return Response.json({ ok: true });
 }
 
-/** Delete (abort subprocess and remove session row entirely) */
+/** Stop (abort subprocess, keep session row) or Delete (abort + remove session row entirely) */
 export async function DELETE(request: Request) {
-  const { sessionId } = z.object({ sessionId: z.string() }).parse(await request.json());
-  deletedSessionIds.add(sessionId);
+  const { sessionId, method } = z
+    .object({ sessionId: z.string(), method: z.enum(["stop", "delete"]).default("delete") })
+    .parse(await request.json());
   sessionRunner.abort(sessionId);
+  if (method === "stop") {
+    return Response.json({ ok: true });
+  }
+  deletedSessionIds.add(sessionId);
   agentContextRegistry.delete(sessionId);
   deleteSession(sessionId);
   return Response.json({ ok: true });

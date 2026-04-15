@@ -89,12 +89,26 @@ export async function readAgentConfigEntries(): Promise<AgentConfigEntry[]> {
   );
 }
 
-/** Read agents config and hydrate each entry into a full AgentDef. Includes tmp/Kiln agents. */
-export async function readAgentsConfig(): Promise<AgentDef[]> {
-  const [entries, tmpEntries] = await Promise.all([
+/**
+ * Read both permanent and tmp agent configs, deduplicating by name.
+ * Permanent entries are canonical; tmp entries with the same name are excluded
+ * (prevents duplicate MCP tool registration and duplicate sidebar buttons).
+ */
+export async function readSplitAgentConfigEntries(): Promise<{
+  entries: AgentConfigEntry[];
+  tmpEntries: AgentConfigEntry[];
+}> {
+  const [entries, allTmpEntries] = await Promise.all([
     readAgentConfigEntries(),
     readTmpAgentConfigEntries(),
   ]);
+  const tmpNames = new Set(allTmpEntries.map((e) => e.name));
+  return { entries: entries.filter((e) => !tmpNames.has(e.name)), tmpEntries: allTmpEntries };
+}
+
+/** Read agents config and hydrate each entry into a full AgentDef. Includes tmp/Kiln agents. */
+export async function readAgentsConfig(): Promise<AgentDef[]> {
+  const { entries, tmpEntries } = await readSplitAgentConfigEntries();
   return [...entries, ...tmpEntries].map(buildAgentDef);
 }
 

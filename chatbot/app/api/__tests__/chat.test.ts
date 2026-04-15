@@ -94,13 +94,28 @@ vi.mock("@/lib/session-runner", () => ({
     abort: vi.fn(),
     complete: vi.fn(),
     abortAll: vi.fn(),
+    isRunning: vi.fn(() => false),
+  },
+}));
+
+vi.mock("@/lib/agent-context-registry", () => ({
+  agentContextRegistry: {
+    getOrLoad: vi.fn(() => new Map()),
+    persist: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
 import { readSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { POST } from "../chat/route";
+import { withMcpQuery } from "@/lib/query-events";
+import { readAgentsConfig } from "@@/lib/agents-config";
+import { buildDoveCanUseTool } from "@/lib/hooks";
+import { deleteSession } from "@/lib/db";
+import { sessionRunner } from "@/lib/session-runner";
+import { agentContextRegistry } from "@/lib/agent-context-registry";
+import { POST, DELETE } from "../chat/route";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -128,6 +143,17 @@ const MOCK_SETTINGS = { version: 1 as const, repositories: [], envVars: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // vi.clearAllMocks() resets vi.fn(impl) implementations in Vitest 4 — re-establish them.
+  vi.mocked(readAgentsConfig).mockReturnValue([
+    { name: "test-agent", displayName: "Test Agent", manifestKey: "test_agent" },
+  ] as ReturnType<typeof readAgentsConfig>);
+  vi.mocked(buildDoveCanUseTool).mockReturnValue({
+    canUseTool: vi.fn(),
+    abortPermissions: vi.fn(),
+  });
+  vi.mocked(withMcpQuery).mockImplementation(async (_tools, cb) => {
+    await cb({} as never);
+  });
   vi.mocked(readSettings).mockResolvedValue(MOCK_SETTINGS);
   vi.mocked(resolveSettingsEnv).mockReturnValue({});
   vi.mocked(query).mockReturnValue(
@@ -182,5 +208,41 @@ describe("POST /api/chat — settings env var wiring", () => {
 
     if (original === undefined) delete process.env["PROCESS_ONLY_KEY"];
     else process.env["PROCESS_ONLY_KEY"] = original;
+  });
+});
+
+// ─── DELETE /api/chat ─────────────────────────────────────────────────────────
+
+function makeDeleteRequest(body: object) {
+  return new Request("http://localhost/api/chat", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("DELETE /api/chat", () => {
+  it("method=stop aborts subprocess but keeps session in DB", async () => {
+    const res = await DELETE(makeDeleteRequest({ sessionId: "sess-1", method: "stop" }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(sessionRunner.abort)).toHaveBeenCalledWith("sess-1");
+    expect(vi.mocked(deleteSession)).not.toHaveBeenCalled();
+    expect(vi.mocked(agentContextRegistry.delete)).not.toHaveBeenCalled();
+  });
+
+  it("method=delete aborts subprocess and removes session from DB", async () => {
+    const res = await DELETE(makeDeleteRequest({ sessionId: "sess-2", method: "delete" }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(sessionRunner.abort)).toHaveBeenCalledWith("sess-2");
+    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith("sess-2");
+    expect(vi.mocked(agentContextRegistry.delete)).toHaveBeenCalledWith("sess-2");
+  });
+
+  it("missing method defaults to delete behaviour", async () => {
+    const res = await DELETE(makeDeleteRequest({ sessionId: "sess-3" }));
+    expect(res.status).toBe(200);
+    expect(vi.mocked(sessionRunner.abort)).toHaveBeenCalledWith("sess-3");
+    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith("sess-3");
+    expect(vi.mocked(agentContextRegistry.delete)).toHaveBeenCalledWith("sess-3");
   });
 });

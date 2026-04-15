@@ -294,6 +294,10 @@ export class QueryAgentExecutor implements AgentExecutor {
           }
         },
       );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      consola.error(`Failed to start ${this.def.displayName} sub-agent: ${msg}`);
+      publishSessionEvent(contextId, { type: "error", content: msg });
     } finally {
       await Promise.allSettled(backgroundTasks);
       this.abortController?.abort();
