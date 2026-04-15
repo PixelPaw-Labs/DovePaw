@@ -1,4 +1,5 @@
 export * from "./claude.js";
+export * from "./claude-runner.js";
 export * from "./exec.js";
 export * from "./git.js";
 export * from "./json.js";
@@ -7,3 +8,4 @@ export * from "./logger.js";
 export * from "./paths.js";
 export * from "./projects.js";
 export * from "./repos.js";
+export * from "./worktree-watchdog.js";
