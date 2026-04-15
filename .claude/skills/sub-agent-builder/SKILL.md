@@ -91,6 +91,10 @@ Then pass it through to Claude — either appended to the prompt string (`Instru
 
 Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the current list of SDK exports. Never re-implement what the SDK already provides — if a function, constant, or type exists there, import and use it.
 
+**Workspace is always fresh:**
+
+`AGENT_WORKSPACE` is a clean, empty directory created for each run — it contains no files from previous runs and no history. Never assume any file pre-exists in the workspace. If the agent needs state that survives between runs, use `agentPersistentStateDir()` from the SDK — never write persistent data to `AGENT_WORKSPACE`.
+
 **Spawning rules (use judgment):**
 
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
@@ -215,6 +219,10 @@ skills/<name>/SKILL.md               ← inside plugin repo
 Read `references/skill-authoring.md` for the SKILL.md schema, argument patterns, output contracts, subdirectory conventions, and hooks.
 
 Read `references/skill-best-practices.md` before writing the SKILL.md body — apply every principle to the content you generate.
+
+**Let the agent decide, not the skill:**
+
+When writing the SKILL.md body, describe _what_ to achieve, not _how_ to execute it. Do not hardcode specific CLI commands, tool flags, or file paths unless they are fully deterministic and verifiable by code within the skill itself. Leave search, discovery, and approach decisions to the executing agent — it can explore the environment and choose the right method. Hardcoding a command that may not exist, vary by environment, or have a better alternative forces the agent to follow a broken path instead of finding the right one.
 
 Fetch https://code.claude.com/docs/en/skills.md for the authoritative SKILL.md frontmatter schema and format — use it to validate your output before writing.
 
