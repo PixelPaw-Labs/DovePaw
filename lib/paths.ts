@@ -110,9 +110,3 @@ export const AGENT_SDK_DIR = join(DOVEPAW_DIR, "sdk");
 export const AGENT_SDK_SRC = join(AGENTS_ROOT, "packages/agent-sdk");
 /** DovePaw/.claude/hooks/karpathy-guidelines.sh — SessionStart hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
-/** <clonePath>/.claude/hooks/karpathy-guidelines.sh — Karpathy hook destination in an agent workspace clone. Creates the directory if it does not exist. */
-export const workspaceKarpathyHook = (clonePath: string): string => {
-  const dest = join(clonePath, ".claude", "hooks", "karpathy-guidelines.sh");
-  mkdirSync(dirname(dest), { recursive: true });
-  return dest;
-};

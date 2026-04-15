@@ -35,11 +35,6 @@ vi.mock("@@/lib/paths", () => ({
     mkdirSync(dir, { recursive: true });
     return dir;
   },
-  workspaceKarpathyHook: (clonePath: string) => {
-    const dest = join(clonePath, ".claude", "hooks", "karpathy-guidelines.sh");
-    mkdirSync(join(clonePath, ".claude", "hooks"), { recursive: true });
-    return dest;
-  },
 }));
 
 const {
@@ -266,19 +261,7 @@ describe("cloneReposIntoWorkspace", () => {
     expect(settings.hooks.PermissionRequest[0].hooks[0].type).toBe("command");
     expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
     expect(settings.hooks?.SessionStart).toHaveLength(1);
-    expect(settings.hooks.SessionStart[0].hooks[0].command).toBe(
-      '"$CLAUDE_PROJECT_DIR"/.claude/hooks/karpathy-guidelines.sh',
-    );
-  });
-
-  it("copies karpathy-guidelines.sh into .claude/ of each cloned repo", async () => {
-    const ghClone = vi.fn().mockResolvedValue(undefined);
-
-    await cloneReposIntoWorkspace(TMP_ROOT, ["org/my-app"], ghClone);
-
-    const hookPath = join(TMP_ROOT, "my-app", ".claude", "hooks", "karpathy-guidelines.sh");
-    expect(existsSync(hookPath)).toBe(true);
-    expect(readFileSync(hookPath, "utf8")).toContain("#!/usr/bin/env bash");
+    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("#!/usr/bin/env bash");
   });
 
   it("writes settings.local.json for each cloned repo", async () => {
