@@ -5,7 +5,7 @@ Pick the right one based on what the agent does with repos. They can be combined
 
 ---
 
-## Pattern A — No repos, or read-only access to all repos
+## Pattern A — No repos, or read-only access to all repos (single Claude invocation)
 
 Always run Claude in `AGENT_WORKSPACE`. Give Claude read access to repos via `--add-dir`.  
 **Never use `REPOS[0]` as cwd** — `REPOS` is a list and the agent may need all of them.
@@ -15,6 +15,25 @@ const repoFlags = REPOS.flatMap((r) => ["--add-dir", r]);
 const { code, stdout } = await spawnClaudeWithSignals(
   ["--permission-mode", "readOnly", ...repoFlags, "-p", prompt],
   { cwd: WORK_DIR, taskName: "{{AGENT_NAME}}", timeoutMs: {{TIMEOUT_MS}} },
+);
+```
+
+## Pattern A (multi-repo) — One Claude invocation per repo, run in parallel
+
+Use when each repo needs independent processing (e.g. per-repo summary, per-repo audit).  
+**Always use `Promise.all` — never loop sequentially.**
+
+```typescript
+import { basename } from "node:path";
+
+const results = await Promise.all(
+  REPOS.map(async (repo) => {
+    const { code, stdout } = await spawnClaudeWithSignals(
+      ["--permission-mode", "readOnly", "--add-dir", repo, "-p", buildPrompt(repo)],
+      { cwd: WORK_DIR, taskName: `{{AGENT_NAME}}-${basename(repo)}`, timeoutMs: {{TIMEOUT_MS}} },
+    );
+    return { repo, code, stdout };
+  }),
 );
 ```
 

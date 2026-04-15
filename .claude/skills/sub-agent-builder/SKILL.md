@@ -90,8 +90,10 @@ Then pass it through to Claude — either appended to the prompt string (`Instru
 **Spawning rules (use judgment):**
 
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
+- Default env var for repo list is `REPO_LIST` — use this name in `agent.json` envVars and in the `parseRepos("REPO_LIST")` call unless the user specifies a different name.
 - If repos selected and agent is read-only: pass all repos as `--add-dir` flags: `REPOS.flatMap(r => ["--add-dir", r])`
 - If repos selected and agent writes to one specific repo: use that repo as cwd with `-w <branch>` (worktree); add remaining repos with `--add-dir`
+- If the agent processes each repo independently (one Claude run per repo): **always spawn in parallel with `Promise.all`** — never loop sequentially. See Pattern A (multi-repo) in `references/spawning-patterns.md`.
 - If agent has sequential steps that share context: chain with `--session-id` / `--resume`
 - Single-step agents: plain `-p` prompt, no worktree, no session chaining
 
