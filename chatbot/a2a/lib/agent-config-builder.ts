@@ -7,6 +7,7 @@
 
 import { join } from "node:path";
 import type { AgentDef } from "@@/lib/agents";
+import { DOVEPAW_TMP_DIR } from "@@/lib/paths";
 import type { AgentWorkspace } from "./workspace";
 
 export interface AgentConfig {
@@ -34,11 +35,11 @@ export function buildAgentConfig(
   extraEnv: Record<string, string>,
   repoSlugs: string[],
 ): AgentConfig {
-  if (!def.pluginPath) {
-    throw new Error(`Agent "${def.name}" has no pluginPath — register it via plugin:add first`);
-  }
+  const scriptPath = def.pluginPath
+    ? join(def.pluginPath, def.entryPath)
+    : join(DOVEPAW_TMP_DIR, def.name, "main.ts");
   return {
-    scriptPath: join(def.pluginPath, def.entryPath),
+    scriptPath,
     agentName: def.displayName,
     whatItDoes: def.description,
     workspacePath: workspace.path,

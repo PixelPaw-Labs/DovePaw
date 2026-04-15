@@ -9,6 +9,7 @@
  *   onArtifact  → chat SSE (text/thinking/tool_call/result)
  */
 
+import consola from "consola";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { makeProgressSender } from "@/lib/chat-sse";
@@ -103,7 +104,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         setSessionStatus(resolvedContextId, "done");
         dispatcher.publish({ type: "done" });
       }
-    } catch (err: unknown) {
+    } catch (err) {
       if (subprocessController.signal.aborted) {
         if (handle) setSessionStatus(handle.contextId, "cancelled");
         try {
@@ -114,6 +115,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         return;
       }
       const msg = err instanceof Error ? err.message : String(err);
+      consola.error("Error in agent chat stream:", msg);
       if (handle) setSessionStatus(handle.contextId, "done");
       try {
         dispatcher.publish({ type: "error", content: msg });

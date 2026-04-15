@@ -14,9 +14,10 @@ const DEF = {
 const WORKSPACE = { path: "/tmp/workspace/my-agent" } as AgentWorkspace;
 
 describe("buildAgentConfig", () => {
-  it("throws when pluginPath is absent", () => {
+  it("falls back to tmp dir when pluginPath is absent", () => {
     const def = { ...DEF, pluginPath: undefined } as unknown as AgentDef;
-    expect(() => buildAgentConfig(def, WORKSPACE, {}, [])).toThrow("no pluginPath");
+    const config = buildAgentConfig(def, WORKSPACE, {}, []);
+    expect(config.scriptPath).toMatch(/\/tmp\/my-agent\/main\.ts$/);
   });
 
   it("builds scriptPath from pluginPath + entryPath", () => {

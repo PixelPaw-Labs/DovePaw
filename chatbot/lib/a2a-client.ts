@@ -187,6 +187,18 @@ export async function collectStreamResult(
     } else if (event.kind === "status-update") {
       if (event.final) {
         finalState = event.status.state;
+        if (event.status.message) {
+          for (const p of event.status.message.parts) {
+            if (p.kind === "text" && p.text) {
+              const entry: ProgressEntry = {
+                message: p.text,
+                artifacts: { [ARTIFACT.FINAL_OUTPUT]: p.text },
+              };
+              progress.push(entry);
+              pendingEntry = entry;
+            }
+          }
+        }
       } else if (event.status.message) {
         for (const p of event.status.message.parts) {
           if (p.kind === "text") {
