@@ -56,6 +56,7 @@ export function ChatApp({
           key={activeAgentId}
           agentId={activeAgentId}
           agentConfigs={agentConfigs}
+          tmpAgentConfigs={tmpAgentConfigs}
           onIsLoadingChange={(loading) => {
             setIsLoading(loading);
             if (activeAgentId === "dove") setDoveIsRunning(loading);

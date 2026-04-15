@@ -7,11 +7,8 @@ import { listPlugins } from "@@/lib/plugin-manager";
 export const metadata = { title: "Settings — DovePaw" };
 
 export default async function SettingsPage() {
-  const [settings, { entries: allAgentEntries }, plugins] = await Promise.all([
-    readSettings(),
-    readSplitAgentConfigEntries(),
-    listPlugins(),
-  ]);
+  const [settings, { entries: allAgentEntries, tmpEntries: tmpAgentEntries }, plugins] =
+    await Promise.all([readSettings(), readSplitAgentConfigEntries(), listPlugins()]);
   const scheduledAgentEntries = allAgentEntries.filter((a) => a.schedulingEnabled !== false);
   const initialAgentRepos: Record<string, string[]> = Object.fromEntries(
     await Promise.all(
@@ -26,7 +23,7 @@ export default async function SettingsPage() {
       <SettingsContent
         initialSettings={settings}
         initialAgentRepos={initialAgentRepos}
-        agentConfigs={allAgentEntries}
+        agentConfigs={[...allAgentEntries, ...tmpAgentEntries]}
         scheduledAgentConfigs={scheduledAgentEntries}
         plugins={plugins}
       />
