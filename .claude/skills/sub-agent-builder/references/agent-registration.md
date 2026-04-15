@@ -1,5 +1,7 @@
 # Agent Registration Reference
 
+> **Before writing agent.json**, read `lib/agents-config-schemas.ts` in the DovePaw repo and verify the required fields against the live schema. The template below is a guide — the schema is the source of truth.
+
 ## agent.json Template
 
 Write to `~/.dovepaw/tmp/<name>/agent.json`. Do NOT include `pluginPath` — it is added at publish time.
