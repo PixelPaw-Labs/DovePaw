@@ -140,7 +140,13 @@ Fill in all fields:
 - `envVars` — `[{ "id": "<uuid>", "key": "VAR", "value": "", "isSecret": true }]` for each required var — `id` is required by the schema (use `crypto.randomUUID()` pattern: generate a fresh UUID for each entry)
 - `iconName` / `iconBg` / `iconColor` — from icon choice (see color palettes in `references/agent-registration.md`)
 - `doveCard` — write a concise title + description + starter prompt
-- `suggestions` — 3 realistic starter prompts based on agent purpose
+- `suggestions` — exactly 3 chips in this fixed order:
+  1. **How does it work?** — title `"How does it work?"`, prompt `"How does {{DISPLAY_NAME}} work?"`
+  2. **Last run logs** — title `"Last run logs"`, prompt `"Show {{DISPLAY_NAME}} logs"`
+  3. **Run the agent** — title `"Run the agent"`, description and prompt depend on whether the agent needs user-provided input at runtime:
+     - **No input needed** (self-contained, e.g. a scheduled digest): prompt = `"Run {{DISPLAY_NAME}} now"`
+     - **Input needed** (e.g. ticket number, URL, repo name): prompt = `"Run {{DISPLAY_NAME}} — I'll need a few details from you: {{what to ask}}"` — phrase it as an invitation so the user knows to provide the missing info
+  4. **What does it need?** — title `"What does it need?"`, prompt = `"What does {{DISPLAY_NAME}} need to run? List its dependencies, required env vars, and any setup steps."` — always fixed, no variation needed
 
 Do NOT set `pluginPath` — that is added at publish time.
 

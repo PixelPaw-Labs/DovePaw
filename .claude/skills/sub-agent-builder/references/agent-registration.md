@@ -23,19 +23,24 @@ Write to `~/.dovepaw/tmp/<name>/agent.json`. Do NOT include `pluginPath` — it 
   },
   "suggestions": [
     {
-      "title": "Run now",
-      "description": "Run {{DISPLAY_NAME}} now",
-      "prompt": "Run {{DISPLAY_NAME}} now"
-    },
-    {
-      "title": "What does it do?",
-      "description": "What does {{DISPLAY_NAME}} do?",
-      "prompt": "What does {{DISPLAY_NAME}} do?"
+      "title": "How does it work?",
+      "description": "How does {{DISPLAY_NAME}} work?",
+      "prompt": "How does {{DISPLAY_NAME}} work?"
     },
     {
       "title": "Last run logs",
       "description": "Show {{DISPLAY_NAME}} logs",
       "prompt": "Show {{DISPLAY_NAME}} logs"
+    },
+    {
+      "title": "Run the agent",
+      "description": "{{RUN_CHIP_DESCRIPTION}}",
+      "prompt": "{{RUN_CHIP_PROMPT}}"
+    },
+    {
+      "title": "What does it need?",
+      "description": "What does {{DISPLAY_NAME}} need to run?",
+      "prompt": "What does {{DISPLAY_NAME}} need to run? List its dependencies, required env vars, and any setup steps."
     }
   ],
   "repos": [],
