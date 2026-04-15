@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
@@ -24,11 +25,7 @@ import { PipelineTrigger } from "./pipeline-trigger";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import type { CollectedStream } from "@/lib/a2a-client";
-import {
-  createAgentWorkspace,
-  agentSourceDirFromEntry,
-  ensureAgentSourceSymlink,
-} from "./workspace";
+import { createAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setSessionStatus, upsertSession } from "@/lib/db";
@@ -114,22 +111,11 @@ export class QueryAgentExecutor implements AgentExecutor {
     );
 
     try {
-      if (!this.def.pluginPath) {
-        throw new Error(
-          `Agent "${this.def.name}" has no pluginPath — register it via plugin:add first`,
-        );
-      }
-
       if (existingState) {
         // Resume existing session — reuse workspace and Claude session.
         workspace = existingState.workspace;
       } else {
         // First message in this context — create a fresh workspace.
-        ensureAgentSourceSymlink(
-          this.def.name,
-          agentSourceDirFromEntry(this.def.entryPath, this.def.pluginPath),
-          publishProgress,
-        );
         workspace = createAgentWorkspace(
           this.def.name,
           this.def.alias,
@@ -140,6 +126,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       }
 
       const agentConfig = buildAgentConfig(this.def, workspace, extraEnv, repoSlugs);
+      const agentSourceDir = dirname(agentConfig.scriptPath);
 
       const registry = new PendingRegistry();
 
@@ -171,7 +158,7 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentPersistentLogDir(this.def.name),
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
-            agentSourceDirFromEntry(this.def.entryPath, this.def.pluginPath),
+            agentSourceDir,
           ];
           const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
@@ -296,7 +283,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      consola.error(`Failed to start ${this.def.displayName} sub-agent: ${msg}`);
+      consola.error(`Failed to start ${this.def.displayName} sub-agent:`, err);
       publishSessionEvent(contextId, { type: "error", content: msg });
     } finally {
       await Promise.allSettled(backgroundTasks);

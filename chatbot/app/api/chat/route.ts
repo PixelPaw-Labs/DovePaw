@@ -323,7 +323,7 @@ export async function POST(request: Request) {
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      consola.error(`Error in Dove query: ${msg}`);
+      consola.error(`Error in Dove query:`, err);
       dispatcher.publish({ type: "error", content: msg });
     } finally {
       // Use registeredSessionId (set when sessionRunner.register was called mid-stream)

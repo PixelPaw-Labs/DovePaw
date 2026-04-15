@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  lstatSync,
-  readlinkSync,
-  readFileSync,
-  rmSync,
-  mkdirSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,7 +31,6 @@ vi.mock("@@/lib/paths", () => ({
 
 const {
   createAgentWorkspace,
-  ensureAgentSourceSymlink,
   agentSourceDirFromEntry,
   cloneReposIntoWorkspace,
   recloneReposIntoWorkspace,
@@ -137,70 +128,6 @@ describe("createAgentWorkspace", () => {
 
       ws2.cleanup();
     });
-  });
-});
-
-// ─── ensureAgentSourceSymlink ─────────────────────────────────────────────────
-
-describe("ensureAgentSourceSymlink", () => {
-  beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
-  afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
-
-  it("creates source_{alias} symlink inside agentConfigDir", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    ensureAgentSourceSymlink("my-agent", sourceDir);
-
-    const symlinkPath = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent", "source");
-    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(symlinkPath)).toBe(sourceDir);
-  });
-
-  it("creates agentConfigDir if it does not exist", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    ensureAgentSourceSymlink("my-agent", sourceDir);
-
-    const configDir = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent");
-    expect(existsSync(configDir)).toBe(true);
-  });
-
-  it("recreates the symlink if it points to a stale target", () => {
-    const oldSourceDir = join(TMP_ROOT, "src", "old-location");
-    const newSourceDir = join(TMP_ROOT, "src", "new-location");
-    mkdirSync(oldSourceDir, { recursive: true });
-    mkdirSync(newSourceDir, { recursive: true });
-
-    ensureAgentSourceSymlink("my-agent", oldSourceDir);
-    ensureAgentSourceSymlink("my-agent", newSourceDir);
-
-    const symlinkPath = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent", "source");
-    expect(readlinkSync(symlinkPath)).toBe(newSourceDir);
-  });
-
-  it("is idempotent when called with the same target", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    expect(() => {
-      ensureAgentSourceSymlink("my-agent", sourceDir);
-      ensureAgentSourceSymlink("my-agent", sourceDir);
-    }).not.toThrow();
-  });
-
-  it("replaces a pre-existing plain directory at the source path with a symlink", () => {
-    const sourceDir = join(TMP_ROOT, "src", "my-agent");
-    mkdirSync(sourceDir, { recursive: true });
-
-    // Simulate a leftover directory from an old install (no symlink yet).
-    const symlinkPath = join(TMP_ROOT, ".dovepaw", "settings.agents", "my-agent", "source");
-    mkdirSync(symlinkPath, { recursive: true });
-
-    expect(() => ensureAgentSourceSymlink("my-agent", sourceDir)).not.toThrow();
-    expect(lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
-    expect(readlinkSync(symlinkPath)).toBe(sourceDir);
   });
 });
 

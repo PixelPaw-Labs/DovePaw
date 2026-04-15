@@ -1,17 +1,8 @@
 import { execFile } from "node:child_process";
-import {
-  rmdirSync,
-  rmSync,
-  symlinkSync,
-  existsSync,
-  lstatSync,
-  writeFileSync,
-  readFileSync,
-  mkdirSync,
-} from "node:fs";
+import { rmdirSync, rmSync, existsSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { AGENTS_ROOT, KARPATHY_HOOK_SRC, agentConfigDir, agentWorkspacePath } from "@@/lib/paths";
+import { AGENTS_ROOT, KARPATHY_HOOK_SRC, agentWorkspacePath } from "@@/lib/paths";
 
 export interface AgentWorkspace {
   /** Absolute path to the UUID workspace directory. */
@@ -21,45 +12,10 @@ export interface AgentWorkspace {
 }
 
 /**
- * Ensure a `source` symlink exists inside the agent's persistent config
- * directory, pointing at the agent's TypeScript source directory.
- *
- *   ~/.dovepaw/settings.agents/{agentName}/source  ->  agentSourceDir
- *
- * Idempotent — skips creation if the symlink already points at the correct target.
- * Recreates the symlink if it exists but points elsewhere (e.g. after a repo move).
- */
-export function ensureAgentSourceSymlink(
-  agentName: string,
-  agentSourceDir: string,
-  onProgress?: (message: string, artifacts: Record<string, string>) => void,
-): void {
-  const configDir = agentConfigDir(agentName);
-  const symlinkPath = join(configDir, `source`);
-  if (existsSync(symlinkPath) || lstatSync(symlinkPath, { throwIfNoEntry: false })) {
-    // Already exists (or is a broken symlink or a leftover directory) — remove so
-    // we can recreate if stale. Use recursive:true so a plain directory is also
-    // handled (rmSync without recursive silently swallows EISDIR when force:true,
-    // leaving the path in place and causing symlinkSync to throw EEXIST).
-    try {
-      rmSync(symlinkPath, { force: true, recursive: true });
-    } catch {
-      // best effort
-    }
-  }
-  symlinkSync(agentSourceDir, symlinkPath);
-  onProgress?.("Linked source", { source: agentSourceDir });
-}
-
-/**
  * Create an isolated workspace directory for a single agent script execution.
  *
  * Structure:
  *   {workspaceRoot}/{alias}-{shortId}/
- *
- * The agent source is accessible via the persistent symlink created by
- * `ensureAgentSourceSymlink` inside the agent's config directory — call that
- * before creating the workspace.
  *
  * @param agentName     kebab-case agent name, e.g. "get-shit-done" — used for the parent dir
  * @param alias         short alias, e.g. "gsd" — used as the workspace folder prefix
