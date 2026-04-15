@@ -1,18 +1,22 @@
 import { SettingsPageLayout } from "@/components/settings/settings-page-layout";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
-import { readSplitAgentConfigEntries } from "@@/lib/agents-config";
+import { readAllAgentConfigEntries, readAgentConfigEntries } from "@@/lib/agents-config";
 import { listPlugins } from "@@/lib/plugin-manager";
 
 export const metadata = { title: "Settings — DovePaw" };
 
 export default async function SettingsPage() {
-  const [settings, { entries: allAgentEntries, tmpEntries: tmpAgentEntries }, plugins] =
-    await Promise.all([readSettings(), readSplitAgentConfigEntries(), listPlugins()]);
-  const scheduledAgentEntries = allAgentEntries.filter((a) => a.schedulingEnabled !== false);
+  const [settings, allAgentEntries, permanentEntries, plugins] = await Promise.all([
+    readSettings(),
+    readAllAgentConfigEntries(),
+    readAgentConfigEntries(), // permanent-only: scheduled agents + repo settings
+    listPlugins(),
+  ]);
+  const scheduledAgentEntries = permanentEntries.filter((a) => a.schedulingEnabled !== false);
   const initialAgentRepos: Record<string, string[]> = Object.fromEntries(
     await Promise.all(
-      allAgentEntries.map(
+      permanentEntries.map(
         async (a): Promise<[string, string[]]> => [a.name, (await readAgentSettings(a.name)).repos],
       ),
     ),
@@ -23,7 +27,7 @@ export default async function SettingsPage() {
       <SettingsContent
         initialSettings={settings}
         initialAgentRepos={initialAgentRepos}
-        agentConfigs={[...allAgentEntries, ...tmpAgentEntries]}
+        agentConfigs={allAgentEntries}
         scheduledAgentConfigs={scheduledAgentEntries}
         plugins={plugins}
       />

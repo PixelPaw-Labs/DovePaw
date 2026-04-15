@@ -10,7 +10,6 @@ import { ChatPane } from "@/components/agent-chat/chat-pane";
 interface AgentChatProps {
   agentId: AgentId;
   agentConfigs: AgentConfigEntry[];
-  tmpAgentConfigs?: AgentConfigEntry[];
   onIsLoadingChange: (loading: boolean) => void;
   onNewSession: (fn: () => void) => void;
 }
@@ -18,7 +17,6 @@ interface AgentChatProps {
 export function AgentChat({
   agentId,
   agentConfigs,
-  tmpAgentConfigs = [],
   onIsLoadingChange,
   onNewSession,
 }: AgentChatProps) {
@@ -61,7 +59,7 @@ export function AgentChat({
   return (
     <ChatPane
       agentId={agentId}
-      agentConfigs={[...agentConfigs, ...tmpAgentConfigs]}
+      agentConfigs={agentConfigs}
       messages={session.messages}
       sessionProgress={session.sessionProgress}
       sessionCancelled={session.sessionCancelled}

@@ -30,6 +30,7 @@ vi.mock("@@/lib/paths", () => ({
 import {
   readAgentConfigEntries,
   readAgentsConfig,
+  readAllAgentConfigEntries,
   readSplitAgentConfigEntries,
   readAgentFile,
   createAgentFile,
@@ -369,6 +370,34 @@ describe("agentConfigEntrySchema validation", () => {
       suggestions: [],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── readAllAgentConfigEntries ────────────────────────────────────────────────
+
+describe("readAllAgentConfigEntries", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  function writeAgentFile(entry: AgentConfigEntry) {
+    mkdirSync(agentDir(entry.name), { recursive: true });
+    writeFileSync(
+      agentFile(entry.name),
+      JSON.stringify({ ...entry, version: 1, repos: [], envVars: [] }, null, 2) + "\n",
+      "utf-8",
+    );
+  }
+
+  it("returns combined permanent and tmp entries, deduplicated (tmp wins)", async () => {
+    writeAgentFile(FIXTURE_AGENT); // memory-dream (permanent)
+    writeAgentFile(FIXTURE_AGENT_2); // get-shit-done (permanent)
+    writeTmpAgentFile(FIXTURE_AGENT); // memory-dream (tmp) — duplicate
+    const all = await readAllAgentConfigEntries();
+    expect(all.map((e) => e.name).sort()).toEqual(["get-shit-done", "memory-dream"]);
+  });
+
+  it("returns empty array when nothing exists", async () => {
+    expect(await readAllAgentConfigEntries()).toEqual([]);
   });
 });
 

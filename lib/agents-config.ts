@@ -106,10 +106,15 @@ export async function readSplitAgentConfigEntries(): Promise<{
   return { entries: entries.filter((e) => !tmpNames.has(e.name)), tmpEntries: allTmpEntries };
 }
 
+/** All agent config entries (permanent + tmp), deduplicated — tmp wins over permanent. */
+export async function readAllAgentConfigEntries(): Promise<AgentConfigEntry[]> {
+  const { entries, tmpEntries } = await readSplitAgentConfigEntries();
+  return [...entries, ...tmpEntries];
+}
+
 /** Read agents config and hydrate each entry into a full AgentDef. Includes tmp/Kiln agents. */
 export async function readAgentsConfig(): Promise<AgentDef[]> {
-  const { entries, tmpEntries } = await readSplitAgentConfigEntries();
-  return [...entries, ...tmpEntries].map(buildAgentDef);
+  return (await readAllAgentConfigEntries()).map(buildAgentDef);
 }
 
 /** Read only agents with schedulingEnabled !== false. */
