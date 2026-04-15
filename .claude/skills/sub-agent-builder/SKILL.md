@@ -101,6 +101,16 @@ Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the c
 - If agent has sequential steps that share context: chain with `--session-id` / `--resume`
 - Single-step agents: plain `-p` prompt, no worktree, no session chaining
 
+**Phase 2 gate — verify before proceeding:**
+
+- [ ] All `{{PLACEHOLDER}}` values substituted in every written file
+- [ ] `INSTRUCTION` read from `process.argv[2]` and passed through to Claude
+- [ ] No SDK function re-implemented — every utility traced to `@dovepaw/agent-sdk`
+- [ ] Spawning pattern (A/B/C) matches the agent's repo access needs
+- [ ] No dead code, no unused imports
+
+Fix any failures before continuing.
+
 ---
 
 ### Phase 3 — Create agent.json
@@ -130,6 +140,15 @@ Fill in all fields:
 
 Do NOT set `pluginPath` — that is added at publish time.
 
+**Phase 3 gate — verify before proceeding:**
+
+- [ ] All required fields present: `name`, `alias`, `displayName`, `description`, `personality`, `schedulingEnabled`, `repos`, `envVars`, `iconName`, `iconBg`, `iconColor`, `doveCard`, `suggestions`
+- [ ] `pluginPath` is NOT set
+- [ ] Every `envVars` entry has an `id` UUID (missing `id` silently drops the agent from Kiln)
+- [ ] Icon values match an actual entry in `references/agent-registration.md`
+
+Fix any failures before continuing.
+
 After writing `agent.json`, bootstrap the agent's `node_modules` so `@dovepaw/agent-sdk` resolves at runtime:
 
 ```bash
@@ -148,6 +167,8 @@ if not os.path.exists(link):
 ---
 
 ### Phase 4 — Associated Skill
+
+**Skip Phase 4 entirely** if the agent type is **Skill-based** — it already generates a skill dynamically at runtime and must not have a static SKILL.md alongside it. Proceed directly to Phase 5.
 
 Ask 2 questions in a single `AskUserQuestion` call:
 
@@ -239,6 +260,15 @@ When publishing to a plugin repo, add the skill name to `dovepaw-plugin.json`:
 ```
 
 Skills and agents are listed independently — a skill can exist without a same-named agent, and vice versa.
+
+**Phase 4 gate** (only if a skill was created) **— verify before proceeding:**
+
+- [ ] SKILL.md frontmatter has `name`, `description`, and `argument-hint`; schema matches https://code.claude.com/docs/en/skills.md
+- [ ] `$ARGUMENTS` parsing documented at the top of the body
+- [ ] Output contract defined: structured JSON last line if agent calls in a loop; plain text otherwise
+- [ ] Skill invocation in `main.ts` uses correct format (`Skill("/skill-name args")`)
+
+Fix any failures before continuing.
 
 ---
 

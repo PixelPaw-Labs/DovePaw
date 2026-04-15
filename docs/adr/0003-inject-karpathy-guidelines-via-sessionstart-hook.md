@@ -60,8 +60,8 @@ must override.
 **Trade-offs:**
 
 - Every session pays the token cost (~500 tokens) even for trivial one-liner tasks. The
-  hook itself acknowledges this: *"These guidelines bias toward caution over speed. For
-  trivial tasks, use judgment."* The cost multiplies across the pipeline: each sub-agent
+  hook itself acknowledges this: _"These guidelines bias toward caution over speed. For
+  trivial tasks, use judgment."_ The cost multiplies across the pipeline: each sub-agent
   workspace clone session pays the same overhead independently.
 - The hook must be maintained as a shell script and re-deployed to each machine. It is not
   automatically inherited by teammates who clone the repo (`.claude/hooks/` is gitignored
