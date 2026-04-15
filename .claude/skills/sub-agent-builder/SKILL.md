@@ -244,7 +244,15 @@ End with a confidence score JSON on its own line:
 
 The Stop hook requires `confidence >= 90` to proceed. Emit this only after all fixes are complete — it must reflect the post-fix state.
 
-Tell the user: "Your agent is ready. **Refresh the page** to see it appear under the **Kiln** group in the sidebar (Sparkles icon). No server restart needed."
+Tell the user: "Your agent is ready. **Refresh the page** to see it appear under the **Kiln** group in the sidebar (Sparkles icon)."
+
+Ask 1 question via `AskUserQuestion`:
+
+- **Restart A2A servers?** — "Restart DovePaw A2A servers to register the new agent?" — options:
+  - Yes — restart `npm run chatbot:servers` now (Recommended)
+  - No, I'll handle it later
+
+If the user selects **Yes**, remind them to run `npm run chatbot:servers` in the DovePaw project root to start the new agent's A2A server.
 
 ---
 

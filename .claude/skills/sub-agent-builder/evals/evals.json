@@ -33,6 +33,18 @@
     ]
   },
   {
+    "id": "phase5-restart-prompt",
+    "prompt": "Create a new DovePaw agent called log-summarizer that summarizes recent error logs. It runs on demand, no schedule.",
+    "expected_output": "After completing the integration check and emitting the confidence score, asks the user via AskUserQuestion whether to restart DovePaw A2A servers. Options are 'Yes — restart npm run chatbot:servers now' and 'No, I'll handle it later'. Does NOT say 'No server restart needed'.",
+    "files": [],
+    "assertions": [
+      "AskUserQuestion is called after the confidence score in Phase 5",
+      "question asks about restarting DovePaw A2A servers",
+      "options include 'npm run chatbot:servers'",
+      "response does not say 'No server restart needed'"
+    ]
+  },
+  {
     "id": "skill-based",
     "prompt": "Build a release-drafter agent that dynamically builds a skill from the current changelog and runs it to draft release notes.",
     "expected_output": "Creates ~/.dovepaw/tmp/release-drafter/main.ts (Type 2 template) with randomBytes skill name, mkdirSync for skill dir, writeFileSync for SKILL.md, spawnClaudeWithSignals, and rmSync in finally block. No static skill file is created. publishStatusToUI called for progress updates.",
