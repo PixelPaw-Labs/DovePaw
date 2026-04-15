@@ -2,12 +2,7 @@ import { notFound } from "next/navigation";
 import { SettingsPageLayout } from "@/components/settings/settings-page-layout";
 import { AgentSettingsContent } from "@/components/settings/agent-settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
-import {
-  readAgentConfigEntries,
-  readAgentFile,
-  readTmpAgentConfigEntries,
-} from "@@/lib/agents-config";
-import { listPlugins } from "@@/lib/plugin-manager";
+import { readSplitAgentConfigEntries, readAgentFile } from "@@/lib/agents-config";
 
 interface Props {
   params: Promise<{ agentName: string }>;
@@ -15,10 +10,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props) {
   const { agentName } = await params;
-  const [entries, tmpEntries] = await Promise.all([
-    readAgentConfigEntries(),
-    readTmpAgentConfigEntries(),
-  ]);
+  const { entries, tmpEntries } = await readSplitAgentConfigEntries();
   const entry =
     entries.find((a) => a.name === agentName) ?? tmpEntries.find((a) => a.name === agentName);
   if (!entry) return { title: "Not Found — DovePaw" };
@@ -27,26 +19,19 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function AgentSettingsPage({ params }: Props) {
   const { agentName } = await params;
-  const [allEntries, tmpAgentConfigs, agentSettings, agentFile, plugins, globalSettings] =
-    await Promise.all([
-      readAgentConfigEntries(),
-      readTmpAgentConfigEntries(),
-      readAgentSettings(agentName),
-      readAgentFile(agentName),
-      listPlugins(),
-      readSettings(),
-    ]);
+  const [{ entries, tmpEntries }, agentSettings, agentFile, globalSettings] = await Promise.all([
+    readSplitAgentConfigEntries(),
+    readAgentSettings(agentName),
+    readAgentFile(agentName),
+    readSettings(),
+  ]);
 
   const agentEntry =
-    allEntries.find((a) => a.name === agentName) ??
-    tmpAgentConfigs.find((a) => a.name === agentName);
+    entries.find((a) => a.name === agentName) ?? tmpEntries.find((a) => a.name === agentName);
   if (!agentEntry) notFound();
 
   return (
     <SettingsPageLayout
-      agentConfigs={allEntries}
-      tmpAgentConfigs={tmpAgentConfigs}
-      plugins={plugins}
       title={agentEntry.displayName}
       breadcrumbItems={[{ label: "Settings", href: "/settings" }]}
     >

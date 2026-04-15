@@ -1,16 +1,15 @@
 import { SettingsPageLayout } from "@/components/settings/settings-page-layout";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
-import { readAgentConfigEntries, readTmpAgentConfigEntries } from "@@/lib/agents-config";
+import { readSplitAgentConfigEntries } from "@@/lib/agents-config";
 import { listPlugins } from "@@/lib/plugin-manager";
 
 export const metadata = { title: "Settings — DovePaw" };
 
 export default async function SettingsPage() {
-  const [settings, allAgentEntries, tmpAgentConfigs, plugins] = await Promise.all([
+  const [settings, { entries: allAgentEntries }, plugins] = await Promise.all([
     readSettings(),
-    readAgentConfigEntries(),
-    readTmpAgentConfigEntries(),
+    readSplitAgentConfigEntries(),
     listPlugins(),
   ]);
   const scheduledAgentEntries = allAgentEntries.filter((a) => a.schedulingEnabled !== false);
@@ -23,12 +22,7 @@ export default async function SettingsPage() {
   );
 
   return (
-    <SettingsPageLayout
-      agentConfigs={allAgentEntries}
-      tmpAgentConfigs={tmpAgentConfigs}
-      plugins={plugins}
-      title="Settings"
-    >
+    <SettingsPageLayout title="Settings">
       <SettingsContent
         initialSettings={settings}
         initialAgentRepos={initialAgentRepos}

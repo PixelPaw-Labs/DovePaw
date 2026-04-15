@@ -30,6 +30,7 @@ vi.mock("@@/lib/paths", () => ({
 import {
   readAgentConfigEntries,
   readAgentsConfig,
+  readSplitAgentConfigEntries,
   readAgentFile,
   createAgentFile,
   patchAgentFile,
@@ -368,5 +369,47 @@ describe("agentConfigEntrySchema validation", () => {
       suggestions: [],
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── readSplitAgentConfigEntries ─────────────────────────────────────────────
+
+describe("readSplitAgentConfigEntries", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  function writeAgentFile(entry: AgentConfigEntry) {
+    mkdirSync(agentDir(entry.name), { recursive: true });
+    writeFileSync(
+      agentFile(entry.name),
+      JSON.stringify({ ...entry, version: 1, repos: [], envVars: [] }, null, 2) + "\n",
+      "utf-8",
+    );
+  }
+
+  it("returns permanent entries and empty tmpEntries when no tmp dir", async () => {
+    writeAgentFile(FIXTURE_AGENT);
+    const { entries, tmpEntries } = await readSplitAgentConfigEntries();
+    expect(entries.map((e) => e.name)).toEqual(["memory-dream"]);
+    expect(tmpEntries).toEqual([]);
+  });
+
+  it("returns tmp entries and removes duplicates from permanent list", async () => {
+    writeAgentFile(FIXTURE_AGENT);
+    writeAgentFile(FIXTURE_AGENT_2);
+    writeTmpAgentFile(FIXTURE_AGENT); // duplicate: memory-dream in both
+    const { entries, tmpEntries } = await readSplitAgentConfigEntries();
+    // permanent list must not include memory-dream (tmp wins)
+    expect(entries.map((e) => e.name)).toEqual(["get-shit-done"]);
+    // tmp list includes memory-dream
+    expect(tmpEntries.map((e) => e.name)).toEqual(["memory-dream"]);
+  });
+
+  it("non-conflicting tmp agents appear only in tmpEntries", async () => {
+    writeAgentFile(FIXTURE_AGENT);
+    writeTmpAgentFile(FIXTURE_AGENT_2); // different name
+    const { entries, tmpEntries } = await readSplitAgentConfigEntries();
+    expect(entries.map((e) => e.name)).toEqual(["memory-dream"]);
+    expect(tmpEntries.map((e) => e.name)).toEqual(["get-shit-done"]);
   });
 });
