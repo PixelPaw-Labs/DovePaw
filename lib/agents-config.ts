@@ -8,13 +8,12 @@ import {
   access,
   constants,
 } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { agentFileSchema, type AgentConfigEntry, type AgentFile } from "./agents-config-schemas";
 import { buildAgentDef } from "./agents";
 import {
   AGENT_SETTINGS_DIR,
   DOVEPAW_TMP_DIR,
-  agentConfigDir,
   agentDefinitionFile,
   tmpAgentDefinitionFile,
 } from "./paths";
@@ -129,10 +128,20 @@ export async function readScheduledAgentsConfig(): Promise<AgentDef[]> {
 
 // ─── Write ────────────────────────────────────────────────────────────────────
 
+/**
+ * Resolve the canonical file path for an agent — tmp/ takes precedence over settings.agents/.
+ * Used so writes go back to the same location as reads.
+ */
+async function resolveAgentFilePath(agentName: string): Promise<string> {
+  const tmpPath = tmpAgentDefinitionFile(agentName);
+  if (await fileExists(tmpPath)) return tmpPath;
+  return agentDefinitionFile(agentName);
+}
+
 /** Persist a combined agent file to its directory (with .bak). */
 export async function writeAgentFile(agentName: string, file: AgentFile): Promise<void> {
-  await mkdir(agentConfigDir(agentName), { recursive: true });
-  const dest = agentDefinitionFile(agentName);
+  const dest = await resolveAgentFilePath(agentName);
+  await mkdir(dirname(dest), { recursive: true });
   const data = JSON.stringify(file, null, 2) + "\n";
   await writeFile(dest, data, "utf-8");
   await copyFile(dest, `${dest}.bak`);

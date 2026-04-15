@@ -173,6 +173,27 @@ describe("createAgentFile", () => {
   });
 });
 
+describe("patchAgentFile — tmp agent write-back", () => {
+  beforeEach(cleanup);
+  afterEach(cleanup);
+
+  it("writes back to tmp/ when the agent lives in tmp/", async () => {
+    writeTmpAgentFile(FIXTURE_AGENT);
+    await patchAgentFile("memory-dream", { displayName: "Memory Dream Updated" });
+    // Permanent settings dir must NOT have been created
+    expect(existsSync(agentFile("memory-dream"))).toBe(false);
+    // The tmp file must reflect the patch
+    const updated = await readAgentFile("memory-dream");
+    expect(updated?.displayName).toBe("Memory Dream Updated");
+  });
+
+  it("writes to settings.agents/ for permanent agents", async () => {
+    await createAgentFile(FIXTURE_AGENT);
+    await patchAgentFile("memory-dream", { displayName: "Memory Dream Updated" });
+    expect(existsSync(agentFile("memory-dream"))).toBe(true);
+  });
+});
+
 describe("patchAgentFile", () => {
   beforeEach(cleanup);
   afterEach(cleanup);
