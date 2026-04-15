@@ -5,6 +5,27 @@ Pick the right one based on what the agent does with repos. They can be combined
 
 ---
 
+## Choosing `timeoutMs`
+
+The SDK default is **30 minutes** (`30 * 60 * 1000`). Override based on expected work duration — do not leave `{{TIMEOUT_MS}}` unresolved.
+
+| Agent behaviour                                      | Recommended timeout                     |
+| ---------------------------------------------------- | --------------------------------------- |
+| Simple lookup, single question, or short summary     | `10 * 60 * 1000` (10 min)               |
+| Multi-step analysis or moderate investigation        | `30 * 60 * 1000` (30 min) — SDK default |
+| Deep research, broad scan, or processing many items  | `60 * 60 * 1000` (1 hour)               |
+| Long-running work across multiple sources or stages  | `2 * 60 * 60 * 1000` (2 hours)          |
+| Unbounded / scheduled batch work or open-ended tasks | `4 * 60 * 60 * 1000` (4 hours)          |
+
+**Rules:**
+
+- Prefer a named constant over an inline expression: `const TIMEOUT_MS = 2 * 60 * 60 * 1000;`
+- For Pattern C (session chain), set each step's timeout independently — step 1 (discovery) is usually shorter than step 2 (implementation).
+- For parallel worktrees (Pattern B multi), the same timeout applies per-item, not to the whole batch.
+- When in doubt, set higher rather than lower — a timed-out agent loses all work silently.
+
+---
+
 ## Pattern A — No repos, or read-only access to all repos (single Claude invocation)
 
 Always run Claude in `AGENT_WORKSPACE`. Give Claude read access to repos via `--add-dir`.  
