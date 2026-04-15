@@ -393,7 +393,7 @@ describe("readAllAgentConfigEntries", () => {
     writeAgentFile(FIXTURE_AGENT_2); // get-shit-done (permanent)
     writeTmpAgentFile(FIXTURE_AGENT); // memory-dream (tmp) — duplicate
     const all = await readAllAgentConfigEntries();
-    expect(all.map((e) => e.name).sort()).toEqual(["get-shit-done", "memory-dream"]);
+    expect(all.map((e) => e.name).toSorted()).toEqual(["get-shit-done", "memory-dream"]);
   });
 
   it("returns empty array when nothing exists", async () => {
