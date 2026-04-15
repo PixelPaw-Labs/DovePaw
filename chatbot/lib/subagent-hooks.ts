@@ -11,7 +11,7 @@ import type {
   HookCallbackMatcher,
   HookEvent,
 } from "@anthropic-ai/claude-agent-sdk";
-import { HANDOFF_PATTERNS } from "@/lib/agent-link-patterns";
+import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import {
   START_SCRIPT_TOOL,
   AWAIT_SCRIPT_TOOL,
@@ -38,14 +38,17 @@ const thresholdTable = Object.entries(CONFIDENCE_THRESHOLD)
   )
   .join("\n");
 
-const CHAT_TO_REFLECTION_PROMPT = `<reminder>
+function buildReflectionPrompt(patterns: string): string {
+  return `<reminder>
 You are about to delegate work to another agent. Pause and answer:
 
 1. Have you completed your own task? If not, finish it first.
 2. Do you have concrete, specific output to hand off (issues list, report, IDs, findings)?
    Vague intent ("check this", "take a look") is not a valid handoff.
 3. Does the handoff match a clear pattern?
-${HANDOFF_PATTERNS}
+<patterns>
+${patterns}
+</patterns>
 
 If YES to all: re-call this tool with a \`justification\` object:
   {
@@ -60,79 +63,95 @@ ${thresholdTable}
 
 If NO to any: do not re-call. Continue without the handoff and explain your reasoning.
 </reminder>`;
+}
 
-const chatToReflectionMatcher: HookCallbackMatcher = {
-  // Matches the full MCP-prefixed names for all agent link tools.
-  // Docs confirm matcher runs against the full tool name (e.g. mcp__agents__chat_to_fixer).
-  matcher: "mcp__agents__(chat_to|start_chat_to|review_with|escalate_to)_.*",
-  hooks: [
-    async (input) => {
-      if (input.hook_event_name !== "PreToolUse") return { continue: true };
-      const { tool_input } = input;
-      const inputObj = tool_input !== null && typeof tool_input === "object" ? tool_input : null;
+function makeReflectionMatcher(matcher: string, reflectionPrompt: string): HookCallbackMatcher {
+  return {
+    matcher,
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PreToolUse") return { continue: true };
+        const { tool_input } = input;
+        const inputObj = tool_input !== null && typeof tool_input === "object" ? tool_input : null;
 
-      const justificationRaw: unknown = inputObj
-        ? Reflect.get(inputObj, "justification")
-        : undefined;
-      if (
-        justificationRaw === null ||
-        justificationRaw === undefined ||
-        typeof justificationRaw !== "object"
-      ) {
+        const justificationRaw: unknown = inputObj
+          ? Reflect.get(inputObj, "justification")
+          : undefined;
+        if (
+          justificationRaw === null ||
+          justificationRaw === undefined ||
+          typeof justificationRaw !== "object"
+        ) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: reflectionPrompt,
+          };
+          return { hookSpecificOutput };
+        }
+
+        const confidence: unknown = Reflect.get(justificationRaw, "confidence");
+        const impact: unknown = Reflect.get(justificationRaw, "impact");
+
+        const impactKey =
+          typeof impact === "string" && impact in CONFIDENCE_THRESHOLD ? impact : undefined;
+
+        if (impactKey === undefined) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `impact is missing or invalid ("${String(impact)}"). Re-call with impact: ${impactPlaceholder}.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        const entry = CONFIDENCE_THRESHOLD[impactKey];
+
+        if (entry.threshold === Infinity) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Low-impact handoffs are skipped. Handle via message instead, or raise the impact level if this is genuinely consequential.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        if (typeof confidence !== "number" || confidence < entry.threshold) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason:
+              typeof confidence !== "number"
+                ? `confidence is missing or not a number. Re-call with a numeric confidence score (0–100).`
+                : `Confidence ${confidence} is below the required threshold of ${entry.threshold} for ${impactKey} impact. Only proceed if genuinely confident this handoff is necessary and well-scoped.`,
+          };
+          return { hookSpecificOutput };
+        }
+
         const hookSpecificOutput: PreToolUseHookSpecificOutput = {
           hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: CHAT_TO_REFLECTION_PROMPT,
+          permissionDecision: "allow",
         };
         return { hookSpecificOutput };
-      }
+      },
+    ],
+  };
+}
 
-      const confidence: unknown = Reflect.get(justificationRaw, "confidence");
-      const impact: unknown = Reflect.get(justificationRaw, "impact");
+const chatToReflectionMatcher = makeReflectionMatcher(
+  "mcp__agents__start_chat_to_.*",
+  buildReflectionPrompt(HANDOFF_PATTERNS()),
+);
 
-      const impactKey =
-        typeof impact === "string" && impact in CONFIDENCE_THRESHOLD ? impact : undefined;
+const reviewReflectionMatcher = makeReflectionMatcher(
+  "mcp__agents__review_with_.*",
+  buildReflectionPrompt(REVIEW_PATTERNS()),
+);
 
-      if (impactKey === undefined) {
-        const hookSpecificOutput: PreToolUseHookSpecificOutput = {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: `impact is missing or invalid ("${String(impact)}"). Re-call with impact: ${impactPlaceholder}.`,
-        };
-        return { hookSpecificOutput };
-      }
-
-      const entry = CONFIDENCE_THRESHOLD[impactKey];
-
-      if (entry.threshold === Infinity) {
-        const hookSpecificOutput: PreToolUseHookSpecificOutput = {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason: `Low-impact handoffs are skipped. Handle via message instead, or raise the impact level if this is genuinely consequential.`,
-        };
-        return { hookSpecificOutput };
-      }
-
-      if (typeof confidence !== "number" || confidence < entry.threshold) {
-        const hookSpecificOutput: PreToolUseHookSpecificOutput = {
-          hookEventName: "PreToolUse",
-          permissionDecision: "deny",
-          permissionDecisionReason:
-            typeof confidence !== "number"
-              ? `confidence is missing or not a number. Re-call with a numeric confidence score (0–100).`
-              : `Confidence ${confidence} is below the required threshold of ${entry.threshold} for ${impactKey} impact. Only proceed if genuinely confident this handoff is necessary and well-scoped.`,
-        };
-        return { hookSpecificOutput };
-      }
-
-      const hookSpecificOutput: PreToolUseHookSpecificOutput = {
-        hookEventName: "PreToolUse",
-        permissionDecision: "allow",
-      };
-      return { hookSpecificOutput };
-    },
-  ],
-};
+const escalateReflectionMatcher = makeReflectionMatcher(
+  "mcp__agents__escalate_to_.*",
+  buildReflectionPrompt(ESCALATE_PATTERNS()),
+);
 
 // ─── Stop hook: handoff consideration ────────────────────────────────────────
 
@@ -147,10 +166,6 @@ function buildHandoffConsiderationPrompt(
     .join("\n");
   return `<reminder>
 Before you finish: have you considered whether to hand off your results to a linked agent?
-
-<handoff_patterns>
-${HANDOFF_PATTERNS}
-</handoff_patterns>
 
 <handoff_tools>
 ${toolsXml}
@@ -203,7 +218,12 @@ export function buildSubAgentHooks(
   });
   return {
     ...base,
-    PreToolUse: [...(base.PreToolUse ?? []), chatToReflectionMatcher],
+    PreToolUse: [
+      ...(base.PreToolUse ?? []),
+      chatToReflectionMatcher,
+      reviewReflectionMatcher,
+      escalateReflectionMatcher,
+    ],
     ...(hasAgentLinks && {
       Stop: [...(base.Stop ?? []), handoffConsiderationStop],
     }),
