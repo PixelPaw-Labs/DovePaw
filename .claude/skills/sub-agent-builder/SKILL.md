@@ -34,7 +34,7 @@ hooks:
    - **Skill-based** — dynamically builds a temporary skill, runs it, cleans up (for complex context assembly)
    - **Stateful** — lock + state dir + orchestration (for scheduled agents requiring mutual exclusion)
 
-**Round 2** — read `~/.dovepaw/settings.json`, extract `repositories` array (each has `id`, `path`), then ask 4 questions in a single `AskUserQuestion` call:
+**Round 2** — read `~/.dovepaw/settings.json`, extract `repositories` array (each has `id`, `path`), then ask 3 questions in a single `AskUserQuestion` call:
 
 1. **Schedule** — "Enable scheduled runs?" — options:
    - On-demand only (Recommended) — triggered manually from chatbot
@@ -45,19 +45,19 @@ hooks:
 
 3. **Env vars** — "Which environment variables does this agent need?" — infer from purpose (Jira → `JIRA_API_KEY`, GitHub → `GITHUB_TOKEN`, Slack → `SLACK_BOT_TOKEN`, email → `GMAIL_TOKEN`, Linear → `LINEAR_API_KEY`); multi-select; include "None" option
 
-4. **Icon** — "Which icon suits this agent best?" — pick 4 from the catalog in `references/agent-registration.md` based on purpose (analytics/reasoning → `Brain`, automation → `Zap`, alerts/incidents → `BellRing`, docs → `FileText`, code → `GitMerge`)
-
 ---
 
 ### Phase 2 — Design file structure, then generate source files
 
-Read the appropriate template from `references/`:
+Read the one template that matches the chosen agent type — do not read the others:
 
-| Type        | Template file                             |
+| Type        | Read now                                  |
 | ----------- | ----------------------------------------- |
 | Simple      | `references/template-simple.md`           |
 | Skill-based | `references/template-skill-based.md`      |
 | Stateful    | `references/template-complex-stateful.md` |
+
+Also read `references/spawning-patterns.md` now — required for the spawning rules below.
 
 The template is a **starting point**, not a rigid layout. Before writing any files, analyse the agent's requirements and decide the file structure:
 
@@ -87,6 +87,10 @@ const INSTRUCTION = process.argv[2] || "";
 
 Then pass it through to Claude — either appended to the prompt string (`Instruction: ${INSTRUCTION}`) or as part of the skill invocation (`/${skillName}\n\n${INSTRUCTION}`). Never silently discard it; it is the user's intent for that specific run.
 
+**Always prefer `@dovepaw/agent-sdk` over custom implementations:**
+
+Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the current list of SDK exports. Never re-implement what the SDK already provides — if a function, constant, or type exists there, import and use it.
+
 **Spawning rules (use judgment):**
 
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
@@ -100,6 +104,12 @@ Then pass it through to Claude — either appended to the prompt string (`Instru
 ---
 
 ### Phase 3 — Create agent.json
+
+Read `references/agent-registration.md` now — it has the agent.json template and the full icon/color catalog.
+
+Ask 1 question via `AskUserQuestion`:
+
+- **Icon** — "Which icon suits this agent best?" — suggest 4 options inferred from purpose: analytics/reasoning → `Brain`, automation → `Zap`, alerts/incidents → `BellRing`, docs → `FileText`, code → `GitMerge`, search → `Search`, time → `Clock`, data → `Database`
 
 Create `~/.dovepaw/tmp/<name>/agent.json` using the template in `references/agent-registration.md`.
 
@@ -185,6 +195,8 @@ Read `references/skill-authoring.md` for the SKILL.md schema, argument patterns,
 
 Read `references/skill-best-practices.md` before writing the SKILL.md body — apply every principle to the content you generate.
 
+Fetch https://code.claude.com/docs/en/skills.md for the authoritative SKILL.md frontmatter schema and format — use it to validate your output before writing.
+
 #### Agent → skill invocation
 
 In `main.ts` (or `prompts.ts`), the agent embeds the skill call in the prompt string it passes to `spawnClaude`:
@@ -231,6 +243,8 @@ Skills and agents are listed independently — a skill can exist without a same-
 ---
 
 ### Phase 5 — Integration Check
+
+Read `references/integration-checklist.md` now for lint/fmt commands and path reference.
 
 Read each created file back and verify against this checklist. Fix any issue found, then re-check until every item passes:
 
@@ -284,18 +298,3 @@ Ask 2 questions in a single `AskUserQuestion` call:
 **If installing:** run `npm run install` in the DovePaw project root (confirm with user before running).
 
 Always remind: restart `npm run chatbot:servers` to register the new A2A server.
-
----
-
-## Reference Files
-
-| File                                      | When to read                                                           |
-| ----------------------------------------- | ---------------------------------------------------------------------- |
-| `references/template-simple.md`           | Phase 2 — Type 1 template                                              |
-| `references/template-skill-based.md`      | Phase 2 — Type 2 template                                              |
-| `references/template-complex-stateful.md` | Phase 2 — Type 3 template                                              |
-| `references/agent-registration.md`        | Phase 3 — agent.json template + icon/color catalog                     |
-| `references/spawning-patterns.md`         | Phase 2 — Options A/B/C for how Claude spawns subprocesses (all types) |
-| `references/skill-authoring.md`           | Phase 4 — SKILL.md schema, argument patterns, output contracts, hooks  |
-| `references/skill-best-practices.md`      | Phase 4 — Content quality principles (gotchas, defaults, procedures…)  |
-| `references/integration-checklist.md`     | Phase 5 — lint/fmt commands + path reference                           |
