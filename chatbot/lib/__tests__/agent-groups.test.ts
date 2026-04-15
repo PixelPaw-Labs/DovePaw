@@ -78,21 +78,21 @@ describe("groupAgentsByPlugin", () => {
     expect(groups[1]?.pluginName).toBe("my-plugin");
   });
 
-  it("adds Kilin group at the end when tmp agents provided", () => {
+  it("adds Kiln group at the end when tmp agents provided", () => {
     const agents = [makeAgent("agent-a", "/home/.dovepaw/plugins/my-plugin")];
     const tmpAgents = [makeAgent("session-agent")];
     const groups = groupAgentsByPlugin(agents, tmpAgents);
     expect(groups).toHaveLength(2);
     const last = groups[groups.length - 1]!;
-    expect(last.pluginName).toBe("Kilin");
+    expect(last.pluginName).toBe("Kiln");
     expect(last.temporary).toBe(true);
     expect(last.agents).toHaveLength(1);
   });
 
-  it("omits Kilin group when tmpAgents is empty", () => {
+  it("omits Kiln group when tmpAgents is empty", () => {
     const agents = [makeAgent("agent-a", "/home/.dovepaw/plugins/my-plugin")];
     const groups = groupAgentsByPlugin(agents, []);
-    expect(groups.find((g) => g.pluginName === "Kilin")).toBeUndefined();
+    expect(groups.find((g) => g.pluginName === "Kiln")).toBeUndefined();
   });
 
   it("uses canonical plugin name from registry over path basename", () => {

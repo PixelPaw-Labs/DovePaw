@@ -34,7 +34,7 @@ export function resolvePluginName(
  * Group a flat agent list by their pluginPath.
  * - Agents without pluginPath come first, ungrouped (no section header).
  * - Plugin agents are grouped by their canonical plugin name.
- * - tmp agents form a "Kilin" group at the end (only when non-empty).
+ * - tmp agents form a "Kiln" group at the end (only when non-empty).
  *
  * Pass `plugins` from the registry to use canonical names; omit to fall back
  * to the directory basename of each agent's pluginPath.
@@ -68,7 +68,7 @@ export function groupAgentsByPlugin(
     });
   }
   if (tmpAgents.length > 0) {
-    result.push({ pluginName: "Kilin", temporary: true, agents: tmpAgents });
+    result.push({ pluginName: "Kiln", temporary: true, agents: tmpAgents });
   }
   return result;
 }
