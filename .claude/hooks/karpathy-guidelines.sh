@@ -63,7 +63,15 @@ For multi-step tasks, state a brief plan:
 2. [Step] → verify: [check]
 3. [Step] → verify: [check]
 
-Strong success criteria let you loop independently. Weak criteria (\"make it work\") require constant clarification.'''
+Strong success criteria let you loop independently. Weak criteria (\"make it work\") require constant clarification.
+
+## 5. Tests First
+
+**Always write the test before the implementation.**
+
+- For every new function or behaviour, write a failing test first.
+- Only then write the code to make it pass.
+- Never write implementation code without a corresponding test already in place.'''
 
 print(json.dumps({
     'hookSpecificOutput': {

@@ -1,9 +1,8 @@
 #!/bin/bash
-# Pre-commit hook: format + lint staged files directly; delegate test decisions to the agent.
+# Pre-commit hook: format + lint staged files directly; run related tests via vitest --related.
 #
 # Format and lint run directly on staged files only — not the whole codebase.
-# Tests are NOT run here; the agent is instructed to determine and run only
-# the relevant test files based on the staged file list.
+# Tests run via `vitest --related` which traces the import graph from staged source files.
 
 set -uo pipefail
 
@@ -59,23 +58,29 @@ if [ -n "$ERRORS" ]; then
   exit 0
 fi
 
-# --- Test gate: delegate to agent ---
-# The hook never runs tests itself. Instead it lists the staged files and
-# instructs the agent to determine and run only the relevant test files.
+# --- Test gate: run related tests via import graph ---
+STAGED_TS=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '\.test\.' | grep -v '^agents/' || true)
+
+if [ -n "$STAGED_TS" ]; then
+  TEST_OUTPUT=$(npx vitest run --related $STAGED_TS 2>&1)
+  TEST_EXIT=$?
+  if [ $TEST_EXIT -ne 0 ]; then
+    printf '{"decision": "block", "reason": %s}' \
+      "$(printf 'Tests failed. Fix before committing.\n\n%s' "$TEST_OUTPUT" | jq -Rs .)"
+    exit 0
+  fi
+fi
+
+# --- Test reminder: confirm tests were written or updated ---
 if [ -n "$SESSION_ID" ] && [ -f "$FLAG_FILE" ]; then
   rm -f "$FLAG_FILE"
   exit 0
 fi
 
-STAGED_LIST=$(printf '%s\n' "$STAGED_FILES" | sed 's/^/  - /')
-
 REFLECTION=$(printf '%s' "All checks pass. Did you write or update tests for the behaviour you just changed?
 
-Staged files:
-$STAGED_LIST
-
   If not → write the tests then in a SEPARATE Bash tool call: git add <files>, then git commit again — the hook will re-ask this question.
-  If yes → run ONLY the test files related to the staged files above (use npx vitest run <file> or npm run agents:test as appropriate — do NOT run the full test suite). Fix any failures. Then run the touch command below in a SEPARATE Bash tool call, then retry the commit in another:
+  If yes → run the touch command below in a SEPARATE Bash tool call, then retry the commit in another:
 
     touch $FLAG_FILE
 
