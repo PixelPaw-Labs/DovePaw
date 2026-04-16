@@ -181,7 +181,10 @@ export function buildAgentHooks(
               const id = getStillRunningId(structured);
               return {
                 decision: "block",
-                reason: `⚠️ Still running (id: ${id}). You MUST call the await tool again yourself with id "${id}".`,
+                reason: [
+                  `⚠️ Still running (id: ${id}). You MUST call the await tool again yourself with id "${id}".`,
+                  `Never recall any previous run from log or memory — always use the await tool with the id from the most recent still_running response.`,
+                ].join("\n"),
               };
             }
             return { continue: true };

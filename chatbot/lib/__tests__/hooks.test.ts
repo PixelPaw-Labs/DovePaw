@@ -137,6 +137,16 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     vi.restoreAllMocks();
   });
 
+  it("includes no-memory guidance in still_running block reason", async () => {
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const hooks = buildAgentHooks(makeConfig({ getStillRunningId: () => "run-xyz" }));
+    const fn = hooks.PostToolUse![0]!.hooks[0]!;
+    const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
+    const { reason } = result as { reason: string };
+    expect(reason).toContain("Never recall any previous run from log or memory");
+    vi.restoreAllMocks();
+  });
+
   it("releases (continue: true) when retry counter threshold is hit", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0); // max = floor(0 * 10) + 6 = 6
     const hooks = buildAgentHooks(makeConfig());
