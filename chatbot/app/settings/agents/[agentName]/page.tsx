@@ -40,6 +40,7 @@ export default async function AgentSettingsPage({ params }: Props) {
         initialAgentEnvVars={agentSettings.envVars}
         globalEnvVars={globalSettings.envVars}
         initialLocked={agentFile?.locked ?? false}
+        initialNotifications={agentSettings.notifications ?? null}
       />
     </SettingsPageLayout>
   );

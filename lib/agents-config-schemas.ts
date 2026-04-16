@@ -1,6 +1,6 @@
 /** Zod schemas for per-agent definition files. No Node.js imports — safe in client components. */
 import { z } from "zod";
-import { envVarSchema } from "./settings-schemas";
+import { envVarSchema, agentNotificationConfigSchema } from "./settings-schemas";
 
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
@@ -126,6 +126,8 @@ export const agentFileSchema = agentConfigEntrySchema
     envVars: z.array(envVarSchema).default([]),
     /** When true, the agent cannot be deleted via the UI or API until unlocked. */
     locked: z.boolean().optional().default(false),
+    /** Optional notification config for SessionStart / SessionEnd events. */
+    notifications: agentNotificationConfigSchema.optional(),
   })
   .extend({
     // Allow empty strings at rest — validated at save time via agentConfigEntrySchema

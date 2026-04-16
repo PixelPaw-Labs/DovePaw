@@ -63,6 +63,25 @@ export type Repository = z.infer<typeof repositorySchema>;
 export type EnvVar = z.infer<typeof envVarSchema>;
 export type GlobalSettings = z.infer<typeof globalSettingsSchema>;
 
+// ─── Per-Agent Notifications Schema ───────────────────────────────────────────
+
+const ntfyChannelSchema = z.object({
+  type: z.literal("ntfy"),
+  topic: z.string().min(1),
+  server: z.string().url().default("https://ntfy.sh"),
+});
+
+export const notificationChannelSchema = z.discriminatedUnion("type", [ntfyChannelSchema]);
+
+export const agentNotificationConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  onSessionStart: z.boolean().default(false),
+  onSessionEnd: z.boolean().default(true),
+  channel: notificationChannelSchema,
+});
+
+export type AgentNotificationConfig = z.infer<typeof agentNotificationConfigSchema>;
+
 // ─── Per-Agent Schema ──────────────────────────────────────────────────────────
 
 export const agentSettingsSchema = z.object({
@@ -74,6 +93,8 @@ export const agentSettingsSchema = z.object({
    * If a key is absent here, the global value is inherited automatically.
    */
   envVars: z.array(envVarSchema).default([]),
+  /** Optional notification config for SessionStart / SessionEnd events. */
+  notifications: agentNotificationConfigSchema.optional(),
 });
 
 export type AgentSettings = z.infer<typeof agentSettingsSchema>;

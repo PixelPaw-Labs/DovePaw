@@ -20,7 +20,9 @@ import {
   thresholdClause,
 } from "@/lib/agent-tools";
 import { buildAgentHooks } from "@/lib/hooks";
+import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 // ─── Script reminder ──────────────────────────────────────────────────────────
 
@@ -184,6 +186,9 @@ export function buildSubAgentHooks(
   additionalDirectories: string[],
   agentLinkTools: Array<{ name: string; description: string }>,
   registry: PendingRegistry,
+  agentDisplayName?: string,
+  notifications?: AgentNotificationConfig,
+  env?: Record<string, string | undefined>,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -202,6 +207,11 @@ export function buildSubAgentHooks(
     ],
   };
 
+  const notifHooks =
+    notifications && agentDisplayName
+      ? buildNotificationHooks(agentDisplayName, notifications, env)
+      : {};
+
   const base = buildAgentHooks({
     postToolUseMatcher: "mcp__agents__await_.*",
     hasPendingWork: () => registry.hasPending(),
@@ -217,6 +227,7 @@ export function buildSubAgentHooks(
     allowedDirectories: [cwd, ...additionalDirectories],
   });
   return {
+    ...notifHooks,
     ...base,
     PreToolUse: [
       ...(base.PreToolUse ?? []),

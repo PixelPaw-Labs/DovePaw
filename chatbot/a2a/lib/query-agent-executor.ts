@@ -9,6 +9,7 @@ import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
+import { readAgentSettings } from "@@/lib/settings";
 import {
   makeAgentMgmtTools,
   makeStartScriptTool,
@@ -106,9 +107,10 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     publishProgress("Starting…");
 
-    const { extraEnv, repoSlugs } = await this.agentConfigReader.resolveAgentSettings(
-      this.def.name,
-    );
+    const [{ extraEnv, repoSlugs }, agentSettings] = await Promise.all([
+      this.agentConfigReader.resolveAgentSettings(this.def.name),
+      readAgentSettings(this.def.name),
+    ]);
 
     try {
       if (existingState) {
@@ -187,6 +189,9 @@ export class QueryAgentExecutor implements AgentExecutor {
                   additionalDirectories,
                   chatToTools,
                   registry,
+                  this.def.displayName,
+                  agentSettings.notifications,
+                  { ...process.env, ...agentConfig.extraEnv },
                 ),
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",

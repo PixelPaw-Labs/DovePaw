@@ -75,7 +75,11 @@ export async function writeSettings(settings: GlobalSettings): Promise<void> {
  */
 export async function readAgentSettings(agentName: string): Promise<AgentSettings> {
   const file = await readAgentFile(agentName);
-  return { repos: file?.repos ?? [], envVars: file?.envVars ?? [] };
+  return {
+    repos: file?.repos ?? [],
+    envVars: file?.envVars ?? [],
+    notifications: file?.notifications,
+  };
 }
 
 /**

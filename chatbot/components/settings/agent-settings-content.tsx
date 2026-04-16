@@ -9,6 +9,7 @@ import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
 import { AgentConfigFilesTab } from "./agent-config-files-tab";
 import { AgentDefinitionTab } from "./agent-definition-tab";
+import { AgentNotificationsTab } from "./agent-notifications-tab";
 import {
   DataTable,
   DataTableHeader,
@@ -20,12 +21,17 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { buildAgentDef } from "@@/lib/agents";
 import { type AgentConfigEntry, formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import { z } from "zod";
-import { type Repository, type EnvVar, envVarSchema } from "@@/lib/settings-schemas";
+import {
+  type Repository,
+  type EnvVar,
+  envVarSchema,
+  type AgentNotificationConfig,
+} from "@@/lib/settings-schemas";
 
 const envVarsResponseSchema = z.object({ envVars: z.array(envVarSchema) });
 const apiErrorSchema = z.object({ error: z.string().optional() });
 
-type Tab = "definition" | "repositories" | "env-vars" | "config-files";
+type Tab = "definition" | "repositories" | "env-vars" | "config-files" | "notifications";
 
 interface AgentSettingsContentProps {
   agentEntry: AgentConfigEntry;
@@ -35,6 +41,7 @@ interface AgentSettingsContentProps {
   globalEnvVars: EnvVar[];
   initialTab?: Tab;
   initialLocked?: boolean;
+  initialNotifications?: AgentNotificationConfig | null;
 }
 
 function MaskedValue({
@@ -82,6 +89,7 @@ export function AgentSettingsContent({
   globalEnvVars,
   initialTab = "definition",
   initialLocked = false,
+  initialNotifications = null,
 }: AgentSettingsContentProps) {
   const [agentEntry, setAgentEntry] = React.useState(initialAgentEntry);
   const agent = buildAgentDef(agentEntry);
@@ -344,6 +352,17 @@ export function AgentSettingsContent({
             >
               Config Files
             </button>
+            <button
+              type="button"
+              onClick={() => setTab("notifications")}
+              className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                tab === "notifications"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+              }`}
+            >
+              Notifications
+            </button>
           </div>
 
           {/* Definition tab */}
@@ -501,6 +520,14 @@ export function AgentSettingsContent({
 
           {/* Config Files tab */}
           {tab === "config-files" && <AgentConfigFilesTab agentName={agentName} />}
+
+          {/* Notifications tab */}
+          {tab === "notifications" && (
+            <AgentNotificationsTab
+              agentName={agentName}
+              initialNotifications={initialNotifications}
+            />
+          )}
 
           {/* Environment Variables tab */}
           {tab === "env-vars" && (

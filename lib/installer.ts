@@ -26,6 +26,7 @@ import {
   AGENTS_DIST,
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
+  DOVEPAW_DIR,
   LAUNCH_AGENTS_DIR,
   PLUGINS_DIR,
   SKILLS_ROOT,
@@ -256,6 +257,16 @@ export async function deployAgentSdk(): Promise<void> {
   const codexSdkLink = join(sdkNmScope, "codex-sdk");
   await rm(codexSdkLink, { recursive: true, force: true });
   await symlink(agentNodeModule("@openai/codex-sdk"), codexSdkLink);
+
+  // Symlink shared deps into ~/.dovepaw/node_modules/ so any plugin agent script
+  // can import them without declaring them in the plugin's own package.json.
+  // Node.js walks up the directory tree from the script's location, so
+  // ~/.dovepaw/node_modules/ is on the resolution path for all installed plugins.
+  const dovepawNmScope = join(DOVEPAW_DIR, "node_modules", "@ladybugdb");
+  await mkdir(dovepawNmScope, { recursive: true });
+  const ladybugLink = join(dovepawNmScope, "core");
+  await rm(ladybugLink, { recursive: true, force: true });
+  await symlink(agentNodeModule("@ladybugdb/core"), ladybugLink);
 }
 
 /**
