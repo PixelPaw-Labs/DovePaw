@@ -1,8 +1,79 @@
-import { writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { createWriteStream, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnClaude, type SpawnClaudeHandle } from "./claude.js";
+import {
+  CLAUDE_CLI,
+  buildSpawnEnv,
+  type SpawnClaudeHandle,
+  type SpawnClaudeOptions,
+  type SpawnClaudeResult,
+} from "./claude.js";
+import { registerChildPid, unregisterChildPid } from "./lock.js";
 import { claudeWorktreePath } from "./paths.js";
 import { WorktreeWatchdog } from "./worktree-watchdog.js";
+
+const noopKill: () => Promise<void> = async () => {};
+
+function spawnClaude(args: string[], opts: SpawnClaudeOptions): SpawnClaudeHandle {
+  const { cwd, taskName, timeoutMs = 30 * 60 * 1000, stderrToLog } = opts;
+
+  let killFn: () => Promise<void> = noopKill;
+
+  const result = new Promise<SpawnClaudeResult>((resolve) => {
+    const child = spawn(CLAUDE_CLI, args, {
+      cwd,
+      env: buildSpawnEnv(taskName, opts.suppressNotify),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    if (child.pid) registerChildPid(child.pid);
+
+    let closed = false;
+    const closedPromise = new Promise<void>((r) => child.on("close", () => r()));
+
+    killFn = async () => {
+      if (closed) return;
+      child.kill("SIGTERM");
+      const waited = await Promise.race([
+        closedPromise.then(() => "exited" as const),
+        new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 5_000)),
+      ]);
+      if (waited === "timeout") {
+        child.kill("SIGKILL");
+        await closedPromise;
+      }
+    };
+
+    const chunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    const logStream = stderrToLog ? createWriteStream(stderrToLog, { flags: "a" }) : null;
+
+    child.stdout.on("data", (data: Buffer) => chunks.push(data));
+    child.stderr.on("data", (data: Buffer) => {
+      if (logStream) logStream.write(data);
+      else stderrChunks.push(data);
+    });
+
+    const timer = setTimeout(() => {
+      void killFn();
+    }, timeoutMs);
+
+    child.on("close", (code) => {
+      closed = true;
+      clearTimeout(timer);
+      logStream?.end();
+      if (child.pid) unregisterChildPid(child.pid);
+      const stdout = Buffer.concat(chunks).toString();
+      const stderr = Buffer.concat(stderrChunks).toString();
+      resolve({
+        code: code ?? 1,
+        stdout: stderrToLog ? stdout : stdout + stderr,
+      });
+    });
+  });
+
+  return { result, kill: () => killFn() };
+}
 
 export interface RunOpts {
   repos?: string[];
@@ -14,6 +85,7 @@ export interface RunOpts {
   effort?: string;
   worktree?: string;
   continueSession?: boolean;
+  permissionMode?: string;
   /** Assign a session ID for later resumption via resumeSession. */
   sessionId?: string;
   /** Resume a prior session by its ID (--resume <id>). */
@@ -27,6 +99,7 @@ export function buildClaudeArgs(opts: RunOpts): string[] {
   const args = [
     ...(opts.sessionId ? ["--session-id", opts.sessionId] : []),
     ...(opts.resumeSession ? ["--resume", opts.resumeSession] : []),
+    ...(opts.permissionMode ? ["--permission-mode", opts.permissionMode] : []),
     ...(opts.agent ? ["--agent", opts.agent] : []),
     ...(opts.model ? ["--model", opts.model] : []),
     ...(opts.effort ? ["--effort", opts.effort] : []),

@@ -19,10 +19,10 @@ Substitute all `{{PLACEHOLDER}}` values before writing to `~/.dovepaw/tmp/<name>
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import {
+  ClaudeRunner,
   createLogger,
   makeTimestamp,
   cleanupOldLogs,
-  spawnClaudeWithSignals,
   AUTONOMY_PREFIX,
   parseRepos,
   agentPersistentLogDir,
@@ -48,10 +48,13 @@ async function main() {
 
   // ── Spawning: read references/spawning-patterns.md for Options A / B / C ───
   // Pick based on repo access needs. Default (no repos): use WORK_DIR as cwd.
-  const { code, stdout } = await spawnClaudeWithSignals(
-    ["--permission-mode", "{{PERMISSION_MODE}}", "-p", prompt],
-    { cwd: WORK_DIR, taskName: "{{AGENT_NAME}}", timeoutMs: {{TIMEOUT_MS}} },
-  );
+  const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
+  const { code, stdout } = await runner.run(prompt, {
+    cwd: WORK_DIR,
+    taskName: "{{AGENT_NAME}}",
+    timeoutMs: {{TIMEOUT_MS}},
+    permissionMode: "{{PERMISSION_MODE}}",
+  });
 
   log(`Claude CLI exited with code: ${code}`);
   log(stdout);

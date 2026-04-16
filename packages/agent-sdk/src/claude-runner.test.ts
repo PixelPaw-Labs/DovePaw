@@ -88,9 +88,20 @@ describe("buildClaudeArgs", () => {
     expect(args.includes("--agent")).toBe(false);
   });
 
-  it("does not include --permission-mode (relies on settings.local.json PermissionRequest hook)", () => {
+  it("omits --permission-mode when not set", () => {
     const args = buildClaudeArgs({ taskName: "t", cwd: "/workspace/abc" });
     expect(args.includes("--permission-mode")).toBe(false);
+  });
+
+  it("includes --permission-mode when permissionMode is set", () => {
+    const args = buildClaudeArgs({
+      taskName: "t",
+      cwd: "/workspace/abc",
+      permissionMode: "acceptEdits",
+    });
+    const idx = args.indexOf("--permission-mode");
+    expect(idx).not.toBe(-1);
+    expect(args[idx + 1]).toBe("acceptEdits");
   });
 
   it("includes --session-id when sessionId is set", () => {

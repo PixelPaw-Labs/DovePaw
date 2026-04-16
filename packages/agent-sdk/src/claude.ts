@@ -1,15 +1,10 @@
-import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
 import { join } from "node:path";
-import { registerChildPid, unregisterChildPid } from "./lock.js";
 
 const HOME = process.env.HOME!;
-const CLAUDE_CLI = join(HOME, ".local/bin/claude");
+export const CLAUDE_CLI = join(HOME, ".local/bin/claude");
 
 export const AUTONOMY_PREFIX =
   "Autonomy mode: never use AskUserQuestion tool — explore answers yourself.";
-
-const noopKill: () => Promise<void> = async () => {};
 
 // Unset nested session guard so Claude CLI can launch
 delete (process.env as Record<string, unknown>).CLAUDECODE;
@@ -24,7 +19,7 @@ function buildClaudePath(): string {
     .join(":");
 }
 
-interface SpawnClaudeOptions {
+export interface SpawnClaudeOptions {
   cwd?: string;
   taskName: string;
   timeoutMs?: number;
@@ -32,7 +27,7 @@ interface SpawnClaudeOptions {
   suppressNotify?: boolean; // suppress scheduler notification on session end
 }
 
-interface SpawnClaudeResult {
+export interface SpawnClaudeResult {
   code: number;
   stdout: string;
 }
@@ -54,89 +49,4 @@ export function buildSpawnEnv(taskName: string, suppressNotify?: boolean): NodeJ
     TERM: process.env.TERM || "xterm-256color",
     PATH: buildClaudePath(),
   };
-}
-
-export function spawnClaude(args: string[], opts: SpawnClaudeOptions): SpawnClaudeHandle {
-  const { cwd, taskName, timeoutMs = 30 * 60 * 1000, stderrToLog } = opts;
-
-  let killFn: () => Promise<void> = noopKill;
-
-  const result = new Promise<SpawnClaudeResult>((resolve) => {
-    const child = spawn(CLAUDE_CLI, args, {
-      cwd,
-      env: buildSpawnEnv(taskName, opts.suppressNotify),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    if (child.pid) registerChildPid(child.pid);
-
-    let closed = false;
-    const closedPromise = new Promise<void>((r) => child.on("close", () => r()));
-
-    killFn = async () => {
-      if (closed) return;
-      child.kill("SIGTERM");
-      const waited = await Promise.race([
-        closedPromise.then(() => "exited" as const),
-        new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 5_000)),
-      ]);
-      if (waited === "timeout") {
-        child.kill("SIGKILL");
-        await closedPromise;
-      }
-    };
-
-    const chunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    const logStream = stderrToLog ? createWriteStream(stderrToLog, { flags: "a" }) : null;
-
-    child.stdout.on("data", (data: Buffer) => chunks.push(data));
-    child.stderr.on("data", (data: Buffer) => {
-      if (logStream) logStream.write(data);
-      else stderrChunks.push(data);
-    });
-
-    const timer = setTimeout(() => {
-      void killFn();
-    }, timeoutMs);
-
-    child.on("close", (code) => {
-      closed = true;
-      clearTimeout(timer);
-      logStream?.end();
-      if (child.pid) unregisterChildPid(child.pid);
-      const stdout = Buffer.concat(chunks).toString();
-      const stderr = Buffer.concat(stderrChunks).toString();
-      resolve({
-        code: code ?? 1,
-        stdout: stderrToLog ? stdout : stdout + stderr,
-      });
-    });
-  });
-
-  return { result, kill: () => killFn() };
-}
-
-/**
- * Like spawnClaude but registers SIGTERM/SIGINT handlers that kill the child
- * process before exiting. Cleans up the handlers when the process finishes
- * naturally. Use this in agent main() functions so launchd unload / Ctrl-C
- * doesn't orphan the Claude CLI subprocess.
- */
-export async function spawnClaudeWithSignals(
-  args: string[],
-  opts: SpawnClaudeOptions,
-): Promise<SpawnClaudeResult> {
-  const handle = spawnClaude(args, opts);
-  const shutdown = () => {
-    void handle.kill().then(() => process.exit(0));
-  };
-  process.once("SIGTERM", shutdown);
-  process.once("SIGINT", shutdown);
-  try {
-    return await handle.result;
-  } finally {
-    process.off("SIGTERM", shutdown);
-    process.off("SIGINT", shutdown);
-  }
 }

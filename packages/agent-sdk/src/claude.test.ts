@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { buildSpawnEnv, spawnClaudeWithSignals } from "./claude.js";
+import { buildSpawnEnv } from "./claude.js";
 
 function spawnTestProcess(
   cmd: string,
@@ -60,39 +60,6 @@ describe("buildSpawnEnv", () => {
 
   it("unsets CLAUDECODE", () => {
     expect(buildSpawnEnv("task").CLAUDECODE).toBeUndefined();
-  });
-});
-
-describe("spawnClaudeWithSignals", () => {
-  it("registers SIGTERM/SIGINT handlers during execution and removes them after", async () => {
-    const sigtermBefore = process.listenerCount("SIGTERM");
-    const sigintBefore = process.listenerCount("SIGINT");
-    let sigtermDuring = -1;
-    let sigintDuring = -1;
-
-    const handle = spawnTestProcess("/bin/echo", ["ok"]);
-    const shutdown = () => void handle.kill().then(() => process.exit(0));
-    process.once("SIGTERM", shutdown);
-    process.once("SIGINT", shutdown);
-    sigtermDuring = process.listenerCount("SIGTERM");
-    sigintDuring = process.listenerCount("SIGINT");
-    try {
-      const { code, stdout } = await handle.result;
-      expect(code).toBe(0);
-      expect(stdout.trim()).toBe("ok");
-    } finally {
-      process.off("SIGTERM", shutdown);
-      process.off("SIGINT", shutdown);
-    }
-
-    expect(sigtermDuring).toBe(sigtermBefore + 1);
-    expect(sigintDuring).toBe(sigintBefore + 1);
-    expect(process.listenerCount("SIGTERM")).toBe(sigtermBefore);
-    expect(process.listenerCount("SIGINT")).toBe(sigintBefore);
-  });
-
-  it("is exported from claude.ts", () => {
-    expect(typeof spawnClaudeWithSignals).toBe("function");
   });
 });
 

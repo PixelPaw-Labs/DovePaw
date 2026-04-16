@@ -23,10 +23,10 @@ import { join } from "node:path";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import {
+  ClaudeRunner,
   createLogger,
   makeTimestamp,
   cleanupOldLogs,
-  spawnClaudeWithSignals,
   agentPersistentLogDir,
 } from "@dovepaw/agent-sdk";
 
@@ -71,12 +71,15 @@ context: fork
 `,
   );
 
+  const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
   try {
     publishStatusToUI("Running skill…");
-    const { code, stdout } = await spawnClaudeWithSignals(
-      ["--permission-mode", "acceptEdits", "-p", `/${skillName}\n\n${INSTRUCTION}`],
-      { cwd: WORK_DIR, taskName: "{{AGENT_NAME}}", timeoutMs: {{TIMEOUT_MS}} },
-    );
+    const { code, stdout } = await runner.run(`/${skillName}\n\n${INSTRUCTION}`, {
+      cwd: WORK_DIR,
+      taskName: "{{AGENT_NAME}}",
+      timeoutMs: {{TIMEOUT_MS}},
+      permissionMode: "acceptEdits",
+    });
     log(`Claude CLI exited with code: ${code}`);
     log(stdout);
   } finally {
