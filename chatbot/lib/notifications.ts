@@ -8,10 +8,10 @@
  *       onSessionStart → PreToolUse on start_run_script
  *       onSessionEnd   → PostToolUse on await_run_script when status === "completed"
  *
- * Channel dispatch is intentionally fire-and-forget: failures are silently
- * swallowed so a broken ntfy topic never blocks the agent session.
+ * Channel dispatch is fire-and-forget: errors are logged but never surface to the agent.
  */
 
+import { consola } from "consola";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { START_SCRIPT_TOOL, AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
@@ -33,7 +33,7 @@ async function sendNtfyNotification(
   message: string,
   priority: number,
 ): Promise<void> {
-  await fetch(`${server}/${topic}`, {
+  const res = await fetch(`${server}/${topic}`, {
     method: "POST",
     headers: {
       Title: title,
@@ -42,9 +42,12 @@ async function sendNtfyNotification(
     },
     body: message,
   });
+  if (!res.ok) {
+    throw new Error(`ntfy responded with ${res.status}: ${await res.text()}`);
+  }
 }
 
-/** Send a notification through the configured channel. Errors are swallowed. */
+/** Send a notification through the configured channel. Errors are logged but never thrown. */
 export async function sendNotification(
   channel: AgentNotificationConfig["channel"],
   title: string,
@@ -55,8 +58,8 @@ export async function sendNotification(
     if (channel.type === "ntfy") {
       await sendNtfyNotification(channel.server, channel.topic, title, message, priority);
     }
-  } catch {
-    // Non-blocking — a broken channel must never surface to the agent
+  } catch (err) {
+    consola.warn("Notification failed:", err instanceof Error ? err.message : String(err));
   }
 }
 

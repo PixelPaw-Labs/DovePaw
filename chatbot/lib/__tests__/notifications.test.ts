@@ -1,3 +1,4 @@
+import { consola } from "consola";
 import { describe, expect, it, vi } from "vitest";
 import { buildNotificationHooks, sendNotification } from "../notifications";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
@@ -187,9 +188,46 @@ describe("sendNotification", () => {
     vi.unstubAllGlobals();
   });
 
-  it("swallows fetch errors silently", async () => {
+  it("does not throw on network error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
+    const warnSpy = vi.spyOn(consola, "warn").mockImplementation(() => {});
     await expect(sendNotification(ntfyChannel, "t", "m")).resolves.toBeUndefined();
+    warnSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("logs warning on network error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network error")));
+    const warnSpy = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    await sendNotification(ntfyChannel, "t", "m");
+    expect(warnSpy).toHaveBeenCalledWith("Notification failed:", "network error");
+    warnSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("logs warning on HTTP error response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 403, text: async () => "Forbidden" }),
+    );
+    const warnSpy = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    await sendNotification(ntfyChannel, "t", "m");
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Notification failed:",
+      "ntfy responded with 403: Forbidden",
+    );
+    warnSpy.mockRestore();
+    vi.unstubAllGlobals();
+  });
+
+  it("does not throw on HTTP error response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 500, text: async () => "Server Error" }),
+    );
+    const warnSpy = vi.spyOn(consola, "warn").mockImplementation(() => {});
+    await expect(sendNotification(ntfyChannel, "t", "m")).resolves.toBeUndefined();
+    warnSpy.mockRestore();
     vi.unstubAllGlobals();
   });
 });
