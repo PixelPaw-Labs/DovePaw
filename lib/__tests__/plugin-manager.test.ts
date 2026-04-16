@@ -425,6 +425,25 @@ describe("syncPlugin", () => {
     expect(cmds.some((c) => c.includes("npm install") && c.includes(pluginDir))).toBe(true);
   });
 
+  it("preserves existing notifications on sync — not dropped when plugin source lacks them", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    await addPlugin(pluginDir);
+
+    // Simulate user having configured notifications after install
+    const agentFile = join(AGENT_SETTINGS_DIR, "my-agent", "agent.json");
+    const existing = JSON.parse(readFileSync(agentFile, "utf-8")) as Record<string, unknown>;
+    existing.notifications = { ntfyTopic: "my-topic", onStart: true, onEnd: false };
+    writeFileSync(agentFile, JSON.stringify(existing, null, 2));
+
+    // Sync (simulates plugin update — plugin source has no notifications field)
+    await syncPlugin("test-plugin");
+
+    const updated = JSON.parse(readFileSync(agentFile, "utf-8")) as {
+      notifications?: { ntfyTopic: string; onStart: boolean; onEnd: boolean };
+    };
+    expect(updated.notifications).toEqual({ ntfyTopic: "my-topic", onStart: true, onEnd: false });
+  });
+
   it("preserves existing envVars on sync — does not overwrite with plugin source defaults", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"], {
       "my-agent": { envVars: [{ key: "PROJECTS", value: "seed-value" }] },

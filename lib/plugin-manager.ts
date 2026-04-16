@@ -113,6 +113,7 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
     repos: existing?.repos ?? entry.repos ?? [],
     envVars: existing?.envVars ?? seedEnvVars,
     locked: existing?.locked ?? false,
+    notifications: existing?.notifications,
   });
 }
 
