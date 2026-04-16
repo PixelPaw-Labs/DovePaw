@@ -5,12 +5,12 @@
 
 import { exec } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm, symlink, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
-import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir } from "./paths";
+import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir, agentDefinitionFile } from "./paths";
 import { makeEnvVar } from "./settings";
 import { linkAgentSdkToPlugin, linkPluginSkills, unlinkPluginSkills } from "./installer";
 import {
@@ -68,7 +68,14 @@ async function readManifest(pluginDir: string): Promise<PluginManifest> {
   return pluginManifestSchema.parse(JSON.parse(raw));
 }
 
-/** Upsert an agent's settings file from the plugin's agent.json, merging in pluginPath. */
+/**
+ * Symlink settings.agents/<name>/agent.json → plugin source so UI edits write
+ * directly to the plugin repo and are never reverted by a plugin update.
+ *
+ * On fresh install: creates the symlink, then writes the initialised AgentFile
+ * (version, pluginPath, seeded envVars) through it into the plugin source.
+ * On update: refreshes the symlink, then writes back preserving existing user config.
+ */
 async function upsertAgentSettings(agentName: string, pluginDir: string): Promise<void> {
   const agentJsonPath = join(pluginDir, "agents", agentName, "agent.json");
   let raw: string;
@@ -79,19 +86,30 @@ async function upsertAgentSettings(agentName: string, pluginDir: string): Promis
   }
 
   const entry = agentConfigEntrySchema.parse(JSON.parse(raw));
+  // Read existing user config before we touch the symlink (update case)
   const existing = await readAgentFile(agentName);
 
-  // On fresh install (no existing file), seed envVars from the plugin source's
-  // envVars. On update, always preserve the user's runtime config unchanged.
+  const configDir = agentConfigDir(agentName);
+  await mkdir(configDir, { recursive: true });
+
+  // (Re-)create symlink: settings.agents/<name>/agent.json → plugin source
+  const symlinkPath = agentDefinitionFile(agentName);
+  try {
+    await unlink(symlinkPath);
+  } catch {
+    // File absent — nothing to remove
+  }
+  await symlink(agentJsonPath, symlinkPath);
+
   const seedEnvVars = (entry.envVars ?? []).map(({ key, value, isSecret }) =>
     makeEnvVar(key, value, isSecret),
   );
 
+  // Write through the symlink into the plugin source; this is how UI edits persist.
+  // pluginPath is intentionally omitted — it is derived from the symlink at read time.
   await writeAgentFile(agentName, {
     version: 1,
     ...entry,
-    pluginPath: pluginDir,
-    // Preserve any user-configured runtime settings; seed from plugin source on fresh install
     repos: existing?.repos ?? entry.repos ?? [],
     envVars: existing?.envVars ?? seedEnvVars,
     locked: existing?.locked ?? false,

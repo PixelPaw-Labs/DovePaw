@@ -7,6 +7,8 @@ import {
   rm,
   access,
   constants,
+  lstat,
+  readlink,
 } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { agentFileSchema, type AgentConfigEntry, type AgentFile } from "./agents-config-schemas";
@@ -30,6 +32,22 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
+/**
+ * If `filePath` is a symlink into a plugin's agents/ directory, derive the
+ * plugin root from the target path. Returns undefined for non-symlink files.
+ * Target layout: {pluginDir}/agents/{agentName}/agent.json
+ */
+async function pluginPathFromSymlink(filePath: string): Promise<string | undefined> {
+  try {
+    const stat = await lstat(filePath);
+    if (!stat.isSymbolicLink()) return undefined;
+    const target = await readlink(filePath); // absolute path (we always symlink with absolute)
+    return dirname(dirname(dirname(target))); // strip agent.json / agentName / agents
+  } catch {
+    return undefined;
+  }
+}
+
 async function tryParseFile(file: string): Promise<AgentFile | null> {
   if (!(await fileExists(file))) return null;
   try {
@@ -50,12 +68,19 @@ async function tryParseFile(file: string): Promise<AgentFile | null> {
 export async function readAgentFile(agentName: string): Promise<AgentFile | null> {
   const file = agentDefinitionFile(agentName);
   const bak = `${file}.bak`;
+
+  // For plugin-backed agents the file is a symlink; derive pluginPath from the
+  // target rather than relying on a stored value (avoids machine-specific paths
+  // being committed to the plugin repo).
+  const pluginPath = await pluginPathFromSymlink(file);
+
   const primary = await tryParseFile(file);
-  if (primary !== null) return primary;
+  if (primary !== null) return pluginPath ? { ...primary, pluginPath } : primary;
+
   const backup = await tryParseFile(bak);
   if (backup !== null) {
     await copyFile(bak, file);
-    return backup;
+    return pluginPath ? { ...backup, pluginPath } : backup;
   }
   // Fall back to tmp/ for session agents created by Dove at runtime
   const tmpFile = tmpAgentDefinitionFile(agentName);
@@ -142,7 +167,9 @@ async function resolveAgentFilePath(agentName: string): Promise<string> {
 export async function writeAgentFile(agentName: string, file: AgentFile): Promise<void> {
   const dest = await resolveAgentFilePath(agentName);
   await mkdir(dirname(dest), { recursive: true });
-  const data = JSON.stringify(file, null, 2) + "\n";
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { pluginPath: _p, ...rest } = file;
+  const data = JSON.stringify(rest, null, 2) + "\n";
   await writeFile(dest, data, "utf-8");
   await copyFile(dest, `${dest}.bak`);
 }

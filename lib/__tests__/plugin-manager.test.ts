@@ -204,14 +204,18 @@ describe("addPlugin — local path", () => {
     expect(record.installedAt).toBeTruthy();
   });
 
-  it("writes agent.json to settings.agents for each agent", async () => {
+  it("symlinks agent.json in settings.agents to the plugin source", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
     await addPlugin(pluginDir);
 
     const agentFile = join(AGENT_SETTINGS_DIR, "my-agent", "agent.json");
-    expect(existsSync(agentFile)).toBe(true);
-    const content = JSON.parse(readFileSync(agentFile, "utf-8")) as { pluginPath: string };
-    expect(content.pluginPath).toBe(pluginDir);
+    // The settings entry must be a symlink pointing at the plugin source —
+    // pluginPath is never stored in the JSON (derived from the symlink at read time).
+    const { lstatSync, readlinkSync } = require("node:fs") as typeof import("node:fs");
+    expect(lstatSync(agentFile).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(agentFile)).toBe(join(pluginDir, "agents", "my-agent", "agent.json"));
+    const content = JSON.parse(readFileSync(agentFile, "utf-8")) as Record<string, unknown>;
+    expect(content.pluginPath).toBeUndefined();
   });
 
   it("writes the plugin to plugins.json registry", async () => {
