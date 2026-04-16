@@ -35,6 +35,28 @@ vi.mock("node:util", () => ({
   }),
 }));
 
+describe("deployAgentSdk", () => {
+  let deployAgentSdk: () => Promise<void>;
+  let symlinkMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    deployAgentSdk = mod.deployAgentSdk;
+    const fs = await import("node:fs/promises");
+    symlinkMock = vi.mocked(fs.symlink);
+  });
+
+  it("symlinks @openai/codex-sdk but not @ladybugdb/core", async () => {
+    await deployAgentSdk();
+
+    const targets = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(targets.some((t) => t.includes("codex-sdk"))).toBe(true);
+    expect(targets.some((t) => t.includes("ladybugdb"))).toBe(false);
+  });
+});
+
 describe("deployTriggerScript", () => {
   let deployTriggerScript: () => Promise<void>;
 
