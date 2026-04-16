@@ -15,17 +15,7 @@ import {
   type ResolvedLink,
 } from "./agent-links-schemas";
 
-export type {
-  AgentLink,
-  AgentLinksFile,
-  AgentLinkStrategy,
-  ResolvedLink,
-} from "./agent-links-schemas";
-export {
-  AGENT_LINK_STRATEGIES,
-  agentLinkSchema,
-  agentLinksFileSchema,
-} from "./agent-links-schemas";
+export { AGENT_LINK_STRATEGIES } from "./agent-links-schemas";
 
 // ─── Read / Write ─────────────────────────────────────────────────────────────
 

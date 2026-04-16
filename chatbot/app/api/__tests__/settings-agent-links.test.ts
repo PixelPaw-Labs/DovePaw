@@ -24,7 +24,10 @@ import type { AgentLinksFile } from "@@/lib/agent-links-schemas";
 
 const SAMPLE_FILE: AgentLinksFile = {
   version: 1,
-  groups: ["Review Chain", "Data Pipeline"],
+  groups: [
+    { name: "Review Chain", members: [] },
+    { name: "Data Pipeline", members: [] },
+  ],
   links: [
     {
       source: "agent-a",
@@ -157,7 +160,7 @@ describe("POST /api/settings/agent-links/groups", () => {
     expect(res.status).toBe(201);
 
     const written = vi.mocked(writeAgentLinksFile).mock.calls[0]?.[0];
-    expect(written?.groups).toContain("Escalation");
+    expect(written?.groups.some((g) => g.name === "Escalation")).toBe(true);
   });
 
   it("rejects a duplicate group name", async () => {
@@ -184,8 +187,8 @@ describe("PATCH /api/settings/agent-links/groups", () => {
     expect(res.status).toBe(200);
 
     const written = vi.mocked(writeAgentLinksFile).mock.calls[0]?.[0];
-    expect(written?.groups).toContain("Approval Flow");
-    expect(written?.groups).not.toContain("Review Chain");
+    expect(written?.groups.some((g) => g.name === "Approval Flow")).toBe(true);
+    expect(written?.groups.some((g) => g.name === "Review Chain")).toBe(false);
     // Link that was in "Review Chain" should now be in "Approval Flow"
     const movedLink = written?.links.find((l) => l.source === "agent-a");
     expect(movedLink?.group).toBe("Approval Flow");
@@ -225,7 +228,7 @@ describe("DELETE /api/settings/agent-links/groups", () => {
     expect(res.status).toBe(200);
 
     const written = vi.mocked(writeAgentLinksFile).mock.calls[0]?.[0];
-    expect(written?.groups).not.toContain("Review Chain");
+    expect(written?.groups.some((g) => g.name === "Review Chain")).toBe(false);
     // Link that was in "Review Chain" should now be ungrouped
     const ungroupedLink = written?.links.find((l) => l.source === "agent-a");
     expect(ungroupedLink?.group).toBeUndefined();

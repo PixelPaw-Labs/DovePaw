@@ -11,13 +11,14 @@ import {
   Pencil,
   Plus,
   Trash2,
+  Users2,
   WifiOff,
   X,
 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { z } from "zod";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
-import type { AgentLink, AgentLinkStrategy } from "@@/lib/agent-links-schemas";
+import type { AgentGroup, AgentLink, AgentLinkStrategy } from "@@/lib/agent-links-schemas";
 import { AGENT_LINK_STRATEGIES } from "@@/lib/agent-links-schemas";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { buildAgentDef } from "@@/lib/agents";
@@ -932,7 +933,7 @@ interface AgentLinksContentProps {
   agentConfigs: AgentConfigEntry[];
   tmpAgentConfigs?: AgentConfigEntry[];
   initialLinks: AgentLink[];
-  initialGroups: string[];
+  initialGroups: AgentGroup[];
 }
 
 export function AgentLinksContent({
@@ -944,13 +945,15 @@ export function AgentLinksContent({
   const [links, setLinks] = React.useState(initialLinks);
   const [groups, setGroups] = React.useState(initialGroups);
   const [showCreateForm, setShowCreateForm] = React.useState(false);
+  const [activeTab, setActiveTab] = React.useState<"links" | "members">("links");
   const statuses = useAgentHeartbeat();
 
   const allConfigs = [...agentConfigs, ...tmpAgentConfigs];
+  const groupNames = React.useMemo(() => groups.map((g) => g.name), [groups]);
 
   function getLinksForGroup(groupName: string | null): AgentLink[] {
     if (groupName === null) {
-      return links.filter((l) => !l.group || !groups.includes(l.group));
+      return links.filter((l) => !l.group || !groupNames.includes(l.group));
     }
     return links.filter((l) => l.group === groupName);
   }
@@ -973,18 +976,22 @@ export function AgentLinksContent({
   }
 
   function handleGroupCreated(name: string) {
-    setGroups((prev) => [...prev, name]);
+    setGroups((prev) => [...prev, { name, members: [] }]);
     setShowCreateForm(false);
   }
 
   function handleGroupRenamed(name: string, newName: string) {
-    setGroups((prev) => prev.map((g) => (g === name ? newName : g)));
+    setGroups((prev) => prev.map((g) => (g.name === name ? { ...g, name: newName } : g)));
     setLinks((prev) => prev.map((l) => (l.group === name ? { ...l, group: newName } : l)));
   }
 
   function handleGroupDeleted(name: string) {
-    setGroups((prev) => prev.filter((g) => g !== name));
+    setGroups((prev) => prev.filter((g) => g.name !== name));
     setLinks((prev) => prev.map((l) => (l.group === name ? { ...l, group: undefined } : l)));
+  }
+
+  function handleMembersChanged(name: string, members: string[]) {
+    setGroups((prev) => prev.map((g) => (g.name === name ? { ...g, members } : g)));
   }
 
   const ungroupedLinks = getLinksForGroup(null);
@@ -999,13 +1006,14 @@ export function AgentLinksContent({
             <h2 className="text-lg font-bold text-foreground">Agent Communication</h2>
           </div>
           <p className="text-sm text-muted-foreground max-w-xl">
-            Configure which agents can message each other. A linked agent gains a{" "}
-            <code className="text-xs bg-muted px-1 py-0.5 rounded">chat_to_*</code> MCP tool at
-            runtime. Organise links into groups — each link belongs to one group only.
+            Links control who can message whom via{" "}
+            <code className="text-xs bg-muted px-1 py-0.5 rounded">chat_to_*</code> MCP tools. Group
+            membership controls who appears together in a group chat — membership is independent of
+            links.
           </p>
         </div>
 
-        {!showCreateForm && (
+        {activeTab === "links" && !showCreateForm && (
           <button
             onClick={() => setShowCreateForm(true)}
             className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors shrink-0"
@@ -1016,56 +1024,264 @@ export function AgentLinksContent({
         )}
       </div>
 
-      {showCreateForm && (
-        <CreateGroupForm
-          existingGroups={groups}
-          onCreated={handleGroupCreated}
-          onCancel={() => setShowCreateForm(false)}
-        />
-      )}
+      <div className="flex gap-0 border-b border-border/40">
+        {(["links", "members"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={cn(
+              "px-4 py-2 text-sm font-medium capitalize transition-colors border-b-2 -mb-px",
+              activeTab === tab
+                ? "text-foreground border-primary"
+                : "text-muted-foreground border-transparent hover:text-foreground",
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
 
-      {allConfigs.length < 2 ? (
-        <div className="flex flex-col items-center gap-3 py-16 text-center">
-          <Network className="w-10 h-10 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">
-            Install at least two agents via Plugins to create links.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          {groups.map((groupName) => (
-            <GroupSection
-              key={groupName}
-              groupName={groupName}
-              links={getLinksForGroup(groupName)}
-              allLinks={links}
-              allGroups={groups}
-              agentConfigs={allConfigs}
-              statuses={statuses}
-              onAdded={handleAdded}
-              onUpdated={handleUpdated}
-              onDeleted={handleDeleted}
-              onGroupRenamed={handleGroupRenamed}
-              onGroupDeleted={handleGroupDeleted}
-            />
-          ))}
-
-          {showUngrouped && (
-            <GroupSection
-              key="__ungrouped__"
-              groupName={null}
-              links={ungroupedLinks}
-              allLinks={links}
-              allGroups={groups}
-              agentConfigs={allConfigs}
-              statuses={statuses}
-              onAdded={handleAdded}
-              onUpdated={handleUpdated}
-              onDeleted={handleDeleted}
-              onGroupRenamed={handleGroupRenamed}
-              onGroupDeleted={handleGroupDeleted}
+      {activeTab === "links" ? (
+        <>
+          {showCreateForm && (
+            <CreateGroupForm
+              existingGroups={groupNames}
+              onCreated={handleGroupCreated}
+              onCancel={() => setShowCreateForm(false)}
             />
           )}
+
+          {allConfigs.length < 2 ? (
+            <div className="flex flex-col items-center gap-3 py-16 text-center">
+              <Network className="w-10 h-10 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">
+                Install at least two agents via Plugins to create links.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {groups.map((group) => (
+                <GroupSection
+                  key={group.name}
+                  groupName={group.name}
+                  links={getLinksForGroup(group.name)}
+                  allLinks={links}
+                  allGroups={groupNames}
+                  agentConfigs={allConfigs}
+                  statuses={statuses}
+                  onAdded={handleAdded}
+                  onUpdated={handleUpdated}
+                  onDeleted={handleDeleted}
+                  onGroupRenamed={handleGroupRenamed}
+                  onGroupDeleted={handleGroupDeleted}
+                />
+              ))}
+
+              {showUngrouped && (
+                <GroupSection
+                  key="__ungrouped__"
+                  groupName={null}
+                  links={ungroupedLinks}
+                  allLinks={links}
+                  allGroups={groupNames}
+                  agentConfigs={allConfigs}
+                  statuses={statuses}
+                  onAdded={handleAdded}
+                  onUpdated={handleUpdated}
+                  onDeleted={handleDeleted}
+                  onGroupRenamed={handleGroupRenamed}
+                  onGroupDeleted={handleGroupDeleted}
+                />
+              )}
+            </div>
+          )}
+        </>
+      ) : (
+        <MembersTab
+          groups={groups}
+          agentConfigs={allConfigs}
+          onMembersChanged={handleMembersChanged}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Members Tab ──────────────────────────────────────────────────────────────
+
+interface MembersTabProps {
+  groups: AgentGroup[];
+  agentConfigs: AgentConfigEntry[];
+  onMembersChanged: (name: string, members: string[]) => void;
+}
+
+function MembersTab({ groups, agentConfigs, onMembersChanged }: MembersTabProps) {
+  if (groups.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-16 text-center">
+        <Users2 className="w-10 h-10 text-muted-foreground/30" />
+        <p className="text-sm text-muted-foreground">No groups yet. Create one on the Links tab.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {groups.map((group) => (
+        <GroupMembersRow
+          key={group.name}
+          group={group}
+          agentConfigs={agentConfigs}
+          onSaved={(members) => onMembersChanged(group.name, members)}
+        />
+      ))}
+    </div>
+  );
+}
+
+interface GroupMembersRowProps {
+  group: AgentGroup;
+  agentConfigs: AgentConfigEntry[];
+  onSaved: (members: string[]) => void;
+}
+
+function GroupMembersRow({ group, agentConfigs, onSaved }: GroupMembersRowProps) {
+  const [editing, setEditing] = React.useState(false);
+  const [selected, setSelected] = React.useState(new Set(group.members));
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  React.useEffect(() => () => abortRef.current?.abort(), []);
+
+  function openEdit() {
+    setSelected(new Set(group.members));
+    setError(null);
+    setEditing(true);
+  }
+
+  function toggle(name: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(name);
+      else next.delete(name);
+      return next;
+    });
+  }
+
+  async function handleSave() {
+    setBusy(true);
+    setError(null);
+    abortRef.current = new AbortController();
+    const members = [...selected];
+    try {
+      const res = await fetch("/api/settings/agent-links/groups/members", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: group.name, members }),
+        signal: abortRef.current.signal,
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        setError(errorResponseSchema.parse(data).error ?? "Failed to save");
+        return;
+      }
+      onSaved(members);
+      setEditing(false);
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return;
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const memberConfigs = group.members
+    .map((name) => agentConfigs.find((a) => a.name === name))
+    .filter((a): a is AgentConfigEntry => Boolean(a));
+
+  return (
+    <div className="border border-border rounded-xl p-5 bg-background">
+      <div className="flex items-center gap-3 mb-3">
+        <h3 className="text-sm font-semibold text-foreground">{group.name}</h3>
+        <span className="text-xs text-muted-foreground">
+          {group.members.length} member{group.members.length === 1 ? "" : "s"}
+        </span>
+        <button
+          onClick={() => (editing ? setEditing(false) : openEdit())}
+          className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {editing ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+          {editing ? "Cancel" : "Edit members"}
+        </button>
+      </div>
+
+      {editing ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1 max-h-64 overflow-y-auto border border-border/40 rounded-lg p-2">
+            {agentConfigs.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-2">No agents available.</p>
+            ) : (
+              agentConfigs.map((config) => {
+                const { icon: Icon, iconBg, iconColor, displayName } = buildAgentDef(config);
+                const checked = selected.has(config.name);
+                return (
+                  <label
+                    key={config.name}
+                    className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-muted cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => toggle(config.name, e.target.checked)}
+                      disabled={busy}
+                      className="cursor-pointer"
+                    />
+                    <div className={cn("w-5 h-5 rounded flex items-center justify-center", iconBg)}>
+                      <Icon className={cn("w-3 h-3", iconColor)} />
+                    </div>
+                    <span className="text-sm text-foreground/90">{displayName}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
+          {error && <p className="text-xs text-destructive">{error}</p>}
+          <div className="flex gap-2">
+            <button
+              onClick={() => void handleSave()}
+              disabled={busy}
+              className="text-sm px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {busy ? "Saving…" : "Save"}
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              disabled={busy}
+              className="text-sm px-4 py-2 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : memberConfigs.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No members yet.</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {memberConfigs.map((config) => {
+            const { icon: Icon, iconBg, iconColor, displayName } = buildAgentDef(config);
+            return (
+              <div
+                key={config.name}
+                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-muted"
+              >
+                <div className={cn("w-4 h-4 rounded flex items-center justify-center", iconBg)}>
+                  <Icon className={cn("w-2.5 h-2.5", iconColor)} />
+                </div>
+                <span>{displayName}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

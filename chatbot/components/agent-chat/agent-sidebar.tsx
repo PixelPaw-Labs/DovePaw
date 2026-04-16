@@ -12,10 +12,12 @@ import {
   Settings,
   Sparkles,
   Trash2,
+  Users2,
 } from "lucide-react";
 import { LUCIDE_ICON_REGISTRY } from "@@/lib/icon-registry";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import type { AgentGroup as AgentLinkGroup } from "@@/lib/agent-links-schemas";
 import { groupAgentsByPlugin, type AgentGroup } from "@@/lib/agent-groups";
 import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { cn } from "@/lib/utils";
@@ -32,6 +34,7 @@ interface AgentSidebarProps {
   agentConfigs: AgentConfigEntry[];
   tmpAgentConfigs?: AgentConfigEntry[];
   plugins?: readonly Pick<PluginRecord, "path" | "name">[];
+  groups?: AgentLinkGroup[];
   activeAgentId?: string;
   initialDoveSettings?: DoveSettings;
   onSelectAgent?: (agentId: string) => void;
@@ -42,6 +45,7 @@ export function AgentSidebar({
   agentConfigs,
   tmpAgentConfigs = [],
   plugins = [],
+  groups = [],
   activeAgentId = "dove",
   initialDoveSettings,
   onSelectAgent,
@@ -86,9 +90,9 @@ export function AgentSidebar({
     };
   }, []);
 
-  const groups = groupAgentsByPlugin(agentConfigs, tmpAgentConfigs, plugins);
-  // Show group headers whenever any group has a named plugin — even if there's only one plugin
-  const showHeaders = groups.some((g) => g.pluginName !== "");
+  const pluginGroups = groupAgentsByPlugin(agentConfigs, tmpAgentConfigs, plugins);
+  const showHeaders = pluginGroups.some((g) => g.pluginName !== "");
+  const chatGroups = groups.filter((g) => g.members.length >= 2);
 
   async function handleDeleteTmpAgent(agentName: string) {
     await fetch("/api/settings/agents", {
@@ -124,7 +128,7 @@ export function AgentSidebar({
         <button
           onClick={() => onSelectAgent?.("dove")}
           className={cn(
-            "relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+            "relative overflow-hidden shrink-0 my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
             isDoveSelected
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -161,8 +165,53 @@ export function AgentSidebar({
           <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", "bg-green-500 animate-pulse")} />
         </button>
 
+        {/* Named group chats (from agent-links.json) */}
+        {chatGroups.length > 0 && (
+          <div className="flex flex-col gap-0 mt-3 shrink-0">
+            <div className="flex items-center gap-2 px-4 py-2 w-full text-left border-t border-border/40 bg-muted/40 shrink-0">
+              <Users2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+              <span className="flex-1 text-[11px] uppercase tracking-widest font-bold text-muted-foreground truncate">
+                Group Chats
+              </span>
+            </div>
+            {chatGroups.map((group) => {
+              const selectionId = `group:${group.name}`;
+              const isActive = !isSettings && activeAgentId === selectionId;
+              return (
+                <button
+                  key={group.name}
+                  onClick={() => onSelectAgent?.(selectionId)}
+                  className={cn(
+                    "shrink-0 my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+                    isActive
+                      ? "bg-primary/10 text-primary border-l-4 border-primary"
+                      : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+                  )}
+                >
+                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-primary/10">
+                    <Users2 className="w-3 h-3 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+                    <span
+                      className={cn(
+                        "text-sm font-medium truncate",
+                        !isActive && "text-foreground/80",
+                      )}
+                    >
+                      {group.name}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
+                      {group.members.length} agents
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Plugin groups */}
-        {groups.map((group) => (
+        {pluginGroups.map((group) => (
           <PluginGroup
             key={group.pluginName || "__ungrouped__"}
             group={group}

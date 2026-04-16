@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import type { AgentGroup } from "@@/lib/agent-links-schemas";
 import type { PluginRecord } from "@@/lib/plugin-schemas";
 import type { DoveSettings } from "@@/lib/settings-schemas";
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
@@ -13,6 +14,7 @@ interface ChatAppProps {
   tmpAgentConfigs?: AgentConfigEntry[];
   plugins?: readonly Pick<PluginRecord, "path" | "name">[];
   initialDoveSettings?: DoveSettings;
+  initialGroups?: AgentGroup[];
 }
 
 export function ChatApp({
@@ -20,6 +22,7 @@ export function ChatApp({
   tmpAgentConfigs = [],
   plugins = [],
   initialDoveSettings,
+  initialGroups = [],
 }: ChatAppProps) {
   const [activeAgentId, setActiveAgentId] = React.useState("dove");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -48,6 +51,7 @@ export function ChatApp({
           tmpAgentConfigs={tmpAgentConfigs}
           plugins={plugins}
           initialDoveSettings={initialDoveSettings}
+          groups={initialGroups}
           onSelectAgent={handleSelectAgent}
           activeAgentId={activeAgentId}
           onClearAllHistory={handleClearAllHistory}
@@ -56,6 +60,7 @@ export function ChatApp({
           key={activeAgentId}
           agentId={activeAgentId}
           agentConfigs={[...agentConfigs, ...tmpAgentConfigs]}
+          groups={initialGroups}
           onIsLoadingChange={(loading) => {
             setIsLoading(loading);
             if (activeAgentId === "dove") setDoveIsRunning(loading);

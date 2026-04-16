@@ -2,14 +2,17 @@
 
 import * as React from "react";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import type { AgentGroup } from "@@/lib/agent-links-schemas";
 import type { AgentId } from "@/lib/agent-api-urls";
 import { useChatSession } from "@/components/hooks/use-chat-session";
 import { useAgentSessions } from "@/components/hooks/use-agent-sessions";
 import { ChatPane } from "@/components/agent-chat/chat-pane";
+import { GroupChatView } from "@/components/agent-chat/group-chat-view";
 
 interface AgentChatProps {
-  agentId: AgentId;
+  agentId: string;
   agentConfigs: AgentConfigEntry[];
+  groups?: AgentGroup[];
   onIsLoadingChange: (loading: boolean) => void;
   onNewSession: (fn: () => void) => void;
 }
@@ -17,9 +20,43 @@ interface AgentChatProps {
 export function AgentChat({
   agentId,
   agentConfigs,
+  groups = [],
   onIsLoadingChange,
   onNewSession,
 }: AgentChatProps) {
+  if (agentId.startsWith("group:")) {
+    const groupName = agentId.slice("group:".length);
+    const memberAgentIds = groups.find((g) => g.name === groupName)?.members ?? [];
+    return (
+      <GroupChatView
+        groupName={groupName}
+        memberAgentIds={memberAgentIds}
+        agentConfigs={agentConfigs}
+      />
+    );
+  }
+
+  return (
+    <AgentChatSession
+      agentId={agentId as AgentId}
+      agentConfigs={agentConfigs}
+      onIsLoadingChange={onIsLoadingChange}
+      onNewSession={onNewSession}
+    />
+  );
+}
+
+function AgentChatSession({
+  agentId,
+  agentConfigs,
+  onIsLoadingChange,
+  onNewSession,
+}: {
+  agentId: AgentId;
+  agentConfigs: AgentConfigEntry[];
+  onIsLoadingChange: (loading: boolean) => void;
+  onNewSession: (fn: () => void) => void;
+}) {
   const session = useChatSession(agentId);
   const { sessions, refresh } = useAgentSessions(agentId);
 

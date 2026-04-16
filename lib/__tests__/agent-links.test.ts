@@ -61,13 +61,31 @@ describe("agentLinksFileSchema", () => {
     expect(result.groups).toEqual([]);
   });
 
-  it("preserves groups when provided", () => {
+  it("parses groups as {name, members} objects", () => {
+    const result = agentLinksFileSchema.parse({
+      version: 1,
+      groups: [
+        { name: "Review Chain", members: ["a", "b"] },
+        { name: "Data Pipeline", members: [] },
+      ],
+      links: [],
+    });
+    expect(result.groups).toEqual([
+      { name: "Review Chain", members: ["a", "b"] },
+      { name: "Data Pipeline", members: [] },
+    ]);
+  });
+
+  it("migrates legacy string-form groups to {name, members:[]} objects", () => {
     const result = agentLinksFileSchema.parse({
       version: 1,
       groups: ["Review Chain", "Data Pipeline"],
       links: [],
     });
-    expect(result.groups).toEqual(["Review Chain", "Data Pipeline"]);
+    expect(result.groups).toEqual([
+      { name: "Review Chain", members: [] },
+      { name: "Data Pipeline", members: [] },
+    ]);
   });
 
   it("parses old files without groups field (backward compat)", () => {
