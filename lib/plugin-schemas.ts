@@ -26,6 +26,8 @@ export const pluginRecordSchema = z.object({
   gitUrl: z.string().optional(),
   /** ISO 8601 timestamp of when the plugin was first installed */
   installedAt: z.string(),
+  /** Semantic version from dovepaw-plugin.json, updated on every sync/update */
+  version: z.string().optional(),
   /** Names of agents this plugin provides (kept in sync via sync/update) */
   agentNames: z.array(z.string()),
   /** Names of skills this plugin provides (kept in sync via sync/update) */

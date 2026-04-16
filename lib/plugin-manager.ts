@@ -180,6 +180,7 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     path: pluginDir,
     gitUrl,
     installedAt: existing?.installedAt ?? now,
+    version: manifest.version,
     agentNames: manifest.agents,
     skillNames: manifest.skills,
   });
@@ -256,6 +257,7 @@ export async function syncPlugin(pluginName: string): Promise<PluginRecord> {
 
   const updated: PluginRecord = {
     ...plugin,
+    version: manifest.version,
     agentNames: manifest.agents,
     skillNames: manifest.skills,
   };

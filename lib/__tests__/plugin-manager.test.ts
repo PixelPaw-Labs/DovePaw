@@ -239,6 +239,12 @@ describe("addPlugin — local path", () => {
     expect(existsSync(join(AGENT_SETTINGS_DIR, "agent-b", "agent.json"))).toBe(true);
   });
 
+  it("stores the manifest version in the registry on install", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    const record = await addPlugin(pluginDir);
+    expect(record.version).toBe("1.0.0");
+  });
+
   it("preserves installedAt when re-adding an existing plugin", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
     const first = await addPlugin(pluginDir);
@@ -368,6 +374,25 @@ describe("syncPlugin", () => {
     await syncPlugin("test-plugin");
     expect(existsSync(join(AGENT_SETTINGS_DIR, "agent-b"))).toBe(false);
     expect(existsSync(join(AGENT_SETTINGS_DIR, "agent-a", "agent.json"))).toBe(true);
+  });
+
+  it("updates the plugin version in the registry from the manifest on sync", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    await addPlugin(pluginDir);
+
+    // Bump version in the manifest (simulates what git pull would deliver)
+    writeFileSync(
+      join(pluginDir, "dovepaw-plugin.json"),
+      JSON.stringify({ name: "test-plugin", version: "2.0.0", agents: ["my-agent"], skills: [] }),
+    );
+
+    const updated = await syncPlugin("test-plugin");
+    expect(updated.version).toBe("2.0.0");
+
+    const registry = JSON.parse(readFileSync(PLUGINS_REGISTRY_FILE, "utf-8")) as {
+      plugins: { name: string; version?: string }[];
+    };
+    expect(registry.plugins[0]!.version).toBe("2.0.0");
   });
 
   it("throws when plugin is not installed", async () => {
