@@ -47,6 +47,22 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("PluginCard — date rendering", () => {
+  it("renders installed date in en-US format to prevent SSR hydration mismatch", () => {
+    const installedAt = "2026-06-15T12:00:00.000Z";
+    const plugin = { ...PLUGIN, installedAt };
+    render(<PluginManagementContent initialPlugins={[plugin]} />);
+    // Compute expected string the same way the component does, so the test
+    // is independent of the local timezone while still verifying a fixed locale is used.
+    const expectedDate = new Date(installedAt).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+    expect(screen.getByText(`Installed ${expectedDate}`)).toBeTruthy();
+  });
+});
+
 describe("PluginManagementContent — server restart wiring", () => {
   it("calls /api/servers/restart after Update action", async () => {
     const fetchMock = mockFetch({

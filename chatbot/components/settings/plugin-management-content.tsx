@@ -124,7 +124,7 @@ function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProp
   const [confirming, setConfirming] = React.useState(false);
   const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const installedDate = new Date(plugin.installedAt).toLocaleDateString(undefined, {
+  const installedDate = new Date(plugin.installedAt).toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",

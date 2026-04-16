@@ -146,6 +146,7 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     }
   }
 
+  await execAsync(`npm install --prefix ${pluginDir}`);
   await linkAgentSdkToPlugin(pluginDir);
   await linkPluginSkills(pluginDir, manifest.skills);
 
@@ -255,6 +256,7 @@ export async function updatePlugin(pluginName: string): Promise<PluginRecord> {
   if (!plugin.gitUrl) throw new Error(`Plugin "${pluginName}" was not installed from a git URL`);
 
   await execAsync(`git -C ${plugin.path} pull --ff-only`);
+  await execAsync(`npm install --prefix ${plugin.path}`);
   await linkAgentSdkToPlugin(plugin.path);
   return syncPlugin(pluginName);
 }

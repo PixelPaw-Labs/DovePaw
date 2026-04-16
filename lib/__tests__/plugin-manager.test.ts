@@ -13,6 +13,7 @@ const {
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
   SKILLS_ROOT,
+  execAsyncSpy,
 } = vi.hoisted(() => {
   const os = require("node:os") as typeof import("node:os");
   const path = require("node:path") as typeof import("node:path");
@@ -26,6 +27,7 @@ const {
     AGENT_SDK_DIR: path.join(tmp, "dovepaw", "sdk"),
     AGENT_SDK_SRC: path.join(tmp, "dovepaw-repo", "packages", "agent-sdk"),
     SKILLS_ROOT: path.join(tmp, "claude", "skills"),
+    execAsyncSpy: vi.fn().mockResolvedValue({ stdout: "", stderr: "" }),
   };
 });
 
@@ -78,10 +80,10 @@ vi.mock("../installer.js", () => ({
 
 vi.mock("node:child_process", () => ({ exec: vi.fn() }));
 vi.mock("node:util", () => ({
-  promisify: () => () => Promise.resolve({ stdout: "", stderr: "" }),
+  promisify: () => execAsyncSpy,
 }));
 
-const { addPlugin, removePlugin, listPlugins, syncPlugin, isGitHubSlug, repoName } =
+const { addPlugin, removePlugin, listPlugins, syncPlugin, updatePlugin, isGitHubSlug, repoName } =
   await import("../plugin-manager.js");
 const { linkPluginSkills, unlinkPluginSkills } = await import("../installer.js");
 
@@ -410,6 +412,15 @@ describe("syncPlugin", () => {
     expect(unlinkPluginSkills).toHaveBeenCalledWith(["git-commit"]);
   });
 
+  it("runs npm install in the plugin dir", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    execAsyncSpy.mockClear();
+    await addPlugin(pluginDir);
+
+    const cmds = execAsyncSpy.mock.calls.map((args) => String(args[0]));
+    expect(cmds.some((c) => c.includes("npm install") && c.includes(pluginDir))).toBe(true);
+  });
+
   it("preserves existing envVars on sync — does not overwrite with plugin source defaults", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"], {
       "my-agent": { envVars: [{ key: "PROJECTS", value: "seed-value" }] },
@@ -431,5 +442,55 @@ describe("syncPlugin", () => {
       envVars: { key: string; value: string }[];
     };
     expect(updated.envVars.find((v) => v.key === "PROJECTS")?.value).toBe("user-configured-value");
+  });
+});
+
+// ─── updatePlugin ─────────────────────────────────────────────────────────────
+
+describe("updatePlugin", () => {
+  function writeRegistry(pluginDir: string, extra: object = {}) {
+    writeFileSync(
+      PLUGINS_REGISTRY_FILE,
+      JSON.stringify({
+        version: 1,
+        plugins: [
+          {
+            name: "test-plugin",
+            path: pluginDir,
+            gitUrl: "https://github.com/user/test-plugin",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            agentNames: ["my-agent"],
+            skillNames: [],
+            ...extra,
+          },
+        ],
+      }),
+    );
+  }
+
+  it("runs npm install after git pull", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    writeRegistry(pluginDir);
+    execAsyncSpy.mockClear();
+
+    await updatePlugin("test-plugin");
+
+    const cmds = execAsyncSpy.mock.calls.map((args) => String(args[0]));
+    expect(cmds.some((c) => c.includes("git") && c.includes("pull"))).toBe(true);
+    expect(cmds.some((c) => c.includes("npm install") && c.includes(pluginDir))).toBe(true);
+    // npm install must come after git pull
+    const pullIdx = cmds.findIndex((c) => c.includes("pull"));
+    const npmIdx = cmds.findIndex((c) => c.includes("npm install"));
+    expect(npmIdx).toBeGreaterThan(pullIdx);
+  });
+
+  it("throws when plugin is not installed", async () => {
+    await expect(updatePlugin("no-such-plugin")).rejects.toThrow("not installed");
+  });
+
+  it("throws when plugin has no gitUrl", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
+    writeRegistry(pluginDir, { gitUrl: undefined });
+    await expect(updatePlugin("test-plugin")).rejects.toThrow("git URL");
   });
 });
