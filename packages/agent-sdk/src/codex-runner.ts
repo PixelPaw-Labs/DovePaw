@@ -10,7 +10,7 @@ export interface CodexRunOpts {
   taskName: string;
   /** OpenAI API key (defaults to OPENAI_API_KEY env var) */
   apiKey?: string;
-  /** Codex model to use (defaults to gpt-5.2) */
+  /** Codex model to use (defaults to gpt-5.4) */
   model?: string;
   /** Agent roster/developer instructions */
   agentRoster?: string;
@@ -18,6 +18,8 @@ export interface CodexRunOpts {
   timeoutMs?: number;
   /** Whether to skip git repo validation */
   skipGitRepoCheck?: boolean;
+  /** Additional directories to grant write access alongside the workspace */
+  additionalDirectories?: string[];
 }
 
 interface CodexResult {
@@ -72,6 +74,9 @@ export class CodexRunner {
       skipGitRepoCheck: opts.skipGitRepoCheck ?? true,
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
+      ...(opts.additionalDirectories?.length
+        ? { additionalDirectories: opts.additionalDirectories }
+        : {}),
     });
   }
 

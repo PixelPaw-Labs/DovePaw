@@ -44,6 +44,32 @@ describe("CodexRunner", () => {
     });
   });
 
+  describe("additionalDirectories option", () => {
+    it("is accepted in CodexRunOpts with directories", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          additionalDirectories: ["/some/path"],
+        })
+        .catch(() => {}); // fails at connect with no API key — expected
+    });
+
+    it("is accepted in CodexRunOpts with empty array", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          additionalDirectories: [],
+        })
+        .catch(() => {});
+    });
+  });
+
   describe("SIGTERM/SIGINT handler lifecycle", () => {
     it("registers handlers during run and removes them after", async () => {
       const runner = new CodexRunner(TMP_DIR);
