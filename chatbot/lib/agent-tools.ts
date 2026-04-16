@@ -119,6 +119,15 @@ export const START_SCRIPT_TOOL = "start_run_script";
 /** Polls a previously started script run; returns output or still_running. */
 export const AWAIT_SCRIPT_TOOL = "await_run_script";
 
+/** Tool name for sending a message to a linked agent (start_chat_to_* pattern). */
+export const startChatToToolName = (manifestKey: string): string => `start_chat_to_${manifestKey}`;
+/** Tool name for collecting the result of a start_chat_to_* call. */
+export const awaitChatToToolName = (manifestKey: string): string => `await_chat_to_${manifestKey}`;
+/** Tool name for submitting work to a reviewing agent (review_with_* pattern). */
+export const reviewWithToolName = (manifestKey: string): string => `review_with_${manifestKey}`;
+/** Tool name for escalating a blocker to a specialist agent (escalate_to_* pattern). */
+export const escalateToToolName = (manifestKey: string): string => `escalate_to_${manifestKey}`;
+
 // ─── Management tools factory ─────────────────────────────────────────────────
 
 /** Returns the 6 per-agent launchd management tools for use in an inner MCP server. */
@@ -376,10 +385,10 @@ export function makeStartChatToTool(
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
-    `start_chat_to_${manifestKey}`,
+    startChatToToolName(manifestKey),
     `Send a message to ${displayName} and wait for their response.
 
-${displayName} specialises in: ${description}
+${displayName} specialises in: "${description}"
 
 ${HANDOFF_PATTERNS(displayName)}`,
     {
@@ -397,7 +406,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         displayName,
         signal,
         registry,
-        `await_chat_to_${manifestKey}`,
+        awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
       ).start(instruction, { contextId, backgroundTasks });
@@ -420,17 +429,17 @@ export function makeAwaitChatToTool(
 ) {
   const { displayName, manifestKey } = targetDef;
   return tool(
-    `await_chat_to_${manifestKey}`,
+    awaitChatToToolName(manifestKey),
     `Collect the result of a previously started ${displayName} task.\n` +
-      `Call this after start_chat_to_${manifestKey} to retrieve the agent's output.`,
-    { taskId: z.string().describe("The taskId returned by start_chat_to_" + manifestKey) },
+      `Call this after ${startChatToToolName(manifestKey)} to retrieve the agent's output.`,
+    { taskId: z.string().describe("The taskId returned by " + startChatToToolName(manifestKey)) },
     async ({ taskId }) => {
       return await new TaskPoller(
         manifestKey,
         displayName,
         signal,
         registry,
-        `await_chat_to_${manifestKey}`,
+        awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
       ).poll(taskId);
@@ -442,15 +451,15 @@ export function makeAwaitChatToTool(
 
 /**
  * Sends content to a reviewing agent and waits for an approve/reject decision.
- * The reviewing agent must include APPROVED or REJECTED in its response.
+ * The reviewing agent must respond with {"decision":"APPROVED"|"REJECTED","reason":"..."} JSON.
  */
 export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
-    `review_with_${manifestKey}`,
+    reviewWithToolName(manifestKey),
     `Submit your output to ${displayName} for review before it goes upstream.\n\n` +
-      `${displayName} specialises in: ${description}\n\n` +
-      `The reviewer will respond with APPROVED or REJECTED and structured feedback.\n\n` +
+      `${displayName} specialises in: "${description}"\n\n` +
+      `The reviewer will respond with a JSON decision {"decision":"APPROVED"|"REJECTED","reason":"..."} and structured feedback.\n\n` +
       REVIEW_PATTERNS(displayName),
     {
       content: z.string().describe("The work product to submit for review — must be complete."),
@@ -462,8 +471,10 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
       const instruction = [
-        `You are reviewing the following work product. Respond with APPROVED or REJECTED on the first line, then your feedback.\n`,
-        `Work product:\n${content}`,
+        `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
+        `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
+        `\nWork product:\n`,
+        `${content}\n\n`,
         ...(context ? [`\nContext:\n${context}`] : []),
       ].join("\n");
       const handle = await startAgentStream(port, instruction, signal);
@@ -472,17 +483,32 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
           content: [{ type: "text" as const, text: `${displayName} did not start.` }],
         };
       const { result } = await collectStreamResult(handle.stream);
-      const approved = /\bAPPROVED\b/i.test(result.output);
-      const rejected = /\bREJECTED\b/i.test(result.output);
-      const decision = approved ? "APPROVED" : rejected ? "REJECTED" : "NO_DECISION";
+      const jsonMatch = result.output.match(/\{[^}]*"decision"\s*:[^}]*\}/);
+      let decision: "APPROVED" | "REJECTED" | "NO_DECISION" = "NO_DECISION";
+      let reason: string | undefined;
+      if (jsonMatch) {
+        try {
+          const reviewSchema = z.object({
+            decision: z.enum(["APPROVED", "REJECTED"]).optional(),
+            reason: z.string().optional(),
+          });
+          const parsed = reviewSchema.safeParse(JSON.parse(jsonMatch[0]));
+          if (parsed.success) {
+            if (parsed.data.decision) decision = parsed.data.decision;
+            reason = parsed.data.reason;
+          }
+        } catch {
+          // fall through to NO_DECISION
+        }
+      }
       return {
         content: [
           {
             type: "text" as const,
-            text: `Review decision: ${decision}\n${formatAgentStreamContext(result, handle.contextId, displayName)}`,
+            text: `Review decision: ${decision}${reason ? `\nReason: ${reason}` : ""}\n${formatAgentStreamContext(result, handle.contextId, displayName)}`,
           },
         ],
-        structuredContent: { ...result, contextId: handle.contextId, decision },
+        structuredContent: { ...result, contextId: handle.contextId, decision, reason },
       };
     },
   );
@@ -497,9 +523,9 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
 export function makeEscalateTool(targetDef: AgentDef, signal?: AbortSignal) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
-    `escalate_to_${manifestKey}`,
+    escalateToToolName(manifestKey),
     `Escalate a blocker to ${displayName} and receive guidance before continuing.\n\n` +
-      `${displayName} specialises in: ${description}\n\n` +
+      `${displayName} specialises in: "${description}"\n\n` +
       ESCALATE_PATTERNS(displayName),
     {
       blocker: z.string().describe("The specific decision or problem you cannot resolve alone."),

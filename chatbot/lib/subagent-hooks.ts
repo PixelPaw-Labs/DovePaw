@@ -18,6 +18,10 @@ import {
   CONFIDENCE_THRESHOLD,
   impactPlaceholder,
   thresholdClause,
+  startChatToToolName,
+  awaitChatToToolName,
+  reviewWithToolName,
+  escalateToToolName,
 } from "@/lib/agent-tools";
 import { buildAgentHooks } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
@@ -28,7 +32,7 @@ import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 const SUB_AGENT_PROMPT_REMINDER = `<reminder>
 When the intent is to RUN this agent: call \`${START_SCRIPT_TOOL}\` first (returns runId immediately), then \`${AWAIT_SCRIPT_TOOL}\` as a background Task. Retry with the same runId if still_running.
-When the intent is to HANDOFF to a linked agent: use chat_to_*, start_chat_to_*/await_chat_to_*, review_with_*, or escalate_to_* — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
+When the intent is to HANDOFF to a linked agent: use \`${startChatToToolName("*")}\`/\`${awaitChatToToolName("*")}\`, \`${reviewWithToolName("*")}\`, or \`${escalateToToolName("*")}\` — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
 </reminder>`;
 
 // ─── Agent link self-reflection gate ─────────────────────────────────────────
@@ -141,17 +145,17 @@ function makeReflectionMatcher(matcher: string, reflectionPrompt: string): HookC
 }
 
 const chatToReflectionMatcher = makeReflectionMatcher(
-  "mcp__agents__start_chat_to_.*",
+  `mcp__agents__${startChatToToolName(".*")}`,
   buildReflectionPrompt(HANDOFF_PATTERNS()),
 );
 
 const reviewReflectionMatcher = makeReflectionMatcher(
-  "mcp__agents__review_with_.*",
+  `mcp__agents__${reviewWithToolName(".*")}`,
   buildReflectionPrompt(REVIEW_PATTERNS()),
 );
 
 const escalateReflectionMatcher = makeReflectionMatcher(
-  "mcp__agents__escalate_to_.*",
+  `mcp__agents__${escalateToToolName(".*")}`,
   buildReflectionPrompt(ESCALATE_PATTERNS()),
 );
 

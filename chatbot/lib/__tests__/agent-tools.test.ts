@@ -46,10 +46,20 @@ import {
   buildSubAgentPrompt,
   makeStartScriptTool,
   makeStartChatToTool,
+  makeReviewTool,
   START_SCRIPT_TOOL,
+  startChatToToolName,
+  awaitChatToToolName,
+  reviewWithToolName,
+  escalateToToolName,
 } from "@/lib/agent-tools";
 import type { CollectedStream } from "@/lib/a2a-client";
-import { resolveAgentPort, startAgentStream, collectStreamResult } from "@/lib/a2a-client";
+import {
+  resolveAgentPort,
+  startAgentStream,
+  collectStreamResult,
+  formatAgentStreamContext,
+} from "@/lib/a2a-client";
 import type { AgentDef } from "@@/lib/agents";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
@@ -347,5 +357,130 @@ describe("makeStartChatToTool", () => {
     const handler = captureStartChatToHandler();
     await handler({ instruction: "resume", contextId: "existing-ctx" });
     expect(startAgentStream).toHaveBeenCalledWith(9999, "resume", undefined, "existing-ctx");
+  });
+});
+
+// ─── Tool name helpers ────────────────────────────────────────────────────────
+
+describe("tool name helpers", () => {
+  it("startChatToToolName", () => {
+    expect(startChatToToolName("fixer")).toBe("start_chat_to_fixer");
+  });
+
+  it("awaitChatToToolName", () => {
+    expect(awaitChatToToolName("fixer")).toBe("await_chat_to_fixer");
+  });
+
+  it("reviewWithToolName", () => {
+    expect(reviewWithToolName("reviewer")).toBe("review_with_reviewer");
+  });
+
+  it("escalateToToolName", () => {
+    expect(escalateToToolName("supervisor")).toBe("escalate_to_supervisor");
+  });
+});
+
+// ─── makeReviewTool ───────────────────────────────────────────────────────────
+
+describe("makeReviewTool", () => {
+  async function* mockStream() {
+    /* empty stream */
+  }
+
+  function captureReviewHandler() {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    return makeReviewTool(AGENT) as any;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
+    vi.mocked(startAgentStream).mockResolvedValue({
+      taskId: "task-123",
+      contextId: "ctx-456",
+      stream: mockStream(),
+      client: {} as any,
+    });
+  });
+
+  it("returns APPROVED when reviewer JSON says APPROVED", async () => {
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: {
+        output: '{"decision":"APPROVED","reason":"looks good"}\nFull feedback here.',
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureReviewHandler();
+    const result = (await handler({ content: "my work" })) as any;
+    expect(result.structuredContent.decision).toBe("APPROVED");
+    expect(result.structuredContent.reason).toBe("looks good");
+    expect(result.content[0].text).toContain("APPROVED");
+    expect(result.content[0].text).toContain("looks good");
+  });
+
+  it("returns REJECTED when reviewer JSON says REJECTED", async () => {
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: {
+        output: '{"decision":"REJECTED","reason":"missing tests"}\nFeedback.',
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureReviewHandler();
+    const result = (await handler({ content: "my work" })) as any;
+    expect(result.structuredContent.decision).toBe("REJECTED");
+    expect(result.structuredContent.reason).toBe("missing tests");
+  });
+
+  it("returns NO_DECISION when output has no JSON", async () => {
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: {
+        output: "I think it looks fine actually.",
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureReviewHandler();
+    const result = (await handler({ content: "my work" })) as any;
+    expect(result.structuredContent.decision).toBe("NO_DECISION");
+    expect(result.structuredContent.reason).toBeUndefined();
+  });
+
+  it("returns NO_DECISION when JSON is malformed", async () => {
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: {
+        output: '{"decision":APPROVED}\nFeedback.',
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureReviewHandler();
+    const result = (await handler({ content: "my work" })) as any;
+    expect(result.structuredContent.decision).toBe("NO_DECISION");
+  });
+
+  it("returns error when agent port is not found", async () => {
+    vi.mocked(resolveAgentPort).mockReturnValue(null);
+    const handler = captureReviewHandler();
+    const result = (await handler({ content: "my work" })) as any;
+    expect(result.content[0].text).toContain("not reachable");
+    expect(startAgentStream).not.toHaveBeenCalled();
+  });
+
+  it("returns error when startAgentStream returns null", async () => {
+    vi.mocked(startAgentStream).mockResolvedValue(null);
+    const handler = captureReviewHandler();
+    const result = (await handler({ content: "my work" })) as any;
+    expect(result.content[0].text).toContain("did not start");
   });
 });
