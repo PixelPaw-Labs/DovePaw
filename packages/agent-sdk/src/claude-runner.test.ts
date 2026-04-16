@@ -88,6 +88,13 @@ describe("buildClaudeArgs", () => {
     expect(args.includes("--agent")).toBe(false);
   });
 
+  it("defaults --model to sonnet when model is not set", () => {
+    const args = buildClaudeArgs({ taskName: "t", cwd: "/workspace/abc" });
+    const idx = args.indexOf("--model");
+    expect(idx).not.toBe(-1);
+    expect(args[idx + 1]).toBe("sonnet");
+  });
+
   it("omits --permission-mode when not set", () => {
     const args = buildClaudeArgs({ taskName: "t", cwd: "/workspace/abc" });
     expect(args.includes("--permission-mode")).toBe(false);

@@ -59,10 +59,10 @@ if [ -n "$ERRORS" ]; then
 fi
 
 # --- Test gate: run related tests via import graph ---
-STAGED_TS=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '\.test\.' | grep -v '^agents/' || true)
+STAGED_TS=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '^agents/' || true)
 
 if [ -n "$STAGED_TS" ]; then
-  TEST_OUTPUT=$(npx vitest run --related $STAGED_TS 2>&1)
+  TEST_OUTPUT=$(npx vitest run --changed HEAD 2>&1)
   TEST_EXIT=$?
   if [ $TEST_EXIT -ne 0 ]; then
     printf '{"decision": "block", "reason": %s}' \
