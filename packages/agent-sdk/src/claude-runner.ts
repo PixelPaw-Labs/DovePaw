@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawnClaude } from "./claude.js";
+import { spawnClaude, type SpawnClaudeHandle } from "./claude.js";
 import { claudeWorktreePath } from "./paths.js";
 import { WorktreeWatchdog } from "./worktree-watchdog.js";
 
@@ -44,6 +44,7 @@ export function buildClaudeArgs(opts: RunOpts): string[] {
  */
 export class ClaudeRunner {
   private readonly watchdog = new WorktreeWatchdog();
+  private currentHandle: SpawnClaudeHandle | null = null;
 
   constructor(
     private readonly logDir: string,
@@ -51,7 +52,17 @@ export class ClaudeRunner {
   ) {}
 
   async run(prompt: string, opts: RunOpts): Promise<{ code: number; stdout: string }> {
-    return this.runOnce(prompt, opts);
+    const shutdown = () => {
+      void this.currentHandle?.kill().then(() => process.exit(0));
+    };
+    process.once("SIGTERM", shutdown);
+    process.once("SIGINT", shutdown);
+    try {
+      return await this.runOnce(prompt, opts);
+    } finally {
+      process.off("SIGTERM", shutdown);
+      process.off("SIGINT", shutdown);
+    }
   }
 
   private async runOnce(
@@ -71,6 +82,7 @@ export class ClaudeRunner {
       stderrToLog: this.logFile,
       suppressNotify: canRetry || false,
     });
+    this.currentHandle = handle;
 
     // When using a worktree, race against a watchdog that detects hung CLI processes.
     // If the worktree directory never appears, the CLI is stuck — kill and retry once.

@@ -29,10 +29,11 @@ hooks:
 
 1. **Purpose** — "What should this agent do?" — free text via Other
 2. **Plugin repo** — "Which plugin repo will this agent eventually live in?" — run `ls ~/.dovepaw/plugins/` and offer each dir basename as an option, plus "None / decide later"
-3. **Agent type** — "Which pattern fits this agent?" — present 3 options with code previews:
+3. **Agent type** — "Which pattern fits this agent?" — present 4 options with code previews:
    - **Simple** — single Claude spawn with a prompt (most agents)
    - **Skill-based** — dynamically builds a temporary skill, runs it, cleans up (for complex context assembly)
    - **Stateful** — lock + state dir + orchestration (for scheduled agents requiring mutual exclusion)
+   - **Codex** — uses OpenAI Codex SDK instead of Claude CLI (smarter and cheaper alternative for tasks)
 
 **Round 2** — read `~/.dovepaw/settings.json`, extract `repositories` array (each has `id`, `path`), then ask 3 questions in a single `AskUserQuestion` call:
 
@@ -56,6 +57,7 @@ Read the one template that matches the chosen agent type — do not read the oth
 | Simple      | `references/template-simple.md`           |
 | Skill-based | `references/template-skill-based.md`      |
 | Stateful    | `references/template-complex-stateful.md` |
+| Codex       | `references/template-codex.md`            |
 
 Also read `references/spawning-patterns.md` now — required for the spawning rules below.
 

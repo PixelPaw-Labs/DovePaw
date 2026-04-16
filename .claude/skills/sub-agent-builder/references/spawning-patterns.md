@@ -32,11 +32,16 @@ Always run Claude in `AGENT_WORKSPACE`. Give Claude read access to repos via `--
 **Never use `REPOS[0]` as cwd** — `REPOS` is a list and the agent may need all of them.
 
 ```typescript
+import { ClaudeRunner, makeTimestamp } from "@dovepaw/agent-sdk";
+
+const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
 const repoFlags = REPOS.flatMap((r) => ["--add-dir", r]);
-const { code, stdout } = await spawnClaudeWithSignals(
-  ["--permission-mode", "readOnly", ...repoFlags, "-p", prompt],
-  { cwd: WORK_DIR, taskName: "{{AGENT_NAME}}", timeoutMs: {{TIMEOUT_MS}} },
-);
+const { code, stdout } = await runner.run(prompt, {
+  cwd: WORK_DIR,
+  repos: REPOS,
+  taskName: "{{AGENT_NAME}}",
+  timeoutMs: {{TIMEOUT_MS}},
+});
 ```
 
 ## Pattern A (multi-repo) — One Claude invocation per repo, run in parallel
@@ -45,14 +50,18 @@ Use when each repo needs independent processing (e.g. per-repo summary, per-repo
 **Always use `Promise.all` — never loop sequentially.**
 
 ```typescript
+import { ClaudeRunner, makeTimestamp } from "@dovepaw/agent-sdk";
 import { basename } from "node:path";
 
+const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
 const results = await Promise.all(
   REPOS.map(async (repo) => {
-    const { code, stdout } = await spawnClaudeWithSignals(
-      ["--permission-mode", "readOnly", "--add-dir", repo, "-p", buildPrompt(repo)],
-      { cwd: WORK_DIR, taskName: `{{AGENT_NAME}}-${basename(repo)}`, timeoutMs: {{TIMEOUT_MS}} },
-    );
+    const { code, stdout } = await runner.run(buildPrompt(repo), {
+      cwd: WORK_DIR,
+      repos: [repo],
+      taskName: `{{AGENT_NAME}}-${basename(repo)}`,
+      timeoutMs: {{TIMEOUT_MS}},
+    });
     return { repo, code, stdout };
   }),
 );
@@ -128,6 +137,36 @@ const { code, stdout } = await runner.run(step2Prompt, {
 ```
 
 Only use when steps are genuinely sequential and share context. Single-step agents do not need this.
+
+---
+
+## Pattern D — Codex (OpenAI Codex SDK instead of Claude CLI)
+
+Use when Codex is a smarter or cheaper option than Claude CLI for the task.  
+`CodexRunner` (from `@dovepaw/agent-sdk`) manages the Codex thread and handles abort.  
+No worktree watchdog, no session chaining — one prompt, one result.
+
+```typescript
+import { CodexRunner, agentPersistentLogDir, makeTimestamp } from "@dovepaw/agent-sdk";
+
+const LOG_DIR = agentPersistentLogDir("{{AGENT_NAME}}");
+const runner = new CodexRunner(LOG_DIR);
+
+const { code, stdout } = await runner.run(prompt, {
+  cwd: WORK_DIR,
+  taskName: "{{AGENT_NAME}}",
+  timeoutMs: {{TIMEOUT_MS}},
+  model: "gpt-5.4",           // optional, defaults to gpt-5.4
+  agentRoster: "...",         // optional developer instructions
+});
+```
+
+**Rules:**
+
+- Always pass `AGENT_WORKSPACE` as `cwd` — Codex operates on the workspace directory
+- `model` defaults to `gpt-5.4` — only override when explicitly needed
+- No `repos` / `worktree` / `sessionId` options — not supported by Codex SDK
+- Abort is handled automatically — shutdown is built into `CodexRunner.run()`
 
 ---
 
