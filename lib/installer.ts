@@ -30,6 +30,7 @@ import {
   PLUGINS_DIR,
   SKILLS_ROOT,
   agentDistScript,
+  agentNodeModule,
   agentPersistentLogDir,
   plistFilePath,
   schedulerNodeModule,
@@ -248,6 +249,13 @@ export async function reloadAgent(agent: AgentDef, uid: string): Promise<void> {
 export async function deployAgentSdk(): Promise<void> {
   await rm(AGENT_SDK_DIR, { recursive: true, force: true });
   await cp(AGENT_SDK_SRC, AGENT_SDK_DIR, { recursive: true });
+  // Symlink SDK peer deps into ~/.dovepaw/sdk/node_modules/ so Node.js resolves
+  // them from the real file path (not the symlinked plugin path).
+  const sdkNmScope = join(AGENT_SDK_DIR, "node_modules", "@openai");
+  await mkdir(sdkNmScope, { recursive: true });
+  const codexSdkLink = join(sdkNmScope, "codex-sdk");
+  await rm(codexSdkLink, { recursive: true, force: true });
+  await symlink(agentNodeModule("@openai/codex-sdk"), codexSdkLink);
 }
 
 /**
