@@ -19,113 +19,138 @@ const baseConfig: AgentNotificationConfig = {
 
 describe("buildNotificationHooks", () => {
   it("returns empty object when disabled", () => {
-    const hooks = buildNotificationHooks("My Agent", { ...baseConfig, enabled: false });
-    expect(hooks).toEqual({});
+    expect(buildNotificationHooks("Agent", { ...baseConfig, enabled: false })).toEqual({});
   });
 
-  it("omits SessionStart when onSessionStart is false", () => {
-    const hooks = buildNotificationHooks("My Agent", { ...baseConfig, onSessionStart: false });
-    expect(hooks.SessionStart).toBeUndefined();
-    expect(hooks.SessionEnd).toBeDefined();
+  it("omits PreToolUse when onSessionStart is false", () => {
+    const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+    expect(hooks.PreToolUse).toBeUndefined();
+    expect(hooks.PostToolUse).toBeDefined();
   });
 
-  it("omits SessionEnd when onSessionEnd is false", () => {
-    const hooks = buildNotificationHooks("My Agent", { ...baseConfig, onSessionEnd: false });
-    expect(hooks.SessionStart).toBeDefined();
-    expect(hooks.SessionEnd).toBeUndefined();
+  it("omits PostToolUse when onSessionEnd is false", () => {
+    const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionEnd: false });
+    expect(hooks.PreToolUse).toBeDefined();
+    expect(hooks.PostToolUse).toBeUndefined();
   });
 
-  it("includes both hooks when both are enabled", () => {
-    const hooks = buildNotificationHooks("My Agent", baseConfig);
-    expect(hooks.SessionStart).toHaveLength(1);
-    expect(hooks.SessionEnd).toHaveLength(1);
+  it("includes both when both flags enabled", () => {
+    const hooks = buildNotificationHooks("Agent", baseConfig);
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PostToolUse).toHaveLength(1);
   });
 
-  it("resolves $VAR topic from env", () => {
+  it("resolves $VAR topic from env", async () => {
     const config: AgentNotificationConfig = {
       ...baseConfig,
+      onSessionEnd: false,
       channel: { type: "ntfy", topic: "$NTFY_TOPIC", server: "https://ntfy.sh" },
     };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
 
     const hooks = buildNotificationHooks("Agent", config, { NTFY_TOPIC: "resolved-topic" });
+    await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
 
-    // Invoke the SessionStart hook to confirm resolved topic is used
-    const matcher = hooks.SessionStart?.[0];
-    expect(matcher).toBeDefined();
-    void matcher?.hooks[0]?.({ hook_event_name: "SessionStart" } as never);
-
-    // fetch is called with the resolved topic in the URL
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("resolved-topic"),
       expect.any(Object),
     );
-
     vi.unstubAllGlobals();
   });
 
-  it("resolves ${VAR} topic from env", () => {
+  it("resolves ${VAR} topic from env", async () => {
     const config: AgentNotificationConfig = {
       ...baseConfig,
+      onSessionEnd: false,
       channel: { type: "ntfy", topic: "${NTFY_TOPIC}", server: "https://ntfy.sh" },
     };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
 
-    buildNotificationHooks("Agent", config, { NTFY_TOPIC: "braces-topic" });
-    // Invoke hook
     const hooks = buildNotificationHooks("Agent", config, { NTFY_TOPIC: "braces-topic" });
-    void hooks.SessionStart?.[0]?.hooks[0]?.({ hook_event_name: "SessionStart" } as never);
+    await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
+
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("braces-topic"),
       expect.any(Object),
     );
-
     vi.unstubAllGlobals();
   });
 
-  it("leaves plain topic unchanged when no env match", () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const hooks = buildNotificationHooks("Agent", baseConfig, {});
-    void hooks.SessionStart?.[0]?.hooks[0]?.({ hook_event_name: "SessionStart" } as never);
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("my-topic"), expect.any(Object));
-
-    vi.unstubAllGlobals();
-  });
-
-  describe("SessionEnd hook", () => {
-    it("uses priority 3 for normal exit reasons", async () => {
+  describe("PreToolUse (script start) hook", () => {
+    it("fires notification on PreToolUse", async () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true });
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
-      const hookFn = hooks.SessionEnd?.[0]?.hooks[0];
-      await hookFn?.({ hook_event_name: "SessionEnd", reason: "other" } as never);
+      const hooks = buildNotificationHooks("My Agent", { ...baseConfig, onSessionEnd: false });
+      await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ headers: expect.objectContaining({ Priority: "3" }) }),
+        expect.stringContaining("my-topic"),
+        expect.objectContaining({ body: expect.stringContaining("Started at") }),
       );
-
       vi.unstubAllGlobals();
     });
 
-    it("uses priority 4 for error exit reasons", async () => {
+    it("ignores non-PreToolUse events", async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionEnd: false });
+      const result = await hooks.PreToolUse?.[0]?.hooks[0]?.({
+        hook_event_name: "PostToolUse",
+      } as never);
+
+      expect(result).toEqual({ continue: true });
+      expect(fetchMock).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe("PostToolUse (script end) hook", () => {
+    it("fires notification when status is completed", async () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true });
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
-      const hookFn = hooks.SessionEnd?.[0]?.hooks[0];
-      await hookFn?.({ hook_event_name: "SessionEnd", reason: "error" } as never);
+      const hooks = buildNotificationHooks("My Agent", { ...baseConfig, onSessionStart: false });
+      await hooks.PostToolUse?.[0]?.hooks[0]?.({
+        hook_event_name: "PostToolUse",
+        tool_response: { structuredContent: { status: "completed" } },
+      } as never);
 
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({ headers: expect.objectContaining({ Priority: "4" }) }),
+        expect.stringContaining("my-topic"),
+        expect.objectContaining({ body: expect.stringContaining("Finished at") }),
       );
+      vi.unstubAllGlobals();
+    });
 
+    it("does not fire when status is still_running", async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+      await hooks.PostToolUse?.[0]?.hooks[0]?.({
+        hook_event_name: "PostToolUse",
+        tool_response: { structuredContent: { status: "still_running", runId: "abc" } },
+      } as never);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
+
+    it("does not fire when structuredContent is absent", async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal("fetch", fetchMock);
+
+      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+      await hooks.PostToolUse?.[0]?.hooks[0]?.({
+        hook_event_name: "PostToolUse",
+        tool_response: { content: [{ type: "text", text: "..." }] },
+      } as never);
+
+      expect(fetchMock).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
 
@@ -133,26 +158,12 @@ describe("buildNotificationHooks", () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 
       const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
-      const result = await hooks.SessionEnd?.[0]?.hooks[0]?.({
-        hook_event_name: "SessionEnd",
-        reason: "other",
+      const result = await hooks.PostToolUse?.[0]?.hooks[0]?.({
+        hook_event_name: "PostToolUse",
+        tool_response: { structuredContent: { status: "completed" } },
       } as never);
 
       expect(result).toEqual({ continue: true });
-      vi.unstubAllGlobals();
-    });
-
-    it("ignores non-SessionEnd events", async () => {
-      const fetchMock = vi.fn();
-      vi.stubGlobal("fetch", fetchMock);
-
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
-      const result = await hooks.SessionEnd?.[0]?.hooks[0]?.({
-        hook_event_name: "SessionStart",
-      } as never);
-
-      expect(result).toEqual({ continue: true });
-      expect(fetchMock).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
     });
   });

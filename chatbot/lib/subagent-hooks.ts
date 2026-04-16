@@ -227,14 +227,15 @@ export function buildSubAgentHooks(
     allowedDirectories: [cwd, ...additionalDirectories],
   });
   return {
-    ...notifHooks,
     ...base,
     PreToolUse: [
       ...(base.PreToolUse ?? []),
+      ...(notifHooks.PreToolUse ?? []),
       chatToReflectionMatcher,
       reviewReflectionMatcher,
       escalateReflectionMatcher,
     ],
+    PostToolUse: [...(base.PostToolUse ?? []), ...(notifHooks.PostToolUse ?? [])],
     ...(hasAgentLinks && {
       Stop: [...(base.Stop ?? []), handoffConsiderationStop],
     }),

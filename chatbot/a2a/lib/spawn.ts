@@ -11,6 +11,13 @@ import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN } from "@/lib/paths";
 import type { AgentConfig } from "./agent-config-builder";
+export type {
+  ScriptCompletedContent,
+  ScriptStillRunningContent,
+  ScriptNotFoundContent,
+  AwaitScriptContent,
+} from "@/lib/script-types";
+import type { ScriptCompletedContent, AwaitScriptContent } from "@/lib/script-types";
 
 /** Sentinel for transient progress messages written by emitProgress(). */
 export const PROGRESS_PREFIX = "__PROGRESS__:";
@@ -62,29 +69,6 @@ export function buildScriptArgs(scriptPath: string, instruction: string): string
 }
 
 // ─── Script run structured content types ──────────────────────────────────────
-
-export type ScriptCompletedContent = {
-  status: "completed";
-  runId: string;
-  output: string;
-};
-
-export type ScriptStillRunningContent = {
-  status: "still_running";
-  runId: string;
-  /** Last lines of script output captured so far, for progress reporting. */
-  latestOutput?: string;
-};
-
-export type ScriptNotFoundContent = {
-  status: "not_found";
-  runId: string;
-};
-
-export type AwaitScriptContent =
-  | ScriptCompletedContent
-  | ScriptStillRunningContent
-  | ScriptNotFoundContent;
 
 // ─── Script process registry ──────────────────────────────────────────────────
 

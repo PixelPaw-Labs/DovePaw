@@ -3,22 +3,21 @@
  *
  * Provides:
  *   sendNotification — dispatches a message to a configured channel (ntfy, …)
- *   buildNotificationHooks — returns SessionStart / SessionEnd hook matchers
+ *   buildNotificationMatchers — returns hook matchers that fire notifications only
+ *     when the agent script actually starts or completes:
+ *       onSessionStart → PreToolUse on start_run_script
+ *       onSessionEnd   → PostToolUse on await_run_script when status === "completed"
  *
  * Channel dispatch is intentionally fire-and-forget: failures are silently
  * swallowed so a broken ntfy topic never blocks the agent session.
  */
 
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
+import { START_SCRIPT_TOOL, AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 // ─── Env-var reference resolution ────────────────────────────────────────────
 
-/**
- * Resolves a $VAR or ${VAR} reference from env.
- * Returns the env value when matched, the original string otherwise.
- * Non-reference strings are returned unchanged.
- */
 function resolveEnvRef(value: string, env: Record<string, string | undefined>): string {
   const match = /^\$\{([^}]+)\}$/.exec(value) ?? /^\$([A-Z_][A-Z0-9_]*)$/i.exec(value);
   if (!match) return value;
@@ -61,14 +60,12 @@ export async function sendNotification(
   }
 }
 
-// ─── Hook builder ─────────────────────────────────────────────────────────────
+// ─── Hook matchers ────────────────────────────────────────────────────────────
 
 /**
- * Returns SessionStart / SessionEnd HookCallbackMatcher entries for a given
- * agent notification config. Returns an empty object when disabled.
- *
- * Priority mirrors scheduler-notify.sh: 3 (normal) on clean exit, 4 (high) on error.
- * "other" and "unknown" are the SDK's normal-exit reasons.
+ * Returns PreToolUse / PostToolUse HookCallbackMatcher entries keyed by event,
+ * firing notifications only when the agent script starts or completes.
+ * Returns an empty object when disabled.
  */
 export function buildNotificationHooks(
   agentDisplayName: string,
@@ -89,15 +86,16 @@ export function buildNotificationHooks(
   const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
 
   if (config.onSessionStart) {
-    hooks.SessionStart = [
+    hooks.PreToolUse = [
       {
+        matcher: `mcp__agents__${START_SCRIPT_TOOL}`,
         hooks: [
           async (input) => {
-            if (input.hook_event_name !== "SessionStart") return { continue: true };
+            if (input.hook_event_name !== "PreToolUse") return { continue: true };
             const timestamp = new Date().toLocaleTimeString();
             void sendNotification(
               channel,
-              `[${agentDisplayName}] Session started`,
+              `[${agentDisplayName}] Script started`,
               `Started at ${timestamp}`,
             );
             return { continue: true };
@@ -108,20 +106,31 @@ export function buildNotificationHooks(
   }
 
   if (config.onSessionEnd) {
-    hooks.SessionEnd = [
+    hooks.PostToolUse = [
       {
+        matcher: `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
         hooks: [
           async (input) => {
-            if (input.hook_event_name !== "SessionEnd") return { continue: true };
-            const reason =
-              "reason" in input && typeof input.reason === "string" ? input.reason : "unknown";
-            const isError = reason !== "other" && reason !== "unknown";
+            if (input.hook_event_name !== "PostToolUse") return { continue: true };
+            const { tool_response } = input;
+            const structured =
+              typeof tool_response === "object" &&
+              tool_response !== null &&
+              "structuredContent" in tool_response
+                ? (tool_response as { structuredContent: unknown }).structuredContent
+                : undefined;
+            if (
+              !structured ||
+              typeof structured !== "object" ||
+              Reflect.get(structured, "status") !== "completed"
+            )
+              return { continue: true };
             const timestamp = new Date().toLocaleTimeString();
-            const title = `[${agentDisplayName}] ${isError ? "✗" : "✓"} Session ended`;
-            const message = isError
-              ? `Ended at ${timestamp} (${reason})`
-              : `Finished at ${timestamp}`;
-            void sendNotification(channel, title, message, isError ? 4 : 3);
+            void sendNotification(
+              channel,
+              `[${agentDisplayName}] ✓ Script finished`,
+              `Finished at ${timestamp}`,
+            );
             return { continue: true };
           },
         ],
