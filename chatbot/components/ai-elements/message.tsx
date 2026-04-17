@@ -39,6 +39,11 @@ export const MessageContent = ({ children, className, ...props }: MessageContent
       "group-[.is-user]:ml-auto group-[.is-user]:rounded-2xl group-[.is-user]:rounded-tr-none group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:shadow-lg group-[.is-user]:shadow-primary/10",
       // Assistant bubble — muted bg, clipped bottom-left corner
       "group-[.is-assistant]:bg-muted group-[.is-assistant]:rounded-2xl group-[.is-assistant]:rounded-bl-none group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:border group-[.is-assistant]:border-border/30 group-[.is-assistant]:text-foreground",
+      // Inline code: bg-muted shows as white on dark primary bg — replace with translucent overlay
+      "group-[.is-user]:[&_code[data-streamdown]]:bg-white/15 group-[.is-user]:[&_code[data-streamdown]]:text-primary-foreground",
+      // Tables: table-wrapper has bg-background (white), but text-primary-foreground makes text white → invisible.
+      // Reset text to dark so the white table box remains readable.
+      "group-[.is-user]:[&_table]:text-foreground",
       className,
     )}
     {...props}
