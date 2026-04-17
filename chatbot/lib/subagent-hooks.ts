@@ -13,13 +13,9 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import {
-  startRunScriptToolName,
-  awaitRunScriptToolName,
   CONFIDENCE_THRESHOLD,
   impactPlaceholder,
-  thresholdClause,
   startChatToToolName,
-  awaitChatToToolName,
   reviewWithToolName,
   escalateToToolName,
 } from "@/lib/agent-tools";
@@ -30,9 +26,8 @@ import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 // ─── Script reminder ──────────────────────────────────────────────────────────
 
-const buildSubAgentPromptReminder = (manifestKey: string): string => `<reminder>
-- When the user's intent is resolved by RUN yourself: ALWAYS call \`${startRunScriptToolName(manifestKey)}\` first (returns runId immediately), then \`${awaitRunScriptToolName(manifestKey)}\` as a background Task. Retry with the same runId if still_running.
-- When the user's intent is resolved by HANDOFF to a linked agent: ALWAYS use \`${startChatToToolName("*")}\`/\`${awaitChatToToolName("*")}\`, \`${reviewWithToolName("*")}\`, or \`${escalateToToolName("*")}\` — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
+export const SUBAGENT_PROMPT_REMINDER = `<reminder>
+- When the user's intent is resolved by SOMETHING BEING DONE: ALWAYS START yourself first (returns runId immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
 </reminder>`;
 
 // ─── Agent link self-reflection gate ─────────────────────────────────────────
@@ -228,7 +223,7 @@ export function buildSubAgentHooks(
       const id: unknown = Reflect.get(s, "runId") ?? Reflect.get(s, "taskId");
       return typeof id === "string" ? id : undefined;
     },
-    userPromptReminder: buildSubAgentPromptReminder(manifestKey),
+    userPromptReminder: SUBAGENT_PROMPT_REMINDER,
     allowedDirectories: [cwd, ...additionalDirectories],
   });
   return {

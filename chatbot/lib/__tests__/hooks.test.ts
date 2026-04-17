@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAgentHooks, buildDoveCanUseTool, buildDoveHooks } from "../hooks";
-import { buildSubAgentHooks } from "../subagent-hooks";
+import { buildSubAgentHooks, SUBAGENT_PROMPT_REMINDER } from "../subagent-hooks";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
 import { resolvePendingQuestion } from "../pending-questions";
@@ -524,6 +524,27 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
       }),
     );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
+  });
+});
+
+// ─── buildSubAgentHooks — UserPromptSubmit reminder ──────────────────────────
+
+describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
+  it("injects SUBAGENT_PROMPT_REMINDER as additionalContext", async () => {
+    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
+    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const result = await callHook(fn, {
+      hook_event_name: "UserPromptSubmit",
+      prompt: "do something",
+    });
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toBe(SUBAGENT_PROMPT_REMINDER);
+  });
+
+  it("reminder contains SOMETHING BEING DONE pattern", () => {
+    expect(SUBAGENT_PROMPT_REMINDER).toContain("SOMETHING BEING DONE");
+    expect(SUBAGENT_PROMPT_REMINDER).not.toContain("RUN yourself");
+    expect(SUBAGENT_PROMPT_REMINDER).not.toContain("HANDOFF");
   });
 });
 
