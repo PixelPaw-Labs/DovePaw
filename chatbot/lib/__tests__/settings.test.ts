@@ -366,7 +366,7 @@ describe("effectiveDoveSettings", () => {
   it("returns defaults when dove is absent", () => {
     const s = effectiveDoveSettings({ version: 1, repositories: [], envVars: [] });
     expect(s.displayName).toBe("Dove");
-    expect(s.avatarUrl).toBe("/dove-avatar.jpg");
+    expect(s.avatarUrl).toBe("/dove-avatar.webp");
     expect(s.persona).toBe("");
     expect(s.tagline).toBe("");
   });

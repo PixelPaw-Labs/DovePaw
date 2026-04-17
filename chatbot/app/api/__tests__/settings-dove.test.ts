@@ -33,7 +33,7 @@ describe("GET /api/settings/dove", () => {
   it("returns defaults when dove field is absent", async () => {
     const body = await (await GET()).json();
     expect(body.displayName).toBe("Dove");
-    expect(body.avatarUrl).toBe("/dove-avatar.jpg");
+    expect(body.avatarUrl).toBe("/dove-avatar.webp");
   });
 
   it("returns stored dove settings when present", async () => {

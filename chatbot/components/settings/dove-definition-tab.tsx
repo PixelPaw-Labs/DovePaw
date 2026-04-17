@@ -40,7 +40,7 @@ function settingsToForm(s: DoveSettings): FormState {
     landingTitle: s.landingTitle || DEFAULT_LANDING_TITLE,
     landingDescription: s.landingDescription || DEFAULT_LANDING_DESCRIPTION,
     persona: s.persona || DEFAULT_PERSONA,
-    avatarUrl: s.avatarUrl || "/dove-avatar.jpg",
+    avatarUrl: s.avatarUrl || "/dove-avatar.webp",
     iconName: s.iconName,
     iconBg: s.iconBg,
     iconColor: s.iconColor,
@@ -137,7 +137,7 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             <div className="flex items-center gap-3">
               <div className="w-14 h-14 rounded-2xl shrink-0 shadow ring-2 ring-border overflow-hidden bg-muted">
                 <img
-                  src={form.avatarUrl || "/dove-avatar.jpg"}
+                  src={form.avatarUrl || "/dove-avatar.webp"}
                   alt="Dove avatar preview"
                   className="w-full h-full object-cover"
                 />
@@ -166,7 +166,7 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             <Input
               value={form.avatarUrl}
               onChange={(e) => set("avatarUrl", e.target.value)}
-              placeholder="/dove-avatar.jpg"
+              placeholder="/dove-avatar.webp"
               className="font-mono text-sm"
             />
           </div>

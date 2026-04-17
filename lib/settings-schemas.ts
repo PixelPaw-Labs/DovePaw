@@ -35,8 +35,8 @@ export const doveSettingsSchema = z.object({
   tagline: z.string().default(""),
   /** Personality paragraph appended to the system prompt. Uses the built-in cat persona when empty. */
   persona: z.string().default(""),
-  /** URL or path to the avatar image served from public/. Defaults to "/dove-avatar.jpg". */
-  avatarUrl: z.string().default("/dove-avatar.jpg"),
+  /** URL or path to the avatar image served from public/. Defaults to "/dove-avatar.webp". */
+  avatarUrl: z.string().default("/dove-avatar.webp"),
   /** Lucide icon name used as fallback when no photo avatar is set. */
   iconName: z.string().default("Bot"),
   /** Tailwind bg classes for the icon circle. */
