@@ -1,8 +1,8 @@
 #!/bin/bash
-# Pre-commit hook: format + lint staged files directly; run related tests via vitest --related.
+# Pre-commit hook: format + lint staged files directly; run related tests via `vitest related`.
 #
 # Format and lint run directly on staged files only — not the whole codebase.
-# Tests run via `vitest --related` which traces the import graph from staged source files.
+# Tests run via `vitest related <files>` which traces the import graph from staged source files.
 
 set -uo pipefail
 
@@ -62,7 +62,7 @@ fi
 STAGED_TS=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '^agents/' || true)
 
 if [ -n "$STAGED_TS" ]; then
-  TEST_OUTPUT=$(npx vitest run --changed HEAD 2>&1)
+  TEST_OUTPUT=$(printf '%s\n' "$STAGED_TS" | sed "s|^|$CLAUDE_PROJECT_DIR/|" | xargs npx vitest related --run 2>&1)
   TEST_EXIT=$?
   if [ $TEST_EXIT -ne 0 ]; then
     printf '{"decision": "block", "reason": %s}' \
