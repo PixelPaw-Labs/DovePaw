@@ -96,6 +96,10 @@ export function ChatPane({
   const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(true);
   const [activeQuestionIdx, setActiveQuestionIdx] = React.useState(0);
+  const [showAllAgents, setShowAllAgents] = React.useState(false);
+  React.useEffect(() => {
+    setShowAllAgents(false);
+  }, [agentId, currentSessionId]);
 
   // Keep active index in bounds when questions are resolved
   const clampedQuestionIdx = Math.min(activeQuestionIdx, Math.max(0, pendingQuestions.length - 1));
@@ -231,7 +235,7 @@ export function ChatPane({
 
         {/* Chat area */}
         <Conversation className="flex-1 bg-background">
-          <ConversationContent>
+          <ConversationContent className={showAllAgents ? "max-w-none" : ""}>
             {messages.filter((msg) =>
               msg.segments.some(
                 (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
@@ -244,6 +248,8 @@ export function ChatPane({
                     agentConfigs={agentConfigs}
                     onSelect={sendMessage}
                     agentId={agentId}
+                    showAllAgents={showAllAgents}
+                    onShowAllAgentsChange={setShowAllAgents}
                   />
                 )}
               </ConversationEmptyState>

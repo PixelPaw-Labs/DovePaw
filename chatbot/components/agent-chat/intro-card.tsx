@@ -6,11 +6,14 @@ import { DOVE_AVATAR } from "@/lib/avatars";
 import { useDoveSettings } from "@/components/hooks/use-dove-settings";
 import { SuggestionChips } from "./suggestion-chips";
 import { AgentSuggestionChips } from "./agent-suggestion-chips";
+import { AllAgentsView } from "./all-agents-view";
 
 interface IntroCardProps {
   agentConfigs: AgentConfigEntry[];
   onSelect: (text: string) => void;
   agentId?: string;
+  showAllAgents?: boolean;
+  onShowAllAgentsChange?: (value: boolean) => void;
 }
 
 function getDoveAge() {
@@ -27,9 +30,13 @@ function getDoveAge() {
 function DoveIntro({
   agentConfigs,
   onSelect,
+  showAllAgents,
+  onShowAllAgentsChange,
 }: {
   agentConfigs: AgentConfigEntry[];
   onSelect: (text: string) => void;
+  showAllAgents: boolean;
+  onShowAllAgentsChange: (value: boolean) => void;
 }) {
   const age = getDoveAge();
   const dove = useDoveSettings();
@@ -38,6 +45,14 @@ function DoveIntro({
   const description =
     dove.landingDescription.trim() ||
     `My cat, ${age}, and your agent wrangler. I've got agents napping until you need them. Just say the word — or a treat works too. 🐾`;
+
+  if (showAllAgents) {
+    return (
+      <div className="flex flex-col gap-4 w-full">
+        <AllAgentsView agentConfigs={agentConfigs} onSelect={onSelect} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 w-full max-w-3xl">
@@ -53,7 +68,11 @@ function DoveIntro({
           </div>
         </div>
       </div>
-      <SuggestionChips agentConfigs={agentConfigs} onSelect={onSelect} />
+      <SuggestionChips
+        agentConfigs={agentConfigs}
+        onSelect={onSelect}
+        onShowAllAgents={() => onShowAllAgentsChange(true)}
+      />
     </div>
   );
 }
@@ -98,9 +117,22 @@ function AgentIntro({
   );
 }
 
-export function IntroCard({ agentConfigs, onSelect, agentId = "dove" }: IntroCardProps) {
+export function IntroCard({
+  agentConfigs,
+  onSelect,
+  agentId = "dove",
+  showAllAgents = false,
+  onShowAllAgentsChange,
+}: IntroCardProps) {
   if (agentId === "dove") {
-    return <DoveIntro agentConfigs={agentConfigs} onSelect={onSelect} />;
+    return (
+      <DoveIntro
+        agentConfigs={agentConfigs}
+        onSelect={onSelect}
+        showAllAgents={showAllAgents}
+        onShowAllAgentsChange={onShowAllAgentsChange ?? (() => {})}
+      />
+    );
   }
   return <AgentIntro agentConfigs={agentConfigs} agentId={agentId} onSelect={onSelect} />;
 }
