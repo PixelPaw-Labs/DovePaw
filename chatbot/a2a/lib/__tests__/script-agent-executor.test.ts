@@ -65,7 +65,7 @@ describe("QueryAgentExecutor prompt fallback", () => {
 
   it("startRunScriptToolName returns a non-empty string that includes the manifestKey", () => {
     expect(typeof startScriptTool).toBe("string");
-    expect(startScriptTool).toBe("start_run_script_test_agent");
+    expect(startScriptTool).toBe("start_test_agent");
   });
 });
 

@@ -115,11 +115,9 @@ export const MGMT_TOOL = {
 } as const;
 
 /** Tool name for firing the agent script in the background (start_run_script_* pattern). */
-export const startRunScriptToolName = (manifestKey: string): string =>
-  `start_run_script_${manifestKey}`;
+export const startRunScriptToolName = (manifestKey: string): string => `start_${manifestKey}`;
 /** Tool name for polling a previously started script run (await_run_script_* pattern). */
-export const awaitRunScriptToolName = (manifestKey: string): string =>
-  `await_run_script_${manifestKey}`;
+export const awaitRunScriptToolName = (manifestKey: string): string => `await_${manifestKey}`;
 
 /** Tool name for sending a message to a linked agent (start_chat_to_* pattern). */
 export const startChatToToolName = (manifestKey: string): string => `start_chat_to_${manifestKey}`;

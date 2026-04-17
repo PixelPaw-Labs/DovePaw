@@ -365,11 +365,11 @@ describe("makeStartChatToTool", () => {
 
 describe("tool name helpers", () => {
   it("startRunScriptToolName", () => {
-    expect(startRunScriptToolName("fixer")).toBe("start_run_script_fixer");
+    expect(startRunScriptToolName("fixer")).toBe("start_fixer");
   });
 
   it("awaitRunScriptToolName", () => {
-    expect(awaitRunScriptToolName("fixer")).toBe("await_run_script_fixer");
+    expect(awaitRunScriptToolName("fixer")).toBe("await_fixer");
   });
 
   it("startChatToToolName", () => {
