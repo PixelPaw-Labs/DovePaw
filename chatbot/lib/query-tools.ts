@@ -22,8 +22,16 @@ import {
   unreachableMessage,
   isConnectionError,
 } from "@/lib/task-poller";
-import type { TaskStartedWithKeyContent } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
+
+function hasTaskId(x: unknown): x is { taskId: string } {
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "taskId" in x &&
+    typeof (x as Record<string, unknown>).taskId === "string"
+  );
+}
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -271,11 +279,9 @@ export function makeAskGroupTool(
           const response = await new TaskPoller(agent.manifestKey, agent.displayName, signal).start(
             message,
           );
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- TaskPoller.start returns this shape on success
-          const structured = response.structuredContent as TaskStartedWithKeyContent | undefined;
-          const taskId = structured?.taskId;
-          if (!taskId) return { agentId, error: "no taskId" as const };
-          return { agentId, taskId };
+          const structured: unknown = response.structuredContent;
+          if (!hasTaskId(structured)) return { agentId, error: "no taskId" as const };
+          return { agentId, taskId: structured.taskId };
         }),
       );
 
