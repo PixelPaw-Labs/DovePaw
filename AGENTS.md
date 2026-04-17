@@ -74,7 +74,7 @@ Plugin repo (e.g. owner/my-agents)
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DovePaw** (1800 symbols, 4978 relationships, 140 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DovePaw** (1834 symbols, 5080 relationships, 143 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

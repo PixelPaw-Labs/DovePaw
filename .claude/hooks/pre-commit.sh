@@ -28,7 +28,7 @@ ERRORS=""
 # oxfmt handles JS/TS/JSX/TSX/JSON/CSS/MD and more; skip unrecognised extensions.
 FMT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs|json|jsonc|css|scss|less|html|md|yaml|yml)$' || true)
 if [ -n "$FMT_FILES" ]; then
-  FMT_OUTPUT=$(printf '%s\n' "$FMT_FILES" | xargs npx oxfmt --check 2>&1) || {
+  FMT_OUTPUT=$(printf '%s\n' "$FMT_FILES" | xargs npx oxfmt --check --no-error-on-unmatched-pattern 2>&1) || {
     ERRORS=$(printf '%s' "Format issues found. Run: npm run fmt
 ⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
 Then retry the commit in another Bash tool call.
