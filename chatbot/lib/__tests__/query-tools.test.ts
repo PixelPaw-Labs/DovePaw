@@ -904,6 +904,31 @@ describe("makeAskGroupTool", () => {
     for (const t of structured.triggered) expect(t.taskId).toMatch(/^task-\d+$/);
   });
 
+  it("appends start_script reminder to each member message", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 51001 } as any);
+    const sendStream = vi.fn((_req: unknown) =>
+      asyncEvents({
+        kind: "task",
+        id: "task-1",
+        contextId: "ctx-1",
+        status: { state: "submitted" },
+      }),
+    );
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({ sendMessageStream: sendStream }),
+      };
+    } as any);
+
+    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A]));
+    const handler = captured[doveAskGroupToolName(GROUP.name)];
+    await handler({ memberIds: ["agent-a"], message: "do work" });
+
+    const sentText = sendStream.mock.calls[0][0].message.parts[0].text as string;
+    expect(sentText).toContain("do work");
+    expect(sentText).toContain(`<reminder>Must call "start_agent_a" tool</reminder>`);
+  });
+
   it("rejects memberIds not in group.members", async () => {
     const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
     const handler = captured[doveAskGroupToolName(GROUP.name)];
