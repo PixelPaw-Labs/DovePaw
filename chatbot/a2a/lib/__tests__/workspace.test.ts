@@ -187,8 +187,10 @@ describe("cloneReposIntoWorkspace", () => {
     expect(settings.hooks.PermissionRequest[0].matcher).toBe("Edit|Write");
     expect(settings.hooks.PermissionRequest[0].hooks[0].type).toBe("command");
     expect(settings.hooks.PermissionRequest[0].hooks[0].command).toContain('"behavior":"allow"');
-    expect(settings.hooks?.SessionStart).toHaveLength(1);
-    expect(settings.hooks.SessionStart[0].hooks[0].command).toContain("#!/usr/bin/env bash");
+    expect(settings.hooks?.UserPromptSubmit).toHaveLength(1);
+    expect(settings.hooks.UserPromptSubmit[0].hooks[0].command).toMatch(
+      /^echo [A-Za-z0-9+/=]+ \| base64 -d \| bash$/,
+    );
   });
 
   it("writes settings.local.json for each cloned repo", async () => {

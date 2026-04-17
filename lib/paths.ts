@@ -108,5 +108,5 @@ export const PLUGINS_REGISTRY_FILE = join(DOVEPAW_DIR, "plugins.json");
 export const AGENT_SDK_DIR = join(DOVEPAW_DIR, "sdk");
 /** DovePaw/packages/agent-sdk — SDK source in the monorepo */
 export const AGENT_SDK_SRC = join(AGENTS_ROOT, "packages/agent-sdk");
-/** DovePaw/.claude/hooks/karpathy-guidelines.sh — SessionStart hook injected into agent workspaces */
+/** DovePaw/.claude/hooks/karpathy-guidelines.sh — UserPromptSubmit hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");

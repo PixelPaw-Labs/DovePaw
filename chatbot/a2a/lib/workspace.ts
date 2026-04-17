@@ -144,12 +144,12 @@ function writeWorkspacePermissions(clonePath: string): void {
   const settings = {
     permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
     hooks: {
-      SessionStart: [
+      UserPromptSubmit: [
         {
           hooks: [
             {
               type: "command",
-              command: readFileSync(KARPATHY_HOOK_SRC, "utf8").trim(),
+              command: `echo ${Buffer.from(readFileSync(KARPATHY_HOOK_SRC, "utf8")).toString("base64")} | base64 -d | bash`,
               timeout: 10,
             },
           ],

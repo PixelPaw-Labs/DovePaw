@@ -43,6 +43,12 @@ export const doveSettingsSchema = z.object({
   iconBg: z.string().default("bg-purple-100"),
   /** Tailwind text color classes for the icon. */
   iconColor: z.string().default("text-purple-700"),
+  /**
+   * Default Claude model for both Dove and sub-agent SDK queries.
+   * Accepts aliases ("sonnet", "opus", "haiku") or full IDs ("claude-sonnet-4-6").
+   * Empty string (default) defers to the SDK's built-in default.
+   */
+  defaultModel: z.string().default(""),
 });
 
 export type DoveSettings = z.infer<typeof doveSettingsSchema>;

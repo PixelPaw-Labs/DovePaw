@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# SessionStart hook — injects Karpathy coding guidelines as additionalContext
+# UserPromptSubmit hook — injects Karpathy coding guidelines as additionalContext
+# on every user turn, keeping them adjacent to the user message for maximum recency.
 # sourced from https://github.com/forrestchang/andrej-karpathy-skills
 
 python3 -c "
@@ -75,7 +76,7 @@ Strong success criteria let you loop independently. Weak criteria (\"make it wor
 
 print(json.dumps({
     'hookSpecificOutput': {
-        'hookEventName': 'SessionStart',
+        'hookEventName': 'UserPromptSubmit',
         'additionalContext': context
     }
 }))

@@ -66,6 +66,7 @@ vi.mock("@@/lib/agents-config", () => ({
 vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch",
   DOVEPAW_DIR: "/mock/dovepaw",
+  DOVEPAW_TMP_DIR: "/mock/dovepaw/tmp",
 }));
 
 vi.mock("@/lib/paths", () => ({

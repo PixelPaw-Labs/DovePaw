@@ -240,7 +240,7 @@ describe("readAgentSettings", () => {
   it("returns only repos and envVars (not definition fields)", async () => {
     await writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
     const settings = await readAgentSettings("my-agent");
-    expect(Object.keys(settings).toSorted()).toEqual(["envVars", "repos"]);
+    expect(Object.keys(settings).toSorted()).toEqual(["envVars", "notifications", "repos"]);
   });
 });
 

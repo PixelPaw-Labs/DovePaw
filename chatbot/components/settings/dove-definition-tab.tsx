@@ -30,6 +30,7 @@ interface FormState {
   iconName: string;
   iconBg: string;
   iconColor: string;
+  defaultModel: string;
 }
 
 function settingsToForm(s: DoveSettings): FormState {
@@ -43,6 +44,7 @@ function settingsToForm(s: DoveSettings): FormState {
     iconName: s.iconName,
     iconBg: s.iconBg,
     iconColor: s.iconColor,
+    defaultModel: s.defaultModel,
   };
 }
 
@@ -198,6 +200,21 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             onChange={(e) => set("persona", e.target.value)}
             rows={6}
             className="font-mono text-sm leading-relaxed resize-y"
+          />
+        </Row>
+      </Section>
+
+      {/* Model */}
+      <Section label="Model">
+        <Row
+          label="Default Model"
+          hint="Applied to Dove and every sub-agent SDK query. Accepts aliases (sonnet, opus, haiku) or full IDs (e.g. claude-sonnet-4-6). Leave blank to use the SDK default."
+        >
+          <Input
+            value={form.defaultModel}
+            onChange={(e) => set("defaultModel", e.target.value)}
+            placeholder="sonnet"
+            className="font-mono text-sm"
           />
         </Row>
       </Section>

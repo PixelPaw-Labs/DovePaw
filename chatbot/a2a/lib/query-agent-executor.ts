@@ -9,7 +9,8 @@ import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
-import { readAgentSettings } from "@@/lib/settings";
+import { readAgentSettings, readSettings } from "@@/lib/settings";
+import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import {
   makeAgentMgmtTools,
   makeStartScriptTool,
@@ -107,10 +108,12 @@ export class QueryAgentExecutor implements AgentExecutor {
 
     publishProgress("Starting…");
 
-    const [{ extraEnv, repoSlugs }, agentSettings] = await Promise.all([
+    const [{ extraEnv, repoSlugs }, agentSettings, globalSettings] = await Promise.all([
       this.agentConfigReader.resolveAgentSettings(this.def.name),
       readAgentSettings(this.def.name),
+      readSettings(),
     ]);
+    const defaultModel = effectiveDoveSettings(globalSettings).defaultModel.trim();
 
     try {
       if (existingState) {
@@ -169,6 +172,7 @@ export class QueryAgentExecutor implements AgentExecutor {
               options: {
                 cwd: workspace!.path,
                 env: { ...process.env, ...agentConfig.extraEnv },
+                ...(defaultModel ? { model: defaultModel } : {}),
                 agent: this.def.displayName,
                 ...(existingState ? { resume: existingState.subagentSessionId } : {}),
                 systemPrompt: {

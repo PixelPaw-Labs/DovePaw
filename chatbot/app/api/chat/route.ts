@@ -237,6 +237,7 @@ export async function POST(request: Request) {
             DOVEPAW_DIR,
           ];
           const settings = await readSettings();
+          const defaultModel = effectiveDoveSettings(settings).defaultModel.trim();
           resolvedSessionId = await consumeQueryEvents(
             query({
               prompt: message,
@@ -246,6 +247,7 @@ export async function POST(request: Request) {
                   ...process.env, // Pass through all env vars so tools can read their configs
                   ...resolveSettingsEnv(settings), // Global settings env vars override process.env
                 },
+                ...(defaultModel ? { model: defaultModel } : {}),
                 promptSuggestions: true,
                 cwd: AGENTS_ROOT,
                 // Expose the launchd install directory so Claude can inspect
