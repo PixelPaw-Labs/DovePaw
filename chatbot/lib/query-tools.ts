@@ -273,7 +273,7 @@ export function makeAskGroupTool(
           const agent = allAgents.find((a) => a.name === agentId);
           if (!agent) return { agentId, error: "unknown agent" as const };
           const response = await new TaskPoller(agent.manifestKey, agent.displayName, signal).start(
-            message,
+            `${message}\n<reminder>Must call "${startRunScriptToolName(agent.manifestKey)}" tool</reminder>`,
           );
           if (!response.structuredContent) return { agentId, error: "no taskId" as const };
           publishSessionStarted({ agentId, sessionId: response.structuredContent.contextId });
