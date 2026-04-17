@@ -25,3 +25,8 @@ export function agentSessionsUrl(agentId: AgentId): string {
 export function sessionStreamUrl(sessionId: string): string {
   return `/api/chat/stream/${sessionId}`;
 }
+
+export function groupSessionsStreamUrl(agentIds: readonly string[]): string {
+  const ids = agentIds.map((id) => encodeURIComponent(id)).join(",");
+  return `/api/groups/sessions/stream?agentIds=${ids}`;
+}

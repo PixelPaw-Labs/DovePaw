@@ -23,6 +23,7 @@ import {
   isConnectionError,
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import { publishSessionStarted } from "@/lib/group-session-events";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -271,6 +272,7 @@ export function makeAskGroupTool(
             message,
           );
           if (!response.structuredContent) return { agentId, error: "no taskId" as const };
+          publishSessionStarted({ agentId, sessionId: response.structuredContent.contextId });
           return { agentId, taskId: response.structuredContent.taskId };
         }),
       );

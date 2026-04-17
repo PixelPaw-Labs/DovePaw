@@ -915,4 +915,38 @@ describe("makeAskGroupTool", () => {
     expect(result.content[0].text).toMatch(/not (in|a member)/i);
     expect(result.structuredContent).toBeUndefined();
   });
+
+  it("publishes session-started events for each triggered member", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({
+      agent_a: 51001,
+      agent_b: 51002,
+    } as any);
+    const sendStream = vi.fn((_req: unknown) => {
+      const callIndex = sendStream.mock.calls.length;
+      return asyncEvents({
+        kind: "task",
+        id: `task-${callIndex}`,
+        contextId: `ctx-${callIndex}`,
+        status: { state: "submitted" },
+      });
+    });
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({ sendMessageStream: sendStream }),
+      };
+    } as any);
+
+    const { subscribeSessionStarted } = await import("../group-session-events");
+    const received: { agentId: string; sessionId: string }[] = [];
+    const ctrl = new AbortController();
+    subscribeSessionStarted((e) => received.push(e), ctrl.signal);
+
+    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B]));
+    const handler = captured[doveAskGroupToolName(GROUP.name)];
+    await handler({ memberIds: ["agent-a", "agent-b"], message: "go" });
+
+    ctrl.abort();
+    expect(received.map((e) => e.agentId).toSorted()).toEqual(["agent-a", "agent-b"]);
+    for (const e of received) expect(e.sessionId).toMatch(/^ctx-\d+$/);
+  });
 });

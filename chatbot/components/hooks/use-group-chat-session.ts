@@ -8,11 +8,17 @@ import {
   sessionDetailUrl,
   agentChatUrl,
   sessionStreamUrl,
+  groupSessionsStreamUrl,
   type AgentId,
 } from "@/lib/agent-api-urls";
 import { readSseStream } from "./read-sse-stream";
 import { activeSessionResponseSchema, fetchSessionDetail } from "./session-api-client";
 import { processActiveStreamEvent } from "./process-stream-event";
+
+interface SessionStartedEvent {
+  agentId: string;
+  sessionId: string;
+}
 
 interface MemberState {
   sessionId: string | null;
@@ -221,6 +227,34 @@ export function useGroupChatSession(memberAgentIds: string[]) {
     },
     [handleEvent, recomputeLoading],
   );
+
+  // Subscribe to new-session events from any member. Dove's ask_group_* broadcast
+  // or scheduled/external triggers start sessions on members after mount; this SSE
+  // tells us to open a new per-session stream as soon as such a session appears.
+  useEffect(() => {
+    const source = new EventSource(groupSessionsStreamUrl(memberAgentIds));
+    const handleMessage = (ev: MessageEvent<string>) => {
+      let parsed: SessionStartedEvent;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- trusted same-origin SSE
+        parsed = JSON.parse(ev.data) as SessionStartedEvent;
+      } catch {
+        return;
+      }
+      const state = memberStateRef.current.get(parsed.agentId);
+      if (!state) return;
+      if (state.sessionId === parsed.sessionId) return; // already tracking
+      state.sessionId = parsed.sessionId;
+      connectStream(parsed.agentId, parsed.sessionId, crypto.randomUUID(), 0);
+    };
+    source.addEventListener("message", handleMessage);
+    return () => {
+      source.removeEventListener("message", handleMessage);
+      source.close();
+    };
+    // memberAgentIds identity is stable for the lifetime of the group view
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

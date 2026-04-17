@@ -79,12 +79,12 @@ export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: Group
               return (
                 <div key={msg.id} className="flex flex-col gap-0.5">
                   {showAgentLabel && (
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest pl-10">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-10">
                       {displayName(msg.agentId!)}
                     </span>
                   )}
                   {showUserTarget && (
-                    <span className="text-[10px] text-muted-foreground text-right">
+                    <span className="text-xs text-muted-foreground text-right">
                       → {displayName(msg.agentId!)}
                     </span>
                   )}
