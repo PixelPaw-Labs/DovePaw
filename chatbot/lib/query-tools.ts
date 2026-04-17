@@ -24,6 +24,7 @@ import {
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { publishSessionStarted } from "@/lib/group-session-events";
+import { startRunScriptToolName } from "@/lib/agent-tools";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -176,7 +177,10 @@ export function makeStartTool(
         doveAwaitToolName(agent),
         undefined,
         agent.name,
-      ).start(instruction, { onProgress, backgroundTasks });
+      ).start(
+        `${instruction}\n<reminder>Must call "${startRunScriptToolName(agent.manifestKey)}" tool</reminder>`,
+        { onProgress, backgroundTasks },
+      );
     },
   );
 }

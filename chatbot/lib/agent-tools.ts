@@ -417,7 +417,10 @@ ${HANDOFF_PATTERNS(displayName)}`,
         awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
-      ).start(instruction, { contextId, backgroundTasks });
+      ).start(
+        `${instruction}\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`,
+        { contextId, backgroundTasks },
+      );
     },
   );
 }
@@ -478,13 +481,15 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
       const port = resolveAgentPort(manifestKey);
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-      const instruction = [
-        `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
-        `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
-        `\nWork product:\n`,
-        `${content}\n\n`,
-        ...(context ? [`\nContext:\n${context}`] : []),
-      ].join("\n");
+      const instruction =
+        [
+          `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
+          `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
+          `\nWork product:\n`,
+          `${content}\n\n`,
+          ...(context ? [`\nContext:\n${context}`] : []),
+        ].join("\n") +
+        `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
       const handle = await startAgentStream(port, instruction, signal);
       if (!handle)
         return {
@@ -544,12 +549,14 @@ export function makeEscalateTool(targetDef: AgentDef, signal?: AbortSignal) {
       const port = resolveAgentPort(manifestKey);
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-      const instruction = [
-        `ESCALATION — confidence: ${justification?.confidence ?? "?"}/100\n`,
-        `Blocker: ${blocker}`,
-        `\nContext:\n${context}`,
-        `\nPlease provide guidance or make the decision so I can continue.`,
-      ].join("\n");
+      const instruction =
+        [
+          `ESCALATION — confidence: ${justification?.confidence ?? "?"}/100\n`,
+          `Blocker: ${blocker}`,
+          `\nContext:\n${context}`,
+          `\nPlease provide guidance or make the decision so I can continue.`,
+        ].join("\n") +
+        `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
       const handle = await startAgentStream(port, instruction, signal);
       if (!handle)
         return { content: [{ type: "text" as const, text: `${displayName} did not start.` }] };
