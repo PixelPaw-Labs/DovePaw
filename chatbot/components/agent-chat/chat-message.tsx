@@ -1,9 +1,8 @@
 "use client";
 
-import * as React from "react";
 import { Ban } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { DOVE_AVATAR } from "@/lib/avatars";
+import { DOVE_AVATAR, USER_AVATAR } from "@/lib/avatars";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { MessageContent, MessageResponse } from "@/components/ai-elements/message";
@@ -15,7 +14,7 @@ import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";
 import { EditDiffList, ToolCallItem } from "./tool-call-badge";
 
-// Width of assistant avatar (w-8 = 2rem) + gap (gap-2 = 0.5rem) in px → pl-10 (2.5rem)
+// Width of avatar (w-8 = 2rem) + gap (gap-2 = 0.5rem) → pl-10 (2.5rem)
 const AVATAR_OFFSET = "pl-10";
 
 const MESSAGE_RESPONSE_SPACING =
@@ -54,12 +53,34 @@ function AssistantAvatar({ avatar }: { avatar: AvatarInfo }) {
   );
 }
 
+function SenderAvatar({
+  agentId,
+  agentConfigs,
+}: {
+  agentId: string | undefined;
+  agentConfigs: AgentConfigEntry[] | undefined;
+}) {
+  if (agentId) {
+    const avatar = resolveAvatar(agentId, agentConfigs);
+    return <AssistantAvatar avatar={avatar} />;
+  }
+  return (
+    <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
+      <img src={USER_AVATAR} alt="You" className="w-full h-full object-cover" />
+    </div>
+  );
+}
+
 export function ChatMessageItem({
   msg,
   agentConfigs,
+  hideReasoning = false,
+  hideAvatars = false,
 }: {
   msg: ChatMessage;
   agentConfigs?: AgentConfigEntry[];
+  hideReasoning?: boolean;
+  hideAvatars?: boolean;
 }) {
   const hasSegmentContent = msg.segments.some(
     (s) => (s.type === "text" && s.content) || s.type === "tool_call",
@@ -69,7 +90,7 @@ export function ChatMessageItem({
   const messageContent = (
     <AnimatedMessage from={msg.role}>
       {/* Process block — collapsed by default, live preview in trigger while streaming */}
-      {msg.processContent ? (
+      {!hideReasoning && msg.processContent ? (
         <Reasoning isStreaming={!!msg.isProcessStreaming} defaultOpen={false}>
           <ReasoningTrigger
             getThinkingMessage={(isStreaming, duration) => {
@@ -137,12 +158,14 @@ export function ChatMessageItem({
     return (
       <div className="group/msg flex flex-col items-start gap-0.5 w-full">
         <div className="flex items-end gap-2 w-full">
-          {hasContent && <AssistantAvatar avatar={resolveAvatar(msg.agentId, agentConfigs)} />}
+          {!hideAvatars && hasContent && (
+            <AssistantAvatar avatar={resolveAvatar(msg.agentId, agentConfigs)} />
+          )}
           {messageContent}
         </div>
         {hasContent && (
           <div
-            className={`${AVATAR_OFFSET} opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100`}
+            className={`${hideAvatars ? "" : AVATAR_OFFSET} opacity-0 transition-opacity duration-150 group-hover/msg:opacity-100`}
           >
             <CopyAction text={fullText} />
           </div>
@@ -151,5 +174,16 @@ export function ChatMessageItem({
     );
   }
 
-  return messageContent;
+  if (hideAvatars) {
+    return messageContent;
+  }
+
+  return (
+    <div className="group/msg flex flex-col items-end gap-0.5 w-full">
+      <div className="flex items-end gap-2 w-full">
+        <div className="flex-1 min-w-0">{messageContent}</div>
+        <SenderAvatar agentId={msg.agentId} agentConfigs={agentConfigs} />
+      </div>
+    </div>
+  );
 }

@@ -70,25 +70,51 @@ export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: Group
           ) : (
             messages.map((msg, i) => {
               const prevMsg = messages[i - 1];
-              const showAgentLabel =
-                msg.role === "assistant" && msg.agentId && msg.agentId !== prevMsg?.agentId;
-              const showUserTarget = msg.role === "user" && msg.agentId;
-              if (!showAgentLabel && !showUserTarget) {
-                return <ChatMessageItem key={msg.id} msg={msg} agentConfigs={agentConfigs} />;
+              const showLabel =
+                msg.agentId &&
+                (msg.role === "user" ||
+                  (msg.role === "assistant" &&
+                    !(prevMsg?.role === "assistant" && prevMsg?.agentId === msg.agentId)));
+
+              if (!showLabel) {
+                return (
+                  <ChatMessageItem
+                    key={msg.id}
+                    msg={msg}
+                    agentConfigs={agentConfigs}
+                    hideReasoning
+                    hideAvatars
+                  />
+                );
               }
+
+              const agentConfig = configByName.get(msg.agentId!);
+              const {
+                icon: AgentIcon,
+                iconBg,
+                iconColor,
+              } = agentConfig
+                ? buildAgentDef(agentConfig)
+                : { icon: Users2, iconBg: "bg-muted", iconColor: "text-muted-foreground" };
+              const isUser = msg.role === "user";
               return (
-                <div key={msg.id} className="flex flex-col gap-0.5">
-                  {showAgentLabel && (
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest pl-10">
+                <div key={msg.id} className="flex flex-col gap-1">
+                  <div className={`flex items-center gap-1.5 ${isUser ? "justify-end" : ""}`}>
+                    <div
+                      className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${iconBg}`}
+                    >
+                      <AgentIcon className={`w-2.5 h-2.5 ${iconColor}`} />
+                    </div>
+                    <span className="text-xs font-semibold text-foreground">
                       {displayName(msg.agentId!)}
                     </span>
-                  )}
-                  {showUserTarget && (
-                    <span className="text-xs text-muted-foreground text-right">
-                      → {displayName(msg.agentId!)}
-                    </span>
-                  )}
-                  <ChatMessageItem msg={msg} agentConfigs={agentConfigs} />
+                  </div>
+                  <ChatMessageItem
+                    msg={msg}
+                    agentConfigs={agentConfigs}
+                    hideReasoning
+                    hideAvatars
+                  />
                 </div>
               );
             })
