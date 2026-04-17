@@ -12,6 +12,7 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";
+import type { AgentGroup } from "@@/lib/agent-links-schemas";
 import { z } from "zod";
 import { resolveAgentPort, createAgentClient } from "@/lib/a2a-client";
 import type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
@@ -21,6 +22,7 @@ import {
   unreachableMessage,
   isConnectionError,
 } from "@/lib/task-poller";
+import type { TaskStartedWithKeyContent } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 
 // ─── Structured content types ─────────────────────────────────────────────────
@@ -69,6 +71,12 @@ export const doveAskToolName = (agent: AgentDef) => `ask_${agent.manifestKey}`;
 export const doveStartToolName = (agent: AgentDef) => `start_${agent.manifestKey}`;
 /** Returns when the referenced task completes */
 export const doveAwaitToolName = (agent: AgentDef) => `await_${agent.manifestKey}`;
+/** Slugified group name used as the dynamic `ask_group_*` MCP tool name. */
+export const doveAskGroupToolName = (groupName: string) =>
+  `ask_group_${groupName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
 
 // ─── makeAskTool ──────────────────────────────────────────────────────────────
 
@@ -203,6 +211,86 @@ export function makeAwaitTool(
         undefined,
         agent.name,
       ).poll(taskId, { onProgress });
+    },
+  );
+}
+
+// ─── makeAskGroupTool ─────────────────────────────────────────────────────────
+
+/**
+ * Fires the same instruction at multiple members of a group in parallel
+ * (fire-and-forget). Returns the started taskIds immediately without polling —
+ * members surface their progress through the Group Chat view.
+ */
+export function makeAskGroupTool(
+  group: AgentGroup,
+  allAgents: readonly AgentDef[],
+  signal?: AbortSignal,
+) {
+  const memberDefs = group.members
+    .map((name) => allAgents.find((a) => a.name === name))
+    .filter((a): a is AgentDef => Boolean(a));
+
+  const memberLines = memberDefs.map((a) => `- ${a.name}: ${a.description}`).join("\n");
+  const description = [
+    `Broadcast a task to selected members of the "${group.name}" group. Fire-and-forget — returns taskIds immediately; do not await.`,
+    group.description && `<group-focus>\n${group.description}\n</group-focus>`,
+    memberLines && `<members>\n${memberLines}\n</members>`,
+    `Pick up to 3 memberIds that best match the user's intent.`,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  return tool(
+    doveAskGroupToolName(group.name),
+    description,
+    {
+      memberIds: z
+        .array(z.string())
+        .min(1)
+        .describe("Member agent names to trigger (recommended max 3)"),
+      message: z.string().describe("Instruction broadcast to every selected member"),
+    },
+    async ({ memberIds, message }) => {
+      const unknown = memberIds.filter((id) => !group.members.includes(id));
+      if (unknown.length > 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Error: member(s) not in group "${group.name}": ${unknown.join(", ")}`,
+            },
+          ],
+        };
+      }
+
+      const results = await Promise.all(
+        memberIds.map(async (agentId) => {
+          const agent = allAgents.find((a) => a.name === agentId);
+          if (!agent) return { agentId, error: "unknown agent" as const };
+          const response = await new TaskPoller(agent.manifestKey, agent.displayName, signal).start(
+            message,
+          );
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- TaskPoller.start returns this shape on success
+          const structured = response.structuredContent as TaskStartedWithKeyContent | undefined;
+          const taskId = structured?.taskId;
+          if (!taskId) return { agentId, error: "no taskId" as const };
+          return { agentId, taskId };
+        }),
+      );
+
+      const triggered = results.flatMap((r) => ("taskId" in r ? [r] : []));
+      const errors = results.flatMap((r) => ("error" in r ? [r] : []));
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Triggered ${triggered.length} member(s) in group "${group.name}": ${triggered.map((t) => t.agentId).join(", ")}`,
+          },
+        ],
+        structuredContent: { group: group.name, triggered, errors },
+      };
     },
   );
 }

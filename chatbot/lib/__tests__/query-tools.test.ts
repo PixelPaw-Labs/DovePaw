@@ -47,9 +47,11 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
+  makeAskGroupTool,
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
+  doveAskGroupToolName,
 } from "@/lib/query-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
@@ -814,5 +816,103 @@ describe("makeAwaitTool", () => {
     const captured = captureTools(() => makeAwaitTool(AGENT));
     const h = captured[doveAwaitToolName(AGENT)];
     await expect(h({ taskId: "task-123" })).resolves.toBeDefined();
+  });
+});
+
+// ─── doveAskGroupToolName ─────────────────────────────────────────────────────
+
+describe("doveAskGroupToolName", () => {
+  it("slugifies the group name", () => {
+    expect(doveAskGroupToolName("PixelPaw Labs")).toBe("ask_group_pixelpaw_labs");
+    expect(doveAskGroupToolName("Review Chain!")).toBe("ask_group_review_chain");
+    expect(doveAskGroupToolName("  spaced  ")).toBe("ask_group_spaced");
+  });
+});
+
+// ─── makeAskGroupTool ─────────────────────────────────────────────────────────
+
+describe("makeAskGroupTool", () => {
+  const AGENT_A: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
+  const AGENT_B: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
+  const AGENT_C: AgentDef = { ...AGENT, name: "agent-c", manifestKey: "agent_c" };
+  const GROUP = {
+    name: "PixelPaw Labs",
+    description: "Simulates Envato's business",
+    members: ["agent-a", "agent-b", "agent-c"],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("registers a tool named ask_group_<slug>", () => {
+    captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+    expect(vi.mocked(tool)).toHaveBeenCalledWith(
+      doveAskGroupToolName(GROUP.name),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  it("tool description embeds group description and member names", () => {
+    captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+    const desc = vi.mocked(tool).mock.calls[0][1] as string;
+    expect(desc).toContain(GROUP.description);
+    expect(desc).toContain("agent-a");
+    expect(desc).toContain("agent-b");
+    expect(desc).toContain("agent-c");
+  });
+
+  it("fires startAgentStream in parallel for each memberId and returns triggered taskIds", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({
+      agent_a: 51001,
+      agent_b: 51002,
+      agent_c: 51003,
+    } as any);
+    const sendStream = vi.fn((_req: unknown) => {
+      // Each call returns a distinct task id based on call order
+      const callIndex = sendStream.mock.calls.length;
+      return asyncEvents({
+        kind: "task",
+        id: `task-${callIndex}`,
+        contextId: `ctx-${callIndex}`,
+        status: { state: "submitted" },
+      });
+    });
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({ sendMessageStream: sendStream }),
+      };
+    } as any);
+
+    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+    const handler = captured[doveAskGroupToolName(GROUP.name)];
+    const result = await handler({
+      memberIds: ["agent-a", "agent-b"],
+      message: "investigate X",
+    });
+
+    expect(sendStream).toHaveBeenCalledTimes(2);
+    const structured = result.structuredContent as {
+      group: string;
+      triggered: { agentId: string; taskId: string }[];
+    };
+    expect(structured.group).toBe(GROUP.name);
+    expect(structured.triggered).toHaveLength(2);
+    expect(structured.triggered.map((t) => t.agentId).toSorted()).toEqual(["agent-a", "agent-b"]);
+    for (const t of structured.triggered) expect(t.taskId).toMatch(/^task-\d+$/);
+  });
+
+  it("rejects memberIds not in group.members", async () => {
+    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+    const handler = captured[doveAskGroupToolName(GROUP.name)];
+    const result = await handler({
+      memberIds: ["agent-a", "agent-z"],
+      message: "hello",
+    });
+    expect(result.content[0].text).toContain("agent-z");
+    expect(result.content[0].text).toMatch(/not (in|a member)/i);
+    expect(result.structuredContent).toBeUndefined();
   });
 });

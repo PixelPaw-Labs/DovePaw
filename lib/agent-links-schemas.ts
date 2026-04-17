@@ -26,11 +26,13 @@ export const agentLinkSchema = z.object({
 const agentGroupSchema = z.object({
   name: z.string(),
   members: z.array(z.string()).default([]),
+  /** Human-readable description of the group's business domain; shown to Dove for semantic routing. */
+  description: z.string().default(""),
 });
 
 /** Accepts legacy string form for on-disk migration of older agent-links.json files. */
 const agentGroupInputSchema = z.union([
-  z.string().transform((name) => ({ name, members: [] as string[] })),
+  z.string().transform((name) => ({ name, members: [] as string[], description: "" })),
   agentGroupSchema,
 ]);
 

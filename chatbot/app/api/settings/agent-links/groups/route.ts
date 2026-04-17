@@ -23,33 +23,52 @@ export async function POST(request: Request) {
     return Response.json({ error: `Group "${name}" already exists` }, { status: 409 });
   }
 
-  writeAgentLinksFile({ ...file, groups: [...file.groups, { name, members: [] }] });
+  writeAgentLinksFile({
+    ...file,
+    groups: [...file.groups, { name, members: [], description: "" }],
+  });
   return Response.json({ ok: true }, { status: 201 });
 }
 
-const patchBodySchema = z.object({
-  name: z.string().min(1),
-  newName: z.string().min(1),
-});
+const patchBodySchema = z
+  .object({
+    name: z.string().min(1),
+    newName: z.string().min(1).optional(),
+    description: z.string().optional(),
+  })
+  .refine((v) => v.newName !== undefined || v.description !== undefined, {
+    message: "At least one of newName or description must be provided",
+  });
 
 export async function PATCH(request: Request) {
   const parsed = await parseBody(request, patchBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { name, newName } = parsed.data;
+  const { name, newName, description } = parsed.data;
   const file = readAgentLinksFile();
 
   if (!file.groups.some((g) => g.name === name)) {
     return Response.json({ error: `Group "${name}" not found` }, { status: 404 });
   }
-  if (name !== newName && file.groups.some((g) => g.name === newName)) {
+  if (newName !== undefined && name !== newName && file.groups.some((g) => g.name === newName)) {
     return Response.json({ error: `Group "${newName}" already exists` }, { status: 409 });
   }
 
+  const resolvedName = newName ?? name;
   writeAgentLinksFile({
     ...file,
-    groups: file.groups.map((g) => (g.name === name ? Object.assign({}, g, { name: newName }) : g)),
-    links: file.links.map((l) => (l.group === name ? Object.assign({}, l, { group: newName }) : l)),
+    groups: file.groups.map((g) => {
+      if (g.name !== name) return g;
+      return {
+        ...g,
+        name: resolvedName,
+        ...(description !== undefined && { description }),
+      };
+    }),
+    links:
+      newName !== undefined && newName !== name
+        ? file.links.map((l) => (l.group === name ? Object.assign({}, l, { group: newName }) : l))
+        : file.links,
   });
   return Response.json({ ok: true });
 }

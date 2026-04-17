@@ -976,7 +976,7 @@ export function AgentLinksContent({
   }
 
   function handleGroupCreated(name: string) {
-    setGroups((prev) => [...prev, { name, members: [] }]);
+    setGroups((prev) => [...prev, { name, members: [], description: "" }]);
     setShowCreateForm(false);
   }
 
@@ -992,6 +992,10 @@ export function AgentLinksContent({
 
   function handleMembersChanged(name: string, members: string[]) {
     setGroups((prev) => prev.map((g) => (g.name === name ? { ...g, members } : g)));
+  }
+
+  function handleDescriptionChanged(name: string, description: string) {
+    setGroups((prev) => prev.map((g) => (g.name === name ? { ...g, description } : g)));
   }
 
   const ungroupedLinks = getLinksForGroup(null);
@@ -1101,6 +1105,7 @@ export function AgentLinksContent({
           groups={groups}
           agentConfigs={allConfigs}
           onMembersChanged={handleMembersChanged}
+          onDescriptionChanged={handleDescriptionChanged}
         />
       )}
     </div>
@@ -1113,9 +1118,15 @@ interface MembersTabProps {
   groups: AgentGroup[];
   agentConfigs: AgentConfigEntry[];
   onMembersChanged: (name: string, members: string[]) => void;
+  onDescriptionChanged: (name: string, description: string) => void;
 }
 
-function MembersTab({ groups, agentConfigs, onMembersChanged }: MembersTabProps) {
+function MembersTab({
+  groups,
+  agentConfigs,
+  onMembersChanged,
+  onDescriptionChanged,
+}: MembersTabProps) {
   if (groups.length === 0) {
     return (
       <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -1133,6 +1144,7 @@ function MembersTab({ groups, agentConfigs, onMembersChanged }: MembersTabProps)
           group={group}
           agentConfigs={agentConfigs}
           onSaved={(members) => onMembersChanged(group.name, members)}
+          onDescriptionSaved={(desc) => onDescriptionChanged(group.name, desc)}
         />
       ))}
     </div>
@@ -1143,11 +1155,18 @@ interface GroupMembersRowProps {
   group: AgentGroup;
   agentConfigs: AgentConfigEntry[];
   onSaved: (members: string[]) => void;
+  onDescriptionSaved: (description: string) => void;
 }
 
-function GroupMembersRow({ group, agentConfigs, onSaved }: GroupMembersRowProps) {
+function GroupMembersRow({
+  group,
+  agentConfigs,
+  onSaved,
+  onDescriptionSaved,
+}: GroupMembersRowProps) {
   const [editing, setEditing] = React.useState(false);
   const [selected, setSelected] = React.useState(new Set(group.members));
+  const [description, setDescription] = React.useState(group.description ?? "");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -1156,6 +1175,7 @@ function GroupMembersRow({ group, agentConfigs, onSaved }: GroupMembersRowProps)
 
   function openEdit() {
     setSelected(new Set(group.members));
+    setDescription(group.description ?? "");
     setError(null);
     setEditing(true);
   }
@@ -1174,19 +1194,36 @@ function GroupMembersRow({ group, agentConfigs, onSaved }: GroupMembersRowProps)
     setError(null);
     abortRef.current = new AbortController();
     const members = [...selected];
+    const descriptionChanged = description !== (group.description ?? "");
     try {
-      const res = await fetch("/api/settings/agent-links/groups/members", {
+      const membersRes = await fetch("/api/settings/agent-links/groups/members", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: group.name, members }),
         signal: abortRef.current.signal,
       });
-      const data: unknown = await res.json();
-      if (!res.ok) {
-        setError(errorResponseSchema.parse(data).error ?? "Failed to save");
+      const membersData: unknown = await membersRes.json();
+      if (!membersRes.ok) {
+        setError(errorResponseSchema.parse(membersData).error ?? "Failed to save");
         return;
       }
       onSaved(members);
+
+      if (descriptionChanged) {
+        const descRes = await fetch("/api/settings/agent-links/groups", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: group.name, description }),
+          signal: abortRef.current.signal,
+        });
+        const descData: unknown = await descRes.json();
+        if (!descRes.ok) {
+          setError(errorResponseSchema.parse(descData).error ?? "Failed to save description");
+          return;
+        }
+        onDescriptionSaved(description);
+      }
+
       setEditing(false);
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") return;
@@ -1218,6 +1255,19 @@ function GroupMembersRow({ group, agentConfigs, onSaved }: GroupMembersRowProps)
 
       {editing ? (
         <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">
+              Description — shown to Dove for semantic routing
+            </span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={busy}
+              rows={3}
+              placeholder="What does this group simulate or focus on?"
+              className="text-sm px-3 py-2 rounded-lg border border-border bg-background text-foreground placeholder:text-muted-foreground resize-y focus:outline-none focus:border-primary"
+            />
+          </label>
           <div className="flex flex-col gap-1 max-h-64 overflow-y-auto border border-border/40 rounded-lg p-2">
             {agentConfigs.length === 0 ? (
               <p className="text-xs text-muted-foreground p-2">No agents available.</p>
@@ -1264,25 +1314,34 @@ function GroupMembersRow({ group, agentConfigs, onSaved }: GroupMembersRowProps)
             </button>
           </div>
         </div>
-      ) : memberConfigs.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No members yet.</p>
       ) : (
-        <div className="flex flex-wrap gap-1.5">
-          {memberConfigs.map((config) => {
-            const { icon: Icon, iconBg, iconColor, displayName } = buildAgentDef(config);
-            return (
-              <div
-                key={config.name}
-                className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-muted"
-              >
-                <div className={cn("w-4 h-4 rounded flex items-center justify-center", iconBg)}>
-                  <Icon className={cn("w-2.5 h-2.5", iconColor)} />
-                </div>
-                <span>{displayName}</span>
-              </div>
-            );
-          })}
-        </div>
+        <>
+          {group.description ? (
+            <p className="text-xs text-muted-foreground mb-3 whitespace-pre-wrap">
+              {group.description}
+            </p>
+          ) : null}
+          {memberConfigs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No members yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {memberConfigs.map((config) => {
+                const { icon: Icon, iconBg, iconColor, displayName } = buildAgentDef(config);
+                return (
+                  <div
+                    key={config.name}
+                    className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full bg-muted"
+                  >
+                    <div className={cn("w-4 h-4 rounded flex items-center justify-center", iconBg)}>
+                      <Icon className={cn("w-2.5 h-2.5", iconColor)} />
+                    </div>
+                    <span>{displayName}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

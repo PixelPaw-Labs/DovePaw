@@ -25,6 +25,7 @@ import {
 } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, DOVEPAW_TMP_DIR, DOVEPAW_DIR } from "@@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
+import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
@@ -36,6 +37,7 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
+  makeAskGroupTool,
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
@@ -180,6 +182,10 @@ export async function POST(request: Request) {
     const dispatcher = new SseQueryDispatcher(send, sessionId ?? undefined);
     const userMsgId = randomUUID();
 
+    const groupTools = readAgentLinksFile().groups.map((group) =>
+      makeAskGroupTool(group, agents, subprocessController.signal),
+    );
+
     const tools = agents.flatMap((agent) => {
       const onInnerProgress = (result: StreamedResult): void => {
         for (const entry of result.progress) {
@@ -216,6 +222,7 @@ export async function POST(request: Request) {
         ),
       ];
     });
+    tools.push(...groupTools);
 
     const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
       dispatcher.publish,
