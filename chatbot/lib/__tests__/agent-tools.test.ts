@@ -313,7 +313,12 @@ describe("makeStartChatToTool", () => {
   it("uses startAgentStream — not sendMessage", async () => {
     const handler = captureStartChatToHandler();
     await handler({ instruction: "do something" });
-    expect(startAgentStream).toHaveBeenCalledWith(9999, "do something\n<reminder>Must call \"start_test_agent\" tool</reminder>", undefined, undefined);
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      'do something\n<reminder>Must call "start_test_agent" tool</reminder>',
+      undefined,
+      undefined,
+    );
   });
 
   it("returns taskId and contextId from the stream handle", async () => {
@@ -357,7 +362,12 @@ describe("makeStartChatToTool", () => {
   it("passes contextId to startAgentStream when provided", async () => {
     const handler = captureStartChatToHandler();
     await handler({ instruction: "resume", contextId: "existing-ctx" });
-    expect(startAgentStream).toHaveBeenCalledWith(9999, "resume\n<reminder>Must call \"start_test_agent\" tool</reminder>", undefined, "existing-ctx");
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      'resume\n<reminder>Must call "start_test_agent" tool</reminder>',
+      undefined,
+      "existing-ctx",
+    );
   });
 });
 
