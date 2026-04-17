@@ -99,13 +99,13 @@ export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: Group
               const isUser = msg.role === "user";
               return (
                 <div key={msg.id} className="flex flex-col gap-1">
-                  <div className={`flex items-center gap-1.5 ${isUser ? "justify-end" : ""}`}>
+                  <div className={`flex items-center gap-2 ${isUser ? "justify-end" : ""}`}>
                     <div
-                      className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${iconBg}`}
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}
                     >
-                      <AgentIcon className={`w-2.5 h-2.5 ${iconColor}`} />
+                      <AgentIcon className={`w-5 h-5 ${iconColor}`} />
                     </div>
-                    <span className="text-xs font-semibold text-foreground">
+                    <span className="text-base font-semibold text-foreground">
                       {displayName(msg.agentId!)}
                     </span>
                   </div>
