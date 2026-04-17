@@ -24,15 +24,6 @@ import {
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 
-function hasTaskId(x: unknown): x is { taskId: string } {
-  return (
-    typeof x === "object" &&
-    x !== null &&
-    "taskId" in x &&
-    typeof (x as Record<string, unknown>).taskId === "string"
-  );
-}
-
 // ─── Structured content types ─────────────────────────────────────────────────
 
 /** Returned by ask_* tools when a task is successfully submitted. */
@@ -279,9 +270,8 @@ export function makeAskGroupTool(
           const response = await new TaskPoller(agent.manifestKey, agent.displayName, signal).start(
             message,
           );
-          const structured: unknown = response.structuredContent;
-          if (!hasTaskId(structured)) return { agentId, error: "no taskId" as const };
-          return { agentId, taskId: structured.taskId };
+          if (!response.structuredContent) return { agentId, error: "no taskId" as const };
+          return { agentId, taskId: response.structuredContent.taskId };
         }),
       );
 

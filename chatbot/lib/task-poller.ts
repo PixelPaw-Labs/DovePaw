@@ -46,6 +46,12 @@ export type TaskStillRunningContent = {
 /** Union of all possible await_* structured content payloads. */
 export type AwaitToolContent = TaskCompletedContent | TaskStillRunningContent;
 
+/** Return shape of TaskPoller.start — structuredContent is present only on success. */
+export type StartToolResult = {
+  content: { type: "text"; text: string }[];
+  structuredContent?: TaskStartedWithKeyContent;
+};
+
 // ─── Error response helpers (shared with makeAskTool etc.) ───────────────────
 
 export function noServersMessage() {
@@ -108,7 +114,7 @@ export class TaskPoller {
       onProgress?: (snapshot: StreamedResult) => void;
       backgroundTasks?: Promise<CollectedStream>[];
     } = {},
-  ) {
+  ): Promise<StartToolResult> {
     const port = resolveAgentPort(this.manifestKey);
     if (!port) return noServersMessage();
     try {
