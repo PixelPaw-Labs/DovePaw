@@ -52,6 +52,12 @@ export type StartToolResult = {
   structuredContent?: TaskStartedWithKeyContent;
 };
 
+/** Return shape of TaskPoller.poll — structuredContent is present only on completion or still-running. */
+export type PollToolResult = {
+  content: { type: "text"; text: string }[];
+  structuredContent?: AwaitToolContent;
+};
+
 // ─── Error response helpers (shared with makeAskTool etc.) ───────────────────
 
 export function noServersMessage() {
@@ -176,7 +182,7 @@ export class TaskPoller {
     }: {
       onProgress?: (snapshot: StreamedResult) => void;
     } = {},
-  ) {
+  ): Promise<PollToolResult> {
     const { registry, awaitTool } = this;
     const port = resolveAgentPort(this.manifestKey);
     if (!port) {
