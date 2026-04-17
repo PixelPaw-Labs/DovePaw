@@ -17,8 +17,8 @@ import {
   makeAwaitScriptTool,
   buildSubAgentPrompt,
   MGMT_TOOL,
-  START_SCRIPT_TOOL,
-  AWAIT_SCRIPT_TOOL,
+  startRunScriptToolName,
+  awaitRunScriptToolName,
 } from "@/lib/agent-tools";
 import { AgentConfigReader } from "./agent-config-reader";
 import { extractInstruction } from "./message-parts";
@@ -168,7 +168,7 @@ export class QueryAgentExecutor implements AgentExecutor {
           const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
             query({
-              prompt: instruction || START_SCRIPT_TOOL,
+              prompt: instruction || startRunScriptToolName(this.def.manifestKey),
               options: {
                 cwd: workspace!.path,
                 env: { ...process.env, ...agentConfig.extraEnv },
@@ -182,8 +182,8 @@ export class QueryAgentExecutor implements AgentExecutor {
                 },
                 additionalDirectories,
                 allowedTools: [
-                  `mcp__agents__${START_SCRIPT_TOOL}`,
-                  `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
+                  `mcp__agents__${startRunScriptToolName(this.def.manifestKey)}`,
+                  `mcp__agents__${awaitRunScriptToolName(this.def.manifestKey)}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
                   ...chatToTools.map((t) => `mcp__agents__${t.name}`),
                 ],
@@ -193,6 +193,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                   additionalDirectories,
                   chatToTools,
                   registry,
+                  this.def.manifestKey,
                   this.def.displayName,
                   agentSettings.notifications,
                   { ...process.env, ...agentConfig.extraEnv },

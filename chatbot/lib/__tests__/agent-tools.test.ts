@@ -47,7 +47,8 @@ import {
   makeStartScriptTool,
   makeStartChatToTool,
   makeReviewTool,
-  START_SCRIPT_TOOL,
+  startRunScriptToolName,
+  awaitRunScriptToolName,
   startChatToToolName,
   awaitChatToToolName,
   reviewWithToolName,
@@ -141,10 +142,10 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).toContain(AGENT.description);
   });
 
-  it("defaults to calling START_SCRIPT_TOOL — does not tell agent to ask the user to clarify", () => {
+  it("defaults to calling the start_run_script tool — does not tell agent to ask the user to clarify", () => {
     const prompt = buildSubAgentPrompt(AGENT);
     expect(prompt).not.toMatch(/ask the user to clarify/i);
-    expect(prompt).toContain(START_SCRIPT_TOOL);
+    expect(prompt).toContain(startRunScriptToolName(AGENT.manifestKey));
   });
 
   it("does not include a <reminder> block (injected per-prompt via UserPromptSubmit hook instead)", () => {
@@ -363,6 +364,14 @@ describe("makeStartChatToTool", () => {
 // ─── Tool name helpers ────────────────────────────────────────────────────────
 
 describe("tool name helpers", () => {
+  it("startRunScriptToolName", () => {
+    expect(startRunScriptToolName("fixer")).toBe("start_run_script_fixer");
+  });
+
+  it("awaitRunScriptToolName", () => {
+    expect(awaitRunScriptToolName("fixer")).toBe("await_run_script_fixer");
+  });
+
   it("startChatToToolName", () => {
     expect(startChatToToolName("fixer")).toBe("start_chat_to_fixer");
   });

@@ -13,8 +13,8 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import {
-  START_SCRIPT_TOOL,
-  AWAIT_SCRIPT_TOOL,
+  startRunScriptToolName,
+  awaitRunScriptToolName,
   CONFIDENCE_THRESHOLD,
   impactPlaceholder,
   thresholdClause,
@@ -30,9 +30,9 @@ import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 // ─── Script reminder ──────────────────────────────────────────────────────────
 
-const SUB_AGENT_PROMPT_REMINDER = `<reminder>
-When the intent is to RUN this agent: call \`${START_SCRIPT_TOOL}\` first (returns runId immediately), then \`${AWAIT_SCRIPT_TOOL}\` as a background Task. Retry with the same runId if still_running.
-When the intent is to HANDOFF to a linked agent: use \`${startChatToToolName("*")}\`/\`${awaitChatToToolName("*")}\`, \`${reviewWithToolName("*")}\`, or \`${escalateToToolName("*")}\` — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
+const buildSubAgentPromptReminder = (manifestKey: string): string => `<reminder>
+- When the user's intent is resolved by RUN yourself: ALWAYS call \`${startRunScriptToolName(manifestKey)}\` first (returns runId immediately), then \`${awaitRunScriptToolName(manifestKey)}\` as a background Task. Retry with the same runId if still_running.
+- When the user's intent is resolved by HANDOFF to a linked agent: ALWAYS use \`${startChatToToolName("*")}\`/\`${awaitChatToToolName("*")}\`, \`${reviewWithToolName("*")}\`, or \`${escalateToToolName("*")}\` — only after your own work is complete and concrete. Delegation threshold is impact-gated: ${thresholdClause}.
 </reminder>`;
 
 // ─── Agent link self-reflection gate ─────────────────────────────────────────
@@ -190,6 +190,7 @@ export function buildSubAgentHooks(
   additionalDirectories: string[],
   agentLinkTools: Array<{ name: string; description: string }>,
   registry: PendingRegistry,
+  manifestKey: string,
   agentDisplayName?: string,
   notifications?: AgentNotificationConfig,
   env?: Record<string, string | undefined>,
@@ -213,7 +214,7 @@ export function buildSubAgentHooks(
 
   const notifHooks =
     notifications && agentDisplayName
-      ? buildNotificationHooks(agentDisplayName, notifications, env)
+      ? buildNotificationHooks(manifestKey, agentDisplayName, notifications, env)
       : {};
 
   const base = buildAgentHooks({
@@ -223,11 +224,11 @@ export function buildSubAgentHooks(
       registry.getPending().map((e) => `call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
     getStillRunningId: (s) => {
       if (typeof s !== "object" || s === null) return undefined;
-      // await_run_script returns { runId }, await_chat_to_* returns { taskId }
+      // await_run_script_* returns { runId }, await_chat_to_* returns { taskId }
       const id: unknown = Reflect.get(s, "runId") ?? Reflect.get(s, "taskId");
       return typeof id === "string" ? id : undefined;
     },
-    userPromptReminder: SUB_AGENT_PROMPT_REMINDER,
+    userPromptReminder: buildSubAgentPromptReminder(manifestKey),
     allowedDirectories: [cwd, ...additionalDirectories],
   });
   return {

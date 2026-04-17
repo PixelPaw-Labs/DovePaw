@@ -8,7 +8,9 @@ import { describe, expect, it } from "vitest";
 // These are pure functions — no mocks needed.
 import { extractInstruction } from "../message-parts";
 import { buildScriptArgs } from "../spawn";
-import { START_SCRIPT_TOOL } from "@/lib/agent-tools";
+import { startRunScriptToolName } from "@/lib/agent-tools";
+
+const startScriptTool = startRunScriptToolName("test_agent");
 
 describe("extractInstruction", () => {
   it("returns text from a single text part", () => {
@@ -53,17 +55,17 @@ describe("extractInstruction", () => {
 describe("QueryAgentExecutor prompt fallback", () => {
   it("uses instruction as prompt when non-empty", () => {
     const instruction = "incidents today";
-    expect(instruction || START_SCRIPT_TOOL).toBe("incidents today");
+    expect(instruction || startScriptTool).toBe("incidents today");
   });
 
-  it("falls back to START_SCRIPT_TOOL when instruction is empty", () => {
+  it("falls back to startRunScriptToolName when instruction is empty", () => {
     const instruction = "";
-    expect(instruction || START_SCRIPT_TOOL).toBe(START_SCRIPT_TOOL);
+    expect(instruction || startScriptTool).toBe(startScriptTool);
   });
 
-  it("START_SCRIPT_TOOL is a non-empty string", () => {
-    expect(typeof START_SCRIPT_TOOL).toBe("string");
-    expect(START_SCRIPT_TOOL.length).toBeGreaterThan(0);
+  it("startRunScriptToolName returns a non-empty string that includes the manifestKey", () => {
+    expect(typeof startScriptTool).toBe("string");
+    expect(startScriptTool).toBe("start_run_script_test_agent");
   });
 });
 

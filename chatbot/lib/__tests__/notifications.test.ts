@@ -20,23 +20,31 @@ const baseConfig: AgentNotificationConfig = {
 
 describe("buildNotificationHooks", () => {
   it("returns empty object when disabled", () => {
-    expect(buildNotificationHooks("Agent", { ...baseConfig, enabled: false })).toEqual({});
+    expect(
+      buildNotificationHooks("test_agent", "Agent", { ...baseConfig, enabled: false }),
+    ).toEqual({});
   });
 
   it("omits PreToolUse when onSessionStart is false", () => {
-    const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+    const hooks = buildNotificationHooks("test_agent", "Agent", {
+      ...baseConfig,
+      onSessionStart: false,
+    });
     expect(hooks.PreToolUse).toBeUndefined();
     expect(hooks.PostToolUse).toBeDefined();
   });
 
   it("omits PostToolUse when onSessionEnd is false", () => {
-    const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionEnd: false });
+    const hooks = buildNotificationHooks("test_agent", "Agent", {
+      ...baseConfig,
+      onSessionEnd: false,
+    });
     expect(hooks.PreToolUse).toBeDefined();
     expect(hooks.PostToolUse).toBeUndefined();
   });
 
   it("includes both when both flags enabled", () => {
-    const hooks = buildNotificationHooks("Agent", baseConfig);
+    const hooks = buildNotificationHooks("test_agent", "Agent", baseConfig);
     expect(hooks.PreToolUse).toHaveLength(1);
     expect(hooks.PostToolUse).toHaveLength(1);
   });
@@ -50,7 +58,9 @@ describe("buildNotificationHooks", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
 
-    const hooks = buildNotificationHooks("Agent", config, { NTFY_TOPIC: "resolved-topic" });
+    const hooks = buildNotificationHooks("test_agent", "Agent", config, {
+      NTFY_TOPIC: "resolved-topic",
+    });
     await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -69,7 +79,9 @@ describe("buildNotificationHooks", () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
 
-    const hooks = buildNotificationHooks("Agent", config, { NTFY_TOPIC: "braces-topic" });
+    const hooks = buildNotificationHooks("test_agent", "Agent", config, {
+      NTFY_TOPIC: "braces-topic",
+    });
     await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -84,7 +96,10 @@ describe("buildNotificationHooks", () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true });
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("My Agent", { ...baseConfig, onSessionEnd: false });
+      const hooks = buildNotificationHooks("test_agent", "My Agent", {
+        ...baseConfig,
+        onSessionEnd: false,
+      });
       await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
 
       expect(fetchMock).toHaveBeenCalledWith(
@@ -98,7 +113,10 @@ describe("buildNotificationHooks", () => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionEnd: false });
+      const hooks = buildNotificationHooks("test_agent", "Agent", {
+        ...baseConfig,
+        onSessionEnd: false,
+      });
       const result = await hooks.PreToolUse?.[0]?.hooks[0]?.({
         hook_event_name: "PostToolUse",
       } as never);
@@ -114,7 +132,10 @@ describe("buildNotificationHooks", () => {
       const fetchMock = vi.fn().mockResolvedValue({ ok: true });
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("My Agent", { ...baseConfig, onSessionStart: false });
+      const hooks = buildNotificationHooks("test_agent", "My Agent", {
+        ...baseConfig,
+        onSessionStart: false,
+      });
       await hooks.PostToolUse?.[0]?.hooks[0]?.({
         hook_event_name: "PostToolUse",
         tool_response: { structuredContent: { status: "completed" } },
@@ -131,7 +152,10 @@ describe("buildNotificationHooks", () => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+      const hooks = buildNotificationHooks("test_agent", "Agent", {
+        ...baseConfig,
+        onSessionStart: false,
+      });
       await hooks.PostToolUse?.[0]?.hooks[0]?.({
         hook_event_name: "PostToolUse",
         tool_response: { structuredContent: { status: "still_running", runId: "abc" } },
@@ -145,7 +169,10 @@ describe("buildNotificationHooks", () => {
       const fetchMock = vi.fn();
       vi.stubGlobal("fetch", fetchMock);
 
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+      const hooks = buildNotificationHooks("test_agent", "Agent", {
+        ...baseConfig,
+        onSessionStart: false,
+      });
       await hooks.PostToolUse?.[0]?.hooks[0]?.({
         hook_event_name: "PostToolUse",
         tool_response: { content: [{ type: "text", text: "..." }] },
@@ -158,7 +185,10 @@ describe("buildNotificationHooks", () => {
     it("returns continue:true", async () => {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
 
-      const hooks = buildNotificationHooks("Agent", { ...baseConfig, onSessionStart: false });
+      const hooks = buildNotificationHooks("test_agent", "Agent", {
+        ...baseConfig,
+        onSessionStart: false,
+      });
       const result = await hooks.PostToolUse?.[0]?.hooks[0]?.({
         hook_event_name: "PostToolUse",
         tool_response: { structuredContent: { status: "completed" } },

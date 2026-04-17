@@ -13,7 +13,7 @@
 
 import { consola } from "consola";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import { START_SCRIPT_TOOL, AWAIT_SCRIPT_TOOL } from "@/lib/agent-tools";
+import { startRunScriptToolName, awaitRunScriptToolName } from "@/lib/agent-tools";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 // ─── Env-var reference resolution ────────────────────────────────────────────
@@ -71,6 +71,7 @@ export async function sendNotification(
  * Returns an empty object when disabled.
  */
 export function buildNotificationHooks(
+  manifestKey: string,
   agentDisplayName: string,
   config: AgentNotificationConfig,
   env?: Record<string, string | undefined>,
@@ -91,7 +92,7 @@ export function buildNotificationHooks(
   if (config.onSessionStart) {
     hooks.PreToolUse = [
       {
-        matcher: `mcp__agents__${START_SCRIPT_TOOL}`,
+        matcher: `mcp__agents__${startRunScriptToolName(manifestKey)}`,
         hooks: [
           async (input) => {
             if (input.hook_event_name !== "PreToolUse") return { continue: true };
@@ -111,7 +112,7 @@ export function buildNotificationHooks(
   if (config.onSessionEnd) {
     hooks.PostToolUse = [
       {
-        matcher: `mcp__agents__${AWAIT_SCRIPT_TOOL}`,
+        matcher: `mcp__agents__${awaitRunScriptToolName(manifestKey)}`,
         hooks: [
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return { continue: true };

@@ -376,6 +376,7 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
       [],
       [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
       makeRegistry(),
+      "test_agent",
     );
     // The reflection matcher is the last PreToolUse matcher
     const matchers = hooks.PreToolUse!;
@@ -535,6 +536,7 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
       [],
       [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
       registry,
+      "test_agent",
     );
     // The handoff hook is the last Stop matcher (base pending-work hook is first)
     const matchers = hooks.Stop!;
@@ -573,7 +575,7 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
   });
 
   it("is absent when no agent link tools are provided", () => {
-    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry());
+    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
     // Stop array should only contain the base pending-work hook, not the handoff hook
     expect(hooks.Stop).toHaveLength(1);
   });

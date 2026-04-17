@@ -114,10 +114,12 @@ export const MGMT_TOOL = {
   logs: "get_logs",
 } as const;
 
-/** Fires the agent script in the background and returns a runId immediately. */
-export const START_SCRIPT_TOOL = "start_run_script";
-/** Polls a previously started script run; returns output or still_running. */
-export const AWAIT_SCRIPT_TOOL = "await_run_script";
+/** Tool name for firing the agent script in the background (start_run_script_* pattern). */
+export const startRunScriptToolName = (manifestKey: string): string =>
+  `start_run_script_${manifestKey}`;
+/** Tool name for polling a previously started script run (await_run_script_* pattern). */
+export const awaitRunScriptToolName = (manifestKey: string): string =>
+  `await_run_script_${manifestKey}`;
 
 /** Tool name for sending a message to a linked agent (start_chat_to_* pattern). */
 export const startChatToToolName = (manifestKey: string): string => `start_chat_to_${manifestKey}`;
@@ -239,7 +241,7 @@ export function makeStartScriptTool(
   registry?: PendingRegistry,
 ) {
   return tool(
-    START_SCRIPT_TOOL,
+    startRunScriptToolName(agent.manifestKey),
     `Start the ${agent.displayName} agent script in the background and return a runId immediately`,
     {
       instruction: z
@@ -260,7 +262,11 @@ export function makeStartScriptTool(
           ? { ...config, extraEnv: { ...config.extraEnv, REPO_LIST: clonedPaths.join(",") } }
           : config;
       const { runId } = startScript(finalConfig, instruction, signal, onProgress, taskId);
-      registry?.register({ awaitTool: AWAIT_SCRIPT_TOOL, idKey: "runId", id: runId });
+      registry?.register({
+        awaitTool: awaitRunScriptToolName(agent.manifestKey),
+        idKey: "runId",
+        id: runId,
+      });
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },
@@ -272,9 +278,13 @@ export function makeStartScriptTool(
 /** Polls a previously started script run; returns output or still_running. */
 export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry) {
   return tool(
-    AWAIT_SCRIPT_TOOL,
+    awaitRunScriptToolName(agent.manifestKey),
     `Await a previously started ${agent.displayName} script run. Returns the output when complete, or { status: "still_running", runId } if still in progress.`,
-    { runId: z.string().describe("The runId returned by start_run_script") },
+    {
+      runId: z
+        .string()
+        .describe(`The runId returned by ${startRunScriptToolName(agent.manifestKey)}`),
+    },
     async ({ runId }) => {
       const result = await awaitScript(runId);
       if (result.status === "completed" || result.status === "not_found") {
@@ -332,8 +342,8 @@ ${
 This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and produces output (files, logs, state) during those runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
 
 - Clearly asking about past/existing state (e.g. past tense, "what happened", "show me logs", "last night's output") → look for existing output first; only run if nothing useful is found
-- Everything else → call \`${START_SCRIPT_TOOL}\` with the instruction as-is; do not ask for clarification`
-    : `**This agent runs on-demand only** — there are no scheduled runs and no past output to look for. When the user's intent is to run this agent, call \`${START_SCRIPT_TOOL}\` directly without looking for prior output.`
+- Everything else → call \`${startRunScriptToolName(agent.manifestKey)}\` with the instruction as-is; do not ask for clarification`
+    : `**This agent runs on-demand only** — there are no scheduled runs and no past output to look for. When the user's intent is to run this agent, call \`${startRunScriptToolName(agent.manifestKey)}\` directly without looking for prior output.`
 }
 
 **Managing this agent (launchd):**
