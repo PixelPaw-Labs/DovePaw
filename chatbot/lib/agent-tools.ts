@@ -390,6 +390,7 @@ export function makeStartChatToTool(
   signal?: AbortSignal,
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
+  callerAgentId?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -419,7 +420,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         targetDef.name,
       ).start(
         `${instruction}\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`,
-        { contextId, backgroundTasks },
+        { contextId, backgroundTasks, senderAgentId: callerAgentId },
       );
     },
   );
@@ -464,7 +465,7 @@ export function makeAwaitChatToTool(
  * Sends content to a reviewing agent and waits for an approve/reject decision.
  * The reviewing agent must respond with {"decision":"APPROVED"|"REJECTED","reason":"..."} JSON.
  */
-export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
+export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal, callerAgentId?: string) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
     reviewWithToolName(manifestKey),
@@ -490,7 +491,7 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
           ...(context ? [`\nContext:\n${context}`] : []),
         ].join("\n") +
         `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
-      const handle = await startAgentStream(port, instruction, signal);
+      const handle = await startAgentStream(port, instruction, signal, undefined, callerAgentId);
       if (!handle)
         return {
           content: [{ type: "text" as const, text: `${displayName} did not start.` }],
@@ -533,7 +534,11 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal) {
  * Escalates a blocker to a supervisor/specialist agent and returns its guidance.
  * Use when confidence is below threshold or the task exceeds your authority.
  */
-export function makeEscalateTool(targetDef: AgentDef, signal?: AbortSignal) {
+export function makeEscalateTool(
+  targetDef: AgentDef,
+  signal?: AbortSignal,
+  callerAgentId?: string,
+) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
     escalateToToolName(manifestKey),
@@ -557,7 +562,7 @@ export function makeEscalateTool(targetDef: AgentDef, signal?: AbortSignal) {
           `\nPlease provide guidance or make the decision so I can continue.`,
         ].join("\n") +
         `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
-      const handle = await startAgentStream(port, instruction, signal);
+      const handle = await startAgentStream(port, instruction, signal, undefined, callerAgentId);
       if (!handle)
         return { content: [{ type: "text" as const, text: `${displayName} did not start.` }] };
       const { result } = await collectStreamResult(handle.stream);

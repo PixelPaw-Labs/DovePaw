@@ -54,10 +54,7 @@ export class AgentConfigReader {
     backgroundTasks?: Promise<CollectedStream>[],
     registry?: PendingRegistry,
   ) {
-    const [links, allAgents] = await Promise.all([
-      Promise.resolve(readAgentLinks()),
-      readAgentsConfig(),
-    ]);
+    const [links, allAgents] = await Promise.all([readAgentLinks(), readAgentsConfig()]);
 
     const resolvedLinks = resolveLinkedTargets(agentName, links);
     const tools: Parameters<typeof createSdkMcpServer>[0]["tools"] = [];
@@ -75,13 +72,13 @@ export class AgentConfigReader {
 
       switch (strategy) {
         case "review":
-          tools.push(makeReviewTool(targetDef, signal));
+          tools.push(makeReviewTool(targetDef, signal, agentName));
           break;
         case "escalation":
-          tools.push(makeEscalateTool(targetDef, signal));
+          tools.push(makeEscalateTool(targetDef, signal, agentName));
           break;
         default: // "parallel" and any future strategies default to start + await
-          tools.push(makeStartChatToTool(targetDef, signal, backgroundTasks, registry));
+          tools.push(makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName));
           tools.push(makeAwaitChatToTool(targetDef, signal, registry));
       }
     }

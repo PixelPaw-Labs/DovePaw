@@ -209,7 +209,7 @@ export class MessageAccumulator {
 
   private saveSnapshot(): void {
     if (!this._saveConfig) return;
-    const { sessionId, agentId, label, userMsgId, userText } = this._saveConfig;
+    const { sessionId, agentId, label, userMsgId, userText, senderAgentId } = this._saveConfig;
     const resumeSeq = getSessionCurrentSeq(sessionId);
     upsertSession({
       id: sessionId,
@@ -223,12 +223,13 @@ export class MessageAccumulator {
       progress: this._progress,
       resumeSeq,
       status: "running",
+      senderAgentId,
     });
   }
 
   private saveProgress(): void {
     if (!this._saveConfig) return;
-    const { sessionId, agentId, label } = this._saveConfig;
+    const { sessionId, agentId, label, senderAgentId } = this._saveConfig;
     upsertSession({
       id: sessionId,
       agentId,
@@ -237,6 +238,7 @@ export class MessageAccumulator {
       messages: [],
       progress: this._progress,
       status: "running",
+      senderAgentId,
     });
   }
 }
@@ -252,6 +254,7 @@ export interface IncrementalSaveConfig {
   label: string;
   userMsgId: string;
   userText: string;
+  senderAgentId?: string;
 }
 
 export class SseQueryDispatcher implements QueryResponseDispatcher {

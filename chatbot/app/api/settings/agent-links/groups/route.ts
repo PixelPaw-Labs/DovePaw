@@ -17,13 +17,13 @@ export async function POST(request: Request) {
   if (!parsed.ok) return parsed.response;
 
   const { name } = parsed.data;
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
 
   if (file.groups.some((g) => g.name === name)) {
     return Response.json({ error: `Group "${name}" already exists` }, { status: 409 });
   }
 
-  writeAgentLinksFile({
+  await writeAgentLinksFile({
     ...file,
     groups: [...file.groups, { name, members: [], description: "" }],
   });
@@ -45,7 +45,7 @@ export async function PATCH(request: Request) {
   if (!parsed.ok) return parsed.response;
 
   const { name, newName, description } = parsed.data;
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
 
   if (!file.groups.some((g) => g.name === name)) {
     return Response.json({ error: `Group "${name}" not found` }, { status: 404 });
@@ -55,7 +55,7 @@ export async function PATCH(request: Request) {
   }
 
   const resolvedName = newName ?? name;
-  writeAgentLinksFile({
+  await writeAgentLinksFile({
     ...file,
     groups: file.groups.map((g) => {
       if (g.name !== name) return g;
@@ -82,9 +82,9 @@ export async function DELETE(request: Request) {
   if (!parsed.ok) return parsed.response;
 
   const { name } = parsed.data;
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
 
-  writeAgentLinksFile({
+  await writeAgentLinksFile({
     ...file,
     groups: file.groups.filter((g) => g.name !== name),
     links: file.links.map((l) => {

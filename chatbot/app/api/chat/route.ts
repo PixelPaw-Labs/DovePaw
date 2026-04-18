@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     const dispatcher = new SseQueryDispatcher(send, sessionId ?? undefined);
     const userMsgId = randomUUID();
 
-    const groupTools = readAgentLinksFile().groups.map((group) =>
+    const groupTools = (await readAgentLinksFile()).groups.map((group) =>
       makeAskGroupTool(group, agents, subprocessController.signal),
     );
 

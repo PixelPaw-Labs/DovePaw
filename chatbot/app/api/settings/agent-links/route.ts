@@ -14,7 +14,7 @@ import { readAgentLinksFile, writeAgentLinksFile, AGENT_LINK_STRATEGIES } from "
 import { parseBody } from "@/lib/env-var-routes";
 
 export async function GET() {
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
   return Response.json({ links: file.links, groups: file.groups });
 }
 
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     return Response.json({ error: `Agent "${target}" not found` }, { status: 404 });
   }
 
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
   const alreadyExists = file.links.some((l) => l.source === source && l.target === target);
   if (alreadyExists) {
     return Response.json(
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     );
   }
 
-  writeAgentLinksFile({
+  await writeAgentLinksFile({
     ...file,
     links: [...file.links, { source, target, direction, strategy, group }],
   });
@@ -85,7 +85,7 @@ export async function PATCH(request: Request) {
     return Response.json({ error: "An agent cannot link to itself" }, { status: 400 });
   }
 
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
   const idx = file.links.findIndex((l) => l.source === source && l.target === target);
   if (idx === -1) {
     return Response.json(
@@ -107,7 +107,7 @@ export async function PATCH(request: Request) {
 
   const updatedLinks = [...file.links];
   updatedLinks[idx] = { source: newSource, target: newTarget, direction, strategy, group };
-  writeAgentLinksFile({ ...file, links: updatedLinks });
+  await writeAgentLinksFile({ ...file, links: updatedLinks });
   return Response.json({ ok: true });
 }
 
@@ -121,8 +121,8 @@ export async function DELETE(request: Request) {
   if (!parsed.ok) return parsed.response;
 
   const { source, target } = parsed.data;
-  const file = readAgentLinksFile();
-  writeAgentLinksFile({
+  const file = await readAgentLinksFile();
+  await writeAgentLinksFile({
     ...file,
     links: file.links.filter((l) => !(l.source === source && l.target === target)),
   });

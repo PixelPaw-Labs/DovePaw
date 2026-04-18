@@ -57,6 +57,7 @@ export interface UpsertSessionArgs {
   workspacePath?: string;
   resumeSeq?: number;
   status?: SessionStatus;
+  senderAgentId?: string;
 }
 
 export interface SessionResumable {
@@ -119,6 +120,9 @@ function getDb(): Database.Database {
   if (!cols.some((c) => c.name === "resume_seq")) {
     _db.exec("ALTER TABLE sessions ADD COLUMN resume_seq INTEGER NOT NULL DEFAULT 0");
   }
+  if (!cols.some((c) => c.name === "sender_agent_id")) {
+    _db.exec("ALTER TABLE sessions ADD COLUMN sender_agent_id TEXT");
+  }
   return _db;
 }
 
@@ -154,8 +158,9 @@ export function upsertSession(args: UpsertSessionArgs): void {
   db.prepare(`
     INSERT INTO sessions (id, agent_id, started_at, label, messages, progress, updated_at,
                           subagent_session_id, workspace_path,
-                          orchestrator_session_id, subagent_a2a_context_id, resume_seq, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                          orchestrator_session_id, subagent_a2a_context_id, resume_seq, status,
+                          sender_agent_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       messages                = excluded.messages,
       progress                = excluded.progress,
@@ -165,7 +170,8 @@ export function upsertSession(args: UpsertSessionArgs): void {
       orchestrator_session_id = COALESCE(sessions.orchestrator_session_id, excluded.orchestrator_session_id),
       subagent_a2a_context_id = COALESCE(sessions.subagent_a2a_context_id, excluded.subagent_a2a_context_id),
       resume_seq              = COALESCE(NULLIF(excluded.resume_seq, 0), sessions.resume_seq),
-      status                  = COALESCE(excluded.status, sessions.status)
+      status                  = COALESCE(excluded.status, sessions.status),
+      sender_agent_id         = COALESCE(sessions.sender_agent_id, excluded.sender_agent_id)
   `).run(
     args.id,
     args.agentId,
@@ -180,6 +186,7 @@ export function upsertSession(args: UpsertSessionArgs): void {
     subagentA2aContextId,
     args.resumeSeq ?? 0,
     args.status ?? "done",
+    args.senderAgentId ?? null,
   );
 }
 
@@ -288,7 +295,8 @@ export function listSessions(agentId: string): SessionInfo[] {
 }
 
 export function getSessionDetail(id: string): SessionDetailResult | null {
-  const row = getDb()
+  const db = getDb();
+  const row = db
     .prepare<
       [string],
       {
@@ -300,18 +308,25 @@ export function getSessionDetail(id: string): SessionDetailResult | null {
         progress: string;
         resume_seq: number;
         status: string;
+        sender_agent_id: string | null;
       }
     >(
-      "SELECT id, agent_id, started_at, label, messages, progress, resume_seq, status FROM sessions WHERE id = ?",
+      "SELECT id, agent_id, started_at, label, messages, progress, resume_seq, status, sender_agent_id FROM sessions WHERE id = ?",
     )
     .get(id);
   if (!row) return null;
+
+  const senderAgentId = row.sender_agent_id ?? undefined;
+  const messages = sessionMessageArraySchema
+    .parse(JSON.parse(row.messages))
+    .map((m) => (senderAgentId && m.role === "user" ? Object.assign({}, m, { senderAgentId }) : m));
+
   return {
     id: row.id,
     agentId: row.agent_id,
     startedAt: row.started_at,
     label: row.label,
-    messages: sessionMessageArraySchema.parse(JSON.parse(row.messages)),
+    messages,
     progress: progressEntryArraySchema.parse(JSON.parse(row.progress)),
     resumeSeq: row.resume_seq,
     status: toSessionStatus(row.status),

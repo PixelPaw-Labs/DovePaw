@@ -21,6 +21,8 @@ export interface ChatMessage {
   agentProgress?: ProgressEntry[];
   /** Which agent sent this message — "dove" or a subagent name */
   agentId?: string;
+  /** For user-role messages in group chat: which agent sent the message */
+  senderAgentId?: string;
 }
 
 /** Extract all text from a message's segments as a single string. */

@@ -18,10 +18,7 @@ export class PipelineTrigger {
    * Resolve all pipeline-linked targets for `agentName` that are currently online.
    */
   private async resolveTargets(agentName: string): Promise<AgentDef[]> {
-    const [links, allAgents] = await Promise.all([
-      Promise.resolve(readAgentLinks()),
-      readAgentsConfig(),
-    ]);
+    const [links, allAgents] = await Promise.all([readAgentLinks(), readAgentsConfig()]);
 
     return resolveLinkedTargets(agentName, links)
       .filter(({ strategy }) => strategy === "pipeline")

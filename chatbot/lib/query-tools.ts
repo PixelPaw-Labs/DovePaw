@@ -114,6 +114,7 @@ export function makeAskTool(
             role: "user",
             parts: [{ kind: "text", text: instruction }],
             ...(contextId ? { contextId } : {}),
+            metadata: { senderAgentId: "dove" },
           },
           configuration: { blocking: false },
         });
@@ -179,7 +180,7 @@ export function makeStartTool(
         agent.name,
       ).start(
         `${instruction}\n<reminder>Must call "${startRunScriptToolName(agent.manifestKey)}" tool</reminder>`,
-        { onProgress, backgroundTasks },
+        { onProgress, backgroundTasks, senderAgentId: "dove" },
       );
     },
   );
@@ -274,6 +275,7 @@ export function makeAskGroupTool(
           if (!agent) return { agentId, error: "unknown agent" as const };
           const response = await new TaskPoller(agent.manifestKey, agent.displayName, signal).start(
             `${message}\n<reminder>Must call "${startRunScriptToolName(agent.manifestKey)}" tool</reminder>`,
+            { senderAgentId: "dove" },
           );
           if (!response.structuredContent) return { agentId, error: "no taskId" as const };
           publishSessionStarted({ agentId, sessionId: response.structuredContent.contextId });

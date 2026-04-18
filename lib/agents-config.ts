@@ -20,6 +20,7 @@ import {
   tmpAgentDefinitionFile,
 } from "./paths";
 import type { AgentDef } from "./agents";
+import { readAgentLinksFile, writeAgentLinksFile } from "./agent-links";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -253,8 +254,16 @@ export async function deleteAgentDefinition(agentName: string): Promise<void> {
   const settingsDir = join(AGENT_SETTINGS_DIR, agentName);
   if (await fileExists(settingsDir)) {
     await rm(settingsDir, { recursive: true });
-    return;
+  } else {
+    const tmpDir = join(DOVEPAW_TMP_DIR, agentName);
+    if (await fileExists(tmpDir)) await rm(tmpDir, { recursive: true });
   }
-  const tmpDir = join(DOVEPAW_TMP_DIR, agentName);
-  if (await fileExists(tmpDir)) await rm(tmpDir, { recursive: true });
+
+  const file = await readAgentLinksFile();
+  const links = file.links.filter((l) => l.source !== agentName && l.target !== agentName);
+  const groups = file.groups.map((g) => ({
+    ...g,
+    members: g.members.filter((m) => m !== agentName),
+  }));
+  await writeAgentLinksFile({ ...file, links, groups });
 }

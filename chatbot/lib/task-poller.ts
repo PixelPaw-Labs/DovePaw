@@ -115,10 +115,12 @@ export class TaskPoller {
       contextId,
       onProgress,
       backgroundTasks,
+      senderAgentId,
     }: {
       contextId?: string;
       onProgress?: (snapshot: StreamedResult) => void;
       backgroundTasks?: Promise<CollectedStream>[];
+      senderAgentId?: string;
     } = {},
   ): Promise<StartToolResult> {
     const port = resolveAgentPort(this.manifestKey);
@@ -127,7 +129,13 @@ export class TaskPoller {
       // Use startAgentStream so the EventQueue is created before execute() runs —
       // this captures workspace/setup events that fire synchronously during execute()
       // before any resubscribeTask connection could be opened.
-      const handle = await startAgentStream(port, instruction, this.signal, contextId);
+      const handle = await startAgentStream(
+        port,
+        instruction,
+        this.signal,
+        contextId,
+        senderAgentId,
+      );
       if (!handle) {
         return {
           content: [

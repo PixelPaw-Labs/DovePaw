@@ -81,6 +81,10 @@ export class QueryAgentExecutor implements AgentExecutor {
       (instruction ? instruction.slice(0, LABEL_MAX_LEN) : `Scheduled Session: ${taskId}`);
     let workspace: AgentWorkspace | null = null;
     const userMsgId = randomUUID();
+    const senderAgentId =
+      typeof requestContext.userMessage.metadata?.senderAgentId === "string"
+        ? requestContext.userMessage.metadata.senderAgentId
+        : undefined;
     const backgroundTasks: Promise<CollectedStream>[] = [];
 
     // Track direct publishStatusToUI calls (workspace setup, clone progress, etc.)
@@ -98,6 +102,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         messages: [],
         progress: innerProgress,
         status: "running",
+        senderAgentId,
       });
     };
 

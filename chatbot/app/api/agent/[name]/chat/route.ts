@@ -23,6 +23,7 @@ import { z } from "zod";
 const chatRequestSchema = z.object({
   message: z.string(),
   sessionId: z.string().nullable(), // contextId from a previous response; null on first message
+  senderAgentId: z.string().optional(),
 });
 
 export const maxDuration = 86400;
@@ -53,7 +54,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
     );
   }
 
-  const { message, sessionId } = chatRequestSchema.parse(await request.json());
+  const { message, sessionId, senderAgentId } = chatRequestSchema.parse(await request.json());
 
   const subprocessController = new AbortController();
   return createSseResponse(request, subprocessController, async (send, _connectionController) => {
@@ -93,6 +94,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         label: message.slice(0, 60) || "Session",
         userMsgId: crypto.randomUUID(),
         userText: message,
+        senderAgentId,
       });
 
       await collectStreamResult(stream, onSnapshot, onArtifact);

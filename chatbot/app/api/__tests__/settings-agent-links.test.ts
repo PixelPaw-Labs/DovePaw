@@ -48,8 +48,8 @@ const SAMPLE_FILE: AgentLinksFile = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(readAgentLinksFile).mockReturnValue(structuredClone(SAMPLE_FILE));
-  vi.mocked(writeAgentLinksFile).mockImplementation(() => {});
+  vi.mocked(readAgentLinksFile).mockResolvedValue(structuredClone(SAMPLE_FILE));
+  vi.mocked(writeAgentLinksFile).mockResolvedValue();
   vi.mocked(readAgentFile).mockResolvedValue({ name: "agent-x" } as never);
 });
 

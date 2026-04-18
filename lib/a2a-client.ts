@@ -35,6 +35,7 @@ export async function startAgentStream(
   message: string,
   signal?: AbortSignal,
   contextId?: string,
+  senderAgentId?: string,
 ): Promise<AgentStreamHandle | null> {
   const client = await createAgentClient(port);
   const ac = new AbortController();
@@ -48,6 +49,7 @@ export async function startAgentStream(
         role: "user",
         parts: [{ kind: "text", text: message }],
         ...(contextId ? { contextId } : {}),
+        ...(senderAgentId ? { metadata: { senderAgentId } } : {}),
       },
     },
     { signal: ac.signal },

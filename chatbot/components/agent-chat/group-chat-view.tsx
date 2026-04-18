@@ -88,7 +88,9 @@ export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: Group
                 );
               }
 
-              const agentConfig = configByName.get(msg.agentId!);
+              const isUser = msg.role === "user";
+              const senderAgentId = isUser ? msg.senderAgentId : msg.agentId;
+              const agentConfig = senderAgentId ? configByName.get(senderAgentId) : null;
               const {
                 icon: AgentIcon,
                 iconBg,
@@ -96,7 +98,6 @@ export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: Group
               } = agentConfig
                 ? buildAgentDef(agentConfig)
                 : { icon: Users2, iconBg: "bg-muted", iconColor: "text-muted-foreground" };
-              const isUser = msg.role === "user";
               return (
                 <div key={msg.id} className="flex flex-col gap-1">
                   <div className={`flex items-center gap-2 ${isUser ? "justify-end" : ""}`}>
@@ -106,7 +107,7 @@ export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: Group
                       <AgentIcon className={`w-5 h-5 ${iconColor}`} />
                     </div>
                     <span className="text-base font-semibold text-foreground">
-                      {displayName(msg.agentId!)}
+                      {senderAgentId ? displayName(senderAgentId) : ""}
                     </span>
                   </div>
                   <ChatMessageItem

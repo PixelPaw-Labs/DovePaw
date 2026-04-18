@@ -6,7 +6,7 @@
  * Import from lib/agent-links-schemas.ts for types/constants only.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import { AGENT_LINKS_FILE } from "./paths";
 import {
   agentLinksFileSchema,
@@ -19,9 +19,9 @@ export { AGENT_LINK_STRATEGIES } from "./agent-links-schemas";
 
 // ─── Read / Write ─────────────────────────────────────────────────────────────
 
-export function readAgentLinksFile(): AgentLinksFile {
+export async function readAgentLinksFile(): Promise<AgentLinksFile> {
   try {
-    const raw: unknown = JSON.parse(readFileSync(AGENT_LINKS_FILE, "utf-8"));
+    const raw: unknown = JSON.parse(await readFile(AGENT_LINKS_FILE, "utf-8"));
     const result = agentLinksFileSchema.safeParse(raw);
     return result.success ? result.data : { version: 1, groups: [], links: [] };
   } catch {
@@ -29,19 +29,18 @@ export function readAgentLinksFile(): AgentLinksFile {
   }
 }
 
-/** Returns only the links array. Existing callers remain unchanged. */
-export function readAgentLinks(): AgentLink[] {
-  return readAgentLinksFile().links;
+export async function readAgentLinks(): Promise<AgentLink[]> {
+  return (await readAgentLinksFile()).links;
 }
 
-export function writeAgentLinksFile(file: AgentLinksFile): void {
-  writeFileSync(AGENT_LINKS_FILE, JSON.stringify(file, null, 2), "utf-8");
+export async function writeAgentLinksFile(file: AgentLinksFile): Promise<void> {
+  await writeFile(AGENT_LINKS_FILE, JSON.stringify(file, null, 2), "utf-8");
 }
 
 /** Updates only the links array, preserving the existing groups list. */
-export function writeAgentLinks(links: AgentLink[]): void {
-  const existing = readAgentLinksFile();
-  writeAgentLinksFile({ ...existing, links });
+export async function writeAgentLinks(links: AgentLink[]): Promise<void> {
+  const existing = await readAgentLinksFile();
+  await writeAgentLinksFile({ ...existing, links });
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

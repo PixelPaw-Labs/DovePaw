@@ -97,7 +97,7 @@ export function buildNotificationHooks(
           async (input) => {
             if (input.hook_event_name !== "PreToolUse") return { continue: true };
             const timestamp = new Date().toLocaleTimeString();
-            void sendNotification(
+            await sendNotification(
               channel,
               `[${agentDisplayName}] Script started`,
               `Started at ${timestamp}`,
@@ -130,7 +130,7 @@ export function buildNotificationHooks(
             )
               return { continue: true };
             const timestamp = new Date().toLocaleTimeString();
-            void sendNotification(
+            await sendNotification(
               channel,
               `[${agentDisplayName}] ✓ Script finished`,
               `Finished at ${timestamp}`,

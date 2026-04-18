@@ -22,7 +22,7 @@ export async function PUT(request: Request) {
   const { name, members } = parsed.data;
   const unique = [...new Set(members)];
 
-  const file = readAgentLinksFile();
+  const file = await readAgentLinksFile();
   const group = file.groups.find((g) => g.name === name);
   if (!group) {
     return Response.json({ error: `Group "${name}" not found` }, { status: 404 });
@@ -39,7 +39,7 @@ export async function PUT(request: Request) {
     return Response.json({ error: `Unknown agent(s): ${missing.join(", ")}` }, { status: 400 });
   }
 
-  writeAgentLinksFile({
+  await writeAgentLinksFile({
     ...file,
     groups: file.groups.map((g) =>
       g.name === name ? Object.assign({}, g, { members: unique }) : g,

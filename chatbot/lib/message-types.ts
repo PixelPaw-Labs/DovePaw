@@ -17,6 +17,7 @@ export const sessionMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
   segments: z.array(messageSegmentSchema),
   processContent: z.string().optional(),
+  senderAgentId: z.string().optional(),
 });
 
 // ─── Inferred types ───────────────────────────────────────────────────────────

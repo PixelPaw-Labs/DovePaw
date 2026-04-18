@@ -15,6 +15,7 @@ const { tmpDir } = vi.hoisted(() => {
 
 vi.mock("@@/lib/paths", () => ({
   AGENT_SETTINGS_DIR: tmpDir,
+  AGENT_LINKS_FILE: require("node:path").join(tmpDir, "agent-links.json"),
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   agentConfigDir: (n: string) => require("node:path").join(tmpDir, n),
   // eslint-disable-next-line @typescript-eslint/no-require-imports
