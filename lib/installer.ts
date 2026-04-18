@@ -26,6 +26,7 @@ import {
   AGENTS_DIST,
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
+  DOVEPAW_TMP_DIR,
   LAUNCH_AGENTS_DIR,
   PLUGINS_DIR,
   SKILLS_ROOT,
@@ -256,6 +257,12 @@ export async function deployAgentSdk(): Promise<void> {
   const codexSdkLink = join(sdkNmScope, "codex-sdk");
   await rm(codexSdkLink, { recursive: true, force: true });
   await symlink(agentNodeModule("@openai/codex-sdk"), codexSdkLink);
+  // Ensure ~/.dovepaw/tmp/ is treated as ESM so tsx loads tmp agent scripts
+  // in ESM mode. Without this, Node.js defaults to CJS and require()ing the
+  // ESM-only @openai/codex-sdk (transitively via the SDK index) fails with
+  // ERR_PACKAGE_PATH_NOT_EXPORTED.
+  await mkdir(DOVEPAW_TMP_DIR, { recursive: true });
+  await writeFile(join(DOVEPAW_TMP_DIR, "package.json"), '{"type":"module"}\n', "utf-8");
 }
 
 /**

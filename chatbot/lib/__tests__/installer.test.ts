@@ -44,4 +44,19 @@ describe("deployAgentSdk", () => {
     expect(mockMkdir).toHaveBeenCalledWith(sdkNmScope, { recursive: true });
     expect(mockSymlink).toHaveBeenCalledWith(expectedTarget, expectedLink);
   });
+
+  it("writes package.json with type:module to ~/.dovepaw/tmp/ so tsx loads tmp agents as ESM", async () => {
+    const { writeFile } = await import("node:fs/promises");
+    const { deployAgentSdk } = await import("@@/lib/installer");
+    const { DOVEPAW_TMP_DIR } = await import("@@/lib/paths");
+
+    await deployAgentSdk();
+
+    expect(mockMkdir).toHaveBeenCalledWith(DOVEPAW_TMP_DIR, { recursive: true });
+    expect(writeFile).toHaveBeenCalledWith(
+      join(DOVEPAW_TMP_DIR, "package.json"),
+      '{"type":"module"}\n',
+      "utf-8",
+    );
+  });
 });
