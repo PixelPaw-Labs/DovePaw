@@ -191,15 +191,15 @@ export function AgentButton({
         <span
           role="button"
           onClick={handleDeleteClick}
-          title={deleteConfirm ? "Confirm delete?" : `Delete ${agent.displayName}`}
+          title={deleteConfirm ? "Click to confirm deletion" : `Delete ${agent.displayName}`}
           className={cn(
-            "shrink-0 w-5 h-5 rounded flex items-center justify-center transition-colors relative z-10",
+            "shrink-0 rounded flex items-center justify-center gap-1 transition-all relative z-10",
             deleteConfirm
-              ? "text-destructive bg-destructive/10"
-              : "text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10",
+              ? "text-destructive bg-destructive/10 px-1.5 h-5 text-[10px] font-bold"
+              : "text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 w-5 h-5",
           )}
         >
-          <Trash2 className="w-3 h-3" />
+          {deleteConfirm ? <span>Confirm</span> : <Trash2 className="w-3 h-3" />}
         </span>
       )}
       {settingsHref && (

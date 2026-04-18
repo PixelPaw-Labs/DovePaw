@@ -71,6 +71,35 @@ export function AgentSidebar({
   const isDoveSelected = (activeAgentId === "dove" && !isSettings) || isDoveLoading;
 
   const [confirming, setConfirming] = React.useState(false);
+
+  const MIN_WIDTH = 180;
+  const MAX_WIDTH = 480;
+  const [sidebarWidth, setSidebarWidth] = React.useState(256);
+  React.useEffect(() => {
+    const stored = localStorage.getItem("sidebar-width");
+    if (stored) setSidebarWidth(Number(stored));
+  }, []);
+  const isDragging = React.useRef(false);
+
+  function handleResizeMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    isDragging.current = true;
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    function onMove(ev: MouseEvent) {
+      if (!isDragging.current) return;
+      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + ev.clientX - startX));
+      setSidebarWidth(next);
+      localStorage.setItem("sidebar-width", String(next));
+    }
+    function onUp() {
+      isDragging.current = false;
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
   const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleClearAllClick = () => {
@@ -104,7 +133,14 @@ export function AgentSidebar({
   }
 
   return (
-    <aside className="h-screen w-64 shrink-0 flex flex-col bg-background border-r border-border/30">
+    <aside
+      style={{ width: sidebarWidth }}
+      className="h-screen shrink-0 flex flex-col bg-background border-r border-border/30 relative"
+    >
+      <div
+        onMouseDown={handleResizeMouseDown}
+        className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-50"
+      />
       {/* Logo header */}
       <div className="px-5 py-5">
         <div className="flex items-center gap-3">
@@ -123,7 +159,7 @@ export function AgentSidebar({
       </div>
 
       {/* Agent nav — scrolls independently; settings links stay pinned below */}
-      <nav className="flex flex-col gap-1 flex-1 overflow-y-auto misty-scroll">
+      <nav className="flex flex-col gap-1 flex-1 overflow-y-auto overflow-x-hidden misty-scroll">
         {/* Dove — the orchestrator (always first, outside all groups) */}
         <button
           onClick={() => onSelectAgent?.("dove")}
@@ -228,7 +264,7 @@ export function AgentSidebar({
       </nav>
 
       {/* Settings nav links — always pinned at bottom */}
-      <div className="pb-2 flex flex-col gap-0.5">
+      <div className="pb-2 flex flex-col gap-0.5 border-t border-border/20 bg-background/80 backdrop-blur-xl shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.06)] pt-1">
         {onClearAllHistory && (
           <button
             onClick={handleClearAllClick}
