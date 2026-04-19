@@ -43,7 +43,7 @@ import type { PendingRegistry } from "@/lib/pending-registry";
 
 export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; description: string }> = {
   high: {
-    threshold: 70,
+    threshold: 0.7,
     description:
       "your output is pivotal — the recipient cannot meaningfully proceed, decide, or respond without it. " +
       "The handoff has clear directionality: there is an obvious and immediate action the recipient takes from what you are giving them. " +
@@ -51,7 +51,7 @@ export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; descripti
       "If you are uncertain whether it qualifies, ask: would the recipient be stuck or significantly misled without this? If yes, it is high.",
   },
   medium: {
-    threshold: 85,
+    threshold: 0.85,
     description:
       "your output is complete and self-contained — the recipient can engage with it fully, build on it, or use it as a foundation for their own contribution. " +
       "It may not be the final word, but it adds real, concrete substance to the shared understanding. " +
@@ -97,8 +97,8 @@ export const justificationField = z
     confidence: z
       .number()
       .min(0)
-      .max(100)
-      .describe(`Confidence score (0–100). Threshold is impact-gated: ${thresholdClause}.`),
+      .max(1)
+      .describe(`Confidence score (0–1). Threshold is impact-gated: ${thresholdClause}.`),
   })
   .optional()
   .describe("Required on retry after self-reflection.");
@@ -396,6 +396,7 @@ export function makeStartChatToTool(
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
   callerAgentId?: string,
+  groupMeta?: Record<string, unknown>,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -425,7 +426,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         targetDef.name,
       ).start(
         `${instruction}\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`,
-        { contextId, backgroundTasks, senderAgentId: callerAgentId },
+        { contextId, backgroundTasks, senderAgentId: callerAgentId, extraMetadata: groupMeta },
       );
     },
   );
@@ -470,7 +471,12 @@ export function makeAwaitChatToTool(
  * Sends content to a reviewing agent and waits for an approve/reject decision.
  * The reviewing agent must respond with {"decision":"APPROVED"|"REJECTED","reason":"..."} JSON.
  */
-export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal, callerAgentId?: string) {
+export function makeReviewTool(
+  targetDef: AgentDef,
+  signal?: AbortSignal,
+  callerAgentId?: string,
+  groupMeta?: Record<string, unknown>,
+) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
     reviewWithToolName(manifestKey),
@@ -496,7 +502,14 @@ export function makeReviewTool(targetDef: AgentDef, signal?: AbortSignal, caller
           ...(context ? [`\nContext:\n${context}`] : []),
         ].join("\n") +
         `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
-      const handle = await startAgentStream(port, instruction, signal, undefined, callerAgentId);
+      const handle = await startAgentStream(
+        port,
+        instruction,
+        signal,
+        undefined,
+        callerAgentId,
+        groupMeta,
+      );
       if (!handle)
         return {
           content: [{ type: "text" as const, text: `${displayName} did not start.` }],
@@ -543,6 +556,7 @@ export function makeEscalateTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
   callerAgentId?: string,
+  groupMeta?: Record<string, unknown>,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -561,13 +575,20 @@ export function makeEscalateTool(
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
       const instruction =
         [
-          `ESCALATION — confidence: ${justification?.confidence ?? "?"}/100\n`,
+          `ESCALATION — confidence: ${justification?.confidence ?? "?"}/1\n`,
           `Blocker: ${blocker}`,
           `\nContext:\n${context}`,
           `\nPlease provide guidance or make the decision so I can continue.`,
         ].join("\n") +
         `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
-      const handle = await startAgentStream(port, instruction, signal, undefined, callerAgentId);
+      const handle = await startAgentStream(
+        port,
+        instruction,
+        signal,
+        undefined,
+        callerAgentId,
+        groupMeta,
+      );
       if (!handle)
         return { content: [{ type: "text" as const, text: `${displayName} did not start.` }] };
       const { result } = await collectStreamResult(handle.stream);

@@ -96,7 +96,7 @@ async function readGroupStream(
         const dataLine = chunk.split("\n").find((l) => l.startsWith("data:"));
         if (!dataLine) continue;
         const event = parseGroupPoolEvent(dataLine.slice(5).trim());
-        if (event && event.text && event.type === "progress") onEvent(event);
+        if (event && event.text) onEvent(event);
       }
     }
   } finally {
@@ -291,13 +291,18 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
 
     const applyPoolEvent = (event: GroupPoolEvent) => {
       const agentMsgId = `pool-${event.agentId}`;
+      const isDone = event.type === "done";
       setMessages((prev) => {
         const existing = prev.findIndex((m) => m.id === agentMsgId);
         if (existing !== -1) {
           return prev.map((m) =>
             m.id !== agentMsgId
               ? m
-              : { ...m, segments: [{ type: "text" as const, content: event.text }] },
+              : {
+                  ...m,
+                  isLoading: !isDone,
+                  segments: [{ type: "text" as const, content: event.text }],
+                },
           );
         }
         return [
@@ -306,7 +311,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
             id: agentMsgId,
             role: "assistant" as const,
             segments: [{ type: "text" as const, content: event.text }],
-            isLoading: true,
+            isLoading: !isDone,
             agentId: event.agentId,
           },
         ];
@@ -395,13 +400,18 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
         await readGroupStream(streamRes.body, abort.signal, (event) => {
           if (!cancelled) {
             const agentMsgId = `pool-${event.agentId}`;
+            const isDone = event.type === "done";
             setMessages((prev) => {
               const existing = prev.findIndex((m) => m.id === agentMsgId);
               if (existing !== -1) {
                 return prev.map((m) =>
                   m.id !== agentMsgId
                     ? m
-                    : { ...m, segments: [{ type: "text" as const, content: event.text }] },
+                    : {
+                        ...m,
+                        isLoading: !isDone,
+                        segments: [{ type: "text" as const, content: event.text }],
+                      },
                 );
               }
               return [
@@ -410,7 +420,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
                   id: agentMsgId,
                   role: "assistant" as const,
                   segments: [{ type: "text" as const, content: event.text }],
-                  isLoading: true,
+                  isLoading: !isDone,
                   agentId: event.agentId,
                 },
               ];

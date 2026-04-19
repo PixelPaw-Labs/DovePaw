@@ -1,9 +1,11 @@
-import { getActiveSession, setActiveSession } from "@/lib/db";
+import { getActiveSession, getSessionStatus, setActiveSession } from "@/lib/db";
 import { z } from "zod";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ name: string }> }) {
   const { name } = await params;
-  return Response.json({ id: getActiveSession(name) });
+  const id = getActiveSession(name);
+  const status = id ? getSessionStatus(id) : null;
+  return Response.json({ id, status });
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ name: string }> }) {

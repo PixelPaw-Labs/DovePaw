@@ -177,6 +177,7 @@ export class QueryAgentExecutor implements AgentExecutor {
         this.abortController.signal,
         backgroundTasks,
         registry,
+        groupOverrides ? { isGroupChat: true, ...groupOverrides } : undefined,
       );
 
       // In group mode: cwd = shared group workspace; own workspace added as additionalDirectory

@@ -53,6 +53,7 @@ export class AgentConfigReader {
     signal?: AbortSignal,
     backgroundTasks?: Promise<CollectedStream>[],
     registry?: PendingRegistry,
+    groupMeta?: Record<string, unknown>,
   ) {
     const [links, allAgents] = await Promise.all([readAgentLinks(), readAgentsConfig()]);
 
@@ -72,13 +73,15 @@ export class AgentConfigReader {
 
       switch (strategy) {
         case "review":
-          tools.push(makeReviewTool(targetDef, signal, agentName));
+          tools.push(makeReviewTool(targetDef, signal, agentName, groupMeta));
           break;
         case "escalation":
-          tools.push(makeEscalateTool(targetDef, signal, agentName));
+          tools.push(makeEscalateTool(targetDef, signal, agentName, groupMeta));
           break;
         default: // "parallel" and any future strategies default to start + await
-          tools.push(makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName));
+          tools.push(
+            makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName, groupMeta),
+          );
           tools.push(makeAwaitChatToTool(targetDef, signal, registry));
       }
     }

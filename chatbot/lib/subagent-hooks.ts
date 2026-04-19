@@ -56,7 +56,7 @@ If YES to all: re-call this tool with a \`justification\` object:
     "impact": "<${impactPlaceholder}>",
     "pattern": "<which pattern above applies>",
     "handoff": "<one sentence: what concrete output you are handing off>",
-    "confidence": <0–100>
+    "confidence": <0–1>
   }
 
 Impact-gated thresholds:
@@ -123,7 +123,7 @@ function makeReflectionMatcher(matcher: string, reflectionPrompt: string): HookC
             permissionDecision: "deny",
             permissionDecisionReason:
               typeof confidence !== "number"
-                ? `confidence is missing or not a number. Re-call with a numeric confidence score (0–100).`
+                ? `confidence is missing or not a number. Re-call with a numeric confidence score (0–1).`
                 : `Confidence ${confidence} is below the required threshold of ${entry.threshold} for ${impactKey} impact. Only proceed if genuinely confident this handoff is necessary and well-scoped.`,
           };
           return { hookSpecificOutput };

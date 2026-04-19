@@ -47,6 +47,7 @@ import {
   makeStartScriptTool,
   makeStartChatToTool,
   makeReviewTool,
+  makeEscalateTool,
   startRunScriptToolName,
   awaitRunScriptToolName,
   startChatToToolName,
@@ -403,6 +404,65 @@ describe("tool name helpers", () => {
   });
 });
 
+// ─── makeStartChatToTool — groupMeta propagation ──────────────────────────────
+
+describe("makeStartChatToTool — groupMeta", () => {
+  async function* mockStream() {
+    /* empty stream */
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(startAgentStream).mockResolvedValue({
+      taskId: "task-123",
+      contextId: "ctx-456",
+      stream: mockStream(),
+      client: {} as any,
+    });
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: { output: "", progress: [], thinking: "", toolCalls: [] },
+    });
+  });
+
+  it("forwards groupMeta as extraMetadata when provided", async () => {
+    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartChatToTool(
+      AGENT,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      groupMeta,
+    ) as any;
+    await handler({ instruction: "do something" });
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      groupMeta,
+    );
+  });
+
+  it("passes undefined extraMetadata when groupMeta is not provided", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartChatToTool(AGENT) as any;
+    await handler({ instruction: "do something" });
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+  });
+});
+
 // ─── makeReviewTool ───────────────────────────────────────────────────────────
 
 describe("makeReviewTool", () => {
@@ -505,5 +565,78 @@ describe("makeReviewTool", () => {
     const handler = captureReviewHandler();
     const result = (await handler({ content: "my work" })) as any;
     expect(result.content[0].text).toContain("did not start");
+  });
+
+  it("forwards groupMeta as extraMetadata when provided", async () => {
+    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeReviewTool(AGENT, undefined, undefined, groupMeta) as any;
+    await handler({ content: "my work" });
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      groupMeta,
+    );
+  });
+});
+
+// ─── makeEscalateTool — groupMeta propagation ─────────────────────────────────
+
+describe("makeEscalateTool — groupMeta", () => {
+  async function* mockStream() {
+    /* empty stream */
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(startAgentStream).mockResolvedValue({
+      taskId: "task-123",
+      contextId: "ctx-456",
+      stream: mockStream(),
+      client: {} as any,
+    });
+    vi.mocked(collectStreamResult).mockResolvedValue({
+      taskId: "task-123",
+      result: {
+        output: "Guidance: proceed with caution.",
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
+  });
+
+  it("forwards groupMeta as extraMetadata when provided", async () => {
+    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeEscalateTool(AGENT, undefined, undefined, groupMeta) as any;
+    await handler({ blocker: "stuck", context: "tried X" });
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      groupMeta,
+    );
+  });
+
+  it("passes undefined extraMetadata when groupMeta is not provided", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeEscalateTool(AGENT) as any;
+    await handler({ blocker: "stuck", context: "tried X" });
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      expect.any(String),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
   });
 });
