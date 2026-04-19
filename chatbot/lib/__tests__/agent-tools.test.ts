@@ -319,6 +319,7 @@ describe("makeStartChatToTool", () => {
       undefined,
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -368,6 +369,7 @@ describe("makeStartChatToTool", () => {
       'resume\n<reminder>Must call "start_test_agent" tool</reminder>',
       undefined,
       "existing-ctx",
+      undefined,
       undefined,
     );
   });

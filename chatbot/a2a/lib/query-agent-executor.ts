@@ -64,7 +64,12 @@ function resolveGroupChatOverrides(
 ): GroupChatOverrides | null {
   if (!metadata?.isGroupChat) return null;
   const { groupContextId, groupWorkspacePath, groupName } = metadata;
-  if (typeof groupContextId !== "string" || typeof groupWorkspacePath !== "string" || typeof groupName !== "string") return null;
+  if (
+    typeof groupContextId !== "string" ||
+    typeof groupWorkspacePath !== "string" ||
+    typeof groupName !== "string"
+  )
+    return null;
   return { groupContextId, groupWorkspacePath, groupName };
 }
 

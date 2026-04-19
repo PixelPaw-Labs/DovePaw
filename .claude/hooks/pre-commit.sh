@@ -53,6 +53,18 @@ $LINT_OUTPUT")
   fi
 fi
 
+# --- Partially-staged detection ---
+# Warn when a staged file also has unstaged working-tree changes.
+# This catches drift caused by running `npm run fmt` or lint fixes AFTER staging —
+# the staged version would be committed without the subsequent working-tree edits.
+PARTIALLY_STAGED=$(git diff --name-only 2>/dev/null | while IFS= read -r f; do
+  printf '%s\n' "$STAGED_FILES" | grep -qxF "$f" && printf '%s\n' "$f"
+done || true)
+if [ -n "$PARTIALLY_STAGED" ]; then
+  ERRORS=$(printf '%s\n\n⚠️  These staged files also have unstaged working-tree changes — the committed version will be MISSING those changes. Stage them too or discard them:\n\n%s' \
+    "$ERRORS" "$PARTIALLY_STAGED")
+fi
+
 if [ -n "$ERRORS" ]; then
   printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$ERRORS" | jq -Rs .)"
   exit 0
