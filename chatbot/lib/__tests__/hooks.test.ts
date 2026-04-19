@@ -152,16 +152,6 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     vi.restoreAllMocks();
   });
 
-  it("releases (continue: true) when retry counter threshold is hit", async () => {
-    vi.spyOn(Math, "random").mockReturnValue(0); // max = floor(0 * 10) + 6 = 6
-    const hooks = buildAgentHooks(makeConfig());
-    const fn = hooks.PostToolUse![0]!.hooks[0]!;
-    // exhaust 5 forced-retry calls, 6th should release
-    for (let i = 0; i < 5; i++) await callHook(fn, postToolUseInput({ status: "still_running" }));
-    const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
-    expect(result).toMatchObject({ continue: true });
-    vi.restoreAllMocks();
-  });
 });
 
 describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => {

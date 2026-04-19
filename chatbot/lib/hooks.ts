@@ -19,7 +19,7 @@ import type {
 import type { AgentDef } from "@@/lib/agents";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
-import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
+//import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
 import { addPendingQuestion, abortPendingQuestions } from "@/lib/pending-questions";
@@ -87,7 +87,7 @@ export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories } = config;
-  const retryCounter = new StillRunningRetryCounter();
+  //const retryCounter = new StillRunningRetryCounter();
   const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
 
   const preToolUseHooks: HookCallbackMatcher[] = [
@@ -187,9 +187,9 @@ export function buildAgentHooks(
                 ? (structured as { status: unknown }).status
                 : undefined;
             if (status === "still_running") {
-              if (retryCounter.shouldRelease()) {
-                return { continue: true };
-              }
+              //if (retryCounter.shouldRelease()) {
+              //return { continue: true };
+              //}
               return { decision: "block", reason: buildPendingBlockReason(registry.getPending()) };
             }
             return { continue: true };
