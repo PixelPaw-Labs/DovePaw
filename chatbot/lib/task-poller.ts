@@ -116,11 +116,13 @@ export class TaskPoller {
       onProgress,
       backgroundTasks,
       senderAgentId,
+      extraMetadata,
     }: {
       contextId?: string;
       onProgress?: (snapshot: StreamedResult) => void;
       backgroundTasks?: Promise<CollectedStream>[];
       senderAgentId?: string;
+      extraMetadata?: Record<string, unknown>;
     } = {},
   ): Promise<StartToolResult> {
     const port = resolveAgentPort(this.manifestKey);
@@ -135,6 +137,7 @@ export class TaskPoller {
         this.signal,
         contextId,
         senderAgentId,
+        extraMetadata,
       );
       if (!handle) {
         return {

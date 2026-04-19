@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";
 import type { AgentGroup } from "@@/lib/agent-links-schemas";
 import { z } from "zod";
-import { resolveAgentPort, createAgentClient } from "@/lib/a2a-client";
+import { resolveAgentPort, createAgentClient, startAgentStream } from "@/lib/a2a-client";
 import type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 import {
   TaskPoller,
@@ -23,7 +23,6 @@ import {
   isConnectionError,
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
-import { publishSessionStarted } from "@/lib/group-session-events";
 import { startRunScriptToolName } from "@/lib/agent-tools";
 
 // ─── Structured content types ─────────────────────────────────────────────────
@@ -222,26 +221,30 @@ export function makeAwaitTool(
 
 // ─── makeAskGroupTool ─────────────────────────────────────────────────────────
 
-/**
- * Fires the same instruction at multiple members of a group in parallel
- * (fire-and-forget). Returns the started taskIds immediately without polling —
- * members surface their progress through the Group Chat view.
- */
-export function makeAskGroupTool(
-  group: AgentGroup,
-  allAgents: readonly AgentDef[],
-  signal?: AbortSignal,
-) {
-  const memberDefs = group.members
-    .map((name) => allAgents.find((a) => a.name === name))
-    .filter((a): a is AgentDef => Boolean(a));
+/** Port manifest key for a group A2A server (must match groupManifestKey in group-server.ts). */
+function groupPortKey(groupName: string): string {
+  return `group-${groupName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
+}
 
-  const memberLines = memberDefs.map((a) => `- ${a.name}: ${a.description}`).join("\n");
+/** Resolve the group A2A port from the ports manifest, or null if unavailable. */
+function resolveGroupPort(groupName: string): number | null {
+  return resolveAgentPort(groupPortKey(groupName));
+}
+
+/**
+ * Routes an instruction to the group's dedicated A2A orchestrator (fire-and-forget).
+ * The group A2A AI selects 1–3 relevant members and delegates work to them.
+ * Returns the group task's contextId so the frontend can subscribe to the group stream.
+ */
+export function makeAskGroupTool(group: AgentGroup, signal?: AbortSignal) {
+  const memberLines = group.members.map((m) => `- ${m}`).join("\n");
   const description = [
-    `Broadcast a task to selected members of the "${group.name}" group. Fire-and-forget — returns taskIds immediately; do not await.`,
+    `Delegate a task to the "${group.name}" group orchestrator. The orchestrator selects the most relevant members and coordinates them. Fire-and-forget — returns immediately.`,
     group.description && `<group-focus>\n${group.description}\n</group-focus>`,
     memberLines && `<members>\n${memberLines}\n</members>`,
-    `Pick up to 3 memberIds that best match the user's intent.`,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -250,51 +253,50 @@ export function makeAskGroupTool(
     doveAskGroupToolName(group.name),
     description,
     {
-      memberIds: z
-        .array(z.string())
-        .min(1)
-        .describe("Member agent names to trigger (recommended max 3)"),
-      message: z.string().describe("Instruction broadcast to every selected member"),
+      instruction: z.string().describe("Instruction for the group to work on"),
     },
-    async ({ memberIds, message }) => {
-      const unknown = memberIds.filter((id) => !group.members.includes(id));
-      if (unknown.length > 0) {
+    async ({ instruction }) => {
+      const port = resolveGroupPort(group.name);
+      if (!port) {
         return {
           content: [
             {
               type: "text" as const,
-              text: `Error: member(s) not in group "${group.name}": ${unknown.join(", ")}`,
+              text: `⚠️ Group "${group.name}" A2A server is not running. Restart servers: **npm run chatbot:servers**`,
             },
           ],
         };
       }
 
-      const results = await Promise.all(
-        memberIds.map(async (agentId) => {
-          const agent = allAgents.find((a) => a.name === agentId);
-          if (!agent) return { agentId, error: "unknown agent" as const };
-          const response = await new TaskPoller(agent.manifestKey, agent.displayName, signal).start(
-            `${message}\n<reminder>Must call "${startRunScriptToolName(agent.manifestKey)}" tool</reminder>`,
-            { senderAgentId: "dove" },
-          );
-          if (!response.structuredContent) return { agentId, error: "no taskId" as const };
-          publishSessionStarted({ agentId, sessionId: response.structuredContent.contextId });
-          return { agentId, taskId: response.structuredContent.taskId };
-        }),
-      );
+      try {
+        const handle = await startAgentStream(port, instruction, signal, undefined, "dove");
+        if (!handle) {
+          return {
+            content: [
+              { type: "text" as const, text: `Error: task ID not received from group server.` },
+            ],
+          };
+        }
+        // Drain the stream in the background — group chat view subscribes independently
+        void handle.stream.return?.(undefined);
 
-      const triggered = results.flatMap((r) => ("taskId" in r ? [r] : []));
-      const errors = results.flatMap((r) => ("error" in r ? [r] : []));
-
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: `Triggered ${triggered.length} member(s) in group "${group.name}": ${triggered.map((t) => t.agentId).join(", ")}`,
-          },
-        ],
-        structuredContent: { group: group.name, triggered, errors },
-      };
+        const started: TaskStartedContent = {
+          taskId: handle.taskId,
+          contextId: handle.contextId,
+        };
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Group "${group.name}" task started (taskId: ${handle.taskId}). Members will surface their progress in the Group Chat view.`,
+            },
+          ],
+          structuredContent: started,
+        };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { content: [{ type: "text" as const, text: `Error: ${msg}` }] };
+      }
     },
   );
 }

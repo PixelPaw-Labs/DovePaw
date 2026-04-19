@@ -38,6 +38,7 @@ import {
   makeStartTool,
   makeAwaitTool,
   makeAskGroupTool,
+  doveAskGroupToolName,
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
@@ -182,8 +183,9 @@ export async function POST(request: Request) {
     const dispatcher = new SseQueryDispatcher(send, sessionId ?? undefined);
     const userMsgId = randomUUID();
 
-    const groupTools = (await readAgentLinksFile()).groups.map((group) =>
-      makeAskGroupTool(group, agents, subprocessController.signal),
+    const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
+    const groupTools = eligibleGroups.map((group) =>
+      makeAskGroupTool(group, subprocessController.signal),
     );
 
     const tools = agents.flatMap((agent) => {
@@ -266,11 +268,14 @@ export async function POST(request: Request) {
                   append: await buildSystemPrompt(settings),
                 },
                 permissionMode: "acceptEdits",
-                allowedTools: agents.flatMap((a) => [
-                  `mcp__agents__${doveAskToolName(a)}`,
-                  `mcp__agents__${doveStartToolName(a)}`,
-                  `mcp__agents__${doveAwaitToolName(a)}`,
-                ]),
+                allowedTools: [
+                  ...agents.flatMap((a) => [
+                    `mcp__agents__${doveAskToolName(a)}`,
+                    `mcp__agents__${doveStartToolName(a)}`,
+                    `mcp__agents__${doveAwaitToolName(a)}`,
+                  ]),
+                  ...eligibleGroups.map((g) => `mcp__agents__${doveAskGroupToolName(g.name)}`),
+                ],
                 mcpServers: { agents: mcpServer },
                 // Resume the existing session so the full conversation history is preserved.
                 // On the first message sessionId is null and query() starts a fresh session.

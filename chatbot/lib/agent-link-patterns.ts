@@ -1,4 +1,28 @@
 /**
+ * Scope-alignment check — run this before any handoff, review, or escalation.
+ *
+ * The current task context must overlap with the target agent's stated domain.
+ * Being linked does not imply relevance — the link represents a possible
+ * connection, not a guarantee that this specific task requires it.
+ */
+export function SCOPE_CHECK(agentName = "the target agent"): string {
+  return `Before calling ${agentName}, answer these two questions:
+
+  1. **What is the scope of the current task?**
+     Re-read the original instruction. Identify the domain: backend, frontend,
+     infra, data, security, etc.
+     <example>"fix the API response" is backend; "update the button label" is frontend.</example>
+
+  2. **Does ${agentName}'s description match that scope?**
+     Read their description word-for-word. If the current task's domain does not
+     appear in their description, do not call — even if they are linked.
+
+  Only proceed if both answers align. A link means "these agents can cooperate";
+  it does not mean "always involve both". Irrelevant handoffs create noise,
+  wasted work, and confusion for the receiving agent.`;
+}
+
+/**
  * Shared handoff guidance used in both the chat_to_* MCP tool descriptions
  * and the PreToolUse self-reflection hook prompt.
  * Kept in one place so they stay in sync.
@@ -7,7 +31,9 @@
  *   for contexts where no specific agent is named (e.g. reflection prompts).
  */
 export function HANDOFF_PATTERNS(agentName = "the target agent"): string {
-  return `When:
+  return `${SCOPE_CHECK(agentName)}
+
+When:
 
 ✅ You have finished your own work and produced concrete, actionable output — a
   list of issues, a diff, a report, a set of IDs — that ${agentName} is built
@@ -53,9 +79,8 @@ When not:
 ❌ You found nothing actionable — zero issues, empty results, no failures. If
   there is nothing to hand off, do not call.
 
-❌ The follow-up work falls outside ${agentName}'s specialisation. Read their
-  description — if the task does not match their scope, do not call. Routing
-  to the wrong agent creates confusion and delays.
+❌ The scope check above failed — the current task domain does not match
+  ${agentName}'s specialisation. Being linked is not a reason to call.
 
 ❌ You are speculating or being cautious. "It might be useful to also ask
   ${agentName}" is not a trigger. Concrete output is the trigger.
@@ -74,7 +99,9 @@ When not:
  * @param agentName - Display name of the escalation target. Defaults to "the target agent".
  */
 export function ESCALATE_PATTERNS(agentName = "the target agent"): string {
-  return `When:
+  return `${SCOPE_CHECK(agentName)}
+
+When:
 
 ✅ You lack confidence or authority to make a decision — the risk of being wrong
   is higher than the cost of asking ${agentName}.
@@ -90,9 +117,8 @@ export function ESCALATE_PATTERNS(agentName = "the target agent"): string {
 
 When not:
 
-❌ The blocker does not fall within ${agentName}'s authority or domain. Read
-  their description — if they are not the right decision-maker for this type
-  of blocker, escalating to them creates confusion rather than resolution.
+❌ The scope check above failed — the blocker does not fall within ${agentName}'s
+  authority or domain. Escalating to the wrong agent creates confusion.
 
 ❌ Your confidence is low only because you have not tried yet. Attempt the task
   first; escalate only if you get stuck.
@@ -107,7 +133,9 @@ When not:
  * @param agentName - Display name of the reviewer. Defaults to "the target agent".
  */
 export function REVIEW_PATTERNS(agentName = "the target agent"): string {
-  return `When:
+  return `${SCOPE_CHECK(agentName)}
+
+When:
 
 ✅ Your work is fully complete and ready for sign-off — not a draft, not
   partially done. ${agentName} reviews finished output, not work-in-progress.
@@ -126,7 +154,6 @@ When not:
 
 ❌ Your work is still in progress. Finish and self-verify first.
 
-❌ You are routing to the wrong reviewer. Read ${agentName}'s description — if
-  the output domain does not match their specialisation, find the right reviewer
-  rather than skipping review altogether.`;
+❌ The scope check above failed — the output domain does not match ${agentName}'s
+  specialisation. Find the right reviewer rather than skipping review altogether.`;
 }

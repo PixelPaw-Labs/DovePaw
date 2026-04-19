@@ -237,6 +237,8 @@ export function makeStartScriptTool(
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
   taskId?: string,
   registry?: PendingRegistry,
+  /** When true, appends the group-chat reminder (read chat_histories, save to moments) to the instruction. */
+  isGroupChat?: boolean,
 ) {
   return tool(
     startRunScriptToolName(agent.manifestKey),
@@ -248,6 +250,9 @@ export function makeStartScriptTool(
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "" }) => {
+      const finalInstruction = isGroupChat
+        ? `${instruction}\n<reminder>\nYou are participating in a group task. Before starting, read /chat_histories/ to understand what other agents have already done. Save important decisions, nodes, and artifacts to /moments/.\n</reminder>`
+        : instruction;
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,
         repoSlugs,
@@ -259,7 +264,7 @@ export function makeStartScriptTool(
         clonedPaths.length > 0
           ? { ...config, extraEnv: { ...config.extraEnv, REPO_LIST: clonedPaths.join(",") } }
           : config;
-      const { runId } = startScript(finalConfig, instruction, signal, onProgress, taskId);
+      const { runId } = startScript(finalConfig, finalInstruction, signal, onProgress, taskId);
       registry?.register({
         awaitTool: awaitRunScriptToolName(agent.manifestKey),
         idKey: "runId",
@@ -297,7 +302,7 @@ export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry)
                 ? result.output
                 : result.status === "still_running"
                   ? [
-                      "Script is still running...",
+                      "Agent script is still running...",
                       result.latestOutput ? `Latest output:\n${result.latestOutput}` : "",
                     ]
                       .filter(Boolean)

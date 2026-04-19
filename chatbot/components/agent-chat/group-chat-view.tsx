@@ -17,7 +17,7 @@ interface GroupChatViewProps {
 }
 
 export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: GroupChatViewProps) {
-  const { messages, isLoading, sendToAgent } = useGroupChatSession(memberAgentIds);
+  const { messages, isLoading, sendToAgent } = useGroupChatSession(memberAgentIds, groupName);
   const [selectedAgentId, setSelectedAgentId] = React.useState(memberAgentIds[0] ?? "");
 
   const configByName = React.useMemo(

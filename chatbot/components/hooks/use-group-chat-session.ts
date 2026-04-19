@@ -55,13 +55,66 @@ function createDirectAnimation(onUpdate: (id: string, content: string) => void) 
 
 const noop = () => {};
 
+interface GroupPoolEvent {
+  agentId: string;
+  text: string;
+  type: "progress" | "done" | "error";
+}
+
+function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return null;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above
+    const p = parsed as Record<string, unknown>;
+    if (typeof p.agentId !== "string" || typeof p.text !== "string" || typeof p.type !== "string")
+      return null;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fields validated above
+    return p as unknown as GroupPoolEvent;
+  } catch {
+    return null;
+  }
+}
+
+async function readGroupStream(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+  onEvent: (event: GroupPoolEvent) => void,
+): Promise<void> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop -- streaming reads must be sequential
+      const { done, value } = await reader.read();
+      if (done || signal.aborted) break;
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() ?? "";
+      for (const chunk of chunks) {
+        const dataLine = chunk.split("\n").find((l) => l.startsWith("data:"));
+        if (!dataLine) continue;
+        const event = parseGroupPoolEvent(dataLine.slice(5).trim());
+        if (event && event.text && event.type === "progress") onEvent(event);
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 /**
  * Manages a merged message feed across multiple agents. Opens one SSE per
  * running member and fans events into a single messages array, each tagged
  * with agentId. Uses a per-id direct-write animation stub — simultaneous
  * streams cannot share a single animation queue.
+ *
+ * Also subscribes to the group A2A stream (via groupName) for live member
+ * progress events and handles reconnection when the group chat is opened
+ * mid-run.
  */
-export function useGroupChatSession(memberAgentIds: string[]) {
+export function useGroupChatSession(memberAgentIds: string[], groupName: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -228,11 +281,62 @@ export function useGroupChatSession(memberAgentIds: string[]) {
     [handleEvent, recomputeLoading],
   );
 
-  // Subscribe to new-session events from any member. Dove's ask_group_* broadcast
-  // or scheduled/external triggers start sessions on members after mount; this SSE
-  // tells us to open a new per-session stream as soon as such a session appears.
+  // Subscribe to new-session events from any member or the group orchestrator.
+  // When the group A2A session starts, we receive { agentId: "group:<name>", sessionId }
+  // and subscribe to the group stream pool for live member events.
   useEffect(() => {
-    const source = new EventSource(groupSessionsStreamUrl(memberAgentIds));
+    const groupAgentId = `group:${groupName}`;
+    const source = new EventSource(groupSessionsStreamUrl([...memberAgentIds, groupAgentId]));
+    let groupStreamAbort: AbortController | null = null;
+
+    const applyPoolEvent = (event: GroupPoolEvent) => {
+      const agentMsgId = `pool-${event.agentId}`;
+      setMessages((prev) => {
+        const existing = prev.findIndex((m) => m.id === agentMsgId);
+        if (existing !== -1) {
+          return prev.map((m) =>
+            m.id !== agentMsgId
+              ? m
+              : { ...m, segments: [{ type: "text" as const, content: event.text }] },
+          );
+        }
+        return [
+          ...prev,
+          {
+            id: agentMsgId,
+            role: "assistant" as const,
+            segments: [{ type: "text" as const, content: event.text }],
+            isLoading: true,
+            agentId: event.agentId,
+          },
+        ];
+      });
+    };
+
+    const subscribeGroupStream = (groupContextId: string) => {
+      groupStreamAbort?.abort();
+      const abort = new AbortController();
+      groupStreamAbort = abort;
+      setIsLoading(true);
+
+      void (async () => {
+        try {
+          const res = await fetch(`/api/groups/stream/${encodeURIComponent(groupContextId)}`, {
+            signal: abort.signal,
+          });
+          if (!res.ok || !res.body) return;
+          await readGroupStream(res.body, abort.signal, applyPoolEvent);
+        } catch (err: unknown) {
+          if (err instanceof Error && err.name === "AbortError") return;
+        } finally {
+          if (groupStreamAbort === abort) {
+            groupStreamAbort = null;
+            recomputeLoading();
+          }
+        }
+      })();
+    };
+
     const handleMessage = (ev: MessageEvent<string>) => {
       let parsed: SessionStartedEvent;
       try {
@@ -241,6 +345,13 @@ export function useGroupChatSession(memberAgentIds: string[]) {
       } catch {
         return;
       }
+
+      if (parsed.agentId === groupAgentId) {
+        // Group orchestrator session started — subscribe to group stream pool
+        subscribeGroupStream(parsed.sessionId);
+        return;
+      }
+
       const state = memberStateRef.current.get(parsed.agentId);
       if (!state) return;
       if (state.sessionId === parsed.sessionId) return; // already tracking
@@ -251,13 +362,70 @@ export function useGroupChatSession(memberAgentIds: string[]) {
     return () => {
       source.removeEventListener("message", handleMessage);
       source.close();
+      groupStreamAbort?.abort();
     };
-    // memberAgentIds identity is stable for the lifetime of the group view
+    // memberAgentIds and groupName are stable for the lifetime of the group view
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    let groupStreamAbort: AbortController | null = null;
+
+    // Check if group A2A has a live active session → reconnect to group stream
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/agent/${encodeURIComponent(`group:${groupName}`)}/active-session`,
+        );
+        if (!res.ok || cancelled) return;
+        const body: unknown = await res.json();
+        if (typeof body !== "object" || body === null) return;
+        const { id: groupContextId, status } = body as { id?: string | null; status?: string };
+        if (!groupContextId || status !== "running" || cancelled) return;
+
+        const abort = new AbortController();
+        groupStreamAbort = abort;
+        setIsLoading(true);
+
+        const streamRes = await fetch(`/api/groups/stream/${encodeURIComponent(groupContextId)}`, {
+          signal: abort.signal,
+        });
+        if (!streamRes.ok || !streamRes.body) return;
+        await readGroupStream(streamRes.body, abort.signal, (event) => {
+          if (!cancelled) {
+            const agentMsgId = `pool-${event.agentId}`;
+            setMessages((prev) => {
+              const existing = prev.findIndex((m) => m.id === agentMsgId);
+              if (existing !== -1) {
+                return prev.map((m) =>
+                  m.id !== agentMsgId
+                    ? m
+                    : { ...m, segments: [{ type: "text" as const, content: event.text }] },
+                );
+              }
+              return [
+                ...prev,
+                {
+                  id: agentMsgId,
+                  role: "assistant" as const,
+                  segments: [{ type: "text" as const, content: event.text }],
+                  isLoading: true,
+                  agentId: event.agentId,
+                },
+              ];
+            });
+          }
+        });
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === "AbortError") return;
+      } finally {
+        if (!cancelled) {
+          groupStreamAbort = null;
+          recomputeLoading();
+        }
+      }
+    })();
 
     void Promise.allSettled(
       memberAgentIds.map(async (agentId) => {
@@ -301,6 +469,7 @@ export function useGroupChatSession(memberAgentIds: string[]) {
 
     return () => {
       cancelled = true;
+      groupStreamAbort?.abort();
       for (const state of memberStateRef.current.values()) {
         state.abort?.abort();
         state.abort = null;

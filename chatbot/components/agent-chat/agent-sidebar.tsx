@@ -29,6 +29,7 @@ import type { DoveSettings } from "@@/lib/settings-schemas";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import type { AgentStatus } from "@/a2a/heartbeat-types";
 import { AgentButton } from "./agent-button";
+import { GroupButton } from "./group-button";
 
 interface AgentSidebarProps {
   agentConfigs: AgentConfigEntry[];
@@ -212,35 +213,16 @@ export function AgentSidebar({
             </div>
             {chatGroups.map((group) => {
               const selectionId = `group:${group.name}`;
-              const isActive = !isSettings && activeAgentId === selectionId;
+              const settingsHref = `/settings/groups/${encodeURIComponent(group.name)}`;
               return (
-                <button
+                <GroupButton
                   key={group.name}
+                  group={group}
+                  isActive={!isSettings && activeAgentId === selectionId}
                   onClick={() => onSelectAgent?.(selectionId)}
-                  className={cn(
-                    "shrink-0 my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
-                    isActive
-                      ? "bg-primary/10 text-primary border-l-4 border-primary"
-                      : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
-                  )}
-                >
-                  <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-primary/10">
-                    <Users2 className="w-3 h-3 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                    <span
-                      className={cn(
-                        "text-sm font-medium truncate",
-                        !isActive && "text-foreground/80",
-                      )}
-                    >
-                      {group.name}
-                    </span>
-                    <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
-                      {group.members.length} agents
-                    </span>
-                  </div>
-                </button>
+                  settingsHref={settingsHref}
+                  isGroupSettings={pathname.startsWith(settingsHref)}
+                />
               );
             })}
           </div>

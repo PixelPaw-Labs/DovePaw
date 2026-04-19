@@ -832,21 +832,21 @@ describe("doveAskGroupToolName", () => {
 // ─── makeAskGroupTool ─────────────────────────────────────────────────────────
 
 describe("makeAskGroupTool", () => {
-  const AGENT_A: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
-  const AGENT_B: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
-  const AGENT_C: AgentDef = { ...AGENT, name: "agent-c", manifestKey: "agent_c" };
   const GROUP = {
     name: "PixelPaw Labs",
     description: "Simulates Envato's business",
     members: ["agent-a", "agent-b", "agent-c"],
   };
 
+  // Port manifest key for the group A2A: "group-pixelpaw_labs"
+  const GROUP_PORT_KEY = "group-pixelpaw_labs";
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("registers a tool named ask_group_<slug>", () => {
-    captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+    captureTools(() => makeAskGroupTool(GROUP));
     expect(vi.mocked(tool)).toHaveBeenCalledWith(
       doveAskGroupToolName(GROUP.name),
       expect.any(String),
@@ -856,7 +856,7 @@ describe("makeAskGroupTool", () => {
   });
 
   it("tool description embeds group description and member names", () => {
-    captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+    captureTools(() => makeAskGroupTool(GROUP));
     const desc = vi.mocked(tool).mock.calls[0][1] as string;
     expect(desc).toContain(GROUP.description);
     expect(desc).toContain("agent-a");
@@ -864,53 +864,13 @@ describe("makeAskGroupTool", () => {
     expect(desc).toContain("agent-c");
   });
 
-  it("fires startAgentStream in parallel for each memberId and returns triggered taskIds", async () => {
-    vi.mocked(readPortsManifest).mockReturnValue({
-      agent_a: 51001,
-      agent_b: 51002,
-      agent_c: 51003,
-    } as any);
-    const sendStream = vi.fn((_req: unknown) => {
-      // Each call returns a distinct task id based on call order
-      const callIndex = sendStream.mock.calls.length;
-      return asyncEvents({
-        kind: "task",
-        id: `task-${callIndex}`,
-        contextId: `ctx-${callIndex}`,
-        status: { state: "submitted" },
-      });
-    });
-    vi.mocked(ClientFactory).mockImplementation(function () {
-      return {
-        createFromUrl: vi.fn().mockResolvedValue({ sendMessageStream: sendStream }),
-      };
-    } as any);
-
-    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
-    const handler = captured[doveAskGroupToolName(GROUP.name)];
-    const result = await handler({
-      memberIds: ["agent-a", "agent-b"],
-      message: "investigate X",
-    });
-
-    expect(sendStream).toHaveBeenCalledTimes(2);
-    const structured = result.structuredContent as {
-      group: string;
-      triggered: { agentId: string; taskId: string }[];
-    };
-    expect(structured.group).toBe(GROUP.name);
-    expect(structured.triggered).toHaveLength(2);
-    expect(structured.triggered.map((t) => t.agentId).toSorted()).toEqual(["agent-a", "agent-b"]);
-    for (const t of structured.triggered) expect(t.taskId).toMatch(/^task-\d+$/);
-  });
-
-  it("appends start_script reminder to each member message", async () => {
-    vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 51001 } as any);
+  it("routes to the group A2A port and returns taskId + contextId", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({ [GROUP_PORT_KEY]: 52000 } as any);
     const sendStream = vi.fn((_req: unknown) =>
       asyncEvents({
         kind: "task",
-        id: "task-1",
-        contextId: "ctx-1",
+        id: "task-grp-1",
+        contextId: "ctx-grp-1",
         status: { state: "submitted" },
       }),
     );
@@ -920,58 +880,27 @@ describe("makeAskGroupTool", () => {
       };
     } as any);
 
-    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A]));
+    const captured = captureTools(() => makeAskGroupTool(GROUP));
     const handler = captured[doveAskGroupToolName(GROUP.name)];
-    await handler({ memberIds: ["agent-a"], message: "do work" });
+    const result = await handler({ instruction: "investigate X" });
 
+    expect(sendStream).toHaveBeenCalledTimes(1);
     const sentText = sendStream.mock.calls[0][0].message.parts[0].text as string;
-    expect(sentText).toContain("do work");
-    expect(sentText).toContain(`<reminder>Must call "start_agent_a" tool</reminder>`);
+    expect(sentText).toBe("investigate X");
+
+    const structured = result.structuredContent as { taskId: string; contextId: string };
+    expect(structured.taskId).toBe("task-grp-1");
+    expect(structured.contextId).toBe("ctx-grp-1");
   });
 
-  it("rejects memberIds not in group.members", async () => {
-    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B, AGENT_C]));
+  it("returns unavailable message when group A2A port is not in manifest", async () => {
+    vi.mocked(readPortsManifest).mockReturnValue({} as any);
+
+    const captured = captureTools(() => makeAskGroupTool(GROUP));
     const handler = captured[doveAskGroupToolName(GROUP.name)];
-    const result = await handler({
-      memberIds: ["agent-a", "agent-z"],
-      message: "hello",
-    });
-    expect(result.content[0].text).toContain("agent-z");
-    expect(result.content[0].text).toMatch(/not (in|a member)/i);
+    const result = await handler({ instruction: "hello" });
+
+    expect(result.content[0].text).toContain("not running");
     expect(result.structuredContent).toBeUndefined();
-  });
-
-  it("publishes session-started events for each triggered member", async () => {
-    vi.mocked(readPortsManifest).mockReturnValue({
-      agent_a: 51001,
-      agent_b: 51002,
-    } as any);
-    const sendStream = vi.fn((_req: unknown) => {
-      const callIndex = sendStream.mock.calls.length;
-      return asyncEvents({
-        kind: "task",
-        id: `task-${callIndex}`,
-        contextId: `ctx-${callIndex}`,
-        status: { state: "submitted" },
-      });
-    });
-    vi.mocked(ClientFactory).mockImplementation(function () {
-      return {
-        createFromUrl: vi.fn().mockResolvedValue({ sendMessageStream: sendStream }),
-      };
-    } as any);
-
-    const { subscribeSessionStarted } = await import("../group-session-events");
-    const received: { agentId: string; sessionId: string }[] = [];
-    const ctrl = new AbortController();
-    subscribeSessionStarted((e) => received.push(e), ctrl.signal);
-
-    const captured = captureTools(() => makeAskGroupTool(GROUP, [AGENT_A, AGENT_B]));
-    const handler = captured[doveAskGroupToolName(GROUP.name)];
-    await handler({ memberIds: ["agent-a", "agent-b"], message: "go" });
-
-    ctrl.abort();
-    expect(received.map((e) => e.agentId).toSorted()).toEqual(["agent-a", "agent-b"]);
-    for (const e of received) expect(e.sessionId).toMatch(/^ctx-\d+$/);
   });
 });

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { dirname } from "node:path";
+import { writeFileSync, mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
@@ -31,7 +32,7 @@ import { createAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setSessionStatus, upsertSession } from "@/lib/db";
-import { publishSessionEvent } from "@/lib/session-events";
+import { publishSessionEvent, publishGroupSessionEvent } from "@/lib/session-events";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -45,6 +46,27 @@ import { ExecutorPublisher } from "./executor-publisher";
  * Settings (env vars, repo list) are resolved fresh on each execution.
  */
 const LABEL_MAX_LEN = 60;
+
+// ─── Group chat mode ──────────────────────────────────────────────────────────
+
+interface GroupChatOverrides {
+  groupContextId: string;
+  groupWorkspacePath: string;
+  groupName: string;
+}
+
+/**
+ * Reads group-chat context from A2A message metadata set by the group executor.
+ * Returns overrides when isGroupChat is present, null for normal single-agent mode.
+ */
+function resolveGroupChatOverrides(
+  metadata: Record<string, unknown> | undefined,
+): GroupChatOverrides | null {
+  if (!metadata?.isGroupChat) return null;
+  const { groupContextId, groupWorkspacePath, groupName } = metadata;
+  if (typeof groupContextId !== "string" || typeof groupWorkspacePath !== "string" || typeof groupName !== "string") return null;
+  return { groupContextId, groupWorkspacePath, groupName };
+}
 
 export { SessionInfo };
 
@@ -62,10 +84,14 @@ export class QueryAgentExecutor implements AgentExecutor {
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
     const { taskId, contextId } = requestContext;
     const instruction = extractInstruction(requestContext.userMessage.parts);
+    const msgMetadata = requestContext.userMessage.metadata as Record<string, unknown> | undefined;
+    const groupOverrides = resolveGroupChatOverrides(msgMetadata);
     this.abortController = new AbortController();
     markProcessing(this.def.manifestKey, this.abortController, instruction ? "dove" : "scheduled");
 
-    consola.start(`Running ${this.def.displayName} sub-agent…`);
+    consola.start(
+      `Running ${this.def.displayName} sub-agent${groupOverrides ? " (group mode)" : ""}…`,
+    );
 
     const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
 
@@ -74,7 +100,8 @@ export class QueryAgentExecutor implements AgentExecutor {
     // and since ON CONFLICT does not update label, it would stay empty in history.
     this.currentContextId = contextId;
     this.sessionManager.restore(contextId, this.def.name);
-    const existingState = this.sessionManager.get(contextId);
+    // Group-mode members always start fresh — no resume across group tasks
+    const existingState = groupOverrides ? null : this.sessionManager.get(contextId);
     const startedAt = existingState?.startedAt ?? new Date();
     const label =
       existingState?.label ??
@@ -147,16 +174,20 @@ export class QueryAgentExecutor implements AgentExecutor {
         registry,
       );
 
+      // In group mode: cwd = shared group workspace; own workspace added as additionalDirectory
+      const cwd = groupOverrides?.groupWorkspacePath ?? workspace.path;
+
       await withMcpQuery(
         [
           makeStartScriptTool(
             this.def,
-            agentConfig,
+            groupOverrides ? { ...agentConfig, workspacePath: cwd } : agentConfig,
             repoSlugs,
             this.abortController.signal,
             publishProgress,
             taskId,
             registry,
+            groupOverrides ? true : undefined,
           ),
           makeAwaitScriptTool(this.def, registry),
           ...makeAgentMgmtTools(this.def),
@@ -169,13 +200,14 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
             agentSourceDir,
+            ...(groupOverrides ? [workspace!.path] : []),
           ];
           const dispatcher = new A2AQueryDispatcher(publisher, contextId);
           const subagentSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || startRunScriptToolName(this.def.manifestKey),
               options: {
-                cwd: workspace!.path,
+                cwd,
                 env: { ...process.env, ...agentConfig.extraEnv },
                 ...(defaultModel ? { model: defaultModel } : {}),
                 agent: this.def.displayName,
@@ -194,7 +226,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                 ],
                 mcpServers: { agents: innerMcpServer },
                 hooks: buildSubAgentHooks(
-                  workspace!.path,
+                  cwd,
                   additionalDirectories,
                   chatToTools,
                   registry,
@@ -224,7 +256,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                     userText: instruction || "",
                     userMsgId,
                     subagentSessionId: subSessionId,
-                    workspacePath: workspace?.path,
+                    workspacePath: cwd,
                   },
                 );
                 setSessionStatus(contextId, "running");
@@ -250,10 +282,9 @@ export class QueryAgentExecutor implements AgentExecutor {
             });
           }
 
-          // Persist session with clean message: text-only segments, thinking → processContent.
-          // Runs for both Dove-triggered and direct subagent-chat requests — single source of truth.
-          // subagentSessionId and workspacePath are persisted so the session can be restored after
-          // a server restart when the user reopens a historical Dove conversation.
+          const assistantMsg = dispatcher.buildAssistantMessage();
+
+          // Persist session — single source of truth for both modes
           SessionManager.save(
             this.def.name,
             contextId,
@@ -262,34 +293,67 @@ export class QueryAgentExecutor implements AgentExecutor {
               label,
               userText: instruction || "",
               userMsgId,
-              assistantMsg: dispatcher.buildAssistantMessage(),
+              assistantMsg,
               subagentSessionId: subagentSessionId ?? undefined,
-              workspacePath: workspace?.path,
+              workspacePath: cwd,
             },
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
 
-          // Pipeline: hand off to PipelineTrigger — it owns target resolution and stream firing
-          const finalOutput = dispatcher
-            .buildAssistantMessage()
-            .segments.filter((s): s is Extract<typeof s, { type: "text" }> => s.type === "text")
+          const finalText = assistantMsg.segments
+            .filter((s): s is Extract<typeof s, { type: "text" }> => s.type === "text")
             .map((s) => s.content)
             .join("\n")
             .trim();
-          void this.pipelineTrigger.fire(this.def.name, finalOutput);
 
+          if (groupOverrides) {
+            try {
+              if (finalText) {
+                const ts = new Date().toISOString().replace(/[:.]/g, "-");
+                mkdirSync(join(cwd, "chat_histories"), { recursive: true });
+                writeFileSync(
+                  join(cwd, "chat_histories", `${this.def.name}-${ts}.md`),
+                  finalText,
+                  "utf-8",
+                );
+              }
+            } catch {
+              // best effort
+            }
+          } else {
+            void this.pipelineTrigger.fire(this.def.name, finalText);
+          }
+
+          if (groupOverrides)
+            publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
+              type: "done",
+              text: finalText,
+            });
           publishSessionEvent(contextId, { type: "done" });
           publisher.publishStatusToUI("", undefined, "completed");
         },
         (err, isAbort) => {
           if (isAbort) {
             consola.info(`${this.def.displayName} sub-agent cancelled`);
+            if (groupOverrides)
+              publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
+                type: "cancelled",
+              });
             publishSessionEvent(contextId, { type: "cancelled" });
             publisher.publishStatusToUI("", undefined, "canceled");
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
+            if (groupOverrides) {
+              publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
+                type: "error",
+                content: msg,
+              });
+              publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
+                type: "done",
+              });
+            }
             publishSessionEvent(contextId, { type: "error", content: msg });
             publishSessionEvent(contextId, { type: "done" });
             publisher.publishStatusToUI("", { error: msg }, "failed");

@@ -173,7 +173,7 @@ ${toolsXml}
 </handoff_tools>
 
 If yes: call the appropriate tool before stopping.
-If no: you may stop.
+If no: stop immediately without replying.
 </reminder>`;
 }
 
@@ -214,15 +214,7 @@ export function buildSubAgentHooks(
 
   const base = buildAgentHooks({
     postToolUseMatcher: "mcp__agents__await_.*",
-    hasPendingWork: () => registry.hasPending(),
-    getPendingDescriptions: () =>
-      registry.getPending().map((e) => `call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
-    getStillRunningId: (s) => {
-      if (typeof s !== "object" || s === null) return undefined;
-      // await_run_script_* returns { runId }, await_chat_to_* returns { taskId }
-      const id: unknown = Reflect.get(s, "runId") ?? Reflect.get(s, "taskId");
-      return typeof id === "string" ? id : undefined;
-    },
+    registry,
     userPromptReminder: SUBAGENT_PROMPT_REMINDER,
     allowedDirectories: [cwd, ...additionalDirectories],
   });

@@ -14,6 +14,7 @@
 import { consola } from "consola";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import { startRunScriptToolName, awaitRunScriptToolName } from "@/lib/agent-tools";
+import { getMcpStructured } from "@/lib/hooks";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 
 // ─── Env-var reference resolution ────────────────────────────────────────────
@@ -99,7 +100,7 @@ export function buildNotificationHooks(
             const timestamp = new Date().toLocaleTimeString();
             await sendNotification(
               channel,
-              `[${agentDisplayName}] Script started`,
+              `[${agentDisplayName}] Started`,
               `Started at ${timestamp}`,
             );
             return { continue: true };
@@ -117,12 +118,7 @@ export function buildNotificationHooks(
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return { continue: true };
             const { tool_response } = input;
-            const structured =
-              typeof tool_response === "object" &&
-              tool_response !== null &&
-              "structuredContent" in tool_response
-                ? (tool_response as { structuredContent: unknown }).structuredContent
-                : undefined;
+            const structured = getMcpStructured(tool_response);
             if (
               !structured ||
               typeof structured !== "object" ||
@@ -132,7 +128,7 @@ export function buildNotificationHooks(
             const timestamp = new Date().toLocaleTimeString();
             await sendNotification(
               channel,
-              `[${agentDisplayName}] ✓ Script finished`,
+              `[${agentDisplayName}] Finished`,
               `Finished at ${timestamp}`,
             );
             return { continue: true };

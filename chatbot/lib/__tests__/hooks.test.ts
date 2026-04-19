@@ -10,17 +10,13 @@ const signal = new AbortController().signal;
 const callHook = (fn: Function, input: unknown) => fn(input, undefined, { signal });
 
 function makeConfig(overrides?: {
-  hasPendingWork?: () => boolean;
-  getPendingDescriptions?: () => string[];
-  getStillRunningId?: (s: unknown) => string | undefined;
+  registry?: PendingRegistry;
   userPromptReminder?: string;
   allowedDirectories?: string[];
 }) {
   return {
     postToolUseMatcher: "test_tool",
-    hasPendingWork: overrides?.hasPendingWork ?? (() => false),
-    getPendingDescriptions: overrides?.getPendingDescriptions ?? (() => []),
-    getStillRunningId: overrides?.getStillRunningId ?? (() => undefined),
+    registry: overrides?.registry ?? new PendingRegistry(),
     userPromptReminder: overrides?.userPromptReminder,
     allowedDirectories: overrides?.allowedDirectories,
   };
@@ -60,24 +56,27 @@ function postToolUseInput(structuredContent: unknown) {
 
 describe("buildAgentHooks — Stop hook", () => {
   it("allows stop when no pending work", async () => {
-    const hooks = buildAgentHooks(makeConfig({ hasPendingWork: () => false }));
+    const hooks = buildAgentHooks(makeConfig());
     const fn = hooks.Stop![0]!.hooks[0]!;
     const result = await callHook(fn, stopInput());
     expect(result).toEqual({ continue: true });
   });
 
-  it("allows stop when stop_hook_active", async () => {
-    const hooks = buildAgentHooks(makeConfig({ hasPendingWork: () => true }));
+  it("blocks stop even when stop_hook_active while pending work exists", async () => {
+    const hooks = buildAgentHooks(
+      makeConfig({
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "abc" }]),
+      }),
+    );
     const fn = hooks.Stop![0]!.hooks[0]!;
     const result = await callHook(fn, stopInput({ stop_hook_active: true }));
-    expect(result).toEqual({ continue: true });
+    expect(result).toMatchObject({ decision: "block" });
   });
 
   it("blocks stop with per-tool instructions when pending work exists", async () => {
     const hooks = buildAgentHooks(
       makeConfig({
-        hasPendingWork: () => true,
-        getPendingDescriptions: () => ['call `await_run_script` with runId: "abc-123"'],
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "abc-123" }]),
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
@@ -90,8 +89,7 @@ describe("buildAgentHooks — Stop hook", () => {
   it("includes polling guidance in the Stop message", async () => {
     const hooks = buildAgentHooks(
       makeConfig({
-        hasPendingWork: () => true,
-        getPendingDescriptions: () => ['call `await_run_script` with runId: "abc-123"'],
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "abc-123" }]),
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
@@ -100,14 +98,13 @@ describe("buildAgentHooks — Stop hook", () => {
     expect(result.reason).toContain("Never give up or stop polling");
   });
 
-  it("lists all pending descriptions as bullets in the Stop message", async () => {
+  it("lists all pending entries as bullets in the Stop message", async () => {
     const hooks = buildAgentHooks(
       makeConfig({
-        hasPendingWork: () => true,
-        getPendingDescriptions: () => [
-          'call `await_run_script` with runId: "id-1"',
-          'call `await_chat_to_fixer` with taskId: "id-2"',
-        ],
+        registry: makeRegistry([
+          { awaitTool: "await_run_script", idKey: "runId", id: "id-1" },
+          { awaitTool: "await_chat_to_fixer", idKey: "taskId", id: "id-2" },
+        ]),
       }),
     );
     const fn = hooks.Stop![0]!.hooks[0]!;
@@ -125,21 +122,29 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     expect(result).toEqual({ continue: true });
   });
 
-  it("blocks with MUST reason on still_running", async () => {
+  it("blocks with pending-entry reason on still_running", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0); // max = 10, won't release on first call
-    const hooks = buildAgentHooks(makeConfig({ getStillRunningId: () => "run-xyz" }));
+    const hooks = buildAgentHooks(
+      makeConfig({
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "run-xyz" }]),
+      }),
+    );
     const fn = hooks.PostToolUse![0]!.hooks[0]!;
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
     const { decision, reason } = result as { decision: string; reason: string };
     expect(decision).toBe("block");
-    expect(reason).toContain("You MUST call the await tool again yourself with id");
+    expect(reason).toContain("await_run_script");
     expect(reason).toContain("run-xyz");
     vi.restoreAllMocks();
   });
 
   it("includes no-memory guidance in still_running block reason", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0);
-    const hooks = buildAgentHooks(makeConfig({ getStillRunningId: () => "run-xyz" }));
+    const hooks = buildAgentHooks(
+      makeConfig({
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "run-xyz" }]),
+      }),
+    );
     const fn = hooks.PostToolUse![0]!.hooks[0]!;
     const result = await callHook(fn, postToolUseInput({ status: "still_running" }));
     const { reason } = result as { reason: string };
@@ -167,7 +172,7 @@ describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => 
   });
 
   it("allows ScheduleWakeup when no pending work", async () => {
-    const hooks = buildAgentHooks(makeConfig({ hasPendingWork: () => false }));
+    const hooks = buildAgentHooks(makeConfig());
     const fn = hooks.PreToolUse![0]!.hooks[0]!;
     const result = await callHook(fn, preToolUseInput("ScheduleWakeup", { delaySeconds: 90 }));
     expect(result).toEqual({ continue: true });
@@ -176,8 +181,7 @@ describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => 
   it("denies ScheduleWakeup when pending work exists", async () => {
     const hooks = buildAgentHooks(
       makeConfig({
-        hasPendingWork: () => true,
-        getPendingDescriptions: () => ['call `await_run_script` with runId: "abc-123"'],
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "abc-123" }]),
       }),
     );
     const fn = hooks.PreToolUse![0]!.hooks[0]!;
@@ -192,7 +196,11 @@ describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => 
   });
 
   it("passes through non-PreToolUse events", async () => {
-    const hooks = buildAgentHooks(makeConfig({ hasPendingWork: () => true }));
+    const hooks = buildAgentHooks(
+      makeConfig({
+        registry: makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "x" }]),
+      }),
+    );
     const fn = hooks.PreToolUse![0]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "Stop" });
     expect(result).toEqual({ continue: true });

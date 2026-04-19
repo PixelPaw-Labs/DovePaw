@@ -18,24 +18,47 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { doveAwaitToolName } from "@/lib/query-tools";
-import { PendingRegistry } from "@/lib/pending-registry";
+import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
 import { addPendingQuestion, abortPendingQuestions } from "@/lib/pending-questions";
 import type { Question } from "@/lib/chat-sse";
 
+// ─── MCP tool response parsing ───────────────────────────────────────────────
+
+/**
+ * Extracts the structured content from a PostToolUse `tool_response`.
+ *
+ * The SDK serialises MCP tool `structuredContent` as a JSON string when passing
+ * it to hook callbacks. This function handles all observed shapes:
+ *   - JSON string   → parsed directly (in-process MCP via createSdkMcpServer)
+ *   - { structuredContent } object → unwrapped (external MCP over SSE)
+ *   - plain object  → returned as-is (fallback)
+ */
+export function getMcpStructured(tool_response: unknown): unknown {
+  if (typeof tool_response === "string") {
+    try {
+      return JSON.parse(tool_response) as unknown;
+    } catch {
+      return undefined;
+    }
+  }
+  if (typeof tool_response === "object" && tool_response !== null) {
+    return "structuredContent" in tool_response
+      ? (tool_response as { structuredContent: unknown }).structuredContent
+      : tool_response;
+  }
+  return undefined;
+}
+
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 
 export interface AgentHooksConfig {
   /** Pipe-separated tool name matcher for the PostToolUse still_running hook. */
   postToolUseMatcher: string;
-  /** Returns true when there is at least one pending in-flight operation. */
-  hasPendingWork: () => boolean;
-  /** Returns a human-readable description for each pending operation (one per entry). */
-  getPendingDescriptions: () => string[];
-  /** Extracts the operation ID from a still_running structuredContent payload. */
-  getStillRunningId: (structured: unknown) => string | undefined;
+  /** Registry tracking all pending in-flight operations. */
+  registry: PendingRegistry;
   /** Appended to every user prompt via UserPromptSubmit hook. */
   userPromptReminder?: string;
   /**
@@ -45,6 +68,17 @@ export interface AgentHooksConfig {
   allowedDirectories?: string[];
 }
 
+function buildPendingBlockReason(entries: PendingEntry[]): string {
+  return [
+    `⚠️ You have ${entries.length} pending operation(s) still running:`,
+    ...entries.map((e) => `- call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
+    `These operations can run for a long time (minutes to hours) — decide an appropriate sleep interval based on the task type.`,
+    `Keep calling await in a loop until the operation completes.`,
+    `Never give up or stop polling; you are responsible for retrieving the final result.`,
+    `Never recall any previous run from log or memory — always use the await tool with the id from the most recent still_running response.`,
+  ].join("\n");
+}
+
 /**
  * Builds a pair of hooks (PostToolUse + Stop) from a generic config.
  * Suitable for any query() call that uses a start/await tool pattern.
@@ -52,14 +86,7 @@ export interface AgentHooksConfig {
 export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const {
-    postToolUseMatcher,
-    hasPendingWork,
-    getPendingDescriptions,
-    getStillRunningId,
-    userPromptReminder,
-    allowedDirectories,
-  } = config;
+  const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories } = config;
   const retryCounter = new StillRunningRetryCounter();
   const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
 
@@ -69,15 +96,15 @@ export function buildAgentHooks(
       hooks: [
         async (input) => {
           if (input.hook_event_name !== "PreToolUse") return { continue: true };
-          if (!hasPendingWork()) return { continue: true };
-          const descriptions = getPendingDescriptions();
+          if (!registry.hasPending()) return { continue: true };
+          const pending = registry.getPending();
           const hookSpecificOutput: PreToolUseHookSpecificOutput = {
             hookEventName: "PreToolUse",
             permissionDecision: "deny",
             permissionDecisionReason: [
               `⚠️ ScheduleWakeup cannot be used while await operations are pending — the wakeup will not fire in this session context.`,
-              `You still have ${descriptions.length} pending operation(s):`,
-              ...descriptions.map((d) => `- ${d}`),
+              `You still have ${pending.length} pending operation(s):`,
+              ...pending.map((e) => `- call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
               `Keep calling the await tool directly in a loop until the operation completes.`,
               `Never schedule a wakeup to defer polling — poll in-session.`,
             ].join("\n"),
@@ -141,18 +168,8 @@ export function buildAgentHooks(
         hooks: [
           async (input) => {
             if (input.hook_event_name !== "Stop") return { continue: true };
-            if (input.stop_hook_active || !hasPendingWork()) return { continue: true };
-            const descriptions = getPendingDescriptions();
-            return {
-              decision: "block",
-              reason: [
-                `⚠️ You have ${descriptions.length} pending operation(s) still running:`,
-                ...descriptions.map((d) => `- ${d}`),
-                `These operations can run for a long time (minutes to hours) — decide an appropriate sleep interval based on the task type.`,
-                `Keep calling await in a loop until the operation completes.`,
-                `Never give up or stop polling; you are responsible for retrieving the final result.`,
-              ].join("\n"),
-            };
+            if (!registry.hasPending()) return { continue: true };
+            return { decision: "block", reason: buildPendingBlockReason(registry.getPending()) };
           },
         ],
       },
@@ -164,12 +181,7 @@ export function buildAgentHooks(
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return { continue: true };
             const { tool_response } = input;
-            const structured =
-              typeof tool_response === "object" &&
-              tool_response !== null &&
-              "structuredContent" in tool_response
-                ? (tool_response as { structuredContent: unknown }).structuredContent
-                : undefined;
+            const structured = getMcpStructured(tool_response);
             const status =
               typeof structured === "object" && structured !== null && "status" in structured
                 ? (structured as { status: unknown }).status
@@ -178,14 +190,7 @@ export function buildAgentHooks(
               if (retryCounter.shouldRelease()) {
                 return { continue: true };
               }
-              const id = getStillRunningId(structured);
-              return {
-                decision: "block",
-                reason: [
-                  `⚠️ Still running (id: ${id}). You MUST call the await tool again yourself with id "${id}".`,
-                  `Never recall any previous run from log or memory — always use the await tool with the id from the most recent still_running response.`,
-                ].join("\n"),
-              };
+              return { decision: "block", reason: buildPendingBlockReason(registry.getPending()) };
             }
             return { continue: true };
           },
@@ -213,14 +218,7 @@ export function buildDoveHooks(
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
-    hasPendingWork: () => registry.hasPending(),
-    getPendingDescriptions: () =>
-      registry.getPending().map((e) => `call \`${e.awaitTool}\` with ${e.idKey}: "${e.id}"`),
-    getStillRunningId: (s) => {
-      if (typeof s !== "object" || s === null || !("taskId" in s)) return undefined;
-      const val: unknown = Reflect.get(s, "taskId");
-      return typeof val === "string" ? val : undefined;
-    },
+    registry,
     userPromptReminder: DOVE_PROMPT_REMINDER,
     allowedDirectories: [cwd, ...additionalDirectories],
   });
