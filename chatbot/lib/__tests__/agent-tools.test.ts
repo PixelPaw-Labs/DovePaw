@@ -46,14 +46,18 @@ import {
   buildSubAgentPrompt,
   makeStartScriptTool,
   makeStartChatToTool,
-  makeReviewTool,
-  makeEscalateTool,
+  makeStartReviewTool,
+  makeAwaitReviewTool,
+  makeStartEscalateTool,
+  makeAwaitEscalateTool,
   startRunScriptToolName,
   awaitRunScriptToolName,
   startChatToToolName,
   awaitChatToToolName,
-  reviewWithToolName,
-  escalateToToolName,
+  startReviewWithToolName,
+  awaitReviewWithToolName,
+  startEscalateToToolName,
+  awaitEscalateToToolName,
   withStartReminder,
 } from "@/lib/agent-tools";
 import type { CollectedStream } from "@/lib/a2a-client";
@@ -62,6 +66,8 @@ import {
   startAgentStream,
   collectStreamResult,
   formatAgentStreamContext,
+  createAgentClient,
+  subscribeTaskStream,
 } from "@/lib/a2a-client";
 import type { AgentDef } from "@@/lib/agents";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -396,12 +402,20 @@ describe("tool name helpers", () => {
     expect(awaitChatToToolName("fixer")).toBe("await_chat_to_fixer");
   });
 
-  it("reviewWithToolName", () => {
-    expect(reviewWithToolName("reviewer")).toBe("review_with_reviewer");
+  it("startReviewWithToolName", () => {
+    expect(startReviewWithToolName("reviewer")).toBe("start_review_with_reviewer");
   });
 
-  it("escalateToToolName", () => {
-    expect(escalateToToolName("supervisor")).toBe("escalate_to_supervisor");
+  it("awaitReviewWithToolName", () => {
+    expect(awaitReviewWithToolName("reviewer")).toBe("await_review_with_reviewer");
+  });
+
+  it("startEscalateToToolName", () => {
+    expect(startEscalateToToolName("supervisor")).toBe("start_escalate_to_supervisor");
+  });
+
+  it("awaitEscalateToToolName", () => {
+    expect(awaitEscalateToToolName("supervisor")).toBe("await_escalate_to_supervisor");
   });
 
   it("withStartReminder appends reminder suffix", () => {
@@ -470,114 +484,56 @@ describe("makeStartChatToTool — groupMeta", () => {
   });
 });
 
-// ─── makeReviewTool ───────────────────────────────────────────────────────────
+// ─── makeStartReviewTool ──────────────────────────────────────────────────────
 
-describe("makeReviewTool", () => {
+describe("makeStartReviewTool", () => {
   async function* mockStream() {
     /* empty stream */
-  }
-
-  function captureReviewHandler() {
-    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
-    return makeReviewTool(AGENT) as any;
   }
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(resolveAgentPort).mockReturnValue(9999);
-    vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
     vi.mocked(startAgentStream).mockResolvedValue({
       taskId: "task-123",
       contextId: "ctx-456",
       stream: mockStream(),
       client: {} as any,
     });
-  });
-
-  it("returns APPROVED when reviewer JSON says APPROVED", async () => {
     vi.mocked(collectStreamResult).mockResolvedValue({
       taskId: "task-123",
-      result: {
-        output: '{"decision":"APPROVED","reason":"looks good"}\nFull feedback here.',
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
+      result: { output: "", progress: [], thinking: "", toolCalls: [] },
     });
-    const handler = captureReviewHandler();
-    const result = (await handler({ content: "my work" })) as any;
-    expect(result.structuredContent.decision).toBe("APPROVED");
-    expect(result.structuredContent.reason).toBe("looks good");
-    expect(result.content[0].text).toContain("APPROVED");
-    expect(result.content[0].text).toContain("looks good");
   });
 
-  it("returns REJECTED when reviewer JSON says REJECTED", async () => {
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: {
-        output: '{"decision":"REJECTED","reason":"missing tests"}\nFeedback.',
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
-    const handler = captureReviewHandler();
+  it("calls startAgentStream with review instruction and returns taskId", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartReviewTool(AGENT) as any;
     const result = (await handler({ content: "my work" })) as any;
-    expect(result.structuredContent.decision).toBe("REJECTED");
-    expect(result.structuredContent.reason).toBe("missing tests");
-  });
-
-  it("returns NO_DECISION when output has no JSON", async () => {
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: {
-        output: "I think it looks fine actually.",
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
-    const handler = captureReviewHandler();
-    const result = (await handler({ content: "my work" })) as any;
-    expect(result.structuredContent.decision).toBe("NO_DECISION");
-    expect(result.structuredContent.reason).toBeUndefined();
-  });
-
-  it("returns NO_DECISION when JSON is malformed", async () => {
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: {
-        output: '{"decision":APPROVED}\nFeedback.',
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
-    const handler = captureReviewHandler();
-    const result = (await handler({ content: "my work" })) as any;
-    expect(result.structuredContent.decision).toBe("NO_DECISION");
+    expect(startAgentStream).toHaveBeenCalledWith(
+      9999,
+      expect.stringContaining("reviewing the following work product"),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    );
+    expect(result.structuredContent.taskId).toBe("task-123");
   });
 
   it("returns error when agent port is not found", async () => {
     vi.mocked(resolveAgentPort).mockReturnValue(null);
-    const handler = captureReviewHandler();
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartReviewTool(AGENT) as any;
     const result = (await handler({ content: "my work" })) as any;
-    expect(result.content[0].text).toContain("not reachable");
+    expect(result.content[0].text).toContain("not running");
     expect(startAgentStream).not.toHaveBeenCalled();
-  });
-
-  it("returns error when startAgentStream returns null", async () => {
-    vi.mocked(startAgentStream).mockResolvedValue(null);
-    const handler = captureReviewHandler();
-    const result = (await handler({ content: "my work" })) as any;
-    expect(result.content[0].text).toContain("did not start");
   });
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
     const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
-    const handler = makeReviewTool(AGENT, undefined, undefined, groupMeta) as any;
+    const handler = makeStartReviewTool(AGENT, undefined, undefined, undefined, groupMeta) as any;
     await handler({ content: "my work" });
     expect(startAgentStream).toHaveBeenCalledWith(
       9999,
@@ -590,9 +546,95 @@ describe("makeReviewTool", () => {
   });
 });
 
-// ─── makeEscalateTool — groupMeta propagation ─────────────────────────────────
+// ─── makeAwaitReviewTool ──────────────────────────────────────────────────────
 
-describe("makeEscalateTool — groupMeta", () => {
+describe("makeAwaitReviewTool", () => {
+  const completedStream = {
+    taskId: "task-123",
+    result: { output: "", progress: [], thinking: "", toolCalls: [] },
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(createAgentClient).mockResolvedValue({} as any);
+    vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
+  });
+
+  function captureAwaitHandler() {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    return makeAwaitReviewTool(AGENT) as any;
+  }
+
+  it("returns APPROVED when reviewer JSON says APPROVED", async () => {
+    vi.mocked(subscribeTaskStream).mockResolvedValue({
+      ...completedStream,
+      result: {
+        output: '{"decision":"APPROVED","reason":"looks good"}\nFull feedback here.',
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureAwaitHandler();
+    const result = (await handler({ taskId: "task-123" })) as any;
+    expect(result.structuredContent.decision).toBe("APPROVED");
+    expect(result.structuredContent.reason).toBe("looks good");
+    expect(result.content[0].text).toContain("APPROVED");
+    expect(result.content[0].text).toContain("looks good");
+  });
+
+  it("returns REJECTED when reviewer JSON says REJECTED", async () => {
+    vi.mocked(subscribeTaskStream).mockResolvedValue({
+      ...completedStream,
+      result: {
+        output: '{"decision":"REJECTED","reason":"missing tests"}\nFeedback.',
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureAwaitHandler();
+    const result = (await handler({ taskId: "task-123" })) as any;
+    expect(result.structuredContent.decision).toBe("REJECTED");
+    expect(result.structuredContent.reason).toBe("missing tests");
+  });
+
+  it("returns NO_DECISION when output has no JSON", async () => {
+    vi.mocked(subscribeTaskStream).mockResolvedValue({
+      ...completedStream,
+      result: {
+        output: "I think it looks fine actually.",
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureAwaitHandler();
+    const result = (await handler({ taskId: "task-123" })) as any;
+    expect(result.structuredContent.decision).toBe("NO_DECISION");
+    expect(result.structuredContent.reason).toBeUndefined();
+  });
+
+  it("returns NO_DECISION when JSON is malformed", async () => {
+    vi.mocked(subscribeTaskStream).mockResolvedValue({
+      ...completedStream,
+      result: {
+        output: '{"decision":APPROVED}\nFeedback.',
+        progress: [],
+        thinking: "",
+        toolCalls: [],
+      },
+    });
+    const handler = captureAwaitHandler();
+    const result = (await handler({ taskId: "task-123" })) as any;
+    expect(result.structuredContent.decision).toBe("NO_DECISION");
+  });
+});
+
+// ─── makeStartEscalateTool ────────────────────────────────────────────────────
+
+describe("makeStartEscalateTool", () => {
   async function* mockStream() {
     /* empty stream */
   }
@@ -608,20 +650,14 @@ describe("makeEscalateTool — groupMeta", () => {
     });
     vi.mocked(collectStreamResult).mockResolvedValue({
       taskId: "task-123",
-      result: {
-        output: "Guidance: proceed with caution.",
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
+      result: { output: "", progress: [], thinking: "", toolCalls: [] },
     });
-    vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
   });
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
     const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
-    const handler = makeEscalateTool(AGENT, undefined, undefined, groupMeta) as any;
+    const handler = makeStartEscalateTool(AGENT, undefined, undefined, undefined, groupMeta) as any;
     await handler({ blocker: "stuck", context: "tried X" });
     expect(startAgentStream).toHaveBeenCalledWith(
       9999,
@@ -635,7 +671,7 @@ describe("makeEscalateTool — groupMeta", () => {
 
   it("passes undefined extraMetadata when groupMeta is not provided", async () => {
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
-    const handler = makeEscalateTool(AGENT) as any;
+    const handler = makeStartEscalateTool(AGENT) as any;
     await handler({ blocker: "stuck", context: "tried X" });
     expect(startAgentStream).toHaveBeenCalledWith(
       9999,
@@ -645,5 +681,43 @@ describe("makeEscalateTool — groupMeta", () => {
       undefined,
       undefined,
     );
+  });
+
+  it("returns taskId in structuredContent", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartEscalateTool(AGENT) as any;
+    const result = (await handler({ blocker: "stuck", context: "tried X" })) as any;
+    expect(result.structuredContent.taskId).toBe("task-123");
+  });
+});
+
+// ─── makeAwaitEscalateTool ────────────────────────────────────────────────────
+
+describe("makeAwaitEscalateTool", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(createAgentClient).mockResolvedValue({} as any);
+    vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
+    vi.mocked(subscribeTaskStream).mockResolvedValue({
+      taskId: "task-123",
+      result: { output: "Guidance: proceed with X.", progress: [], thinking: "", toolCalls: [] },
+    });
+  });
+
+  it("returns guidance text when task completes", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeAwaitEscalateTool(AGENT) as any;
+    const result = (await handler({ taskId: "task-123" })) as any;
+    expect(result.content[0].text).toBeTruthy();
+    expect(result.structuredContent.status).toBe("completed");
+  });
+
+  it("returns error when agent port is not found", async () => {
+    vi.mocked(resolveAgentPort).mockReturnValue(null);
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeAwaitEscalateTool(AGENT) as any;
+    const result = (await handler({ taskId: "task-123" })) as any;
+    expect(result.content[0].text).toContain("not running");
   });
 });

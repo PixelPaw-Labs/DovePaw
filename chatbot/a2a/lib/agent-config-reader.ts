@@ -10,8 +10,10 @@ import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
 import {
   makeStartChatToTool,
   makeAwaitChatToTool,
-  makeReviewTool,
-  makeEscalateTool,
+  makeStartReviewTool,
+  makeAwaitReviewTool,
+  makeStartEscalateTool,
+  makeAwaitEscalateTool,
 } from "@/lib/agent-tools";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
@@ -70,10 +72,12 @@ export class AgentConfigReader {
 
       switch (strategy) {
         case "review":
-          tools.push(makeReviewTool(targetDef, signal, agentName, groupMeta));
+          tools.push(makeStartReviewTool(targetDef, signal, registry, agentName, groupMeta));
+          tools.push(makeAwaitReviewTool(targetDef, signal, registry));
           break;
         case "escalation":
-          tools.push(makeEscalateTool(targetDef, signal, agentName, groupMeta));
+          tools.push(makeStartEscalateTool(targetDef, signal, registry, agentName, groupMeta));
+          tools.push(makeAwaitEscalateTool(targetDef, signal, registry));
           break;
         default: // "chat" and any future strategies default to start + await
           tools.push(

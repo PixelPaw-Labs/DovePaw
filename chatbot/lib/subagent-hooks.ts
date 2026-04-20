@@ -16,8 +16,8 @@ import {
   CONFIDENCE_THRESHOLD,
   impactPlaceholder,
   startChatToToolName,
-  reviewWithToolName,
-  escalateToToolName,
+  startReviewWithToolName,
+  startEscalateToToolName,
 } from "@/lib/agent-tools";
 import { buildAgentHooks } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
@@ -145,12 +145,12 @@ const chatToReflectionMatcher = makeReflectionMatcher(
 );
 
 const reviewReflectionMatcher = makeReflectionMatcher(
-  `mcp__agents__${reviewWithToolName(".*")}`,
+  `mcp__agents__${startReviewWithToolName(".*")}`,
   buildReflectionPrompt(REVIEW_PATTERNS()),
 );
 
 const escalateReflectionMatcher = makeReflectionMatcher(
-  `mcp__agents__${escalateToToolName(".*")}`,
+  `mcp__agents__${startEscalateToToolName(".*")}`,
   buildReflectionPrompt(ESCALATE_PATTERNS()),
 );
 

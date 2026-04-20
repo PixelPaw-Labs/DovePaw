@@ -28,12 +28,6 @@ import { z } from "zod";
 import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
 import type { CollectedStream } from "@/lib/a2a-client";
-import {
-  collectStreamResult,
-  formatAgentStreamContext,
-  resolveAgentPort,
-  startAgentStream,
-} from "@/lib/a2a-client";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import { TaskPoller } from "@/lib/task-poller";
@@ -126,10 +120,18 @@ export const withStartReminder = (instruction: string, manifestKey: string): str
 export const startChatToToolName = (manifestKey: string): string => `start_chat_to_${manifestKey}`;
 /** Tool name for collecting the result of a start_chat_to_* call. */
 export const awaitChatToToolName = (manifestKey: string): string => `await_chat_to_${manifestKey}`;
-/** Tool name for submitting work to a reviewing agent (review_with_* pattern). */
-export const reviewWithToolName = (manifestKey: string): string => `review_with_${manifestKey}`;
-/** Tool name for escalating a blocker to a specialist agent (escalate_to_* pattern). */
-export const escalateToToolName = (manifestKey: string): string => `escalate_to_${manifestKey}`;
+/** Tool name for submitting work to a reviewing agent (start_review_with_* pattern). */
+export const startReviewWithToolName = (manifestKey: string): string =>
+  `start_review_with_${manifestKey}`;
+/** Tool name for collecting the result of a start_review_with_* call. */
+export const awaitReviewWithToolName = (manifestKey: string): string =>
+  `await_review_with_${manifestKey}`;
+/** Tool name for escalating a blocker to a specialist agent (start_escalate_to_* pattern). */
+export const startEscalateToToolName = (manifestKey: string): string =>
+  `start_escalate_to_${manifestKey}`;
+/** Tool name for collecting the result of a start_escalate_to_* call. */
+export const awaitEscalateToToolName = (manifestKey: string): string =>
+  `await_escalate_to_${manifestKey}`;
 
 // ─── Management tools factory ─────────────────────────────────────────────────
 
@@ -470,21 +472,23 @@ export function makeAwaitChatToTool(
   );
 }
 
-// ─── Review strategy tool ─────────────────────────────────────────────────────
+// ─── Review strategy tools ────────────────────────────────────────────────────
 
 /**
- * Sends content to a reviewing agent and waits for an approve/reject decision.
- * The reviewing agent must respond with {"decision":"APPROVED"|"REJECTED","reason":"..."} JSON.
+ * Fire-and-forget start tool for review delegation.
+ * Sends content to a reviewing agent and returns a taskId immediately.
+ * Use makeAwaitReviewTool to collect the approve/reject decision.
  */
-export function makeReviewTool(
+export function makeStartReviewTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
+  registry?: PendingRegistry,
   callerAgentId?: string,
   groupMeta?: Record<string, unknown>,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
-    reviewWithToolName(manifestKey),
+    startReviewWithToolName(manifestKey),
     `Submit your output to ${displayName} for review before it goes upstream.\n\n` +
       `${displayName} specialises in: "${description}"\n\n` +
       `The reviewer will respond with a JSON decision {"decision":"APPROVED"|"REJECTED","reason":"..."} and structured feedback.\n\n` +
@@ -495,9 +499,6 @@ export function makeReviewTool(
       justification: justificationField,
     },
     async ({ content, context }) => {
-      const port = resolveAgentPort(manifestKey);
-      if (!port)
-        return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
       const instruction = [
         `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
         `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
@@ -505,20 +506,55 @@ export function makeReviewTool(
         `${content}\n\n`,
         ...(context ? [`\nContext:\n${context}`] : []),
       ].join("\n");
-      const handle = await startAgentStream(
-        port,
-        withStartReminder(instruction, manifestKey),
+      return new TaskPoller(
+        manifestKey,
+        displayName,
         signal,
+        registry,
+        awaitReviewWithToolName(manifestKey),
         undefined,
-        callerAgentId,
-        groupMeta,
-      );
-      if (!handle)
-        return {
-          content: [{ type: "text" as const, text: `${displayName} did not start.` }],
-        };
-      const { result } = await collectStreamResult(handle.stream);
-      const jsonMatch = result.output.match(/\{[^}]*"decision"\s*:[^}]*\}/);
+        targetDef.name,
+      ).start(withStartReminder(instruction, manifestKey), {
+        senderAgentId: callerAgentId,
+        extraMetadata: groupMeta,
+      });
+    },
+  );
+}
+
+/**
+ * Await tool for review delegation — polls a task started by start_review_with_*.
+ * Parses the approve/reject JSON decision from the reviewer's output when complete.
+ */
+export function makeAwaitReviewTool(
+  targetDef: AgentDef,
+  signal?: AbortSignal,
+  registry?: PendingRegistry,
+) {
+  const { displayName, manifestKey } = targetDef;
+  return tool(
+    awaitReviewWithToolName(manifestKey),
+    `Collect the review decision from a previously submitted ${displayName} review.\n` +
+      `Call this after ${startReviewWithToolName(manifestKey)} to retrieve the approve/reject decision.`,
+    {
+      taskId: z.string().describe("The taskId returned by " + startReviewWithToolName(manifestKey)),
+    },
+    async ({ taskId }) => {
+      const pollResult = await new TaskPoller(
+        manifestKey,
+        displayName,
+        signal,
+        registry,
+        awaitReviewWithToolName(manifestKey),
+        undefined,
+        targetDef.name,
+      ).poll(taskId);
+
+      const sc = pollResult.structuredContent;
+      if (!sc || !("result" in sc)) return pollResult;
+
+      const output = sc.result.output ?? "";
+      const jsonMatch = output.match(/\{[^}]*"decision"\s*:[^}]*\}/);
       let decision: "APPROVED" | "REJECTED" | "NO_DECISION" = "NO_DECISION";
       let reason: string | undefined;
       if (jsonMatch) {
@@ -536,35 +572,35 @@ export function makeReviewTool(
           // fall through to NO_DECISION
         }
       }
+      const decisionLine = `Review decision: ${decision}${reason ? `\nReason: ${reason}` : ""}`;
       return {
         content: [
-          {
-            type: "text" as const,
-            text: `Review decision: ${decision}${reason ? `\nReason: ${reason}` : ""}\n${formatAgentStreamContext(result, handle.contextId, displayName)}`,
-          },
+          { type: "text" as const, text: `${decisionLine}\n${pollResult.content[0].text}` },
         ],
-        structuredContent: { ...result, contextId: handle.contextId, decision, reason },
+        structuredContent: { ...sc, decision, reason },
       };
     },
   );
 }
 
-// ─── Escalation strategy tool ─────────────────────────────────────────────────
+// ─── Escalation strategy tools ───────────────────────────────────────────────
 
 /**
- * Escalates a blocker to a supervisor/specialist agent and returns its guidance.
- * Use when confidence is below threshold or the task exceeds your authority.
+ * Fire-and-forget start tool for escalation delegation.
+ * Escalates a blocker to a supervisor/specialist agent and returns a taskId immediately.
+ * Use makeAwaitEscalateTool to collect the guidance.
  */
-export function makeEscalateTool(
+export function makeStartEscalateTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
+  registry?: PendingRegistry,
   callerAgentId?: string,
   groupMeta?: Record<string, unknown>,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
-    escalateToToolName(manifestKey),
-    `Escalate a blocker to ${displayName} and receive guidance before continuing.\n\n` +
+    startEscalateToToolName(manifestKey),
+    `Escalate a blocker to ${displayName} and receive a taskId immediately.\n\n` +
       `${displayName} specialises in: "${description}"\n\n` +
       ESCALATE_PATTERNS(displayName),
     {
@@ -573,35 +609,55 @@ export function makeEscalateTool(
       justification: justificationField,
     },
     async ({ blocker, context, justification }) => {
-      const port = resolveAgentPort(manifestKey);
-      if (!port)
-        return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
       const instruction = [
         `ESCALATION — confidence: ${justification?.confidence ?? "?"}/1\n`,
         `Blocker: ${blocker}`,
         `\nContext:\n${context}`,
         `\nPlease provide guidance or make the decision so I can continue.`,
       ].join("\n");
-      const handle = await startAgentStream(
-        port,
-        withStartReminder(instruction, manifestKey),
+      return new TaskPoller(
+        manifestKey,
+        displayName,
         signal,
+        registry,
+        awaitEscalateToToolName(manifestKey),
         undefined,
-        callerAgentId,
-        groupMeta,
-      );
-      if (!handle)
-        return { content: [{ type: "text" as const, text: `${displayName} did not start.` }] };
-      const { result } = await collectStreamResult(handle.stream);
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: formatAgentStreamContext(result, handle.contextId, displayName),
-          },
-        ],
-        structuredContent: { ...result, contextId: handle.contextId },
-      };
+        targetDef.name,
+      ).start(withStartReminder(instruction, manifestKey), {
+        senderAgentId: callerAgentId,
+        extraMetadata: groupMeta,
+      });
+    },
+  );
+}
+
+/**
+ * Await tool for escalation delegation — polls a task started by start_escalate_to_*.
+ * Returns the supervisor's guidance or decision when complete.
+ */
+export function makeAwaitEscalateTool(
+  targetDef: AgentDef,
+  signal?: AbortSignal,
+  registry?: PendingRegistry,
+) {
+  const { displayName, manifestKey } = targetDef;
+  return tool(
+    awaitEscalateToToolName(manifestKey),
+    `Collect the guidance from a previously started ${displayName} escalation.\n` +
+      `Call this after ${startEscalateToToolName(manifestKey)} to retrieve the decision or guidance.`,
+    {
+      taskId: z.string().describe("The taskId returned by " + startEscalateToToolName(manifestKey)),
+    },
+    async ({ taskId }) => {
+      return new TaskPoller(
+        manifestKey,
+        displayName,
+        signal,
+        registry,
+        awaitEscalateToToolName(manifestKey),
+        undefined,
+        targetDef.name,
+      ).poll(taskId);
     },
   );
 }
