@@ -1,6 +1,49 @@
 import { renderHook, act, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+function makePoolSseChunk(agentId: string, type: "progress" | "done" | "error"): string {
+  return `data: ${JSON.stringify({ agentId, text: "text", type })}\n\n`;
+}
+
+/** Stream that pushes chunks then blocks forever (simulates an open SSE connection). */
+function makeBlockingStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk));
+      }
+      // Intentionally no close() — stream stays open indefinitely
+    },
+  });
+}
+
+/** Stream that pushes chunks then closes (simulates an SSE connection that ends). */
+function makeClosingStream(chunks: string[]): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) {
+        controller.enqueue(encoder.encode(chunk));
+      }
+      controller.close();
+    },
+  });
+}
+
+function makeGroupFetchMock(stream: ReadableStream<Uint8Array>) {
+  return (url: unknown) => {
+    const u = String(url);
+    // Group active-session endpoint
+    if ((u.includes("group%3A") || u.includes("group:")) && u.includes("active-session"))
+      return Promise.resolve(makeJson({ id: "ctx-1", status: "running" }));
+    // Group SSE stream endpoint
+    if (u.includes("groups/stream")) return Promise.resolve(new Response(stream, { status: 200 }));
+    // Member active-session: no running session (prevents individual stream connections)
+    return Promise.resolve(makeJson({ id: null }));
+  };
+}
+
 function makeJson(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -117,6 +160,61 @@ describe("useGroupChatSession", () => {
 
       expect(result.current.messages[0].agentId).toBe("agent-a");
       expect(result.current.messages[1].agentId).toBe("agent-b");
+    });
+  });
+
+  describe("isLoading tracks group pool progress", () => {
+    it("stays true while a member has received progress but not done", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(makeBlockingStream([makePoolSseChunk("agent-a", "progress")])),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => expect(result.current.isLoading).toBe(true));
+      unmount();
+    });
+
+    it("stays true when one of two members is still in progress after the other finishes", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeBlockingStream([
+            makePoolSseChunk("agent-a", "progress"),
+            makePoolSseChunk("agent-b", "progress"),
+            makePoolSseChunk("agent-a", "done"),
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() =>
+        useGroupChatSession(["agent-a", "agent-b"], "test-group"),
+      );
+
+      // Wait until agent-a's pool message shows as complete
+      await waitFor(() => {
+        const aDone = result.current.messages.find((m) => m.id === "pool-agent-a");
+        expect(aDone?.isLoading).toBe(false);
+      });
+
+      // agent-b is still in progress — isLoading must remain true
+      expect(result.current.isLoading).toBe(true);
+      unmount();
+    });
+
+    it("becomes false when all members are done and the stream closes", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeClosingStream([
+            makePoolSseChunk("agent-a", "progress"),
+            makePoolSseChunk("agent-a", "done"),
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      unmount();
     });
   });
 });

@@ -121,6 +121,12 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     ),
   );
 
+  // Tracks members indicated as in-progress by the group pool stream.
+  // A member is added on "progress" and removed on "done"/"error".
+  // Keeps isLoading true during the async window between pool event arrival
+  // and the individual member stream connecting (setting state.abort).
+  const activeGroupMembersRef = useRef(new Set<string>());
+
   // Lazy-init so the animation's onUpdate closes over setMessages at the right time
   const animationRef = useRef<ReturnType<typeof createDirectAnimation> | null>(null);
   if (!animationRef.current) {
@@ -147,8 +153,8 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
   }
 
   const recomputeLoading = useCallback(() => {
-    const anyActive = [...memberStateRef.current.values()].some((s) => s.abort !== null);
-    setIsLoading(anyActive);
+    const anyStreamActive = [...memberStateRef.current.values()].some((s) => s.abort !== null);
+    setIsLoading(anyStreamActive || activeGroupMembersRef.current.size > 0);
   }, []);
 
   const handleEvent = useCallback(
@@ -283,6 +289,13 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     let groupStreamAbort: AbortController | null = null;
 
     const applyPoolEvent = (event: GroupPoolEvent) => {
+      if (event.type === "progress") {
+        activeGroupMembersRef.current.add(event.agentId);
+      } else if (event.type === "done" || event.type === "error") {
+        activeGroupMembersRef.current.delete(event.agentId);
+        recomputeLoading();
+      }
+
       const agentMsgId = `pool-${event.agentId}`;
       const isDone = event.type === "done";
       setMessages((prev) => {
@@ -360,6 +373,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
           if (groupStreamAbort === abort) {
             groupStreamAbort = null;
             subscribedContextId = null;
+            activeGroupMembersRef.current.clear();
             recomputeLoading();
           }
         }
