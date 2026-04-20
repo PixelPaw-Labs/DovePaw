@@ -151,7 +151,6 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     expect(reason).toContain("Never recall any previous run from log or memory");
     vi.restoreAllMocks();
   });
-
 });
 
 describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => {
