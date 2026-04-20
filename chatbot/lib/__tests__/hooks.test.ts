@@ -607,6 +607,7 @@ function makeCanUseToolCtx(overrides?: { signal?: AbortSignal }) {
     title: undefined,
     displayName: undefined,
     blockedPath: undefined,
+    toolUseID: "tu-mock",
   };
 }
 
