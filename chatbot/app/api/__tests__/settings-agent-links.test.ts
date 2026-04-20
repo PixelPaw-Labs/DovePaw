@@ -5,7 +5,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("@@/lib/agent-links", () => ({
   readAgentLinksFile: vi.fn(),
   writeAgentLinksFile: vi.fn(),
-  AGENT_LINK_STRATEGIES: ["parallel", "review", "escalation"],
+  AGENT_LINK_STRATEGIES: ["chat", "review", "escalation"],
 }));
 
 vi.mock("@@/lib/agents-config", () => ({
@@ -33,7 +33,7 @@ const SAMPLE_FILE: AgentLinksFile = {
       source: "agent-a",
       target: "agent-b",
       direction: "single",
-      strategy: "parallel",
+      strategy: "chat",
       group: "Review Chain",
     },
     {
@@ -76,7 +76,7 @@ describe("POST /api/settings/agent-links", () => {
         source: "agent-a",
         target: "agent-e",
         direction: "single",
-        strategy: "parallel",
+        strategy: "chat",
         group: "Review Chain",
       }),
     });
@@ -99,6 +99,38 @@ describe("POST /api/settings/agent-links", () => {
     const written = vi.mocked(writeAgentLinksFile).mock.calls[0]?.[0];
     expect(written?.links.at(-1)?.group).toBeUndefined();
   });
+
+  it("allows same source+target pair with a different strategy", async () => {
+    // SAMPLE_FILE has agent-a→agent-b with strategy "chat"; "review" should be allowed
+    const req = new Request("http://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "agent-a",
+        target: "agent-b",
+        direction: "single",
+        strategy: "review",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects a link with the same source, target, and strategy", async () => {
+    // SAMPLE_FILE has agent-a→agent-b with strategy "chat"
+    const req = new Request("http://x", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        source: "agent-a",
+        target: "agent-b",
+        direction: "single",
+        strategy: "chat",
+      }),
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(409);
+  });
 });
 
 // ─── PATCH /api/settings/agent-links ─────────────────────────────────────────
@@ -111,10 +143,11 @@ describe("PATCH /api/settings/agent-links", () => {
       body: JSON.stringify({
         source: "agent-a",
         target: "agent-b",
+        currentStrategy: "chat",
         newSource: "agent-a",
         newTarget: "agent-b",
         direction: "single",
-        strategy: "parallel",
+        strategy: "chat",
         group: "Data Pipeline",
       }),
     });
@@ -134,16 +167,49 @@ describe("DELETE /api/settings/agent-links", () => {
     const req = new Request("http://x", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "agent-a", target: "agent-b" }),
+      body: JSON.stringify({ source: "agent-a", target: "agent-b", strategy: "chat" }),
     });
     const res = await DELETE(req);
     expect(res.status).toBe(200);
 
     const written = vi.mocked(writeAgentLinksFile).mock.calls[0]?.[0];
-    expect(written?.links.some((l) => l.source === "agent-a" && l.target === "agent-b")).toBe(
-      false,
-    );
+    expect(
+      written?.links.some(
+        (l) => l.source === "agent-a" && l.target === "agent-b" && l.strategy === "chat",
+      ),
+    ).toBe(false);
     expect(written?.groups).toEqual(SAMPLE_FILE.groups);
+  });
+
+  it("only removes the matching strategy, leaving other strategies intact", async () => {
+    // Add a second link between agent-a and agent-b with strategy "review"
+    vi.mocked(readAgentLinksFile).mockResolvedValue({
+      ...SAMPLE_FILE,
+      links: [
+        ...SAMPLE_FILE.links,
+        { source: "agent-a", target: "agent-b", direction: "single", strategy: "review" },
+      ],
+    });
+
+    const req = new Request("http://x", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "agent-a", target: "agent-b", strategy: "chat" }),
+    });
+    const res = await DELETE(req);
+    expect(res.status).toBe(200);
+
+    const written = vi.mocked(writeAgentLinksFile).mock.calls[0]?.[0];
+    expect(
+      written?.links.some(
+        (l) => l.source === "agent-a" && l.target === "agent-b" && l.strategy === "chat",
+      ),
+    ).toBe(false);
+    expect(
+      written?.links.some(
+        (l) => l.source === "agent-a" && l.target === "agent-b" && l.strategy === "review",
+      ),
+    ).toBe(true);
   });
 });
 

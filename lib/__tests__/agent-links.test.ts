@@ -10,9 +10,9 @@ import {
 // ─── agentLinkSchema ──────────────────────────────────────────────────────────
 
 describe("agentLinkSchema", () => {
-  it("defaults strategy to parallel", () => {
+  it("defaults strategy to chat", () => {
     const result = agentLinkSchema.parse({ source: "a", target: "b", direction: "single" });
-    expect(result.strategy).toBe("parallel");
+    expect(result.strategy).toBe("chat");
   });
 
   it("accepts all valid strategies", () => {
@@ -115,13 +115,13 @@ const link = (
   source,
   target,
   direction,
-  strategy: "parallel",
+  strategy: "chat",
 });
 
 describe("resolveLinkedTargets", () => {
   it("returns target for a single link where agent is source", () => {
     const links = [link("a", "b")];
-    expect(resolveLinkedTargets("a", links)).toEqual([{ targetName: "b", strategy: "parallel" }]);
+    expect(resolveLinkedTargets("a", links)).toEqual([{ targetName: "b", strategy: "chat" }]);
   });
 
   it("does not return target for a single link where agent is target (not source)", () => {
@@ -131,15 +131,15 @@ describe("resolveLinkedTargets", () => {
 
   it("returns source for a dual link where agent is target", () => {
     const links = [link("a", "b", "dual")];
-    expect(resolveLinkedTargets("b", links)).toEqual([{ targetName: "a", strategy: "parallel" }]);
+    expect(resolveLinkedTargets("b", links)).toEqual([{ targetName: "a", strategy: "chat" }]);
   });
 
   it("returns both directions for a dual link", () => {
     const links = [link("a", "b", "dual")];
     const fromA = resolveLinkedTargets("a", links);
     const fromB = resolveLinkedTargets("b", links);
-    expect(fromA).toEqual([{ targetName: "b", strategy: "parallel" }]);
-    expect(fromB).toEqual([{ targetName: "a", strategy: "parallel" }]);
+    expect(fromA).toEqual([{ targetName: "b", strategy: "chat" }]);
+    expect(fromB).toEqual([{ targetName: "a", strategy: "chat" }]);
   });
 
   it("preserves strategy on resolved link", () => {

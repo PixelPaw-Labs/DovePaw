@@ -40,7 +40,7 @@ function getManifestKey(configs: AgentConfigEntry[], name: string): string {
 
 // ─── Shared badge ────────────────────────────────────────────────────────────
 
-type BadgeVariant = "single" | "dual" | "parallel" | "review" | "escalation" | "inactive";
+type BadgeVariant = "single" | "dual" | "chat" | "review" | "escalation" | "inactive";
 
 function Badge({ children, variant }: { children: React.ReactNode; variant: BadgeVariant }) {
   return (
@@ -49,8 +49,7 @@ function Badge({ children, variant }: { children: React.ReactNode; variant: Badg
         "shrink-0 text-[10px] uppercase tracking-widest font-semibold px-2 py-0.5 rounded-full",
         variant === "single" && "bg-muted text-muted-foreground",
         variant === "dual" && "bg-primary/10 text-primary",
-        variant === "parallel" &&
-          "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+        variant === "chat" && "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
         variant === "review" &&
           "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
         variant === "escalation" && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
@@ -65,13 +64,13 @@ function Badge({ children, variant }: { children: React.ReactNode; variant: Badg
 // ─── Strategy helpers ─────────────────────────────────────────────────────────
 
 const STRATEGY_LABELS: Record<AgentLinkStrategy, string> = {
-  parallel: "Start & Await",
+  chat: "Chat",
   review: "Review",
   escalation: "Escalation",
 };
 
 const STRATEGY_DESCRIPTIONS: Record<AgentLinkStrategy, string> = {
-  parallel: "Non-blocking — source starts target then awaits concurrently",
+  chat: "Non-blocking — source starts target then awaits concurrently",
   review: "Blocking review — target approves or rejects source's output",
   escalation: "Blocking escalation — source sends a blocker, target returns guidance",
 };
@@ -126,7 +125,7 @@ function AddLinkForm({
   const [source, setSource] = React.useState(agentConfigs[0]?.name ?? "");
   const [target, setTarget] = React.useState("");
   const [direction, setDirection] = React.useState<"single" | "dual">("single");
-  const [strategy, setStrategy] = React.useState<AgentLinkStrategy>("parallel");
+  const [strategy, setStrategy] = React.useState<AgentLinkStrategy>("chat");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -150,11 +149,11 @@ function AddLinkForm({
 
     const conflict = existingLinks.some(
       (l) =>
-        (l.source === source && l.target === target) ||
-        (l.source === target && l.target === source),
+        (l.source === source && l.target === target && l.strategy === strategy) ||
+        (l.source === target && l.target === source && l.strategy === strategy),
     );
     if (conflict) {
-      setError("A link between these agents already exists.");
+      setError("A link between these agents with the same strategy already exists.");
       return;
     }
 
@@ -300,7 +299,7 @@ function LinkCard({
   const [editTarget, setEditTarget] = React.useState(link.target);
   const [editDirection, setEditDirection] = React.useState(link.direction);
   const [editStrategy, setEditStrategy] = React.useState<AgentLinkStrategy>(
-    link.strategy ?? "parallel",
+    link.strategy ?? "chat",
   );
   const [editGroup, setEditGroup] = React.useState(link.group ?? "");
   const [confirming, setConfirming] = React.useState(false);
@@ -330,7 +329,7 @@ function LinkCard({
     setEditSource(link.source);
     setEditTarget(link.target);
     setEditDirection(link.direction);
-    setEditStrategy(link.strategy ?? "parallel");
+    setEditStrategy(link.strategy ?? "chat");
     setEditGroup(link.group ?? "");
     setError(null);
     setEditing(true);
@@ -351,6 +350,7 @@ function LinkCard({
         body: JSON.stringify({
           source: link.source,
           target: link.target,
+          currentStrategy: link.strategy ?? "chat",
           newSource: editSource,
           newTarget: editTarget,
           direction: editDirection,
@@ -398,7 +398,11 @@ function LinkCard({
       await fetch("/api/settings/agent-links", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: link.source, target: link.target }),
+        body: JSON.stringify({
+          source: link.source,
+          target: link.target,
+          strategy: link.strategy ?? "chat",
+        }),
         signal: abortRef.current.signal,
       });
       onDeleted(link);
@@ -550,9 +554,7 @@ function LinkCard({
 
       <Badge variant={link.direction}>{link.direction}</Badge>
 
-      <Badge variant={link.strategy ?? "parallel"}>
-        {STRATEGY_LABELS[link.strategy ?? "parallel"]}
-      </Badge>
+      <Badge variant={link.strategy ?? "chat"}>{STRATEGY_LABELS[link.strategy ?? "chat"]}</Badge>
 
       {!isActive && <Badge variant="inactive">inactive</Badge>}
 
@@ -808,7 +810,7 @@ function GroupSection({
 
         {links.map((link) => (
           <LinkCard
-            key={`${link.source}→${link.target}`}
+            key={`${link.source}→${link.target}→${link.strategy ?? "chat"}`}
             link={link}
             agentConfigs={agentConfigs}
             allGroups={allGroups}
@@ -949,19 +951,30 @@ export function AgentLinksContent({
 
   function handleAdded(link: AgentLink) {
     setLinks((prev) => {
-      const exists = prev.some((l) => l.source === link.source && l.target === link.target);
+      const exists = prev.some(
+        (l) => l.source === link.source && l.target === link.target && l.strategy === link.strategy,
+      );
       return exists ? prev : [...prev, link];
     });
   }
 
   function handleUpdated(old: AgentLink, next: AgentLink) {
     setLinks((prev) =>
-      prev.map((l) => (l.source === old.source && l.target === old.target ? next : l)),
+      prev.map((l) =>
+        l.source === old.source && l.target === old.target && l.strategy === old.strategy
+          ? next
+          : l,
+      ),
     );
   }
 
   function handleDeleted(link: AgentLink) {
-    setLinks((prev) => prev.filter((l) => !(l.source === link.source && l.target === link.target)));
+    setLinks((prev) =>
+      prev.filter(
+        (l) =>
+          !(l.source === link.source && l.target === link.target && l.strategy === link.strategy),
+      ),
+    );
   }
 
   function handleGroupCreated(name: string) {

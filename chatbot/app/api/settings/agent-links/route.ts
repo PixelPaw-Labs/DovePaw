@@ -22,7 +22,7 @@ const postBodySchema = z.object({
   source: z.string(),
   target: z.string(),
   direction: z.enum(["single", "dual"]),
-  strategy: z.enum(AGENT_LINK_STRATEGIES).default("parallel"),
+  strategy: z.enum(AGENT_LINK_STRATEGIES).default("chat"),
   group: z.string().optional(),
 });
 
@@ -48,10 +48,12 @@ export async function POST(request: Request) {
   }
 
   const file = await readAgentLinksFile();
-  const alreadyExists = file.links.some((l) => l.source === source && l.target === target);
+  const alreadyExists = file.links.some(
+    (l) => l.source === source && l.target === target && l.strategy === strategy,
+  );
   if (alreadyExists) {
     return Response.json(
-      { error: `Link from "${source}" to "${target}" already exists` },
+      { error: `Link from "${source}" to "${target}" with strategy "${strategy}" already exists` },
       { status: 409 },
     );
   }
@@ -67,11 +69,12 @@ const patchBodySchema = z.object({
   /** Identifies the existing link to replace. */
   source: z.string(),
   target: z.string(),
+  currentStrategy: z.enum(AGENT_LINK_STRATEGIES),
   /** New values — all fields required (full replace). */
   newSource: z.string(),
   newTarget: z.string(),
   direction: z.enum(["single", "dual"]),
-  strategy: z.enum(AGENT_LINK_STRATEGIES).default("parallel"),
+  strategy: z.enum(AGENT_LINK_STRATEGIES).default("chat"),
   group: z.string().optional(),
 });
 
@@ -79,28 +82,38 @@ export async function PATCH(request: Request) {
   const parsed = await parseBody(request, patchBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { source, target, newSource, newTarget, direction, strategy, group } = parsed.data;
+  const { source, target, currentStrategy, newSource, newTarget, direction, strategy, group } =
+    parsed.data;
 
   if (newSource === newTarget) {
     return Response.json({ error: "An agent cannot link to itself" }, { status: 400 });
   }
 
   const file = await readAgentLinksFile();
-  const idx = file.links.findIndex((l) => l.source === source && l.target === target);
+  const idx = file.links.findIndex(
+    (l) => l.source === source && l.target === target && l.strategy === currentStrategy,
+  );
   if (idx === -1) {
     return Response.json(
-      { error: `Link from "${source}" to "${target}" not found` },
+      {
+        error: `Link from "${source}" to "${target}" with strategy "${currentStrategy}" not found`,
+      },
       { status: 404 },
     );
   }
 
-  // Guard against creating a duplicate if source/target changed
+  // Guard against creating a duplicate if source/target/strategy changed
   if (
-    (newSource !== source || newTarget !== target) &&
-    file.links.some((l, i) => i !== idx && l.source === newSource && l.target === newTarget)
+    (newSource !== source || newTarget !== target || strategy !== currentStrategy) &&
+    file.links.some(
+      (l, i) =>
+        i !== idx && l.source === newSource && l.target === newTarget && l.strategy === strategy,
+    )
   ) {
     return Response.json(
-      { error: `Link from "${newSource}" to "${newTarget}" already exists` },
+      {
+        error: `Link from "${newSource}" to "${newTarget}" with strategy "${strategy}" already exists`,
+      },
       { status: 409 },
     );
   }
@@ -114,17 +127,20 @@ export async function PATCH(request: Request) {
 const deleteBodySchema = z.object({
   source: z.string(),
   target: z.string(),
+  strategy: z.enum(AGENT_LINK_STRATEGIES),
 });
 
 export async function DELETE(request: Request) {
   const parsed = await parseBody(request, deleteBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { source, target } = parsed.data;
+  const { source, target, strategy } = parsed.data;
   const file = await readAgentLinksFile();
   await writeAgentLinksFile({
     ...file,
-    links: file.links.filter((l) => !(l.source === source && l.target === target)),
+    links: file.links.filter(
+      (l) => !(l.source === source && l.target === target && l.strategy === strategy),
+    ),
   });
   return Response.json({ ok: true });
 }

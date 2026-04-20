@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const AGENT_LINK_STRATEGIES = ["parallel", "review", "escalation"] as const;
+export const AGENT_LINK_STRATEGIES = ["chat", "review", "escalation"] as const;
 
 export type AgentLinkStrategy = (typeof AGENT_LINK_STRATEGIES)[number];
 
@@ -13,7 +13,7 @@ export const agentLinkSchema = z.object({
   source: z.string(),
   target: z.string(),
   direction: z.enum(["single", "dual"]),
-  strategy: z.enum(AGENT_LINK_STRATEGIES).default("parallel"),
+  strategy: z.enum(AGENT_LINK_STRATEGIES).default("chat"),
   /** User-defined group name this link belongs to */
   group: z.string().optional(),
 });

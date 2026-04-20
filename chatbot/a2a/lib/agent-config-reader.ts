@@ -40,7 +40,7 @@ export class AgentConfigReader {
   /**
    * Returns the MCP tools for every agent this agent is linked to, based on strategy:
    *   sequential  → chat_to_*
-   *   parallel    → start_chat_to_* + await_chat_to_*
+   *   chat        → start_chat_to_* + await_chat_to_*
    *   review      → review_with_*
    *   escalation  → escalate_to_*
    *
@@ -75,7 +75,7 @@ export class AgentConfigReader {
         case "escalation":
           tools.push(makeEscalateTool(targetDef, signal, agentName, groupMeta));
           break;
-        default: // "parallel" and any future strategies default to start + await
+        default: // "chat" and any future strategies default to start + await
           tools.push(
             makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName, groupMeta),
           );
