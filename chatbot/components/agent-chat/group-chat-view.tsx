@@ -14,10 +14,24 @@ interface GroupChatViewProps {
   groupName: string;
   memberAgentIds: string[];
   agentConfigs: AgentConfigEntry[];
+  onNewSession?: (fn: () => void) => void;
 }
 
-export function GroupChatView({ groupName, memberAgentIds, agentConfigs }: GroupChatViewProps) {
-  const { messages, isLoading, sendToAgent } = useGroupChatSession(memberAgentIds, groupName);
+export function GroupChatView({
+  groupName,
+  memberAgentIds,
+  agentConfigs,
+  onNewSession,
+}: GroupChatViewProps) {
+  const { messages, isLoading, sendToAgent, clearMessages } = useGroupChatSession(
+    memberAgentIds,
+    groupName,
+  );
+
+  React.useEffect(() => {
+    onNewSession?.(clearMessages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [selectedAgentId, setSelectedAgentId] = React.useState(memberAgentIds[0] ?? "");
 
   const configByName = React.useMemo(

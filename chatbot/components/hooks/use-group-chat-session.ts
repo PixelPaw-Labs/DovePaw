@@ -421,5 +421,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { messages, isLoading, sendToAgent };
+  const clearMessages = useCallback(() => setMessages([]), []);
+
+  return { messages, isLoading, sendToAgent, clearMessages };
 }

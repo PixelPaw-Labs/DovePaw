@@ -32,6 +32,7 @@ export function AgentChat({
         groupName={groupName}
         memberAgentIds={memberAgentIds}
         agentConfigs={agentConfigs}
+        onNewSession={onNewSession}
       />
     );
   }
