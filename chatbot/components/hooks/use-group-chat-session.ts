@@ -8,17 +8,11 @@ import {
   sessionDetailUrl,
   agentChatUrl,
   sessionStreamUrl,
-  groupSessionsStreamUrl,
   type AgentId,
 } from "@/lib/agent-api-urls";
 import { readSseStream } from "./read-sse-stream";
 import { activeSessionResponseSchema, fetchSessionDetail } from "./session-api-client";
 import { processActiveStreamEvent } from "./process-stream-event";
-
-interface SessionStartedEvent {
-  agentId: string;
-  sessionId: string;
-}
 
 interface MemberState {
   sessionId: string | null;
@@ -281,12 +275,11 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     [handleEvent, recomputeLoading],
   );
 
-  // Subscribe to new-session events from any member or the group orchestrator.
-  // When the group A2A session starts, we receive { agentId: "group:<name>", sessionId }
-  // and subscribe to the group stream pool for live member events.
+  // Poll for an active group session. Runs immediately on mount (reconnect)
+  // and every 2 s thereafter (live discovery when Dove starts a new group task).
   useEffect(() => {
-    const groupAgentId = `group:${groupName}`;
-    const source = new EventSource(groupSessionsStreamUrl([...memberAgentIds, groupAgentId]));
+    let cancelled = false;
+    let subscribedContextId: string | null = null;
     let groupStreamAbort: AbortController | null = null;
 
     const applyPoolEvent = (event: GroupPoolEvent) => {
@@ -319,54 +312,55 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     };
 
     const subscribeGroupStream = (groupContextId: string) => {
+      if (subscribedContextId === groupContextId) return;
+      subscribedContextId = groupContextId;
       groupStreamAbort?.abort();
       const abort = new AbortController();
       groupStreamAbort = abort;
       setIsLoading(true);
-
       void (async () => {
         try {
           const res = await fetch(`/api/groups/stream/${encodeURIComponent(groupContextId)}`, {
             signal: abort.signal,
           });
           if (!res.ok || !res.body) return;
-          await readGroupStream(res.body, abort.signal, applyPoolEvent);
+          await readGroupStream(res.body, abort.signal, (event) => {
+            if (!cancelled) applyPoolEvent(event);
+          });
         } catch (err: unknown) {
           if (err instanceof Error && err.name === "AbortError") return;
         } finally {
           if (groupStreamAbort === abort) {
             groupStreamAbort = null;
+            subscribedContextId = null;
             recomputeLoading();
           }
         }
       })();
     };
 
-    const handleMessage = (ev: MessageEvent<string>) => {
-      let parsed: SessionStartedEvent;
+    const checkGroupSession = async () => {
+      if (cancelled || subscribedContextId) return;
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- trusted same-origin SSE
-        parsed = JSON.parse(ev.data) as SessionStartedEvent;
+        const res = await fetch(
+          `/api/agent/${encodeURIComponent(`group:${groupName}`)}/active-session`,
+        );
+        if (!res.ok || cancelled) return;
+        const body: unknown = await res.json();
+        if (typeof body !== "object" || body === null) return;
+        const { id, status } = body as { id?: string | null; status?: string };
+        if (id && status === "running") subscribeGroupStream(id);
       } catch {
-        return;
+        // ignore network errors
       }
-
-      if (parsed.agentId === groupAgentId) {
-        // Group orchestrator session started — subscribe to group stream pool
-        subscribeGroupStream(parsed.sessionId);
-        return;
-      }
-
-      const state = memberStateRef.current.get(parsed.agentId);
-      if (!state) return;
-      if (state.sessionId === parsed.sessionId) return; // already tracking
-      state.sessionId = parsed.sessionId;
-      connectStream(parsed.agentId, parsed.sessionId, crypto.randomUUID(), 0);
     };
-    source.addEventListener("message", handleMessage);
+
+    void checkGroupSession();
+    const interval = setInterval(() => void checkGroupSession(), 2000);
+
     return () => {
-      source.removeEventListener("message", handleMessage);
-      source.close();
+      cancelled = true;
+      clearInterval(interval);
       groupStreamAbort?.abort();
     };
     // memberAgentIds and groupName are stable for the lifetime of the group view
@@ -375,67 +369,6 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
 
   useEffect(() => {
     let cancelled = false;
-    let groupStreamAbort: AbortController | null = null;
-
-    // Check if group A2A has a live active session → reconnect to group stream
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/agent/${encodeURIComponent(`group:${groupName}`)}/active-session`,
-        );
-        if (!res.ok || cancelled) return;
-        const body: unknown = await res.json();
-        if (typeof body !== "object" || body === null) return;
-        const { id: groupContextId, status } = body as { id?: string | null; status?: string };
-        if (!groupContextId || status !== "running" || cancelled) return;
-
-        const abort = new AbortController();
-        groupStreamAbort = abort;
-        setIsLoading(true);
-
-        const streamRes = await fetch(`/api/groups/stream/${encodeURIComponent(groupContextId)}`, {
-          signal: abort.signal,
-        });
-        if (!streamRes.ok || !streamRes.body) return;
-        await readGroupStream(streamRes.body, abort.signal, (event) => {
-          if (!cancelled) {
-            const agentMsgId = `pool-${event.agentId}`;
-            const isDone = event.type === "done";
-            setMessages((prev) => {
-              const existing = prev.findIndex((m) => m.id === agentMsgId);
-              if (existing !== -1) {
-                return prev.map((m) =>
-                  m.id !== agentMsgId
-                    ? m
-                    : {
-                        ...m,
-                        isLoading: !isDone,
-                        segments: [{ type: "text" as const, content: event.text }],
-                      },
-                );
-              }
-              return [
-                ...prev,
-                {
-                  id: agentMsgId,
-                  role: "assistant" as const,
-                  segments: [{ type: "text" as const, content: event.text }],
-                  isLoading: !isDone,
-                  agentId: event.agentId,
-                },
-              ];
-            });
-          }
-        });
-      } catch (err: unknown) {
-        if (err instanceof Error && err.name === "AbortError") return;
-      } finally {
-        if (!cancelled) {
-          groupStreamAbort = null;
-          recomputeLoading();
-        }
-      }
-    })();
 
     void Promise.allSettled(
       memberAgentIds.map(async (agentId) => {
@@ -479,7 +412,6 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
 
     return () => {
       cancelled = true;
-      groupStreamAbort?.abort();
       for (const state of memberStateRef.current.values()) {
         state.abort?.abort();
         state.abort = null;

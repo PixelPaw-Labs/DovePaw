@@ -76,6 +76,14 @@ export type ChatSseQuestion = {
   questions: Question[];
 };
 
+/** A member agent's output in a group task — keyed by agentId for demuxing. */
+export type ChatSseGroupMember = {
+  type: "group_member";
+  agentId: string;
+  text: string;
+  done: boolean;
+};
+
 export type ChatSseEvent =
   | ChatSseSession
   | ChatSseText
@@ -88,7 +96,8 @@ export type ChatSseEvent =
   | ChatSseCancelled
   | ChatSseDone
   | ChatSsePermission
-  | ChatSseQuestion;
+  | ChatSseQuestion
+  | ChatSseGroupMember;
 
 /**
  * Returns an onSnapshot callback that delta-tracks a StreamedResult and

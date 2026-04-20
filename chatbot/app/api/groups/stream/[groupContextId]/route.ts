@@ -2,11 +2,13 @@
  * GET /api/groups/stream/:groupContextId
  *
  * SSE endpoint that streams all member agent events for a group task.
- * The client supplies the groupContextId (returned by ask_group_* via makeAskGroupTool).
- * Each event is { agentId, text, type } so the frontend can demux by agent.
+ * Uses the same buffered session-events system as individual agent sessions,
+ * so late-connecting clients get a replay of missed events.
+ * Each SSE data payload is { agentId, text, type } (GroupStreamEvent shape).
  */
 
-import { groupStreamPool, type GroupStreamEvent } from "@/lib/group-stream-pool";
+import { subscribeSession } from "@/lib/session-events";
+import type { ChatSseGroupMember } from "@/lib/chat-sse";
 
 export const maxDuration = 86400;
 
@@ -16,21 +18,35 @@ const SSE_HEADERS = {
   Connection: "keep-alive",
 } as const;
 
+function encodeGroupMember(event: ChatSseGroupMember): string {
+  return `data: ${JSON.stringify({
+    agentId: event.agentId,
+    text: event.text,
+    type: event.done ? "done" : "progress",
+  })}\n\n`;
+}
+
 export function GET(request: Request, { params }: { params: Promise<{ groupContextId: string }> }) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const { groupContextId } = await params;
       const encoder = new TextEncoder();
 
-      const onEvent = (event: GroupStreamEvent) => {
+      const onEvent = (event: ReturnType<typeof subscribeSession>[number]) => {
+        if (event.type !== "group_member") return;
         try {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+          controller.enqueue(encoder.encode(encodeGroupMember(event)));
         } catch {
           // controller already closed
         }
       };
 
-      groupStreamPool.subscribe(groupContextId, onEvent, request.signal);
+      const buffer = subscribeSession(groupContextId, onEvent, request.signal);
+      for (const event of buffer) {
+        if (event.type === "group_member") {
+          controller.enqueue(encoder.encode(encodeGroupMember(event)));
+        }
+      }
 
       request.signal.addEventListener(
         "abort",

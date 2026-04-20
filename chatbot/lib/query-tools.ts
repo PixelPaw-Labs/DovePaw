@@ -30,6 +30,8 @@ import {
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { startRunScriptToolName } from "@/lib/agent-tools";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
+import { publishSessionEvent } from "@/lib/session-events";
+import { upsertSession, setActiveSession } from "@/lib/db";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -276,6 +278,17 @@ export function makeInitGroupTool(group: AgentGroup) {
         await cloneReposIntoWorkspace(groupWorkspacePath, repoSlugs);
       }
 
+      upsertSession({
+        id: groupContextId,
+        agentId: `group:${group.name}`,
+        startedAt: new Date().toISOString(),
+        label: `Group: ${group.name}`,
+        messages: [],
+        progress: [],
+        status: "running",
+      });
+      setActiveSession(`group:${group.name}`, groupContextId);
+
       return {
         content: [
           {
@@ -331,6 +344,9 @@ export function makeStartGroupTool(
         members.map(async (memberName) => {
           const memberDef = memberDefs.find((a) => a.name === memberName);
           if (!memberDef) return;
+          // Per-member drain bucket — captures the stream promise so we can
+          // publish the final group_member event from this (Next.js) process.
+          const memberDrain: Promise<CollectedStream>[] = [];
           const result = await new TaskPoller(
             memberDef.manifestKey,
             memberDef.displayName,
@@ -341,10 +357,35 @@ export function makeStartGroupTool(
             memberDef.name,
           ).start(
             `${instruction}\n<reminder>Must call "${startRunScriptToolName(memberDef.manifestKey)}" tool</reminder>`,
-            { onProgress, backgroundTasks, senderAgentId: "dove", extraMetadata: groupMeta },
+            {
+              onProgress,
+              backgroundTasks: memberDrain,
+              senderAgentId: "dove",
+              extraMetadata: groupMeta,
+            },
           );
           const taskId = (result.structuredContent as { taskId?: string } | undefined)?.taskId;
-          if (taskId) memberTaskIds[memberDef.manifestKey] = taskId;
+          if (taskId) {
+            memberTaskIds[memberDef.manifestKey] = taskId;
+            if (backgroundTasks) backgroundTasks.push(...memberDrain);
+            publishSessionEvent(groupContextId, {
+              type: "group_member",
+              agentId: memberDef.name,
+              text: `${memberDef.displayName} is working on the task…`,
+              done: false,
+            });
+            // Publish done event from this process when the drain resolves
+            if (memberDrain.length > 0) {
+              void memberDrain[0].then((collected) => {
+                publishSessionEvent(groupContextId, {
+                  type: "group_member",
+                  agentId: memberDef.name,
+                  text: collected.result.output,
+                  done: true,
+                });
+              });
+            }
+          }
         }),
       );
 

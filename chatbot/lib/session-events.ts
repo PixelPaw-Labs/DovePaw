@@ -1,6 +1,5 @@
 import { EventEmitter } from "node:events";
 import type { ChatSseEvent } from "@/lib/chat-sse";
-import { groupStreamPool } from "@/lib/group-stream-pool";
 
 const BUFFER_MAX = 500;
 const BUFFER_TTL_MS = 60_000;
@@ -26,24 +25,6 @@ function getOrCreate(sessionId: string): SessionBucket {
     buckets.set(sessionId, b);
   }
   return b;
-}
-
-/**
- * Publish a group task event: session lifecycle bucket (for SSE reconnection)
- * AND the in-process stream pool (for live frontend streaming).
- * Single call-site — session-events is the source of truth for group events.
- */
-export function publishGroupSessionEvent(
-  groupContextId: string,
-  agentId: string,
-  event: ChatSseEvent & { text?: string },
-): void {
-  publishSessionEvent(groupContextId, event);
-  groupStreamPool.publish(groupContextId, {
-    agentId,
-    text: event.text ?? "",
-    type: event.type === "done" ? "done" : event.type === "error" ? "error" : "progress",
-  });
 }
 
 export function publishSessionEvent(sessionId: string, event: ChatSseEvent): void {

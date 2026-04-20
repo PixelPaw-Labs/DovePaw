@@ -51,6 +51,10 @@ vi.mock("@/lib/db", () => ({
   setActiveSession: vi.fn(),
 }));
 
+vi.mock("@/lib/session-events", () => ({
+  publishSessionEvent: vi.fn(),
+}));
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
@@ -72,6 +76,8 @@ import {
 } from "@/lib/query-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
+import { upsertSession, setActiveSession } from "@/lib/db";
+import { publishSessionEvent } from "@/lib/session-events";
 import type { AgentDef } from "@@/lib/agents";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -903,6 +909,24 @@ describe("makeInitGroupTool", () => {
     expect(typeof sc.groupWorkspacePath).toBe("string");
     expect(typeof sc.groupContextId).toBe("string");
   });
+
+  it("calls upsertSession and setActiveSession with group agentId", async () => {
+    const captured = captureTools(() => makeInitGroupTool(GROUP));
+    const handler = captured[doveInitGroupToolName(GROUP.name)];
+    const result = await handler({});
+    const sc = result.structuredContent as { groupContextId: string };
+    expect(vi.mocked(upsertSession)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: sc.groupContextId,
+        agentId: `group:${GROUP.name}`,
+        status: "running",
+      }),
+    );
+    expect(vi.mocked(setActiveSession)).toHaveBeenCalledWith(
+      `group:${GROUP.name}`,
+      sc.groupContextId,
+    );
+  });
 });
 
 // ─── makeStartGroupTool ───────────────────────────────────────────────────────
@@ -979,6 +1003,22 @@ describe("makeStartGroupTool", () => {
     };
     expect(sc.memberTaskIds).toEqual({ test_agent: "task-grp-1" });
     expect(sc.groupContextId).toBe("gc-1");
+  });
+
+  it("publishes a group_member progress event for each started member", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      instruction: "do something",
+      members: ["test-agent"],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
+      "gc-1",
+      expect.objectContaining({ type: "group_member", agentId: "test-agent", done: false }),
+    );
   });
 });
 

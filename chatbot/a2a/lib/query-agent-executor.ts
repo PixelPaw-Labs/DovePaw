@@ -32,7 +32,7 @@ import { createAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setSessionStatus, upsertSession } from "@/lib/db";
-import { publishSessionEvent, publishGroupSessionEvent } from "@/lib/session-events";
+import { publishSessionEvent } from "@/lib/session-events";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -331,35 +331,17 @@ export class QueryAgentExecutor implements AgentExecutor {
             void this.pipelineTrigger.fire(this.def.name, finalText);
           }
 
-          if (groupOverrides)
-            publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
-              type: "done",
-              text: finalText,
-            });
           publishSessionEvent(contextId, { type: "done" });
           publisher.publishStatusToUI("", undefined, "completed");
         },
         (err, isAbort) => {
           if (isAbort) {
             consola.info(`${this.def.displayName} sub-agent cancelled`);
-            if (groupOverrides)
-              publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
-                type: "cancelled",
-              });
             publishSessionEvent(contextId, { type: "cancelled" });
             publisher.publishStatusToUI("", undefined, "canceled");
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
-            if (groupOverrides) {
-              publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
-                type: "error",
-                content: msg,
-              });
-              publishGroupSessionEvent(groupOverrides.groupContextId, this.def.name, {
-                type: "done",
-              });
-            }
             publishSessionEvent(contextId, { type: "error", content: msg });
             publishSessionEvent(contextId, { type: "done" });
             publisher.publishStatusToUI("", { error: msg }, "failed");
