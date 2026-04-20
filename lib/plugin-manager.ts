@@ -279,5 +279,6 @@ export async function updatePlugin(pluginName: string): Promise<PluginRecord> {
   await execAsync(`git -C ${plugin.path} pull --ff-only`);
   await execAsync(`npm install --prefix ${plugin.path}`);
   await linkAgentSdkToPlugin(plugin.path);
+  await linkPluginSkills(plugin.path, plugin.skillNames);
   return syncPlugin(pluginName);
 }

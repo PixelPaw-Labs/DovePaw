@@ -532,6 +532,16 @@ describe("updatePlugin", () => {
     expect(npmIdx).toBeGreaterThan(pullIdx);
   });
 
+  it("re-links existing skills on update", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr"]);
+    writeRegistry(pluginDir, { skillNames: ["create-pr"] });
+    vi.clearAllMocks();
+
+    await updatePlugin("test-plugin");
+
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["create-pr"]);
+  });
+
   it("throws when plugin is not installed", async () => {
     await expect(updatePlugin("no-such-plugin")).rejects.toThrow("not installed");
   });
