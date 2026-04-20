@@ -57,6 +57,72 @@ describe("deployAgentSdk", () => {
   });
 });
 
+describe("linkPluginSkills", () => {
+  let linkPluginSkills: (pluginDir: string, skillNames: string[]) => Promise<void>;
+  let symlinkMock: ReturnType<typeof vi.fn>;
+  let rmMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    linkPluginSkills = mod.linkPluginSkills;
+    const fs = await import("node:fs/promises");
+    symlinkMock = vi.mocked(fs.symlink);
+    rmMock = vi.mocked(fs.rm);
+  });
+
+  it("does nothing when skillNames is empty", async () => {
+    await linkPluginSkills("/plugin", []);
+    expect(symlinkMock).not.toHaveBeenCalled();
+  });
+
+  it("symlinks each skill into ~/.claude/skills", async () => {
+    await linkPluginSkills("/plugin", ["create-pr"]);
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".claude/skills") && d.endsWith("create-pr"))).toBe(true);
+  });
+
+  it("symlinks each skill into ~/.codex/skills", async () => {
+    await linkPluginSkills("/plugin", ["create-pr"]);
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".codex/skills") && d.endsWith("create-pr"))).toBe(true);
+  });
+
+  it("removes existing link before symlinking in both roots", async () => {
+    await linkPluginSkills("/plugin", ["create-pr"]);
+    const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
+    expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("create-pr"))).toBe(true);
+    expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("create-pr"))).toBe(true);
+  });
+});
+
+describe("unlinkPluginSkills", () => {
+  let unlinkPluginSkills: (skillNames: string[]) => Promise<void>;
+  let rmMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    unlinkPluginSkills = mod.unlinkPluginSkills;
+    const fs = await import("node:fs/promises");
+    rmMock = vi.mocked(fs.rm);
+  });
+
+  it("removes skill from ~/.claude/skills", async () => {
+    await unlinkPluginSkills(["create-pr"]);
+    const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
+    expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("create-pr"))).toBe(true);
+  });
+
+  it("removes skill from ~/.codex/skills", async () => {
+    await unlinkPluginSkills(["create-pr"]);
+    const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
+    expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("create-pr"))).toBe(true);
+  });
+});
+
 describe("deployTriggerScript", () => {
   let deployTriggerScript: () => Promise<void>;
 

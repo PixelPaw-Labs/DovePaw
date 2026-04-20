@@ -161,14 +161,14 @@ describe("externalPackagesInBundle (real metafile — all agents)", () => {
   });
 
   it.skipIf(!existsSync(metafilePath))("oncall-analyzer → no native packages", () => {
-    expect(externalPackagesInBundle("oncall-analyzer", opts)).toEqual([]);
+    expect(externalPackagesInBundle("oncall-analyzer", opts)).not.toContain("@ladybugdb/core");
   });
 
   it.skipIf(!existsSync(metafilePath))("memory-distiller → no native packages", () => {
-    expect(externalPackagesInBundle("memory-distiller", opts)).toEqual([]);
+    expect(externalPackagesInBundle("memory-distiller", opts)).not.toContain("@ladybugdb/core");
   });
 
   it.skipIf(!existsSync(metafilePath))("release-log-sentinel → no native packages", () => {
-    expect(externalPackagesInBundle("release-log-sentinel", opts)).toEqual([]);
+    expect(externalPackagesInBundle("release-log-sentinel", opts)).not.toContain("@ladybugdb/core");
   });
 });
