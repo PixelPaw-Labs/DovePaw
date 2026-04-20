@@ -28,7 +28,7 @@ import {
   isConnectionError,
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
-import { startRunScriptToolName } from "@/lib/agent-tools";
+import { withStartReminder } from "@/lib/agent-tools";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession } from "@/lib/db";
@@ -197,10 +197,11 @@ export function makeStartTool(
         doveAwaitToolName(agent),
         undefined,
         agent.name,
-      ).start(
-        `${instruction}\n<reminder>Must call "${startRunScriptToolName(agent.manifestKey)}" tool</reminder>`,
-        { onProgress, backgroundTasks, senderAgentId: "dove" },
-      );
+      ).start(withStartReminder(instruction, agent.manifestKey), {
+        onProgress,
+        backgroundTasks,
+        senderAgentId: "dove",
+      });
     },
   );
 }
@@ -355,15 +356,12 @@ export function makeStartGroupTool(
             doveAwaitGroupToolName(group.name),
             undefined,
             memberDef.name,
-          ).start(
-            `${instruction}\n<reminder>Must call "${startRunScriptToolName(memberDef.manifestKey)}" tool</reminder>`,
-            {
-              onProgress,
-              backgroundTasks: memberDrain,
-              senderAgentId: "dove",
-              extraMetadata: groupMeta,
-            },
-          );
+          ).start(withStartReminder(instruction, memberDef.manifestKey), {
+            onProgress,
+            backgroundTasks: memberDrain,
+            senderAgentId: "dove",
+            extraMetadata: groupMeta,
+          });
           const taskId = (result.structuredContent as { taskId?: string } | undefined)?.taskId;
           if (taskId) {
             memberTaskIds[memberDef.manifestKey] = taskId;

@@ -118,6 +118,9 @@ export const MGMT_TOOL = {
 export const startRunScriptToolName = (manifestKey: string): string => `start_${manifestKey}`;
 /** Tool name for polling a previously started script run (await_run_script_* pattern). */
 export const awaitRunScriptToolName = (manifestKey: string): string => `await_${manifestKey}`;
+/** Appends the standard reminder suffix that forces the agent to call the start tool. */
+export const withStartReminder = (instruction: string, manifestKey: string): string =>
+  `${instruction}\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
 
 /** Tool name for sending a message to a linked agent (start_chat_to_* pattern). */
 export const startChatToToolName = (manifestKey: string): string => `start_chat_to_${manifestKey}`;
@@ -410,7 +413,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
       instruction: z
         .string()
         .describe(
-          `The task or findings to hand off to ${displayName}. Be specific — include relevant context, file paths, issue IDs, or data.`,
+          `The task or findings to hand off to ${displayName}. Be specific — include relevant context and data.`,
         ),
       contextId: z.string().optional().describe("Continue a prior session. Omit to start fresh."),
       justification: justificationField,
@@ -424,10 +427,12 @@ ${HANDOFF_PATTERNS(displayName)}`,
         awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
-      ).start(
-        `${instruction}\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`,
-        { contextId, backgroundTasks, senderAgentId: callerAgentId, extraMetadata: groupMeta },
-      );
+      ).start(withStartReminder(instruction, manifestKey), {
+        contextId,
+        backgroundTasks,
+        senderAgentId: callerAgentId,
+        extraMetadata: groupMeta,
+      });
     },
   );
 }
@@ -493,18 +498,16 @@ export function makeReviewTool(
       const port = resolveAgentPort(manifestKey);
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-      const instruction =
-        [
-          `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
-          `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
-          `\nWork product:\n`,
-          `${content}\n\n`,
-          ...(context ? [`\nContext:\n${context}`] : []),
-        ].join("\n") +
-        `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
+      const instruction = [
+        `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
+        `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
+        `\nWork product:\n`,
+        `${content}\n\n`,
+        ...(context ? [`\nContext:\n${context}`] : []),
+      ].join("\n");
       const handle = await startAgentStream(
         port,
-        instruction,
+        withStartReminder(instruction, manifestKey),
         signal,
         undefined,
         callerAgentId,
@@ -573,17 +576,15 @@ export function makeEscalateTool(
       const port = resolveAgentPort(manifestKey);
       if (!port)
         return { content: [{ type: "text" as const, text: `${displayName} is not reachable.` }] };
-      const instruction =
-        [
-          `ESCALATION — confidence: ${justification?.confidence ?? "?"}/1\n`,
-          `Blocker: ${blocker}`,
-          `\nContext:\n${context}`,
-          `\nPlease provide guidance or make the decision so I can continue.`,
-        ].join("\n") +
-        `\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
+      const instruction = [
+        `ESCALATION — confidence: ${justification?.confidence ?? "?"}/1\n`,
+        `Blocker: ${blocker}`,
+        `\nContext:\n${context}`,
+        `\nPlease provide guidance or make the decision so I can continue.`,
+      ].join("\n");
       const handle = await startAgentStream(
         port,
-        instruction,
+        withStartReminder(instruction, manifestKey),
         signal,
         undefined,
         callerAgentId,

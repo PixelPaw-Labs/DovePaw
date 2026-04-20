@@ -54,6 +54,7 @@ import {
   awaitChatToToolName,
   reviewWithToolName,
   escalateToToolName,
+  withStartReminder,
 } from "@/lib/agent-tools";
 import type { CollectedStream } from "@/lib/a2a-client";
 import {
@@ -401,6 +402,12 @@ describe("tool name helpers", () => {
 
   it("escalateToToolName", () => {
     expect(escalateToToolName("supervisor")).toBe("escalate_to_supervisor");
+  });
+
+  it("withStartReminder appends reminder suffix", () => {
+    expect(withStartReminder("do the thing", "fixer")).toBe(
+      'do the thing\n<reminder>Must call "start_fixer" tool</reminder>',
+    );
   });
 });
 
