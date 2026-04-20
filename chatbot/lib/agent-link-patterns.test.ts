@@ -10,12 +10,6 @@ describe("HANDOFF_PATTERNS", () => {
     expect(text).toContain("Blocked by gap");
   });
 
-  it("includes Pipeline in sequential delegation section", () => {
-    const text = HANDOFF_PATTERNS();
-    const sequentialSection = text.slice(0, text.indexOf("Organisational patterns"));
-    expect(sequentialSection).toContain("Pipeline");
-  });
-
   it("includes Coordination in organisational patterns section", () => {
     const text = HANDOFF_PATTERNS();
     const organisationalSection = text.slice(text.indexOf("Organisational patterns"));

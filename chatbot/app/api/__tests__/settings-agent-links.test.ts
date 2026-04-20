@@ -5,7 +5,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 vi.mock("@@/lib/agent-links", () => ({
   readAgentLinksFile: vi.fn(),
   writeAgentLinksFile: vi.fn(),
-  AGENT_LINK_STRATEGIES: ["parallel", "pipeline", "review", "escalation"],
+  AGENT_LINK_STRATEGIES: ["parallel", "review", "escalation"],
 }));
 
 vi.mock("@@/lib/agents-config", () => ({

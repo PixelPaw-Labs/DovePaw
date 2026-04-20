@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Users2 } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
@@ -15,6 +16,7 @@ interface GroupChatViewProps {
   memberAgentIds: string[];
   agentConfigs: AgentConfigEntry[];
   onNewSession?: (fn: () => void) => void;
+  onIsLoadingChange?: (loading: boolean) => void;
 }
 
 export function GroupChatView({
@@ -22,6 +24,7 @@ export function GroupChatView({
   memberAgentIds,
   agentConfigs,
   onNewSession,
+  onIsLoadingChange,
 }: GroupChatViewProps) {
   const { messages, isLoading, sendToAgent, clearMessages } = useGroupChatSession(
     memberAgentIds,
@@ -32,6 +35,14 @@ export function GroupChatView({
     onNewSession?.(clearMessages);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const prevIsLoadingRef = useRef(isLoading);
+  useLayoutEffect(() => {
+    if (prevIsLoadingRef.current !== isLoading) {
+      prevIsLoadingRef.current = isLoading;
+      onIsLoadingChange?.(isLoading);
+    }
+  }, [isLoading, onIsLoadingChange]);
   const [selectedAgentId, setSelectedAgentId] = React.useState(memberAgentIds[0] ?? "");
 
   const configByName = React.useMemo(

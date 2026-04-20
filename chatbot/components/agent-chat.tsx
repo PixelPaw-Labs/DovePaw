@@ -33,6 +33,7 @@ export function AgentChat({
         memberAgentIds={memberAgentIds}
         agentConfigs={agentConfigs}
         onNewSession={onNewSession}
+        onIsLoadingChange={onIsLoadingChange}
       />
     );
   }

@@ -41,7 +41,6 @@ export class AgentConfigReader {
    * Returns the MCP tools for every agent this agent is linked to, based on strategy:
    *   sequential  → chat_to_*
    *   parallel    → start_chat_to_* + await_chat_to_*
-   *   pipeline    → no tool (executor handles post-completion trigger)
    *   review      → review_with_*
    *   escalation  → escalate_to_*
    *
@@ -61,8 +60,6 @@ export class AgentConfigReader {
     const tools: Parameters<typeof createSdkMcpServer>[0]["tools"] = [];
 
     for (const { targetName, strategy } of resolvedLinks) {
-      if (strategy === "pipeline") continue; // handled by executor post-completion
-
       const targetDef = allAgents.find((a) => a.name === targetName);
       if (!targetDef) continue;
 

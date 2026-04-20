@@ -309,6 +309,33 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
           },
         ];
       });
+
+      // When a member starts, connect its individual stream for live text deltas.
+      // The mount effect only covers sessions already active — this handles tasks that
+      // start after the group chat view is already open.
+      if (event.type === "progress") {
+        const state = memberStateRef.current.get(event.agentId);
+        if (state && !state.abort) {
+          void (async () => {
+            const { id } = activeSessionResponseSchema.parse(
+              await (await fetch(activeSessionUrl(event.agentId as AgentId))).json(),
+            );
+            if (!id || cancelled) return;
+            const {
+              messages: stamped,
+              status,
+              resumeSeq,
+            } = await fetchSessionDetail(
+              sessionDetailUrl(event.agentId as AgentId, id),
+              event.agentId as AgentId,
+            );
+            if (status !== "running" || cancelled) return;
+            const assistantId =
+              stamped.toReversed().find((m) => m.role === "assistant")?.id ?? crypto.randomUUID();
+            connectStream(event.agentId, id, assistantId, resumeSeq);
+          })();
+        }
+      }
     };
 
     const subscribeGroupStream = (groupContextId: string) => {
@@ -370,29 +397,53 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
   useEffect(() => {
     let cancelled = false;
 
-    void Promise.allSettled(
-      memberAgentIds.map(async (agentId) => {
+    void (async () => {
+      const results = await Promise.allSettled(
+        memberAgentIds.map(async (agentId) => {
+          const state = memberStateRef.current.get(agentId);
+          if (!state) return null;
+
+          const { id } = activeSessionResponseSchema.parse(
+            await (await fetch(activeSessionUrl(agentId as AgentId))).json(),
+          );
+          if (!id) return null;
+
+          const detail = await fetchSessionDetail(
+            sessionDetailUrl(agentId as AgentId, id),
+            agentId as AgentId,
+          );
+          return { agentId, id, detail };
+        }),
+      );
+
+      if (cancelled) return;
+
+      const fulfilled = results
+        .filter(
+          (
+            r,
+          ): r is PromiseFulfilledResult<{
+            agentId: string;
+            id: string;
+            detail: Awaited<ReturnType<typeof fetchSessionDetail>>;
+          }> => r.status === "fulfilled" && r.value !== null,
+        )
+        .map((r) => r.value)
+        .toSorted((a, b) => (a.detail.startedAt ?? "").localeCompare(b.detail.startedAt ?? ""));
+
+      const allTagged = fulfilled.flatMap(({ agentId, detail: { messages: stamped } }) => {
+        return stamped.map((m) => (m.agentId ? m : { ...m, agentId }));
+      });
+
+      if (allTagged.length > 0) {
+        setMessages((prev) => [...prev, ...allTagged]);
+      }
+
+      for (const { agentId, id, detail } of fulfilled) {
         const state = memberStateRef.current.get(agentId);
-        if (!state) return;
-
-        const { id } = activeSessionResponseSchema.parse(
-          await (await fetch(activeSessionUrl(agentId as AgentId))).json(),
-        );
-        if (!id || cancelled) return;
-
-        const {
-          messages: stamped,
-          status,
-          resumeSeq,
-        } = await fetchSessionDetail(sessionDetailUrl(agentId as AgentId, id), agentId as AgentId);
-        if (cancelled) return;
-
+        if (!state) continue;
         state.sessionId = id;
-
-        // fetchSessionDetail tags assistant messages; tag user messages too
-        const tagged = stamped.map((m) => (m.agentId ? m : { ...m, agentId }));
-        setMessages((prev) => [...prev, ...tagged]);
-
+        const { messages: stamped, status, resumeSeq } = detail;
         if (status === "running") {
           const lastAssistant = stamped.toReversed().find((m) => m.role === "assistant");
           const assistantId = lastAssistant?.id ?? crypto.randomUUID();
@@ -407,8 +458,8 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
           }
           connectStream(agentId, id, assistantId, resumeSeq);
         }
-      }),
-    );
+      }
+    })();
 
     return () => {
       cancelled = true;

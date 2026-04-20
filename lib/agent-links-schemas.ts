@@ -5,7 +5,7 @@
 
 import { z } from "zod";
 
-export const AGENT_LINK_STRATEGIES = ["parallel", "pipeline", "review", "escalation"] as const;
+export const AGENT_LINK_STRATEGIES = ["parallel", "review", "escalation"] as const;
 
 export type AgentLinkStrategy = (typeof AGENT_LINK_STRATEGIES)[number];
 

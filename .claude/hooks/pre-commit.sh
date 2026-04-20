@@ -96,7 +96,7 @@ REFLECTION=$(printf '%s' "All checks pass. Did you write or update tests for the
 
     touch $FLAG_FILE
   
-  NEVER do `<command> && touch file` in a single tool call — it will make the pre-commit guardrail fail to work correctly.
+  NEVER do '<command> && touch file' in a single tool call — it will make the pre-commit guardrail fail to work correctly.
 
   NEVER touch the flag file unless you are answering yes to the question above.
   If you modified any files since the last git commit, run git commit again first — the hook will re-ask this question.")

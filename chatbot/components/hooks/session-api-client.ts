@@ -16,6 +16,7 @@ export const sessionDetailResponseSchema = z.object({
     .default([]),
   resumeSeq: z.number().default(0),
   status: z.enum(["running", "done", "cancelled"]).default("done"),
+  startedAt: z.string().optional(),
 });
 
 export type SessionStatus = "running" | "done" | "cancelled" | "pending";

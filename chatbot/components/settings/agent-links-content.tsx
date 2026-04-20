@@ -40,14 +40,7 @@ function getManifestKey(configs: AgentConfigEntry[], name: string): string {
 
 // ─── Shared badge ────────────────────────────────────────────────────────────
 
-type BadgeVariant =
-  | "single"
-  | "dual"
-  | "parallel"
-  | "pipeline"
-  | "review"
-  | "escalation"
-  | "inactive";
+type BadgeVariant = "single" | "dual" | "parallel" | "review" | "escalation" | "inactive";
 
 function Badge({ children, variant }: { children: React.ReactNode; variant: BadgeVariant }) {
   return (
@@ -58,8 +51,6 @@ function Badge({ children, variant }: { children: React.ReactNode; variant: Badg
         variant === "dual" && "bg-primary/10 text-primary",
         variant === "parallel" &&
           "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-        variant === "pipeline" &&
-          "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
         variant === "review" &&
           "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
         variant === "escalation" && "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
@@ -75,14 +66,12 @@ function Badge({ children, variant }: { children: React.ReactNode; variant: Badg
 
 const STRATEGY_LABELS: Record<AgentLinkStrategy, string> = {
   parallel: "Start & Await",
-  pipeline: "Pipeline",
   review: "Review",
   escalation: "Escalation",
 };
 
 const STRATEGY_DESCRIPTIONS: Record<AgentLinkStrategy, string> = {
   parallel: "Non-blocking — source starts target then awaits concurrently",
-  pipeline: "Auto-trigger — executor feeds source's output to target after completion",
   review: "Blocking review — target approves or rejects source's output",
   escalation: "Blocking escalation — source sends a blocker, target returns guidance",
 };

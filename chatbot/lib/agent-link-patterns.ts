@@ -45,8 +45,6 @@ When:
   Sequential delegation — one agent hands off to another:
   - Detection → Resolution: you found N problems, the other agent fixes them.
   - Aggregation → Action: you produced a report, the other agent acts on it.
-  - Pipeline: your output is the exact input the next agent needs — pass it directly
-    without summarising or transforming; the chain depends on full fidelity.
   - Blocked by gap: you hit a case outside your domain and the other agent fills it.
   - Phase handoff: your workflow phase is complete, the next phase belongs to the other agent.
 
@@ -56,8 +54,6 @@ When:
   - Coordination: you are the orchestrator — break the task into scoped sub-tasks,
     assign each to the appropriate member agent, collect their responses,
     and synthesize before returning upstream.
-  - Pipeline: your output is the exact input the next agent needs — pass it directly
-    without summarising or transforming; the chain depends on full fidelity.
   - Peer review: you have produced a result but lack confidence or authority to finalise;
     the other agent reviews, approves, or rejects before it goes upstream.
   - Escalation: the task exceeds your confidence or authority — surface the specific

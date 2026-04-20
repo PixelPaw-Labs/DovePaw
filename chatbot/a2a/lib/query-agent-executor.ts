@@ -24,14 +24,13 @@ import {
 import { AgentConfigReader } from "./agent-config-reader";
 import { extractInstruction } from "./message-parts";
 import { buildAgentConfig } from "./agent-config-builder";
-import { PipelineTrigger } from "./pipeline-trigger";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { createAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
-import { setSessionStatus, upsertSession } from "@/lib/db";
+import { setActiveSession, setSessionStatus, upsertSession } from "@/lib/db";
 import { publishSessionEvent } from "@/lib/session-events";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
@@ -79,7 +78,6 @@ export class QueryAgentExecutor implements AgentExecutor {
   private abortController: AbortController | null = null;
   private currentContextId: string | null = null;
   private readonly agentConfigReader = new AgentConfigReader();
-  private readonly pipelineTrigger = new PipelineTrigger();
 
   constructor(
     private readonly def: AgentDef,
@@ -143,6 +141,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     // ResultManager.currentTask is only set when it sees a kind:"task" event.
     publisher.publishTask();
 
+    setActiveSession(this.def.name, contextId);
     publishProgress("Starting…");
 
     const [{ extraEnv, repoSlugs }, agentSettings, globalSettings] = await Promise.all([
@@ -327,8 +326,6 @@ export class QueryAgentExecutor implements AgentExecutor {
             } catch {
               // best effort
             }
-          } else {
-            void this.pipelineTrigger.fire(this.def.name, finalText);
           }
 
           publishSessionEvent(contextId, { type: "done" });

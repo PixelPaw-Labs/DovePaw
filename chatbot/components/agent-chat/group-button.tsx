@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Settings, Users2 } from "lucide-react";
 import type { AgentGroup } from "@@/lib/agent-links-schemas";
 import { cn } from "@/lib/utils";
+import { useAgentRunState } from "@/components/hooks/use-agent-run-state";
+import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
 
 export function GroupButton({
   group,
@@ -18,16 +20,31 @@ export function GroupButton({
   settingsHref?: string;
   isGroupSettings?: boolean;
 }) {
+  const { isRunning } = useAgentRunState(isActive, undefined);
+  const shimmerRef = useButtonShimmer(isRunning);
+  const isSelected = isActive || isRunning;
+
   return (
     <button
       onClick={onClick}
       className={cn(
         "group relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
-        isActive
+        isSelected
           ? "bg-primary/10 text-primary border-l-4 border-primary"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
       )}
     >
+      {isRunning && (
+        <span
+          ref={shimmerRef}
+          aria-hidden
+          className="absolute inset-y-0 left-0 w-1/2 pointer-events-none -skew-x-12"
+          style={{
+            background:
+              "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 25%, rgba(255,255,255,0.5) 50%, rgba(255,255,255,0.06) 75%, transparent 100%)",
+          }}
+        />
+      )}
       <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-primary/10">
         <Users2 className="w-3 h-3 text-primary" />
       </div>
