@@ -59,10 +59,17 @@ async function tryExec(cmd: string): Promise<void> {
   }
 }
 
-/** Copy compiled .mjs to ~/.dovepaw/cron and make it executable. */
+/** Copy compiled .mjs to ~/.dovepaw/cron and make it executable.
+ *  Triggers a full build first if the compiled output is missing. */
 export async function deployAgentScript(agentName: string): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
-  await copyFile(agentDistScript(agentName), schedulerScript(agentName));
+  const src = agentDistScript(agentName);
+  try {
+    await access(src);
+  } catch {
+    await execAsync("npm run build", { cwd: AGENTS_ROOT });
+  }
+  await copyFile(src, schedulerScript(agentName));
   await chmod(schedulerScript(agentName), 0o755);
 }
 

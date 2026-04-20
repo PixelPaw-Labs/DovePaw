@@ -89,6 +89,10 @@ const INSTRUCTION = process.argv[2] || "";
 
 Then pass it through to Claude — either appended to the prompt string (`Instruction: ${INSTRUCTION}`) or as part of the skill invocation (`/${skillName}\n\n${INSTRUCTION}`). Never silently discard it; it is the user's intent for that specific run.
 
+**Use async/await throughout:**
+
+All agent functions that perform I/O must be `async`. Synchronous I/O (`readFileSync`, `execSync`, etc.) blocks the Node.js event loop — use async equivalents. The only acceptable exception is top-level module-init code that genuinely cannot be awaited (e.g. a static constant derived from a synchronous path resolution), and that must be a deliberate, commented choice.
+
 **Always prefer `@dovepaw/agent-sdk` over custom implementations:**
 
 Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the current list of SDK exports. Never re-implement what the SDK already provides — if a function, constant, or type exists there, import and use it.
