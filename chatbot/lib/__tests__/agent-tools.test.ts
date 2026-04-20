@@ -289,6 +289,28 @@ describe("makeStartScriptTool", () => {
       undefined,
     );
   });
+
+  it("appends group-chat reminder with absolute paths when isGroupChat is true", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartScriptTool(
+      AGENT,
+      BASE_CONFIG,
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      true,
+    ) as any;
+
+    await handler({ instruction: "do work" });
+
+    const passedInstruction = vi.mocked(startScript).mock.calls[0][1];
+    expect(passedInstruction).toContain("/ws/ta-abc123/members/roster.md");
+    expect(passedInstruction).toContain("/ws/ta-abc123/chat_histories/");
+    expect(passedInstruction).toContain("/ws/ta-abc123/moments/");
+  });
 });
 
 // ─── makeStartChatToTool ──────────────────────────────────────────────────────
