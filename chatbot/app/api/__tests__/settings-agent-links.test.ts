@@ -25,8 +25,8 @@ import type { AgentLinksFile } from "@@/lib/agent-links-schemas";
 const SAMPLE_FILE: AgentLinksFile = {
   version: 1,
   groups: [
-    { name: "Review Chain", members: [] },
-    { name: "Data Pipeline", members: [] },
+    { name: "Review Chain", members: [], description: "" },
+    { name: "Data Pipeline", members: [], description: "" },
   ],
   links: [
     {

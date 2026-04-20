@@ -66,7 +66,7 @@ const visibleUserMsg = {
 };
 
 const progressEntries = [
-  { message: "Starting…", artifacts: {} },
+  { message: "Starting…", artifacts: {} as Record<string, string> },
   { message: "tool-call", artifacts: { "tool-call": "bash", label: "bash" } },
 ];
 
@@ -173,9 +173,15 @@ describe("ChatPane — workflow auto-open for history sessions", () => {
 
 function makeQuestion(id: string) {
   return {
+    type: "question" as const,
     requestId: id,
     questions: [
-      { header: "Q", question: "Pick one", options: [{ label: "A" }], multiSelect: false },
+      {
+        header: "Q",
+        question: "Pick one",
+        options: [{ label: "A", description: "" }],
+        multiSelect: false,
+      },
     ],
   };
 }

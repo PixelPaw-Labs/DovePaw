@@ -11,7 +11,7 @@
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentDef } from "@@/lib/agents";
 import type { AgentGroup } from "@@/lib/agent-links-schemas";
@@ -247,7 +247,7 @@ export function makeAwaitTool(
  * group repos into it. Returns the workspace path and context ID so Dove can
  * pass them to start_group_* calls.
  */
-export function makeInitGroupTool(group: AgentGroup) {
+export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
   return tool(
     doveInitGroupToolName(group.name),
     [
@@ -267,6 +267,22 @@ export function makeInitGroupTool(group: AgentGroup) {
       );
       await mkdir(join(groupWorkspacePath, "chat_histories"), { recursive: true });
       await mkdir(join(groupWorkspacePath, "moments"), { recursive: true });
+
+      // Write the member roster so every agent knows who is in this group
+      const knownDefs = group.members
+        .map((name) => memberDefs.find((d) => d.name === name))
+        .filter((d): d is AgentDef => d !== undefined);
+      await mkdir(join(groupWorkspacePath, "members"), { recursive: true });
+      const rosterLines = [
+        "# Group Members",
+        "",
+        "Only collaborate with, assign work to, or communicate with the agents listed below.",
+        "Do not involve any agent outside this list.",
+        "",
+        ...knownDefs.map((d) => `- **${d.displayName}** (\`${d.name}\`): ${d.description}`),
+        ...(knownDefs.length === 0 ? group.members.map((name) => `- \`${name}\``) : []),
+      ];
+      await writeFile(join(groupWorkspacePath, "members", "roster.md"), rosterLines.join("\n"));
 
       const settings = await readSettings();
       const groupConfig = readOrCreateGroupConfig(group.name);

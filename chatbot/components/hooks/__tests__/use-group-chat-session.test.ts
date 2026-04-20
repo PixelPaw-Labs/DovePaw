@@ -100,7 +100,8 @@ describe("useGroupChatSession", () => {
 
   describe("history sort by startedAt", () => {
     it("orders messages from earlier-started sessions first", async () => {
-      vi.mocked(fetch).mockImplementation((url: string) => {
+      vi.mocked(fetch).mockImplementation((input: unknown) => {
+        const url = String(input);
         // Group active-session → no running group task
         if (url.includes("group%3A") || url.includes("group:"))
           return Promise.resolve(makeJson({ id: null }));
@@ -133,7 +134,8 @@ describe("useGroupChatSession", () => {
     });
 
     it("places messages from later-started session second", async () => {
-      vi.mocked(fetch).mockImplementation((url: string) => {
+      vi.mocked(fetch).mockImplementation((input: unknown) => {
+        const url = String(input);
         if (url.includes("group%3A") || url.includes("group:"))
           return Promise.resolve(makeJson({ id: null }));
         if (url.includes("agent-a/active-session"))

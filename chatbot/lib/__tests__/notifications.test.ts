@@ -61,7 +61,11 @@ describe("buildNotificationHooks", () => {
     const hooks = buildNotificationHooks("test_agent", "Agent", config, {
       NTFY_TOPIC: "resolved-topic",
     });
-    await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
+    await hooks.PreToolUse?.[0]?.hooks[0]?.(
+      { hook_event_name: "PreToolUse" } as never,
+      undefined,
+      {} as never,
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("resolved-topic"),
@@ -82,7 +86,11 @@ describe("buildNotificationHooks", () => {
     const hooks = buildNotificationHooks("test_agent", "Agent", config, {
       NTFY_TOPIC: "braces-topic",
     });
-    await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
+    await hooks.PreToolUse?.[0]?.hooks[0]?.(
+      { hook_event_name: "PreToolUse" } as never,
+      undefined,
+      {} as never,
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining("braces-topic"),
@@ -100,7 +108,11 @@ describe("buildNotificationHooks", () => {
         ...baseConfig,
         onSessionEnd: false,
       });
-      await hooks.PreToolUse?.[0]?.hooks[0]?.({ hook_event_name: "PreToolUse" } as never);
+      await hooks.PreToolUse?.[0]?.hooks[0]?.(
+        { hook_event_name: "PreToolUse" } as never,
+        undefined,
+        {} as never,
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("my-topic"),
@@ -117,9 +129,13 @@ describe("buildNotificationHooks", () => {
         ...baseConfig,
         onSessionEnd: false,
       });
-      const result = await hooks.PreToolUse?.[0]?.hooks[0]?.({
-        hook_event_name: "PostToolUse",
-      } as never);
+      const result = await hooks.PreToolUse?.[0]?.hooks[0]?.(
+        {
+          hook_event_name: "PostToolUse",
+        } as never,
+        undefined,
+        {} as never,
+      );
 
       expect(result).toEqual({ continue: true });
       expect(fetchMock).not.toHaveBeenCalled();
@@ -136,10 +152,14 @@ describe("buildNotificationHooks", () => {
         ...baseConfig,
         onSessionStart: false,
       });
-      await hooks.PostToolUse?.[0]?.hooks[0]?.({
-        hook_event_name: "PostToolUse",
-        tool_response: { structuredContent: { status: "completed" } },
-      } as never);
+      await hooks.PostToolUse?.[0]?.hooks[0]?.(
+        {
+          hook_event_name: "PostToolUse",
+          tool_response: { structuredContent: { status: "completed" } },
+        } as never,
+        undefined,
+        {} as never,
+      );
 
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining("my-topic"),
@@ -156,10 +176,14 @@ describe("buildNotificationHooks", () => {
         ...baseConfig,
         onSessionStart: false,
       });
-      await hooks.PostToolUse?.[0]?.hooks[0]?.({
-        hook_event_name: "PostToolUse",
-        tool_response: { structuredContent: { status: "still_running", runId: "abc" } },
-      } as never);
+      await hooks.PostToolUse?.[0]?.hooks[0]?.(
+        {
+          hook_event_name: "PostToolUse",
+          tool_response: { structuredContent: { status: "still_running", runId: "abc" } },
+        } as never,
+        undefined,
+        {} as never,
+      );
 
       expect(fetchMock).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
@@ -173,10 +197,14 @@ describe("buildNotificationHooks", () => {
         ...baseConfig,
         onSessionStart: false,
       });
-      await hooks.PostToolUse?.[0]?.hooks[0]?.({
-        hook_event_name: "PostToolUse",
-        tool_response: { content: [{ type: "text", text: "..." }] },
-      } as never);
+      await hooks.PostToolUse?.[0]?.hooks[0]?.(
+        {
+          hook_event_name: "PostToolUse",
+          tool_response: { content: [{ type: "text", text: "..." }] },
+        } as never,
+        undefined,
+        {} as never,
+      );
 
       expect(fetchMock).not.toHaveBeenCalled();
       vi.unstubAllGlobals();
@@ -189,10 +217,14 @@ describe("buildNotificationHooks", () => {
         ...baseConfig,
         onSessionStart: false,
       });
-      const result = await hooks.PostToolUse?.[0]?.hooks[0]?.({
-        hook_event_name: "PostToolUse",
-        tool_response: { structuredContent: { status: "completed" } },
-      } as never);
+      const result = await hooks.PostToolUse?.[0]?.hooks[0]?.(
+        {
+          hook_event_name: "PostToolUse",
+          tool_response: { structuredContent: { status: "completed" } },
+        } as never,
+        undefined,
+        {} as never,
+      );
 
       expect(result).toEqual({ continue: true });
       vi.unstubAllGlobals();

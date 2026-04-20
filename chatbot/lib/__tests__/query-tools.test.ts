@@ -880,7 +880,7 @@ describe("makeInitGroupTool", () => {
   });
 
   it("registers a tool named init_group_<slug>", () => {
-    captureTools(() => makeInitGroupTool(GROUP));
+    captureTools(() => makeInitGroupTool(GROUP, []));
     expect(vi.mocked(tool)).toHaveBeenCalledWith(
       doveInitGroupToolName(GROUP.name),
       expect.any(String),
@@ -890,14 +890,14 @@ describe("makeInitGroupTool", () => {
   });
 
   it("description embeds group description and member names", () => {
-    captureTools(() => makeInitGroupTool(GROUP));
+    captureTools(() => makeInitGroupTool(GROUP, []));
     const desc = vi.mocked(tool).mock.calls[0][1] as string;
     expect(desc).toContain(GROUP.description);
     expect(desc).toContain("agent-a");
   });
 
   it("returns groupWorkspacePath, groupContextId, and groupName", async () => {
-    const captured = captureTools(() => makeInitGroupTool(GROUP));
+    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
     const handler = captured[doveInitGroupToolName(GROUP.name)];
     const result = await handler({});
     const sc = result.structuredContent as {
@@ -911,7 +911,7 @@ describe("makeInitGroupTool", () => {
   });
 
   it("calls upsertSession and setActiveSession with group agentId", async () => {
-    const captured = captureTools(() => makeInitGroupTool(GROUP));
+    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
     const handler = captured[doveInitGroupToolName(GROUP.name)];
     const result = await handler({});
     const sc = result.structuredContent as { groupContextId: string };
@@ -926,6 +926,25 @@ describe("makeInitGroupTool", () => {
       `group:${GROUP.name}`,
       sc.groupContextId,
     );
+  });
+
+  it("writes members/roster.md listing each member's displayName and description", async () => {
+    const memberDefs = [
+      { name: "agent-a", displayName: "Agent A", description: "Does A things" },
+      { name: "agent-b", displayName: "Agent B", description: "Does B things" },
+    ];
+    const captured = captureTools(() => makeInitGroupTool(GROUP, memberDefs as any));
+    const handler = captured[doveInitGroupToolName(GROUP.name)];
+    const result = await handler({});
+    const { groupWorkspacePath } = result.structuredContent as { groupWorkspacePath: string };
+
+    const { readFile } = await import("node:fs/promises");
+    const roster = await readFile(`${groupWorkspacePath}/members/roster.md`, "utf8");
+    expect(roster).toContain("Agent A");
+    expect(roster).toContain("Does A things");
+    expect(roster).toContain("Agent B");
+    expect(roster).toContain("Does B things");
+    expect(roster).toContain("Do not involve any agent outside this list.");
   });
 });
 

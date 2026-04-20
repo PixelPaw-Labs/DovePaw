@@ -15,7 +15,7 @@ vi.mock("@/components/agent-chat/agent-sidebar", () => ({
 describe("SettingsPageLayout — breadcrumbs", () => {
   it("renders breadcrumb and title on the same row with a / separator", () => {
     render(
-      <SettingsPageLayout agentConfigs={[]} title="Settings">
+      <SettingsPageLayout title="Settings">
         <div />
       </SettingsPageLayout>,
     );
@@ -30,7 +30,6 @@ describe("SettingsPageLayout — breadcrumbs", () => {
   it("renders extra breadcrumb items after Home", () => {
     render(
       <SettingsPageLayout
-        agentConfigs={[]}
         title="Plugins"
         breadcrumbItems={[{ label: "Settings", href: "/settings" }]}
       >
@@ -46,7 +45,6 @@ describe("SettingsPageLayout — breadcrumbs", () => {
   it("renders multiple breadcrumb items in order", () => {
     render(
       <SettingsPageLayout
-        agentConfigs={[]}
         title="My Agent"
         breadcrumbItems={[
           { label: "Settings", href: "/settings" },

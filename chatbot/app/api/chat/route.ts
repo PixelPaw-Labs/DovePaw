@@ -207,7 +207,12 @@ export async function POST(request: Request) {
     };
 
     const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
-    const groupInitTools = eligibleGroups.map((group) => makeInitGroupTool(group));
+    const groupInitTools = eligibleGroups.map((group) =>
+      makeInitGroupTool(
+        group,
+        agents.filter((a) => group.members.includes(a.name)),
+      ),
+    );
     const groupStartTools = eligibleGroups.map((group) => {
       const memberDefs = agents.filter((a) => group.members.includes(a.name));
       return makeStartGroupTool(

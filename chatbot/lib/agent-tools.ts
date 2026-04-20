@@ -256,7 +256,7 @@ export function makeStartScriptTool(
     },
     async ({ instruction = "" }) => {
       const finalInstruction = isGroupChat
-        ? `${instruction}\n<reminder>\nYou are participating in a group task. Before starting, read /chat_histories/ to understand what other agents have already done. Save important decisions, nodes, and artifacts to /moments/.\n</reminder>`
+        ? `${instruction}\n<reminder>\nYou are participating in a group task. Before starting:\n1. Read members/roster.md to understand who is in this group. Only collaborate with, assign work to, or communicate with the agents listed there — no one else.\n2. Read chat_histories/ to understand what other agents have already done.\nSave important decisions, nodes, and artifacts to moments/.\n</reminder>`
         : instruction;
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,

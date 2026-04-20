@@ -145,9 +145,9 @@ const MOCK_SETTINGS = { version: 1 as const, repositories: [], envVars: [] };
 beforeEach(() => {
   vi.clearAllMocks();
   // vi.clearAllMocks() resets vi.fn(impl) implementations in Vitest 4 — re-establish them.
-  vi.mocked(readAgentsConfig).mockReturnValue([
+  vi.mocked(readAgentsConfig).mockResolvedValue([
     { name: "test-agent", displayName: "Test Agent", manifestKey: "test_agent" },
-  ] as ReturnType<typeof readAgentsConfig>);
+  ] as Awaited<ReturnType<typeof readAgentsConfig>>);
   vi.mocked(buildDoveCanUseTool).mockReturnValue({
     canUseTool: vi.fn(),
     abortPermissions: vi.fn(),

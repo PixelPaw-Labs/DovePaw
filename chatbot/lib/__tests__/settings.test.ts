@@ -364,7 +364,7 @@ describe("makeRepository", () => {
 
 describe("effectiveDoveSettings", () => {
   it("returns defaults when dove is absent", () => {
-    const s = effectiveDoveSettings({ version: 1, repositories: [], envVars: [] });
+    const s = effectiveDoveSettings({});
     expect(s.displayName).toBe("Dove");
     expect(s.avatarUrl).toBe("/dove-avatar.webp");
     expect(s.persona).toBe("");
@@ -373,9 +373,6 @@ describe("effectiveDoveSettings", () => {
 
   it("returns stored values when dove is present", () => {
     const s = effectiveDoveSettings({
-      version: 1,
-      repositories: [],
-      envVars: [],
       dove: {
         displayName: "Kitty",
         tagline: "helper",
@@ -394,7 +391,7 @@ describe("effectiveDoveSettings", () => {
   });
 
   it("fills in missing dove fields with defaults", () => {
-    const s = effectiveDoveSettings({ version: 1, repositories: [], envVars: [], dove: {} });
+    const s = effectiveDoveSettings({ dove: {} });
     expect(s.displayName).toBe("Dove");
     expect(s.iconBg).toBe("bg-purple-100");
   });
@@ -411,6 +408,7 @@ describe("effectiveDoveSettings", () => {
       iconName: "Cat",
       iconBg: "bg-pink-100",
       iconColor: "text-pink-700",
+      defaultModel: "",
     };
     await writeSettings(settings);
     const loaded = await readSettings();
