@@ -11,10 +11,15 @@
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { AgentDef } from "@@/lib/agents";
 import type { AgentGroup } from "@@/lib/agent-links-schemas";
+import { GROUP_WORKSPACE_ROOT } from "@@/lib/paths";
+import { readSettings } from "@@/lib/settings";
+import { readOrCreateGroupConfig } from "@@/lib/group-config";
 import { z } from "zod";
-import { resolveAgentPort, createAgentClient, startAgentStream } from "@/lib/a2a-client";
+import { resolveAgentPort, createAgentClient } from "@/lib/a2a-client";
 import type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
 import {
   TaskPoller,
@@ -24,6 +29,7 @@ import {
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { startRunScriptToolName } from "@/lib/agent-tools";
+import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -71,9 +77,21 @@ export const doveAskToolName = (agent: AgentDef) => `ask_${agent.manifestKey}`;
 export const doveStartToolName = (agent: AgentDef) => `start_${agent.manifestKey}`;
 /** Returns when the referenced task completes */
 export const doveAwaitToolName = (agent: AgentDef) => `await_${agent.manifestKey}`;
-/** Slugified group name used as the dynamic `ask_group_*` MCP tool name. */
-export const doveAskGroupToolName = (groupName: string) =>
-  `ask_group_${groupName
+/** Slugified group name used as the `init_group_*` MCP tool name. */
+export const doveInitGroupToolName = (groupName: string) =>
+  `init_group_${groupName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
+/** Tool name for starting all members of a group. */
+export const doveStartGroupToolName = (groupName: string) =>
+  `start_group_${groupName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")}`;
+/** Tool name for awaiting all members of a group. */
+export const doveAwaitGroupToolName = (groupName: string) =>
+  `await_group_${groupName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")}`;
@@ -219,84 +237,199 @@ export function makeAwaitTool(
   );
 }
 
-// ─── makeAskGroupTool ─────────────────────────────────────────────────────────
-
-/** Port manifest key for a group A2A server (must match groupManifestKey in group-server.ts). */
-function groupPortKey(groupName: string): string {
-  return `group-${groupName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")}`;
-}
-
-/** Resolve the group A2A port from the ports manifest, or null if unavailable. */
-function resolveGroupPort(groupName: string): number | null {
-  return resolveAgentPort(groupPortKey(groupName));
-}
+// ─── makeInitGroupTool ────────────────────────────────────────────────────────
 
 /**
- * Routes an instruction to the group's dedicated A2A orchestrator (fire-and-forget).
- * The group A2A AI selects 1–3 relevant members and delegates work to them.
- * Returns the group task's contextId so the frontend can subscribe to the group stream.
+ * Creates the shared group workspace (chat_histories/ + moments/) and clones
+ * group repos into it. Returns the workspace path and context ID so Dove can
+ * pass them to start_group_* calls.
  */
-export function makeAskGroupTool(group: AgentGroup, signal?: AbortSignal) {
-  const memberLines = group.members.map((m) => `- ${m}`).join("\n");
-  const description = [
-    `Delegate a task to the "${group.name}" group orchestrator. The orchestrator selects the most relevant members and coordinates them. Fire-and-forget — returns immediately.`,
-    group.description && `<group-focus>\n${group.description}\n</group-focus>`,
-    memberLines && `<members>\n${memberLines}\n</members>`,
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-
+export function makeInitGroupTool(group: AgentGroup) {
   return tool(
-    doveAskGroupToolName(group.name),
-    description,
-    {
-      instruction: z.string().describe("Instruction for the group to work on"),
+    doveInitGroupToolName(group.name),
+    [
+      `Initialize a shared workspace for the "${group.name}" group, then delegate work to members using start_group_* tools.`,
+      group.description && `Group focus: ${group.description}`,
+      `Members: ${group.members.join(", ")}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    {},
+    async () => {
+      const groupContextId = randomUUID();
+      const slug = doveInitGroupToolName(group.name).replace("init_group_", "");
+      const groupWorkspacePath = join(
+        GROUP_WORKSPACE_ROOT,
+        `${slug}-${groupContextId.replace(/-/g, "").slice(0, 8)}`,
+      );
+      await mkdir(join(groupWorkspacePath, "chat_histories"), { recursive: true });
+      await mkdir(join(groupWorkspacePath, "moments"), { recursive: true });
+
+      const settings = await readSettings();
+      const groupConfig = readOrCreateGroupConfig(group.name);
+      const repoSlugs = groupConfig.repos
+        .map((id) => settings.repositories.find((r) => r.id === id))
+        .filter((r): r is NonNullable<typeof r> => r !== undefined)
+        .map((r) => r.githubRepo);
+
+      if (repoSlugs.length > 0) {
+        await cloneReposIntoWorkspace(groupWorkspacePath, repoSlugs);
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Group "${group.name}" workspace ready. Now call start_group_* for each relevant member.`,
+          },
+        ],
+        structuredContent: { groupWorkspacePath, groupContextId, groupName: group.name },
+      };
     },
-    async ({ instruction }) => {
-      const port = resolveGroupPort(group.name);
-      if (!port) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `⚠️ Group "${group.name}" A2A server is not running. Restart servers: **npm run chatbot:servers**`,
-            },
-          ],
-        };
-      }
+  );
+}
 
-      try {
-        const handle = await startAgentStream(port, instruction, signal, undefined, "dove");
-        if (!handle) {
-          return {
-            content: [
-              { type: "text" as const, text: `Error: task ID not received from group server.` },
-            ],
-          };
+// ─── makeStartGroupTool ───────────────────────────────────────────────────────
+
+/**
+ * Fans out the instruction to all online members of the group.
+ * Returns memberTaskIds (manifestKey → taskId) to pass to await_group_*.
+ */
+export function makeStartGroupTool(
+  group: AgentGroup,
+  memberDefs: AgentDef[],
+  signal?: AbortSignal,
+  onProgress?: (result: StreamedResult) => void,
+  backgroundTasks?: Promise<CollectedStream>[],
+  registry?: PendingRegistry,
+) {
+  return tool(
+    doveStartGroupToolName(group.name),
+    `Start all members of the "${group.name}" group on a task. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
+    {
+      instruction: z
+        .string()
+        .describe(
+          "Instruction for the group. Must open with: 'I am Dove, your orchestrator. ' followed by the task.",
+        ),
+      members: z
+        .array(z.string())
+        .min(1)
+        .max(3)
+        .describe(
+          `1–3 member names to delegate to. Choose the most relevant.\n<members>\n${memberDefs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n")}\n</members>`,
+        ),
+      groupWorkspacePath: z.string().describe("groupWorkspacePath from init_group_* result"),
+      groupContextId: z.string().describe("groupContextId from init_group_* result"),
+      groupName: z.string().describe("groupName from init_group_* result"),
+    },
+    async ({ instruction, members, groupWorkspacePath, groupContextId, groupName }) => {
+      const groupMeta = { isGroupChat: true, groupWorkspacePath, groupContextId, groupName };
+      const memberTaskIds: Record<string, string> = {};
+
+      await Promise.all(
+        members.map(async (memberName) => {
+          const memberDef = memberDefs.find((a) => a.name === memberName);
+          if (!memberDef) return;
+          const result = await new TaskPoller(
+            memberDef.manifestKey,
+            memberDef.displayName,
+            signal,
+            registry,
+            doveAwaitGroupToolName(group.name),
+            undefined,
+            memberDef.name,
+          ).start(
+            `${instruction}\n<reminder>Must call "${startRunScriptToolName(memberDef.manifestKey)}" tool</reminder>`,
+            { onProgress, backgroundTasks, senderAgentId: "dove", extraMetadata: groupMeta },
+          );
+          const taskId = (result.structuredContent as { taskId?: string } | undefined)?.taskId;
+          if (taskId) memberTaskIds[memberDef.manifestKey] = taskId;
+        }),
+      );
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Group "${group.name}" started (${Object.keys(memberTaskIds).length} members). Call ${doveAwaitGroupToolName(group.name)} to collect results.`,
+          },
+        ],
+        structuredContent: { memberTaskIds, groupContextId },
+      };
+    },
+  );
+}
+
+// ─── makeAwaitGroupTool ───────────────────────────────────────────────────────
+
+/**
+ * Polls all member tasks started by start_group_*. Returns combined output when
+ * all complete, or { status: "still_running", memberTaskIds } for re-polling.
+ */
+export function makeAwaitGroupTool(
+  group: AgentGroup,
+  memberDefs: AgentDef[],
+  signal?: AbortSignal,
+  onProgress?: (result: StreamedResult) => void,
+  registry?: PendingRegistry,
+) {
+  return tool(
+    doveAwaitGroupToolName(group.name),
+    `Await all members of the "${group.name}" group. Re-call with the same memberTaskIds if still_running.`,
+    {
+      memberTaskIds: z
+        .record(z.string(), z.string())
+        .describe("memberTaskIds from start_group_* result"),
+      groupContextId: z.string().describe("groupContextId from start_group_* result"),
+    },
+    async ({ memberTaskIds, groupContextId }) => {
+      const entries = Object.entries(memberTaskIds);
+      const results = await Promise.all(
+        entries.map(([manifestKey, taskId]) => {
+          const memberDef = memberDefs.find((a) => a.manifestKey === manifestKey);
+          return new TaskPoller(
+            manifestKey,
+            memberDef?.displayName ?? manifestKey,
+            signal,
+            registry,
+            doveAwaitGroupToolName(group.name),
+            undefined,
+            memberDef?.name,
+          ).poll(taskId, { onProgress });
+        }),
+      );
+
+      const updatedIds: Record<string, string> = {};
+      let anyStillRunning = false;
+      for (let i = 0; i < entries.length; i++) {
+        const [key] = entries[i];
+        const sc = results[i].structuredContent as { status?: string; taskId?: string } | undefined;
+        if (sc?.status === "still_running" && sc.taskId) {
+          updatedIds[key] = sc.taskId;
+          anyStillRunning = true;
+        } else {
+          updatedIds[key] = memberTaskIds[key];
         }
-        // Drain the stream in the background — group chat view subscribes independently
-        void handle.stream.return?.(undefined);
-
-        const started: TaskStartedContent = {
-          taskId: handle.taskId,
-          contextId: handle.contextId,
-        };
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `Group "${group.name}" task started (taskId: ${handle.taskId}). Members will surface their progress in the Group Chat view.`,
-            },
-          ],
-          structuredContent: started,
-        };
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        return { content: [{ type: "text" as const, text: `Error: ${msg}` }] };
       }
+
+      if (anyStillRunning) {
+        return {
+          content: [{ type: "text" as const, text: "Group still running. Re-call to poll." }],
+          structuredContent: { status: "still_running", memberTaskIds: updatedIds, groupContextId },
+        };
+      }
+
+      const combinedText = results
+        .map((r, i) => `[${entries[i][0]}]: ${r.content?.[0]?.text ?? ""}`)
+        .join("\n\n");
+      return {
+        content: [{ type: "text" as const, text: combinedText }],
+        structuredContent: {
+          memberResults: Object.fromEntries(entries.map(([k], i) => [k, results[i]])),
+          groupContextId,
+        },
+      };
     },
   );
 }

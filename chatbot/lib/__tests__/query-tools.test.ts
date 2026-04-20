@@ -31,6 +31,19 @@ vi.mock("@/lib/paths", () => ({
 vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch-agents",
   DOVEPAW_DIR: "/mock/dovepaw",
+  GROUP_WORKSPACE_ROOT: require("node:os").tmpdir(),
+}));
+
+vi.mock("@@/lib/settings", () => ({
+  readSettings: vi.fn().mockResolvedValue({ repositories: [] }),
+}));
+
+vi.mock("@@/lib/group-config", () => ({
+  readOrCreateGroupConfig: vi.fn().mockReturnValue({ repos: [], envVars: {} }),
+}));
+
+vi.mock("@/a2a/lib/workspace", () => ({
+  cloneReposIntoWorkspace: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -47,11 +60,15 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
-  makeAskGroupTool,
+  makeInitGroupTool,
+  makeStartGroupTool,
+  makeAwaitGroupTool,
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
-  doveAskGroupToolName,
+  doveInitGroupToolName,
+  doveStartGroupToolName,
+  doveAwaitGroupToolName,
 } from "@/lib/query-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
@@ -819,88 +836,188 @@ describe("makeAwaitTool", () => {
   });
 });
 
-// ─── doveAskGroupToolName ─────────────────────────────────────────────────────
+// ─── doveInitGroupToolName ────────────────────────────────────────────────────
 
-describe("doveAskGroupToolName", () => {
+describe("doveInitGroupToolName", () => {
   it("slugifies the group name", () => {
-    expect(doveAskGroupToolName("PixelPaw Labs")).toBe("ask_group_pixelpaw_labs");
-    expect(doveAskGroupToolName("Review Chain!")).toBe("ask_group_review_chain");
-    expect(doveAskGroupToolName("  spaced  ")).toBe("ask_group_spaced");
+    expect(doveInitGroupToolName("PixelPaw Labs")).toBe("init_group_pixelpaw_labs");
+    expect(doveInitGroupToolName("Review Chain!")).toBe("init_group_review_chain");
+    expect(doveInitGroupToolName("  spaced  ")).toBe("init_group_spaced");
   });
 });
 
-// ─── makeAskGroupTool ─────────────────────────────────────────────────────────
+// ─── doveStartGroupToolName / doveAwaitGroupToolName ──────────────────────────
 
-describe("makeAskGroupTool", () => {
+describe("doveStartGroupToolName", () => {
+  it("slugifies the group name", () => {
+    expect(doveStartGroupToolName("PixelPaw Labs")).toBe("start_group_pixelpaw_labs");
+  });
+});
+
+describe("doveAwaitGroupToolName", () => {
+  it("slugifies the group name", () => {
+    expect(doveAwaitGroupToolName("PixelPaw Labs")).toBe("await_group_pixelpaw_labs");
+  });
+});
+
+// ─── makeInitGroupTool ────────────────────────────────────────────────────────
+
+describe("makeInitGroupTool", () => {
   const GROUP = {
     name: "PixelPaw Labs",
     description: "Simulates Envato's business",
     members: ["agent-a", "agent-b", "agent-c"],
   };
 
-  // Port manifest key for the group A2A: "group-pixelpaw_labs"
-  const GROUP_PORT_KEY = "group-pixelpaw_labs";
-
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("registers a tool named ask_group_<slug>", () => {
-    captureTools(() => makeAskGroupTool(GROUP));
+  it("registers a tool named init_group_<slug>", () => {
+    captureTools(() => makeInitGroupTool(GROUP));
     expect(vi.mocked(tool)).toHaveBeenCalledWith(
-      doveAskGroupToolName(GROUP.name),
+      doveInitGroupToolName(GROUP.name),
       expect.any(String),
       expect.any(Object),
       expect.any(Function),
     );
   });
 
-  it("tool description embeds group description and member names", () => {
-    captureTools(() => makeAskGroupTool(GROUP));
+  it("description embeds group description and member names", () => {
+    captureTools(() => makeInitGroupTool(GROUP));
     const desc = vi.mocked(tool).mock.calls[0][1] as string;
     expect(desc).toContain(GROUP.description);
     expect(desc).toContain("agent-a");
-    expect(desc).toContain("agent-b");
-    expect(desc).toContain("agent-c");
   });
 
-  it("routes to the group A2A port and returns taskId + contextId", async () => {
-    vi.mocked(readPortsManifest).mockReturnValue({ [GROUP_PORT_KEY]: 52000 } as any);
-    const sendStream = vi.fn((_req: unknown) =>
-      asyncEvents({
-        kind: "task",
-        id: "task-grp-1",
-        contextId: "ctx-grp-1",
-        status: { state: "submitted" },
-      }),
-    );
+  it("returns groupWorkspacePath, groupContextId, and groupName", async () => {
+    const captured = captureTools(() => makeInitGroupTool(GROUP));
+    const handler = captured[doveInitGroupToolName(GROUP.name)];
+    const result = await handler({});
+    const sc = result.structuredContent as {
+      groupWorkspacePath: string;
+      groupContextId: string;
+      groupName: string;
+    };
+    expect(sc.groupName).toBe(GROUP.name);
+    expect(typeof sc.groupWorkspacePath).toBe("string");
+    expect(typeof sc.groupContextId).toBe("string");
+  });
+});
+
+// ─── makeStartGroupTool ───────────────────────────────────────────────────────
+
+describe("makeStartGroupTool", () => {
+  const GROUP = {
+    name: "PixelPaw Labs",
+    description: "Simulates Envato's business",
+    members: ["test-agent"],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 9999 } as any);
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
-        createFromUrl: vi.fn().mockResolvedValue({ sendMessageStream: sendStream }),
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessageStream: vi.fn((_req: unknown) =>
+            asyncEvents({
+              kind: "task",
+              id: "task-grp-1",
+              contextId: "ctx-grp-1",
+              status: { state: "submitted" },
+            }),
+          ),
+        }),
       };
     } as any);
-
-    const captured = captureTools(() => makeAskGroupTool(GROUP));
-    const handler = captured[doveAskGroupToolName(GROUP.name)];
-    const result = await handler({ instruction: "investigate X" });
-
-    expect(sendStream).toHaveBeenCalledTimes(1);
-    const sentText = sendStream.mock.calls[0][0].message.parts[0].text as string;
-    expect(sentText).toBe("investigate X");
-
-    const structured = result.structuredContent as { taskId: string; contextId: string };
-    expect(structured.taskId).toBe("task-grp-1");
-    expect(structured.contextId).toBe("ctx-grp-1");
   });
 
-  it("returns unavailable message when group A2A port is not in manifest", async () => {
-    vi.mocked(readPortsManifest).mockReturnValue({} as any);
+  it("registers a tool named start_group_<slug>", () => {
+    captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    expect(vi.mocked(tool)).toHaveBeenCalledWith(
+      doveStartGroupToolName(GROUP.name),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
 
-    const captured = captureTools(() => makeAskGroupTool(GROUP));
-    const handler = captured[doveAskGroupToolName(GROUP.name)];
-    const result = await handler({ instruction: "hello" });
+  it("forwards isGroupChat metadata to each member", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      instruction: "do something",
+      members: ["test-agent"],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    const client =
+      await vi.mocked(ClientFactory).mock.results[0].value.createFromUrl.mock.results[0].value;
+    const sentMetadata = client.sendMessageStream.mock.calls[0][0].message.metadata as Record<
+      string,
+      unknown
+    >;
+    expect(sentMetadata.isGroupChat).toBe(true);
+    expect(sentMetadata.groupWorkspacePath).toBe("/ws/group");
+  });
 
-    expect(result.content[0].text).toContain("not running");
-    expect(result.structuredContent).toBeUndefined();
+  it("returns memberTaskIds in structuredContent", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    const result = await handler({
+      instruction: "do something",
+      members: ["test-agent"],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    const sc = result.structuredContent as {
+      memberTaskIds: Record<string, string>;
+      groupContextId: string;
+    };
+    expect(sc.memberTaskIds).toEqual({ test_agent: "task-grp-1" });
+    expect(sc.groupContextId).toBe("gc-1");
+  });
+});
+
+// ─── makeAwaitGroupTool ───────────────────────────────────────────────────────
+
+describe("makeAwaitGroupTool", () => {
+  const GROUP = {
+    name: "PixelPaw Labs",
+    description: "Simulates Envato's business",
+    members: ["test-agent"],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 9999 } as any);
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          resubscribeTask: vi.fn((_req: unknown) =>
+            asyncEvents({
+              kind: "task",
+              id: "task-grp-1",
+              contextId: "ctx-grp-1",
+              status: { state: "completed" },
+              result: { parts: [{ kind: "text", text: "done" }] },
+            }),
+          ),
+        }),
+      };
+    } as any);
+  });
+
+  it("registers a tool named await_group_<slug>", () => {
+    captureTools(() => makeAwaitGroupTool(GROUP, [AGENT]));
+    expect(vi.mocked(tool)).toHaveBeenCalledWith(
+      doveAwaitGroupToolName(GROUP.name),
+      expect.any(String),
+      expect.any(Object),
+      expect.any(Function),
+    );
   });
 });

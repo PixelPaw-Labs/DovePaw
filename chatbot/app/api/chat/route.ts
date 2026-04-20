@@ -37,8 +37,12 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
-  makeAskGroupTool,
-  doveAskGroupToolName,
+  makeInitGroupTool,
+  makeStartGroupTool,
+  makeAwaitGroupTool,
+  doveInitGroupToolName,
+  doveStartGroupToolName,
+  doveAwaitGroupToolName,
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
@@ -183,31 +187,51 @@ export async function POST(request: Request) {
     const dispatcher = new SseQueryDispatcher(send, sessionId ?? undefined);
     const userMsgId = randomUUID();
 
-    const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
-    const groupTools = eligibleGroups.map((group) =>
-      makeAskGroupTool(group, subprocessController.signal),
-    );
+    const onInnerProgress = (result: StreamedResult): void => {
+      for (const entry of result.progress) {
+        upsertProgressEntry(innerProgress, entry.message, entry.artifacts);
+      }
+      // Only write to DB while the session is still running — don't resurrect
+      // a session that was stopped/aborted while background tasks wind down.
+      if (registeredSessionId && sessionRunner.isRunning(registeredSessionId)) {
+        upsertSession({
+          id: registeredSessionId,
+          agentId: "dove",
+          startedAt: new Date().toISOString(),
+          label: message.slice(0, 60) || "Session",
+          messages: [],
+          progress: innerProgress,
+          status: "running",
+        });
+      }
+    };
 
-    const tools = agents.flatMap((agent) => {
-      const onInnerProgress = (result: StreamedResult): void => {
-        for (const entry of result.progress) {
-          upsertProgressEntry(innerProgress, entry.message, entry.artifacts);
-        }
-        // Only write to DB while the session is still running — don't resurrect
-        // a session that was stopped/aborted while background tasks wind down.
-        if (registeredSessionId && sessionRunner.isRunning(registeredSessionId)) {
-          upsertSession({
-            id: registeredSessionId,
-            agentId: "dove",
-            startedAt: new Date().toISOString(),
-            label: message.slice(0, 60) || "Session",
-            messages: [],
-            progress: innerProgress,
-            status: "running",
-          });
-        }
-      };
-      return [
+    const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
+    const groupInitTools = eligibleGroups.map((group) => makeInitGroupTool(group));
+    const groupStartTools = eligibleGroups.map((group) => {
+      const memberDefs = agents.filter((a) => group.members.includes(a.name));
+      return makeStartGroupTool(
+        group,
+        memberDefs,
+        subprocessController.signal,
+        makeProgressSender(dispatcher.publish, onInnerProgress),
+        backgroundTasks,
+        doveRegistry,
+      );
+    });
+    const groupAwaitTools = eligibleGroups.map((group) => {
+      const memberDefs = agents.filter((a) => group.members.includes(a.name));
+      return makeAwaitGroupTool(
+        group,
+        memberDefs,
+        subprocessController.signal,
+        makeProgressSender(dispatcher.publish, onInnerProgress),
+        doveRegistry,
+      );
+    });
+
+    const tools = [
+      ...agents.flatMap((agent) => [
         makeAskTool(agent, subprocessController.signal, ctxMap),
         makeStartTool(
           agent,
@@ -222,9 +246,11 @@ export async function POST(request: Request) {
           makeProgressSender(dispatcher.publish, onInnerProgress),
           doveRegistry,
         ),
-      ];
-    });
-    tools.push(...groupTools);
+      ]),
+      ...groupInitTools,
+      ...groupStartTools,
+      ...groupAwaitTools,
+    ];
 
     const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
       dispatcher.publish,
@@ -274,7 +300,11 @@ export async function POST(request: Request) {
                     `mcp__agents__${doveStartToolName(a)}`,
                     `mcp__agents__${doveAwaitToolName(a)}`,
                   ]),
-                  ...eligibleGroups.map((g) => `mcp__agents__${doveAskGroupToolName(g.name)}`),
+                  ...eligibleGroups.flatMap((g) => [
+                    `mcp__agents__${doveInitGroupToolName(g.name)}`,
+                    `mcp__agents__${doveStartGroupToolName(g.name)}`,
+                    `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
+                  ]),
                 ],
                 mcpServers: { agents: mcpServer },
                 // Resume the existing session so the full conversation history is preserved.
