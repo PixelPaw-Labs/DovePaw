@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { buildSpawnEnv } from "./claude.js";
+import { buildSpawnEnv, PERSONA_RULES } from "./claude.js";
 
 function spawnTestProcess(
   cmd: string,
@@ -39,6 +39,20 @@ function spawnTestProcess(
 
   return { result, kill: () => killFn() };
 }
+
+describe("PERSONA_RULES", () => {
+  it("instructs first-person responses", () => {
+    expect(PERSONA_RULES).toMatch(/first person/i);
+  });
+
+  it("forbids preamble", () => {
+    expect(PERSONA_RULES).toMatch(/no preamble/i);
+  });
+
+  it("enforces role boundaries", () => {
+    expect(PERSONA_RULES).toMatch(/stay within your role/i);
+  });
+});
 
 describe("buildSpawnEnv", () => {
   it("sets CLAUDE_SCHEDULER_TASK to taskName", () => {

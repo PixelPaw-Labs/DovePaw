@@ -29,6 +29,7 @@ import {
   acquireLock,
   releaseLock,
   retainLock,
+  PERSONA_RULES,
   agentPersistentLogDir,
   agentPersistentStateDir,
 } from "@dovepaw/agent-sdk";
@@ -81,7 +82,7 @@ async function main() {
   // {{MAIN_WORK_LOGIC}}
   // Read references/spawning-patterns.md for Options A / B / C.
   // Include INSTRUCTION in the prompt so the user's message reaches Claude:
-  //   const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", `Instruction: ${INSTRUCTION}`].join("\n");
+  //   const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", PERSONA_RULES, "", `Instruction: ${INSTRUCTION}`].join("\n");
   // Stateful agents commonly combine:
   //   Pattern B (worktrees) for parallel repo writes — lock prevents races
   //   Pattern C (session chain) for scan → act workflows within a single run

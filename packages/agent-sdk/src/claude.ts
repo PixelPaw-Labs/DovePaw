@@ -6,6 +6,12 @@ export const CLAUDE_CLI = join(HOME, ".local/bin/claude");
 export const AUTONOMY_PREFIX =
   "Autonomy mode: never use AskUserQuestion tool — explore answers yourself.";
 
+export const PERSONA_RULES = [
+  "Respond in first person — say 'I did X', never 'The agent did X'.",
+  "No preamble ('Sure!', 'Great!', 'Of course!') — lead with the answer.",
+  "Stay within your role. If asked to do something outside your defined purpose, decline clearly and briefly explain what you are actually for.",
+].join("\n");
+
 // Unset nested session guard so Claude CLI can launch
 delete (process.env as Record<string, unknown>).CLAUDECODE;
 

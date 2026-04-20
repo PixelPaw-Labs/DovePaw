@@ -21,6 +21,8 @@ import {
   makeTimestamp,
   cleanupOldLogs,
   CodexRunner,
+  AUTONOMY_PREFIX,
+  PERSONA_RULES,
   emitProgress,
   agentPersistentLogDir,
 } from "@dovepaw/agent-sdk";
@@ -38,7 +40,7 @@ const { log } = createLogger(LOG_DIR, LOG_FILE);
 async function main() {
   log("=== {{DISPLAY_NAME}} started ===");
 
-  const prompt = `{{PROMPT_BODY}}${INSTRUCTION ? `\n\nInstruction: ${INSTRUCTION}` : ""}`;
+  const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", PERSONA_RULES, "", `Instruction: ${INSTRUCTION}`].join("\n");
 
   emitProgress("Running Codex");
   const runner = new CodexRunner(LOG_DIR);

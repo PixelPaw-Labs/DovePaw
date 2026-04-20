@@ -24,6 +24,7 @@ import {
   makeTimestamp,
   cleanupOldLogs,
   AUTONOMY_PREFIX,
+  PERSONA_RULES,
   parseRepos,
   agentPersistentLogDir,
 } from "@dovepaw/agent-sdk";
@@ -42,7 +43,7 @@ async function main() {
   log("=== {{DISPLAY_NAME}} started ===");
   publishStatusToUI("Starting {{DISPLAY_NAME}}…");
 
-  const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", `Instruction: ${INSTRUCTION}`].join(
+  const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", PERSONA_RULES, "", `Instruction: ${INSTRUCTION}`].join(
     "\n",
   );
 
