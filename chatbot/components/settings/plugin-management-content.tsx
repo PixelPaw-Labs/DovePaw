@@ -121,6 +121,7 @@ interface PluginCardProps {
 
 function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProps) {
   const [expanded, setExpanded] = React.useState(false);
+  const [skillsExpanded, setSkillsExpanded] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -201,15 +202,31 @@ function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProp
           </div>
         </div>
 
-        {/* Agent list toggle */}
-        <button
-          type="button"
-          onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors w-fit"
-        >
-          {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-          {plugin.agentNames.length} agent{plugin.agentNames.length !== 1 ? "s" : ""}
-        </button>
+        {/* Agent / skill toggles */}
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            {plugin.agentNames.length} agent{plugin.agentNames.length !== 1 ? "s" : ""}
+          </button>
+          {plugin.skillNames.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSkillsExpanded((v) => !v)}
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {skillsExpanded ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronRight className="w-3 h-3" />
+              )}
+              {plugin.skillNames.length} skill{plugin.skillNames.length !== 1 ? "s" : ""}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Collapsible agent list */}
@@ -219,6 +236,23 @@ function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProp
             <p key={name} className="text-sm text-muted-foreground font-mono">
               • {name}
             </p>
+          ))}
+        </div>
+      )}
+
+      {/* Collapsible skill list with symlink paths */}
+      {skillsExpanded && plugin.skillNames.length > 0 && (
+        <div className="border-t border-border/40 bg-muted/30 px-5 py-3 flex flex-col gap-2">
+          {plugin.skillNames.map((name) => (
+            <div key={name} className="flex flex-col gap-0.5">
+              <p className="text-sm text-muted-foreground font-mono">• {name}</p>
+              <p className="text-xs text-muted-foreground/60 font-mono pl-3">
+                ~/.claude/skills/{name}
+              </p>
+              <p className="text-xs text-muted-foreground/60 font-mono pl-3">
+                ~/.codex/skills/{name}
+              </p>
+            </div>
           ))}
         </div>
       )}
