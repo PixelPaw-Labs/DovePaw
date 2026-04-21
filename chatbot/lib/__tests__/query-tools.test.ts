@@ -49,6 +49,7 @@ vi.mock("@/a2a/lib/workspace", () => ({
 vi.mock("@/lib/db", () => ({
   upsertSession: vi.fn(),
   setActiveSession: vi.fn(),
+  setGroupMessage: vi.fn(),
 }));
 
 vi.mock("@/lib/session-events", () => ({

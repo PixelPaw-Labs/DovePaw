@@ -82,6 +82,7 @@ export type ChatSseGroupMember = {
   agentId: string;
   text: string;
   done: boolean;
+  sessionId?: string;
 };
 
 export type ChatSseEvent =

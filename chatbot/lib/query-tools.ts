@@ -31,7 +31,7 @@ import type { PendingRegistry } from "@/lib/pending-registry";
 import { withStartReminder } from "@/lib/agent-tools";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { publishSessionEvent } from "@/lib/session-events";
-import { upsertSession, setActiveSession } from "@/lib/db";
+import { upsertSession, setActiveSession, setGroupMessage } from "@/lib/db";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -387,6 +387,7 @@ export function makeStartGroupTool(
               agentId: memberDef.name,
               text: `${memberDef.displayName} is working on the task…`,
               done: false,
+              sessionId: taskId,
             });
             // Publish done event from this process when the drain resolves
             if (memberDrain.length > 0) {
@@ -397,6 +398,7 @@ export function makeStartGroupTool(
                   text: collected.result.output,
                   done: true,
                 });
+                setGroupMessage(taskId, collected.result.output);
               });
             }
           }

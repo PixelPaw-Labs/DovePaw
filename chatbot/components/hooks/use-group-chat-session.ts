@@ -12,7 +12,6 @@ import {
 } from "@/lib/agent-api-urls";
 import { readSseStream } from "./read-sse-stream";
 import { activeSessionResponseSchema, fetchSessionDetail } from "./session-api-client";
-import { processActiveStreamEvent } from "./process-stream-event";
 
 interface MemberState {
   sessionId: string | null;
@@ -47,12 +46,11 @@ function createDirectAnimation(onUpdate: (id: string, content: string) => void) 
   };
 }
 
-const noop = () => {};
-
 interface GroupPoolEvent {
   agentId: string;
   text: string;
   type: "progress" | "done" | "error";
+  sessionId?: string;
 }
 
 function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
@@ -63,8 +61,9 @@ function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
     const p = parsed as Record<string, unknown>;
     if (typeof p.agentId !== "string" || typeof p.text !== "string" || typeof p.type !== "string")
       return null;
+    const sessionId = typeof p.sessionId === "string" ? p.sessionId : undefined;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fields validated above
-    return p as unknown as GroupPoolEvent;
+    return { ...(p as unknown as GroupPoolEvent), sessionId };
   } catch {
     return null;
   }
@@ -158,31 +157,13 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
   }, []);
 
   const handleEvent = useCallback(
-    (
-      event: ChatSseEvent,
-      assistantId: string,
-      state: MemberState,
-      skipResultIfHasText: boolean,
-    ) => {
+    (event: ChatSseEvent, assistantId: string, state: MemberState) => {
       if (event.type === "session") {
         state.sessionId = event.sessionId;
         return;
       }
-      if (event.type === "progress") return;
-
-      processActiveStreamEvent(
-        event,
-        assistantId,
-        {
-          updateActiveMessages: setMessages,
-          animation: animationRef.current!,
-          pendingToolNameRef: state.pendingToolNameRef,
-          setPendingPermissions: noop,
-          setPendingQuestions: noop,
-          setSessionCancelled: noop,
-        },
-        { skipResultIfHasText },
-      );
+      if (event.type !== "text") return;
+      animationRef.current!.enqueue(assistantId, event.content);
     },
     [],
   );
@@ -203,7 +184,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
           });
           if (!response.ok || !response.body) return;
           await readSseStream(response.body, (event) => {
-            if (!abort.signal.aborted) handleEvent(event, assistantId, state, false);
+            if (!abort.signal.aborted) handleEvent(event, assistantId, state);
           });
         } catch (err: unknown) {
           if (err instanceof Error && err.name === "AbortError") return;
@@ -257,7 +238,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         await readSseStream(response.body!, (event) => {
-          if (!abort.signal.aborted) handleEvent(event, assistantId, state, true);
+          if (!abort.signal.aborted) handleEvent(event, assistantId, state);
         });
       } catch (err: unknown) {
         if (err instanceof Error && err.name === "AbortError") return;
@@ -322,33 +303,6 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
           },
         ];
       });
-
-      // When a member starts, connect its individual stream for live text deltas.
-      // The mount effect only covers sessions already active — this handles tasks that
-      // start after the group chat view is already open.
-      if (event.type === "progress") {
-        const state = memberStateRef.current.get(event.agentId);
-        if (state && !state.abort) {
-          void (async () => {
-            const { id } = activeSessionResponseSchema.parse(
-              await (await fetch(activeSessionUrl(event.agentId as AgentId))).json(),
-            );
-            if (!id || cancelled) return;
-            const {
-              messages: stamped,
-              status,
-              resumeSeq,
-            } = await fetchSessionDetail(
-              sessionDetailUrl(event.agentId as AgentId, id),
-              event.agentId as AgentId,
-            );
-            if (status !== "running" || cancelled) return;
-            const assistantId =
-              stamped.toReversed().find((m) => m.role === "assistant")?.id ?? crypto.randomUUID();
-            connectStream(event.agentId, id, assistantId, resumeSeq);
-          })();
-        }
-      }
     };
 
     const subscribeGroupStream = (groupContextId: string) => {
@@ -445,14 +399,6 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
         .map((r) => r.value)
         .toSorted((a, b) => (a.detail.startedAt ?? "").localeCompare(b.detail.startedAt ?? ""));
 
-      const allTagged = fulfilled.flatMap(({ agentId, detail: { messages: stamped } }) => {
-        return stamped.map((m) => (m.agentId ? m : { ...m, agentId }));
-      });
-
-      if (allTagged.length > 0) {
-        setMessages((prev) => [...prev, ...allTagged]);
-      }
-
       for (const { agentId, id, detail } of fulfilled) {
         const state = memberStateRef.current.get(agentId);
         if (!state) continue;
@@ -483,6 +429,37 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
       }
     };
     // Run once on mount; connectStream is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load completed group message history on mount
+  useEffect(() => {
+    let cancelled = false;
+    if (memberAgentIds.length > 0) {
+      const agentIds = memberAgentIds.join(",");
+      void (async () => {
+        const res = await fetch(`/api/groups/messages?agentIds=${encodeURIComponent(agentIds)}`);
+        if (!res.ok || cancelled) return;
+        const raw: unknown = await res.json();
+        if (!Array.isArray(raw) || raw.length === 0 || cancelled) return;
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        const history = raw as { id: string; agentId: string; groupMessage: string }[];
+        const msgs: ChatMessage[] = history.map(({ id, agentId, groupMessage }) => ({
+          id,
+          role: "assistant" as const,
+          segments: [{ type: "text" as const, content: groupMessage }],
+          agentId,
+        }));
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newMsgs = msgs.filter((m) => !existingIds.has(m.id));
+          return [...newMsgs, ...prev];
+        });
+      })();
+    }
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

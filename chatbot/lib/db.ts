@@ -123,6 +123,9 @@ function getDb(): Database.Database {
   if (!cols.some((c) => c.name === "sender_agent_id")) {
     _db.exec("ALTER TABLE sessions ADD COLUMN sender_agent_id TEXT");
   }
+  if (!cols.some((c) => c.name === "group_message")) {
+    _db.exec("ALTER TABLE sessions ADD COLUMN group_message TEXT");
+  }
   return _db;
 }
 
@@ -221,6 +224,36 @@ export function setSessionStatus(id: string, status: SessionStatus): void {
 
 export function closeStaleSessions(): void {
   getDb().prepare("UPDATE sessions SET status = 'done' WHERE status = 'running'").run();
+}
+
+export function setGroupMessage(sessionId: string, text: string): void {
+  getDb().prepare("UPDATE sessions SET group_message = ? WHERE id = ?").run(text, sessionId);
+}
+
+export interface GroupMessage {
+  id: string;
+  agentId: string;
+  startedAt: string;
+  groupMessage: string;
+}
+
+export function getGroupMessages(agentIds: string[]): GroupMessage[] {
+  if (agentIds.length === 0) return [];
+  const placeholders = agentIds.map(() => "?").join(", ");
+  return getDb()
+    .prepare<string[], { id: string; agent_id: string; started_at: string; group_message: string }>(
+      `SELECT id, agent_id, started_at, group_message
+       FROM sessions
+       WHERE agent_id IN (${placeholders}) AND group_message IS NOT NULL
+       ORDER BY started_at ASC`,
+    )
+    .all(...agentIds)
+    .map((r) => ({
+      id: r.id,
+      agentId: r.agent_id,
+      startedAt: r.started_at,
+      groupMessage: r.group_message,
+    }));
 }
 
 export function setOrchestratorAgentContext(

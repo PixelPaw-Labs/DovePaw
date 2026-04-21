@@ -39,6 +39,8 @@ function makeGroupFetchMock(stream: ReadableStream<Uint8Array>) {
       return Promise.resolve(makeJson({ id: "ctx-1", status: "running" }));
     // Group SSE stream endpoint
     if (u.includes("groups/stream")) return Promise.resolve(new Response(stream, { status: 200 }));
+    // Group message history: return empty array so no messages are injected
+    if (u.includes("groups/messages")) return Promise.resolve(makeJson([]));
     // Member active-session: no running session (prevents individual stream connections)
     return Promise.resolve(makeJson({ id: null }));
   };
@@ -51,31 +53,14 @@ function makeJson(data: unknown, status = 200) {
   });
 }
 
-function makeSession(
-  agentId: string,
-  sessionId: string,
-  startedAt: string,
-  messageContent: string,
-) {
-  return {
-    messages: [
-      {
-        id: `msg-${agentId}`,
-        role: "assistant",
-        segments: [{ type: "text", content: messageContent }],
-        agentId,
-      },
-    ],
-    progress: [],
-    resumeSeq: 0,
-    status: "done",
-    startedAt,
-  };
-}
-
-// Minimal fetch mock — group chat session polls active-session on mount
+// Minimal fetch mock — use mockImplementation so each call gets a fresh Response
+// (mockResolvedValue reuses the same Response instance, causing "Body is unusable" when
+// multiple concurrent effects all call res.json() on the same object)
 beforeEach(() => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(makeJson({ id: null })));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation(() => Promise.resolve(makeJson({ id: null }))),
+  );
 });
 
 afterEach(() => {
@@ -105,20 +90,26 @@ describe("useGroupChatSession", () => {
         // Group active-session → no running group task
         if (url.includes("group%3A") || url.includes("group:"))
           return Promise.resolve(makeJson({ id: null }));
-        // Member active-session checks
-        if (url.includes("agent-a/active-session"))
-          return Promise.resolve(makeJson({ id: "session-a" }));
-        if (url.includes("agent-b/active-session"))
-          return Promise.resolve(makeJson({ id: "session-b" }));
-        // Session detail — agent-b started earlier
-        if (url.includes("agent-a/session/session-a"))
+        // Group message history — agent-b started earlier, returned first (sorted ASC)
+        if (url.includes("groups/messages"))
           return Promise.resolve(
-            makeJson(makeSession("agent-a", "session-a", "2024-01-02T00:00:00Z", "from A")),
+            makeJson([
+              {
+                id: "session-b",
+                agentId: "agent-b",
+                startedAt: "2024-01-01T00:00:00Z",
+                groupMessage: "from B",
+              },
+              {
+                id: "session-a",
+                agentId: "agent-a",
+                startedAt: "2024-01-02T00:00:00Z",
+                groupMessage: "from A",
+              },
+            ]),
           );
-        if (url.includes("agent-b/session/session-b"))
-          return Promise.resolve(
-            makeJson(makeSession("agent-b", "session-b", "2024-01-01T00:00:00Z", "from B")),
-          );
+        // Member active-session: no active session (history comes from groups/messages)
+        if (url.includes("active-session")) return Promise.resolve(makeJson({ id: null }));
         return Promise.resolve(makeJson({ id: null }));
       });
 
@@ -138,19 +129,25 @@ describe("useGroupChatSession", () => {
         const url = String(input);
         if (url.includes("group%3A") || url.includes("group:"))
           return Promise.resolve(makeJson({ id: null }));
-        if (url.includes("agent-a/active-session"))
-          return Promise.resolve(makeJson({ id: "session-a" }));
-        if (url.includes("agent-b/active-session"))
-          return Promise.resolve(makeJson({ id: "session-b" }));
         // agent-a started earlier this time
-        if (url.includes("agent-a/session/session-a"))
+        if (url.includes("groups/messages"))
           return Promise.resolve(
-            makeJson(makeSession("agent-a", "session-a", "2024-01-01T00:00:00Z", "from A")),
+            makeJson([
+              {
+                id: "session-a",
+                agentId: "agent-a",
+                startedAt: "2024-01-01T00:00:00Z",
+                groupMessage: "from A",
+              },
+              {
+                id: "session-b",
+                agentId: "agent-b",
+                startedAt: "2024-01-02T00:00:00Z",
+                groupMessage: "from B",
+              },
+            ]),
           );
-        if (url.includes("agent-b/session/session-b"))
-          return Promise.resolve(
-            makeJson(makeSession("agent-b", "session-b", "2024-01-02T00:00:00Z", "from B")),
-          );
+        if (url.includes("active-session")) return Promise.resolve(makeJson({ id: null }));
         return Promise.resolve(makeJson({ id: null }));
       });
 

@@ -23,6 +23,7 @@ function encodeGroupMember(event: ChatSseGroupMember): string {
     agentId: event.agentId,
     text: event.text,
     type: event.done ? "done" : "progress",
+    sessionId: event.sessionId,
   })}\n\n`;
 }
 
