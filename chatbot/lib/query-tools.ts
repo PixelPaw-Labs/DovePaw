@@ -31,6 +31,7 @@ import type { PendingRegistry } from "@/lib/pending-registry";
 import { withStartReminder } from "@/lib/agent-tools";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { publishSessionEvent } from "@/lib/session-events";
+import { ARTIFACT } from "@/lib/artifact-names";
 import { upsertSession, setActiveSession, setGroupMessage } from "@/lib/db";
 
 // ─── Structured content types ─────────────────────────────────────────────────
@@ -364,6 +365,17 @@ export function makeStartGroupTool(
           // Per-member drain bucket — captures the stream promise so we can
           // publish the final group_member event from this (Next.js) process.
           const memberDrain: Promise<CollectedStream>[] = [];
+          let streamText = "";
+          const onArtifact = (name: string, chunk: string) => {
+            if (name !== ARTIFACT.STREAM) return;
+            streamText += chunk;
+            publishSessionEvent(groupContextId, {
+              type: "group_member",
+              agentId: memberDef.name,
+              text: streamText,
+              done: false,
+            });
+          };
           const result = await new TaskPoller(
             memberDef.manifestKey,
             memberDef.displayName,
@@ -374,6 +386,7 @@ export function makeStartGroupTool(
             memberDef.name,
           ).start(withStartReminder(instruction, memberDef.manifestKey), {
             onProgress,
+            onArtifact,
             backgroundTasks: memberDrain,
             senderAgentId: "dove",
             extraMetadata: groupMeta,

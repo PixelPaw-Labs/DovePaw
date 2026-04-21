@@ -52,6 +52,7 @@ export { ARTIFACT, TRANSIENT_ARTIFACT_NAMES } from "@/lib/artifact-names";
 import { ARTIFACT } from "@/lib/artifact-names";
 import { upsertSession } from "@/lib/db";
 import { getSessionCurrentSeq, publishSessionEvent } from "@/lib/session-events";
+import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -379,21 +380,26 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
 export class A2AQueryDispatcher implements QueryResponseDispatcher {
   private readonly accumulator = new MessageAccumulator();
 
+  private groupStreamText = "";
+
   /**
-   * @param publisher  A2A event bus publisher (required)
-   * @param sessionId  DB context ID for this session. When provided, every event is
-   *                   also published to the in-memory session event bus so the
-   *                   `/api/chat/stream/[sessionId]` endpoint can serve the subagent's
-   *                   live stream when the user switches to the subagent's tab.
+   * @param publisher   A2A event bus publisher (required)
+   * @param sessionId   DB context ID for this session. When provided, events are relayed
+   *                    to the Next.js chatbot so `/api/chat/stream/[sessionId]` can serve
+   *                    the subagent's live stream.
+   * @param groupRelay  When set, each text delta is also accumulated and relayed as a
+   *                    `group_member` pool event to the group context stream.
    */
   constructor(
     private readonly publisher: ExecutorPublisher,
     private readonly sessionId?: string,
+    private readonly groupRelay?: { groupContextId: string; agentName: string },
   ) {}
 
-  /** Publish an event to the in-memory session event bus (no-op when sessionId absent). */
-  private emit(event: ChatSseEvent): void {
-    if (this.sessionId) publishSessionEvent(this.sessionId, event);
+  /** Relay an event to the Next.js session event bus via HTTP (no-op when sessionId absent). */
+  private emit(event: ChatSseEvent, toSessionId?: string): void {
+    const id = toSessionId ?? this.sessionId;
+    if (id) relaySessionEvent(id, event);
   }
 
   enableIncrementalSave(config: IncrementalSaveConfig): void {
@@ -420,6 +426,18 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.publisher.send(text, ARTIFACT.STREAM);
     this.accumulator.onTextDelta(text);
     this.emit({ type: "text", content: text });
+    if (this.groupRelay) {
+      this.groupStreamText += text;
+      this.emit(
+        {
+          type: "group_member",
+          agentId: this.groupRelay.agentName,
+          text: this.groupStreamText,
+          done: false,
+        },
+        this.groupRelay.groupContextId,
+      );
+    }
   }
 
   onThinking(text: string): void {

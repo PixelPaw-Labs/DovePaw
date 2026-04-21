@@ -31,7 +31,7 @@ import { createAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setActiveSession, setSessionStatus, upsertSession } from "@/lib/db";
-import { publishSessionEvent } from "@/lib/session-events";
+import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 import { markProcessing, markIdle } from "./processing-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 
@@ -207,7 +207,13 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentSourceDir,
             ...(groupOverrides ? [workspace!.path] : []),
           ];
-          const dispatcher = new A2AQueryDispatcher(publisher, contextId);
+          const dispatcher = new A2AQueryDispatcher(
+            publisher,
+            contextId,
+            groupOverrides
+              ? { groupContextId: groupOverrides.groupContextId, agentName: this.def.name }
+              : undefined,
+          );
           const subagentSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || startRunScriptToolName(this.def.manifestKey),
@@ -328,19 +334,19 @@ export class QueryAgentExecutor implements AgentExecutor {
             }
           }
 
-          publishSessionEvent(contextId, { type: "done" });
+          relaySessionEvent(contextId, { type: "done" });
           publisher.publishStatusToUI("", undefined, "completed");
         },
         (err, isAbort) => {
           if (isAbort) {
             consola.info(`${this.def.displayName} sub-agent cancelled`);
-            publishSessionEvent(contextId, { type: "cancelled" });
+            relaySessionEvent(contextId, { type: "cancelled" });
             publisher.publishStatusToUI("", undefined, "canceled");
           } else {
             const msg = err instanceof Error ? err.message : String(err);
             consola.error(`${this.def.displayName} sub-agent failed: ${msg}`);
-            publishSessionEvent(contextId, { type: "error", content: msg });
-            publishSessionEvent(contextId, { type: "done" });
+            relaySessionEvent(contextId, { type: "error", content: msg });
+            relaySessionEvent(contextId, { type: "done" });
             publisher.publishStatusToUI("", { error: msg }, "failed");
           }
         },
@@ -348,7 +354,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       consola.error(`Failed to start ${this.def.displayName} sub-agent:`, err);
-      publishSessionEvent(contextId, { type: "error", content: msg });
+      relaySessionEvent(contextId, { type: "error", content: msg });
     } finally {
       await Promise.allSettled(backgroundTasks);
       this.abortController?.abort();

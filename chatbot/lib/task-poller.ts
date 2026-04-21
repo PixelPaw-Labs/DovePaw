@@ -114,12 +114,14 @@ export class TaskPoller {
     {
       contextId,
       onProgress,
+      onArtifact,
       backgroundTasks,
       senderAgentId,
       extraMetadata,
     }: {
       contextId?: string;
       onProgress?: (snapshot: StreamedResult) => void;
+      onArtifact?: (name: string, text: string) => void;
       backgroundTasks?: Promise<CollectedStream>[];
       senderAgentId?: string;
       extraMetadata?: Record<string, unknown>;
@@ -151,7 +153,7 @@ export class TaskPoller {
       if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
 
       // Always drain to avoid stalling the EventQueue; forward progress if requested.
-      const drainTask = collectStreamResult(stream, onProgress);
+      const drainTask = collectStreamResult(stream, onProgress, onArtifact);
       if (backgroundTasks) {
         backgroundTasks.push(drainTask); // Promise.allSettled at call site absorbs rejections
       } else {

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   SseQueryDispatcher,
   A2AQueryDispatcher,
@@ -6,6 +6,10 @@ import {
   ARTIFACT,
 } from "../query-dispatcher";
 import type { ExecutorPublisher } from "@/a2a/lib/executor-publisher";
+
+vi.mock("@/lib/relay-to-chatbot", () => ({ relaySessionEvent: vi.fn() }));
+
+import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -373,5 +377,64 @@ describe("A2AQueryDispatcher", () => {
     expect(progress).toHaveLength(2);
     expect(progress[0].message).toBe("Read");
     expect(progress[1].message).toBe("Bash");
+  });
+
+  describe("relay via emit", () => {
+    beforeEach(() => {
+      vi.mocked(relaySessionEvent).mockClear();
+    });
+
+    it("onTextDelta relays text event to sessionId when provided", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), "ctx-1");
+      dispatcher.onTextDelta("hello");
+      expect(relaySessionEvent).toHaveBeenCalledWith("ctx-1", { type: "text", content: "hello" });
+    });
+
+    it("onTextDelta does not relay when sessionId is absent", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher());
+      dispatcher.onTextDelta("hello");
+      expect(relaySessionEvent).not.toHaveBeenCalled();
+    });
+
+    it("onTextDelta relays group_member event with accumulated text when groupRelay set", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
+        groupContextId: "grp-1",
+        agentName: "agent-a",
+      });
+      dispatcher.onTextDelta("foo");
+      dispatcher.onTextDelta(" bar");
+      expect(relaySessionEvent).toHaveBeenLastCalledWith("grp-1", {
+        type: "group_member",
+        agentId: "agent-a",
+        text: "foo bar",
+        done: false,
+      });
+    });
+
+    it("group relay accumulates across multiple onTextDelta calls", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
+        groupContextId: "grp-1",
+        agentName: "agent-a",
+      });
+      dispatcher.onTextDelta("a");
+      dispatcher.onTextDelta("b");
+      dispatcher.onTextDelta("c");
+      const calls = vi.mocked(relaySessionEvent).mock.calls.filter(([sid]) => sid === "grp-1");
+      expect(calls[0][1]).toMatchObject({ text: "a" });
+      expect(calls[1][1]).toMatchObject({ text: "ab" });
+      expect(calls[2][1]).toMatchObject({ text: "abc" });
+    });
+
+    it("sessionId relay and groupRelay fire independently when both set", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), "ctx-1", {
+        groupContextId: "grp-1",
+        agentName: "agent-a",
+      });
+      dispatcher.onTextDelta("x");
+      const calls = vi.mocked(relaySessionEvent).mock.calls;
+      expect(calls).toHaveLength(2);
+      expect(calls.some(([sid]) => sid === "ctx-1")).toBe(true);
+      expect(calls.some(([sid]) => sid === "grp-1")).toBe(true);
+    });
   });
 });
