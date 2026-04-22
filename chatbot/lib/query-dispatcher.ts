@@ -533,7 +533,7 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
         {
           type: "group_member",
           agentId: this.groupRelay.agentName,
-          text: this.groupStreamText,
+          text: result,
           done: true,
         },
         this.groupRelay.groupContextId,

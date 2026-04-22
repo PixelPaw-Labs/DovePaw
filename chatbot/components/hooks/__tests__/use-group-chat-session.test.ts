@@ -250,7 +250,7 @@ describe("useGroupChatSession", () => {
       unmount();
     });
 
-    it("deduplicates sender bubbles when the same seq is replayed", async () => {
+    it("deduplicates sender bubbles when the same content is replayed (same seq)", async () => {
       vi.mocked(fetch).mockImplementation(
         makeGroupFetchMock(
           makeClosingStream([
@@ -263,7 +263,30 @@ describe("useGroupChatSession", () => {
       const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
 
       await waitFor(() => {
-        const senderMsgs = result.current.messages.filter((m) => m.id === "sender-agent-a-42");
+        const senderMsgs = result.current.messages.filter(
+          (m) => m.id === "sender-agent-a-handoff instruction",
+        );
+        expect(senderMsgs).toHaveLength(1);
+      });
+      unmount();
+    });
+
+    it("deduplicates sender bubbles when the same content is replayed (different seq)", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeClosingStream([
+            makeSenderSseChunk("agent-a", 67),
+            makeSenderSseChunk("agent-a", 70), // same text, different seq — relay replay
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => {
+        const senderMsgs = result.current.messages.filter(
+          (m) => m.id === "sender-agent-a-handoff instruction",
+        );
         expect(senderMsgs).toHaveLength(1);
       });
       unmount();

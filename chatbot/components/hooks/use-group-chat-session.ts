@@ -319,10 +319,8 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
       // bubble and do not participate in activeGroupMembers loading tracking.
       if (event.isSender) {
         if (event.text) {
-          const senderId =
-            event.seq != null
-              ? `sender-${event.agentId}-${event.seq}`
-              : `sender-${event.agentId}-${crypto.randomUUID()}`;
+          // Use content-based key so replays at different seq numbers are still deduplicated.
+          const senderId = `sender-${event.agentId}-${event.text}`;
           if (seenSenderIdsRef.current.has(senderId)) return;
           seenSenderIdsRef.current.add(senderId);
           setMessages((prev) => [
