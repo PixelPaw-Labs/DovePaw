@@ -243,7 +243,7 @@ export function makeAwaitTool(
 // ─── makeInitGroupTool ────────────────────────────────────────────────────────
 
 /**
- * Creates the shared group workspace (chat_histories/ + moments/) and clones
+ * Creates the shared group workspace (moments/) and clones
  * group repos into it. Returns the workspace path and context ID so Dove can
  * pass them to start_group_* calls.
  */
@@ -265,7 +265,6 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
         GROUP_WORKSPACE_ROOT,
         `${slug}-${groupContextId.replace(/-/g, "").slice(0, 8)}`,
       );
-      await mkdir(join(groupWorkspacePath, "chat_histories"), { recursive: true });
       await mkdir(join(groupWorkspacePath, "moments"), { recursive: true });
 
       // Write the member roster so every agent knows who is in this group

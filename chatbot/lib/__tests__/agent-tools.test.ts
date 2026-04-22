@@ -308,8 +308,8 @@ describe("makeStartScriptTool", () => {
 
     const passedInstruction = vi.mocked(startScript).mock.calls[0][1];
     expect(passedInstruction).toContain("/ws/ta-abc123/members/roster.md");
-    expect(passedInstruction).toContain("/ws/ta-abc123/chat_histories/");
     expect(passedInstruction).toContain("/ws/ta-abc123/moments/");
+    expect(passedInstruction).toContain("All substance stays. Only fluff dies.");
   });
 });
 

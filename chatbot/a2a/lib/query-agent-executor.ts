@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { writeFileSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { consola } from "consola";
 import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
@@ -312,28 +311,6 @@ export class QueryAgentExecutor implements AgentExecutor {
           );
 
           consola.success(`${this.def.displayName} sub-agent completed`);
-
-          const finalText = assistantMsg.segments
-            .filter((s): s is Extract<typeof s, { type: "text" }> => s.type === "text")
-            .map((s) => s.content)
-            .join("\n")
-            .trim();
-
-          if (groupOverrides) {
-            try {
-              if (finalText) {
-                const ts = new Date().toISOString().replace(/[:.]/g, "-");
-                mkdirSync(join(cwd, "chat_histories"), { recursive: true });
-                writeFileSync(
-                  join(cwd, "chat_histories", `${this.def.name}-${ts}.md`),
-                  finalText,
-                  "utf-8",
-                );
-              }
-            } catch {
-              // best effort
-            }
-          }
 
           relaySessionEvent(contextId, { type: "done" });
           publisher.publishStatusToUI("", undefined, "completed");

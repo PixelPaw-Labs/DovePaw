@@ -33,6 +33,39 @@ import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agen
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 
+// ─── Moments writing pattern ──────────────────────────────────────────────────
+
+export const MOMENTS_PATTERN = `All substance stays. Only fluff dies.
+
+File rules:
+- One file per item.
+- Name clearly (e.g. "auth-decision.md", "api-schema.json").
+
+Core rules:
+- Drop articles: a, an, the.
+- Drop filler: just, really, basically, actually, simply.
+- Drop pleasantries, hedging, preamble.
+- Fragments OK.
+- Short synonyms: "big" not "extensive", "fix" not "implement a solution for".
+- Exact technical terms. Quote errors exactly.
+
+Preferred pattern: [thing] [action] [reason]. [next step].
+Example:
+  Bad: "I've decided that we should probably use Redis for caching because it might help with performance."
+  Good: "Cache layer: Redis. Reason: sub-ms reads, existing infra. Next: wire into auth middleware."
+
+Exception — write full sentences for:
+- Security warnings.
+- Irreversible action confirmations.
+- Multi-step sequences where fragments cause misread.`;
+
+// ─── Handoff completeness rule ────────────────────────────────────────────────
+
+export const HANDOFF_COMPLETENESS =
+  `Completeness is critical — the recipient has no access to your prior context, memory, or intermediate work. ` +
+  `Include all significant findings, decisions, data, and assumptions. ` +
+  `Do not summarise lossy — missing information cannot be recovered after handoff.`;
+
 // ─── Delegation thresholds ────────────────────────────────────────────────────
 
 export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; description: string }> = {
@@ -247,7 +280,7 @@ export function makeStartScriptTool(
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
   taskId?: string,
   registry?: PendingRegistry,
-  /** When true, appends the group-chat reminder (read chat_histories, save to moments) to the instruction. */
+  /** When true, appends the group-chat reminder (save to moments) to the instruction. */
   isGroupChat?: boolean,
 ) {
   return tool(
@@ -261,7 +294,16 @@ export function makeStartScriptTool(
     },
     async ({ instruction = "" }) => {
       const finalInstruction = isGroupChat
-        ? `${instruction}\n<reminder>\nYou are participating in a group task. Before starting:\n1. Read ${config.workspacePath}/members/roster.md to understand who is in this group. Only collaborate with, assign work to, or communicate with the agents listed there — no one else.\n2. Read ${config.workspacePath}/chat_histories/ to understand what other agents have already done.\nSave important decisions, nodes, and artifacts to ${config.workspacePath}/moments/.\n</reminder>`
+        ? `${instruction}
+<reminder>
+You are participating in a group task. Before starting:
+- Read ${config.workspacePath}/members/roster.md to understand who is in this group. Only collaborate with, assign work to, or communicate with the agents listed there — no one else.
+- Save to ${config.workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing.
+  Writing style:
+${MOMENTS_PATTERN.split("\n")
+  .map((l) => `  ${l}`)
+  .join("\n")}
+</reminder>`
         : instruction;
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,
@@ -427,7 +469,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
       instruction: z
         .string()
         .describe(
-          `The task or findings to hand off to ${displayName}. Be specific — include relevant context and data. ` +
+          `The task or findings to hand off to ${displayName}. ${HANDOFF_COMPLETENESS} ` +
             `Open by addressing ${displayName} by name (e.g. "${displayName}, I have done X and need Y"). ` +
             `Write in first person — never refer to yourself by name or in third person, ` +
             `because ${displayName} receives this as a direct message from you, not a report about you. ` +
@@ -513,7 +555,7 @@ export function makeStartReviewTool(
       content: z
         .string()
         .describe(
-          `Your review request — describe what you have done and what you need reviewed. ` +
+          `Your review request — describe what you have done and what you need reviewed. ${HANDOFF_COMPLETENESS} ` +
             `Open by addressing ${displayName} by name (e.g. "${displayName}, I have completed X, please review Y"). ` +
             `Write in first person — the reviewer reads this as your direct submission, not a third-party description. ` +
             `Must be complete, not a draft.`,
@@ -630,7 +672,7 @@ export function makeStartEscalateTool(
       blocker: z
         .string()
         .describe(
-          `The specific decision or problem you cannot resolve alone. ` +
+          `The specific decision or problem you cannot resolve alone. ${HANDOFF_COMPLETENESS} ` +
             `Open by addressing ${displayName} by name (e.g. "${displayName}, I cannot decide X because Y"). ` +
             `Write in first person from your own perspective — not a third-party description. The receiving agent needs to understand your situation, not read a report about you.`,
         ),
