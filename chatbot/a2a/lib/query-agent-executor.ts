@@ -26,7 +26,7 @@ import { buildAgentConfig } from "./agent-config-builder";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import type { CollectedStream } from "@/lib/a2a-client";
-import { createAgentWorkspace } from "./workspace";
+import { createAgentWorkspace, restoreAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setActiveSession, setSessionStatus, upsertSession } from "@/lib/db";
@@ -154,7 +154,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       if (existingState) {
         // Resume existing session — reuse workspace and Claude session.
         workspace = existingState.workspace;
-      } else {
+      } else if (!groupOverrides) {
         // First message in this context — create a fresh workspace.
         workspace = createAgentWorkspace(
           this.def.name,
@@ -165,8 +165,8 @@ export class QueryAgentExecutor implements AgentExecutor {
         );
       }
 
-      // In group mode: cwd = shared group workspace; own workspace added as additionalDirectory
-      const cwd = groupOverrides?.groupWorkspacePath ?? workspace.path;
+      // In group mode: cwd = shared group workspace; member has no own workspace
+      const cwd = groupOverrides?.groupWorkspacePath ?? workspace!.path;
 
       const agentConfig = buildAgentConfig(this.def, cwd, extraEnv, repoSlugs);
       const agentSourceDir = dirname(agentConfig.scriptPath);
@@ -204,7 +204,6 @@ export class QueryAgentExecutor implements AgentExecutor {
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
             agentSourceDir,
-            ...(groupOverrides ? [workspace!.path] : []),
           ];
           const dispatcher = new A2AQueryDispatcher(
             publisher,
@@ -287,7 +286,7 @@ export class QueryAgentExecutor implements AgentExecutor {
           if (subagentSessionId) {
             this.sessionManager.set(contextId, {
               subagentSessionId,
-              workspace: workspace!,
+              workspace: workspace ?? restoreAgentWorkspace(cwd),
               startedAt,
               label,
             });

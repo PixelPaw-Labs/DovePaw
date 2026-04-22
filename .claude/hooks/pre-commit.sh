@@ -1,8 +1,6 @@
 #!/bin/bash
-# Pre-commit hook: format + lint staged files directly; run related tests via `vitest related`.
-#
-# Format and lint run directly on staged files only — not the whole codebase.
-# Tests run via `vitest related <files>` which traces the import graph from staged source files.
+# Pre-commit hook: format + lint + tests run in parallel on staged files only.
+# All three jobs launch concurrently; results are collected after all complete.
 
 set -uo pipefail
 
@@ -22,65 +20,101 @@ FLAG_FILE="${TMPDIR:-/tmp}/dovepaw-tests-verified-${SESSION_ID}"
 STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true)
 [ -z "$STAGED_FILES" ] && exit 0
 
-ERRORS=""
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-# --- Format check (staged files only) ---
-# oxfmt handles JS/TS/JSX/TSX/JSON/CSS/MD and more; skip unrecognised extensions.
-FMT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs|json|jsonc|css|scss|less|html|md|yaml|yml)$' || true)
-if [ -n "$FMT_FILES" ]; then
-  FMT_OUTPUT=$(printf '%s\n' "$FMT_FILES" | xargs npx oxfmt --check --no-error-on-unmatched-pattern 2>&1) || {
-    ERRORS=$(printf '%s' "Format issues found. Run: npm run fmt
-⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
-Then retry the commit in another Bash tool call.
-
-$FMT_OUTPUT")
-  }
-fi
-
-# --- Lint check (staged JS/TS files only, skip agents/) ---
-if [ -z "$ERRORS" ]; then
-  LINT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$' | grep -v '^agents/' || true)
-  if [ -n "$LINT_FILES" ]; then
-    LINT_OUTPUT=$(printf '%s\n' "$LINT_FILES" | xargs npx oxlint --disable-nested-config 2>&1)
-    LINT_EXIT=$?
-    if [ $LINT_EXIT -ne 0 ] || printf '%s' "$LINT_OUTPUT" | grep -qE "[1-9][0-9]* warnings? "; then
-      ERRORS=$(printf '%s' "Lint issues found. Fix each issue at the root cause — do NOT add eslint-disable comments.
-⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
-Then retry the commit in another Bash tool call.
-
-$LINT_OUTPUT")
-    fi
-  fi
-fi
-
-# --- Partially-staged detection ---
+# --- Partially-staged detection (fast, run inline) ---
 # Warn when a staged file also has unstaged working-tree changes.
 # This catches drift caused by running `npm run fmt` or lint fixes AFTER staging —
 # the staged version would be committed without the subsequent working-tree edits.
 PARTIALLY_STAGED=$(git diff --name-only 2>/dev/null | while IFS= read -r f; do
   printf '%s\n' "$STAGED_FILES" | grep -qxF "$f" && printf '%s\n' "$f"
 done || true)
+
+# --- Launch format, lint, and tests in parallel ---
+FMT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs|json|jsonc|css|scss|less|html|md|yaml|yml)$' || true)
+FMT_PID=""
+if [ -n "$FMT_FILES" ]; then
+  (printf '%s\n' "$FMT_FILES" | xargs npx oxfmt --check --no-error-on-unmatched-pattern >"$TMP/fmt.out" 2>&1) &
+  FMT_PID=$!
+fi
+
+LINT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$' | grep -v '^agents/' || true)
+LINT_PID=""
+if [ -n "$LINT_FILES" ]; then
+  (printf '%s\n' "$LINT_FILES" | xargs npx oxlint --disable-nested-config >"$TMP/lint.out" 2>&1) &
+  LINT_PID=$!
+fi
+
+STAGED_TS=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '^agents/' || true)
+TEST_PID=""
+if [ -n "$STAGED_TS" ]; then
+  (printf '%s\n' "$STAGED_TS" | sed "s|^|$CLAUDE_PROJECT_DIR/|" | xargs npx vitest related --run >"$TMP/test.out" 2>&1) &
+  TEST_PID=$!
+fi
+
+# --- Wait for all jobs ---
+FMT_EXIT=0
+if [ -n "$FMT_PID" ]; then
+  wait "$FMT_PID" || FMT_EXIT=$?
+fi
+
+LINT_EXIT=0
+if [ -n "$LINT_PID" ]; then
+  wait "$LINT_PID" || LINT_EXIT=$?
+fi
+
+TEST_EXIT=0
+if [ -n "$TEST_PID" ]; then
+  wait "$TEST_PID" || TEST_EXIT=$?
+fi
+
+# --- Collect errors ---
+ERRORS=""
+
+if [ $FMT_EXIT -ne 0 ]; then
+  ERRORS="Format issues found. Run: npm run fmt
+⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
+Then retry the commit in another Bash tool call.
+
+$(cat "$TMP/fmt.out")"
+fi
+
+if [ -n "$LINT_PID" ]; then
+  LINT_OUTPUT=$(cat "$TMP/lint.out")
+  if [ $LINT_EXIT -ne 0 ] || printf '%s' "$LINT_OUTPUT" | grep -qE "[1-9][0-9]* warnings? "; then
+    [ -n "$ERRORS" ] && ERRORS="$ERRORS
+
+"
+    ERRORS="${ERRORS}Lint issues found. Fix each issue at the root cause — do NOT add eslint-disable comments.
+⚠️  Run: git diff --name-only to see which files the fix changed, then stage ONLY those files in a SEPARATE Bash tool call: git add <only the files changed by the fix above — NOT other unrelated unstaged files>
+Then retry the commit in another Bash tool call.
+
+$LINT_OUTPUT"
+  fi
+fi
+
+if [ $TEST_EXIT -ne 0 ]; then
+  [ -n "$ERRORS" ] && ERRORS="$ERRORS
+
+"
+  ERRORS="${ERRORS}Tests failed. Fix before committing.
+
+$(cat "$TMP/test.out")"
+fi
+
 if [ -n "$PARTIALLY_STAGED" ]; then
-  ERRORS=$(printf '%s\n\n⚠️  These staged files also have unstaged working-tree changes — the committed version will be MISSING those changes. Stage them too or discard them:\n\n%s' \
-    "$ERRORS" "$PARTIALLY_STAGED")
+  [ -n "$ERRORS" ] && ERRORS="$ERRORS
+
+"
+  ERRORS="${ERRORS}⚠️  These staged files also have unstaged working-tree changes — the committed version will be MISSING those changes. Stage them too or discard them:
+
+$PARTIALLY_STAGED"
 fi
 
 if [ -n "$ERRORS" ]; then
   printf '{"decision": "block", "reason": %s}' "$(printf '%s' "$ERRORS" | jq -Rs .)"
   exit 0
-fi
-
-# --- Test gate: run related tests via import graph ---
-STAGED_TS=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '^agents/' || true)
-
-if [ -n "$STAGED_TS" ]; then
-  TEST_OUTPUT=$(printf '%s\n' "$STAGED_TS" | sed "s|^|$CLAUDE_PROJECT_DIR/|" | xargs npx vitest related --run 2>&1)
-  TEST_EXIT=$?
-  if [ $TEST_EXIT -ne 0 ]; then
-    printf '{"decision": "block", "reason": %s}' \
-      "$(printf 'Tests failed. Fix before committing.\n\n%s' "$TEST_OUTPUT" | jq -Rs .)"
-    exit 0
-  fi
 fi
 
 # --- Test reminder: confirm tests were written or updated ---
@@ -95,7 +129,7 @@ REFLECTION=$(printf '%s' "All checks pass. Did you write or update tests for the
   If yes → run the touch command below in a SEPARATE Bash tool call, then retry the commit in another:
 
     touch $FLAG_FILE
-  
+
   NEVER do '<command> && touch file' in a single tool call — it will make the pre-commit guardrail fail to work correctly.
 
   NEVER touch the flag file unless you are answering yes to the question above.

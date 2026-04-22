@@ -43,7 +43,10 @@ const thresholdTable = Object.entries(CONFIDENCE_THRESHOLD)
   )
   .join("\n");
 
-function buildReflectionPrompt(patterns: string): string {
+function buildReflectionPrompt(patterns: string, isGroupMode?: boolean): string {
+  const ifNo = isGroupMode
+    ? "If NO to any: do not re-call. Continue without the handoff and DO NOT explain your reasoning."
+    : "If NO to any: do not re-call. Continue without the handoff and explain your reasoning.";
   return `<reminder>
 You are about to delegate work to another agent. Pause and answer:
 
@@ -66,7 +69,7 @@ If YES to all: re-call this tool with a \`justification\` object:
 Impact-gated thresholds:
 ${thresholdTable}
 
-If NO to any: do not re-call. Continue without the handoff and explain your reasoning.
+${ifNo}
 </reminder>`;
 }
 
@@ -143,19 +146,19 @@ function makeReflectionMatcher(matcher: string, reflectionPrompt: string): HookC
   };
 }
 
-function buildReflectionMatchers(): HookCallbackMatcher[] {
+function buildReflectionMatchers(isGroupMode?: boolean): HookCallbackMatcher[] {
   return [
     makeReflectionMatcher(
       `mcp__agents__${startChatToToolName(".*")}`,
-      buildReflectionPrompt(HANDOFF_PATTERNS()),
+      buildReflectionPrompt(HANDOFF_PATTERNS(), isGroupMode),
     ),
     makeReflectionMatcher(
       `mcp__agents__${startReviewWithToolName(".*")}`,
-      buildReflectionPrompt(REVIEW_PATTERNS()),
+      buildReflectionPrompt(REVIEW_PATTERNS(), isGroupMode),
     ),
     makeReflectionMatcher(
       `mcp__agents__${startEscalateToToolName(".*")}`,
-      buildReflectionPrompt(ESCALATE_PATTERNS()),
+      buildReflectionPrompt(ESCALATE_PATTERNS(), isGroupMode),
     ),
   ];
 }
@@ -164,6 +167,7 @@ function buildReflectionMatchers(): HookCallbackMatcher[] {
 
 function buildHandoffConsiderationPrompt(
   tools: Array<{ name: string; description: string }>,
+  isGroupMode?: boolean,
 ): string {
   const toolsXml = tools
     .map(
@@ -171,6 +175,9 @@ function buildHandoffConsiderationPrompt(
         `  <tool>\n    <name>${t.name}</name>\n    <description>${t.description}</description>\n  </tool>`,
     )
     .join("\n");
+  const ifNo = isGroupMode
+    ? "If no: stop immediately and DO NOT explain your reasoning."
+    : "If no: stop immediately and explain your reasoning.";
   return `<reminder>
 Before you finish: have you considered whether to hand off your results to a linked agent?
 
@@ -179,7 +186,7 @@ ${toolsXml}
 </handoff_tools>
 
 If yes: call the appropriate tool before stopping.
-If no: stop immediately without replying.
+${ifNo}
 </reminder>`;
 }
 
@@ -255,7 +262,7 @@ export function buildSubAgentHooks(
         if (registry.hasPending()) return { continue: true };
         return {
           decision: "block",
-          reason: buildHandoffConsiderationPrompt(agentLinkTools),
+          reason: buildHandoffConsiderationPrompt(agentLinkTools, isGroupMode),
         };
       },
     ],
@@ -277,7 +284,7 @@ export function buildSubAgentHooks(
     PreToolUse: [
       ...(base.PreToolUse ?? []),
       ...(notifHooks.PreToolUse ?? []),
-      ...buildReflectionMatchers(),
+      ...buildReflectionMatchers(isGroupMode),
     ],
     PostToolUse: [
       ...(base.PostToolUse ?? []),
