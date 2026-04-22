@@ -39,7 +39,7 @@ if [ -n "$FMT_FILES" ]; then
   FMT_PID=$!
 fi
 
-LINT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$' | grep -v '^agents/' || true)
+LINT_FILES=$(printf '%s\n' "$STAGED_FILES" | grep -E '\.(js|ts|jsx|tsx|mjs|cjs)$' | grep -v '^agents/' | grep -v '^\.claude/' || true)
 LINT_PID=""
 if [ -n "$LINT_FILES" ]; then
   (printf '%s\n' "$LINT_FILES" | xargs npx oxlint --disable-nested-config >"$TMP/lint.out" 2>&1) &

@@ -33,7 +33,7 @@ process.stdout.write(
     decision: "block",
     reason:
       "Sub-agent-builder quality gate: Before stopping, evaluate ALL files you created or edited against the sub-agent-builder SKILL.md specification. " +
-      "Check: (1) main.ts — all {{PLACEHOLDER}} values substituted, spawning pattern correct, INSTRUCTION passed through, agent script flow steps and logic are correct without flaw (no dead branches, correct error handling, emitProgress called appropriately, subprocess env correct etc); " +
+      "Check: (1) main.ts — all {{PLACEHOLDER}} values substituted, spawning pattern correct, INSTRUCTION passed through, agent script flow steps and logic are correct without flaw (no dead branches, correct error handling, publishStatusToUI called appropriately (awaited), subprocess env correct etc); " +
       "(2) agent.json — all required fields present, no pluginPath set, every envVars entry has an `id` UUID (missing id causes Zod to silently drop the agent from the Kiln group); " +
       "(3) SKILL.md if created — frontmatter valid for Claude Code, argument pattern documented, output contract defined. " +
       "Fix all listed issues first, then — after all fixes are complete — " +

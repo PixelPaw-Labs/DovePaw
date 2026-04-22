@@ -23,7 +23,7 @@ import {
   CodexRunner,
   AUTONOMY_PREFIX,
   PERSONA_RULES,
-  emitProgress,
+  publishStatusToUI,
   agentPersistentLogDir,
 } from "@dovepaw/agent-sdk";
 
@@ -42,7 +42,7 @@ async function main() {
 
   const prompt = [AUTONOMY_PREFIX, "", "{{PROMPT_BODY}}", "", PERSONA_RULES, "", `Instruction: ${INSTRUCTION}`].join("\n");
 
-  emitProgress("Running Codex");
+  await publishStatusToUI("Running Codex");
   const runner = new CodexRunner(LOG_DIR);
   const { code, stdout } = await runner.run(prompt, {
     cwd: WORK_DIR,

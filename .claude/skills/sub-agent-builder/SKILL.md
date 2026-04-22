@@ -303,7 +303,7 @@ Read `references/integration-checklist.md` now for lint/fmt commands and path re
 
 Read each created file back and verify against this checklist. Fix any issue found, then re-check until every item passes:
 
-- **main.ts** — all `{{PLACEHOLDER}}` values substituted; spawning pattern matches the chosen Option A/B/C; `INSTRUCTION` is passed through to Claude; no dead branches; `emitProgress` called at meaningful steps; subprocess env is correct (no `CLAUDECODE`, clean PATH)
+- **main.ts** — all `{{PLACEHOLDER}}` values substituted; spawning pattern matches the chosen Option A/B/C; `INSTRUCTION` is passed through to Claude; no dead branches; `publishStatusToUI` called at meaningful steps (awaited); subprocess env is correct (no `CLAUDECODE`, clean PATH)
 - **agent.json** — all required fields present; `pluginPath` is NOT set; every entry in `envVars` has an `id` UUID (missing `id` causes Zod to silently drop the agent from the Kiln group)
 - **SKILL.md** (if created) — frontmatter is valid for Claude Code; argument pattern is documented; output contract is defined
 
