@@ -490,9 +490,14 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
       try {
         const parsed: unknown = JSON.parse(content);
         let instruction: string | null = null;
-        if (parsed !== null && typeof parsed === "object" && "instruction" in parsed) {
-          if (typeof parsed.instruction === "string") {
+        if (parsed !== null && typeof parsed === "object") {
+          // chat_to uses "instruction", review_with uses "content", escalate_to uses "blocker"
+          if ("instruction" in parsed && typeof parsed.instruction === "string") {
             instruction = parsed.instruction;
+          } else if ("content" in parsed && typeof parsed.content === "string") {
+            instruction = parsed.content;
+          } else if ("blocker" in parsed && typeof parsed.blocker === "string") {
+            instruction = parsed.blocker;
           }
         }
         // Only emit if there is actual instruction text; otherwise let onFinalOutput

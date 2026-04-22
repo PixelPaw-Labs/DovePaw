@@ -599,6 +599,73 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
   });
 });
 
+// ─── buildSubAgentHooks — group handoff silence hooks ────────────────────────
+
+function postToolUseByName(toolName: string) {
+  return {
+    hook_event_name: "PostToolUse" as const,
+    tool_name: toolName,
+    tool_input: {},
+    tool_use_id: "tu-1",
+    tool_response: "",
+  };
+}
+
+describe("buildSubAgentHooks — group handoff silence hooks", () => {
+  function getGroupPostToolUseHooks() {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    // base hook is [0]; group hooks are appended after
+    return hooks.PostToolUse!;
+  }
+
+  it("is absent when isGroupMode is false", () => {
+    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
+    // only the base still_running hook should be present
+    expect(hooks.PostToolUse).toHaveLength(1);
+  });
+
+  it("injects additionalContext after start_* handoff tools", async () => {
+    const matchers = getGroupPostToolUseHooks();
+    // start matcher is second (index 1)
+    const fn = matchers[1]!.hooks[0]!;
+    const result = await callHook(fn, postToolUseByName("mcp__agents__start_chat_to_agent_b"));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toBeTruthy();
+    expect(hookSpecificOutput.additionalContext).toContain("await");
+  });
+
+  it("injects additionalContext after await_* handoff tools", async () => {
+    const matchers = getGroupPostToolUseHooks();
+    // await matcher is third (index 2)
+    const fn = matchers[2]!.hooks[0]!;
+    const result = await callHook(fn, postToolUseByName("mcp__agents__await_chat_to_agent_b"));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toBeTruthy();
+  });
+
+  it("passes through non-PostToolUse events", async () => {
+    const matchers = getGroupPostToolUseHooks();
+    const fn = matchers[1]!.hooks[0]!;
+    const result = await callHook(fn, {
+      hook_event_name: "PreToolUse" as const,
+      tool_name: "foo",
+      tool_input: {},
+      tool_use_id: "t1",
+    });
+    expect(result).toEqual({ continue: true });
+  });
+});
+
 // ─── buildDoveCanUseTool ──────────────────────────────────────────────────────
 
 function makeCanUseToolCtx(overrides?: { signal?: AbortSignal }) {

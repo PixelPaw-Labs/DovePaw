@@ -5,6 +5,11 @@ function makePoolSseChunk(agentId: string, type: "progress" | "done" | "error"):
   return `data: ${JSON.stringify({ agentId, text: "text", type })}\n\n`;
 }
 
+function makeSenderSseChunk(agentId: string): string {
+  // encodeGroupMember maps done:true → type:"done"; isSender events always have done:true
+  return `data: ${JSON.stringify({ agentId, text: "handoff instruction", type: "done", isSender: true })}\n\n`;
+}
+
 /** Stream that pushes chunks then blocks forever (simulates an open SSE connection). */
 function makeBlockingStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -218,6 +223,29 @@ describe("useGroupChatSession", () => {
         const agentMsgs = result.current.messages.filter((m) => m.id.startsWith("pool-agent-a"));
         expect(agentMsgs).toHaveLength(2);
         expect(agentMsgs[0].id).not.toBe(agentMsgs[1].id);
+      });
+      unmount();
+    });
+
+    it("creates a new response bubble after a sender (handoff) event from the same agent", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeClosingStream([
+            makePoolSseChunk("agent-a", "progress"),
+            makeSenderSseChunk("agent-a"),
+            makePoolSseChunk("agent-a", "progress"),
+            makePoolSseChunk("agent-a", "done"),
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => {
+        // One sender bubble + two distinct response bubbles (before and after handoff)
+        const responseMsgs = result.current.messages.filter((m) => m.id.startsWith("pool-agent-a"));
+        expect(responseMsgs).toHaveLength(2);
+        expect(responseMsgs[0].id).not.toBe(responseMsgs[1].id);
       });
       unmount();
     });

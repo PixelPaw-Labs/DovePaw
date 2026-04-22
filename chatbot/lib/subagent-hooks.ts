@@ -8,6 +8,7 @@
 
 import type {
   PreToolUseHookSpecificOutput,
+  PostToolUseHookSpecificOutput,
   HookCallbackMatcher,
   HookEvent,
 } from "@anthropic-ai/claude-agent-sdk";
@@ -182,34 +183,52 @@ If no: stop immediately without replying.
 </reminder>`;
 }
 
-// ─── Group chat silence hook ──────────────────────────────────────────────────
+// ─── Group chat silence hooks ─────────────────────────────────────────────────
 
-// Fires after any handoff start or await tool in group mode.
-// Prevents the agent from narrating between tool calls (e.g. "I've sent this to Agent B…").
-const GROUP_HANDOFF_MATCHER = [
+// After start_*: agent must call the await tool next — no output allowed.
+// After await_*: agent has the result — no narration, deliver response directly.
+
+const GROUP_START_MATCHER = [
   `mcp__agents__${startChatToToolName(".*")}`,
   `mcp__agents__${startReviewWithToolName(".*")}`,
   `mcp__agents__${startEscalateToToolName(".*")}`,
+].join("|");
+
+const GROUP_AWAIT_MATCHER = [
   `mcp__agents__${awaitChatToToolName(".*")}`,
   `mcp__agents__${awaitReviewWithToolName(".*")}`,
   `mcp__agents__${awaitEscalateToToolName(".*")}`,
 ].join("|");
 
-const GROUP_SILENCE_REMINDER = `<reminder>
-Do NOT output any text or narration between tool calls. 
-Proceed directly to the next tool call. 
+const GROUP_START_SILENCE = `<reminder>
+You have started a handoff task. Do NOT output any text.
+Call the corresponding await tool immediately to collect the result.
+</reminder>`;
+
+const GROUP_AWAIT_SILENCE = `<reminder>
+Do NOT output any text or narration between tool calls.
+Proceed directly to the next tool call.
 Only deliver your response when you have fully completed your task with concrete results to share.
 </reminder>`;
 
-const groupHandoffSilenceHook: HookCallbackMatcher = {
-  matcher: GROUP_HANDOFF_MATCHER,
-  hooks: [
-    async (input) => {
-      if (input.hook_event_name !== "PostToolUse") return { continue: true };
-      return { decision: "block", reason: GROUP_SILENCE_REMINDER };
-    },
-  ],
-};
+function makeGroupSilenceHook(matcher: string, context: string): HookCallbackMatcher {
+  return {
+    matcher,
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PostToolUse") return { continue: true };
+        const hookSpecificOutput: PostToolUseHookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          additionalContext: context,
+        };
+        return { hookSpecificOutput };
+      },
+    ],
+  };
+}
+
+const groupStartHandoffHook = makeGroupSilenceHook(GROUP_START_MATCHER, GROUP_START_SILENCE);
+const groupAwaitHandoffHook = makeGroupSilenceHook(GROUP_AWAIT_MATCHER, GROUP_AWAIT_SILENCE);
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
@@ -263,7 +282,7 @@ export function buildSubAgentHooks(
     PostToolUse: [
       ...(base.PostToolUse ?? []),
       ...(notifHooks.PostToolUse ?? []),
-      ...(isGroupMode ? [groupHandoffSilenceHook] : []),
+      ...(isGroupMode ? [groupStartHandoffHook, groupAwaitHandoffHook] : []),
     ],
     ...(hasAgentLinks && {
       Stop: [...(base.Stop ?? []), handoffConsiderationStop],

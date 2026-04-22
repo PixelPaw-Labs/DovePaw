@@ -446,6 +446,46 @@ describe("A2AQueryDispatcher", () => {
       });
     });
 
+    it("emits group_member with isSender:true for review_with tool using content field", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
+        groupContextId: "grp-1",
+        agentName: "agent-a",
+      });
+      dispatcher.onToolCall("start_review_with_agent_b");
+      dispatcher.onToolInput(JSON.stringify({ content: "Morgan, please review my PR." }));
+      const groupCalls = vi.mocked(relaySessionEvent).mock.calls.filter(([sid]) => sid === "grp-1");
+      const senderCall = groupCalls.find(
+        ([, e]) => (e as { isSender?: boolean }).isSender === true,
+      );
+      expect(senderCall![1]).toMatchObject({
+        type: "group_member",
+        agentId: "agent-a",
+        text: "Morgan, please review my PR.",
+        done: true,
+        isSender: true,
+      });
+    });
+
+    it("emits group_member with isSender:true for escalate_to tool using blocker field", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
+        groupContextId: "grp-1",
+        agentName: "agent-a",
+      });
+      dispatcher.onToolCall("start_escalate_to_agent_b");
+      dispatcher.onToolInput(JSON.stringify({ blocker: "Morgan, I cannot decide the DB schema." }));
+      const groupCalls = vi.mocked(relaySessionEvent).mock.calls.filter(([sid]) => sid === "grp-1");
+      const senderCall = groupCalls.find(
+        ([, e]) => (e as { isSender?: boolean }).isSender === true,
+      );
+      expect(senderCall![1]).toMatchObject({
+        type: "group_member",
+        agentId: "agent-a",
+        text: "Morgan, I cannot decide the DB schema.",
+        done: true,
+        isSender: true,
+      });
+    });
+
     it("suppresses group relay after a handoff tool call", () => {
       const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
         groupContextId: "grp-1",

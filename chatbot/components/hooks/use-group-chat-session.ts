@@ -323,6 +323,9 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
             },
           ]);
         }
+        // A handoff instruction is a logical break — clear the sender's active
+        // bubble so the next progress event opens a fresh response bubble.
+        activePoolMsgIdsRef.current.delete(event.agentId);
         return;
       }
 
@@ -389,6 +392,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
       if (subscribedContextId === groupContextId) return;
       subscribedContextId = groupContextId;
       groupStreamAbort?.abort();
+      activePoolMsgIdsRef.current.clear();
       const abort = new AbortController();
       groupStreamAbort = abort;
       setIsLoading(true);
