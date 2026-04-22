@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAgentHooks, buildDoveCanUseTool, buildDoveHooks } from "../hooks";
-import { buildSubAgentHooks, SUBAGENT_PROMPT_REMINDER } from "../subagent-hooks";
+import {
+  buildSubAgentHooks,
+  SUBAGENT_PROMPT_REMINDER,
+  GROUP_PROMPT_REMINDER,
+} from "../subagent-hooks";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
 import { resolvePendingQuestion } from "../pending-questions";
@@ -545,6 +549,83 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
   });
 });
 
+describe("buildSubAgentHooks — reflection gate (group mode)", () => {
+  function getGroupReflectionHook() {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    const matchers = hooks.PreToolUse!;
+    const reflectionMatcher = matchers[matchers.length - 1]!;
+    return reflectionMatcher.hooks[0]!;
+  }
+
+  it("includes DO NOT output rule in denial reason when in group mode", async () => {
+    const fn = getGroupReflectionHook();
+    const result = await callHook(fn, {
+      hook_event_name: "PreToolUse" as const,
+      tool_name: "mcp__agents__chat_to_fixer",
+      tool_input: { instruction: "fix it" },
+      tool_use_id: "tu-1",
+    });
+    expect(result.hookSpecificOutput?.permissionDecisionReason).toMatch(/DO NOT output/i);
+  });
+
+  it("does not include DO NOT output rule when not in group mode", async () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+      "test_agent",
+    );
+    const matchers = hooks.PreToolUse!;
+    const fn = matchers[matchers.length - 1]!.hooks[0]!;
+    const result = await callHook(fn, {
+      hook_event_name: "PreToolUse" as const,
+      tool_name: "mcp__agents__chat_to_fixer",
+      tool_input: { instruction: "fix it" },
+      tool_use_id: "tu-1",
+    });
+    expect(result.hookSpecificOutput?.permissionDecisionReason).not.toMatch(/DO NOT output/i);
+  });
+});
+
+describe("buildSubAgentHooks — UserPromptSubmit reminder (group mode)", () => {
+  it("injects GROUP_PROMPT_REMINDER instead of SUBAGENT_PROMPT_REMINDER", async () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const result = await callHook(fn, {
+      hook_event_name: "UserPromptSubmit",
+      prompt: "do something",
+    });
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toBe(GROUP_PROMPT_REMINDER);
+    expect(hookSpecificOutput.additionalContext).not.toBe(SUBAGENT_PROMPT_REMINDER);
+  });
+
+  it("GROUP_PROMPT_REMINDER suppresses narration", () => {
+    expect(GROUP_PROMPT_REMINDER).toMatch(/DO NOT output/i);
+  });
+});
+
 // ─── buildSubAgentHooks — handoff consideration stop hook ─────────────────────
 
 describe("buildSubAgentHooks — handoff consideration stop hook", () => {
@@ -596,6 +677,30 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
     // Stop array should only contain the base pending-work hook, not the handoff hook
     expect(hooks.Stop).toHaveLength(1);
+  });
+
+  it("includes DO NOT output rule in block reason when in group mode", async () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    const matchers = hooks.Stop!;
+    const fn = matchers[matchers.length - 1]!.hooks[0]!;
+    const result = await callHook(fn, stopInput());
+    expect((result as { reason: string }).reason).toMatch(/DO NOT output/i);
+  });
+
+  it("does not include DO NOT output rule when not in group mode", async () => {
+    const fn = getHandoffStopHook();
+    const result = await callHook(fn, stopInput());
+    expect((result as { reason: string }).reason).not.toMatch(/DO NOT output/i);
   });
 });
 

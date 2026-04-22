@@ -34,6 +34,11 @@ export const SUBAGENT_PROMPT_REMINDER = `<reminder>
 - When the user's intent is resolved by SOMETHING BEING DONE: ALWAYS START yourself first (returns runId immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
 </reminder>`;
 
+export const GROUP_PROMPT_REMINDER = `<reminder>
+- When the user's intent is resolved by SOMETHING BEING DONE: ALWAYS START yourself first (returns runId immediately), then WAIT as a **background Task** concurrently.
+- Do NOT output and respond with any text such as narration, status updates, or confirmations.
+</reminder>`;
+
 // ─── Agent link self-reflection gate ─────────────────────────────────────────
 
 const thresholdTable = Object.entries(CONFIDENCE_THRESHOLD)
@@ -65,7 +70,7 @@ If YES to all: re-call this tool with a \`justification\` object:
     "handoff": "<one sentence: what concrete output you are handing off>",
     "confidence": <0–1>
   }
-
+${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}
 Impact-gated thresholds:
 ${thresholdTable}
 
@@ -186,7 +191,7 @@ ${toolsXml}
 </handoff_tools>
 
 If yes: call the appropriate tool before stopping.
-${ifNo}
+${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}${ifNo}
 </reminder>`;
 }
 
@@ -277,7 +282,7 @@ export function buildSubAgentHooks(
   const base = buildAgentHooks({
     postToolUseMatcher: "mcp__agents__await_.*",
     registry,
-    userPromptReminder: SUBAGENT_PROMPT_REMINDER,
+    userPromptReminder: isGroupMode ? GROUP_PROMPT_REMINDER : SUBAGENT_PROMPT_REMINDER,
     allowedDirectories: [cwd, ...additionalDirectories],
   });
   return {
