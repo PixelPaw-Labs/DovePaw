@@ -137,6 +137,11 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
   // overwriting the previous response.
   const activePoolMsgIdsRef = useRef(new Map<string, string>());
 
+  // Stable dedup set for sender bubbles — keyed by senderId. Persists across
+  // stream reconnects and messages-state resets so buffer replays never add a
+  // duplicate sender bubble even when messages is empty.
+  const seenSenderIdsRef = useRef(new Set<string>());
+
   // Lazy-init so the animation's onUpdate closes over setMessages at the right time
   const animationRef = useRef<ReturnType<typeof createDirectAnimation> | null>(null);
   if (!animationRef.current) {
@@ -318,19 +323,18 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
             event.seq != null
               ? `sender-${event.agentId}-${event.seq}`
               : `sender-${event.agentId}-${crypto.randomUUID()}`;
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === senderId)) return prev;
-            return [
-              ...prev,
-              {
-                id: senderId,
-                role: "user" as const,
-                segments: [{ type: "text" as const, content: event.text }],
-                agentId: event.agentId,
-                senderAgentId: event.agentId,
-              },
-            ];
-          });
+          if (seenSenderIdsRef.current.has(senderId)) return;
+          seenSenderIdsRef.current.add(senderId);
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: senderId,
+              role: "user" as const,
+              segments: [{ type: "text" as const, content: event.text }],
+              agentId: event.agentId,
+              senderAgentId: event.agentId,
+            },
+          ]);
         }
         // A handoff instruction is a logical break — clear the sender's active
         // bubble so the next progress event opens a fresh response bubble.
