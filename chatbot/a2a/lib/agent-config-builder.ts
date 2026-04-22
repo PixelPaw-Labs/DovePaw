@@ -8,7 +8,6 @@
 import { join } from "node:path";
 import type { AgentDef } from "@@/lib/agents";
 import { DOVEPAW_TMP_DIR } from "@@/lib/paths";
-import type { AgentWorkspace } from "./workspace";
 
 export interface AgentConfig {
   scriptPath: string;
@@ -32,7 +31,7 @@ export interface AgentConfig {
  */
 export function buildAgentConfig(
   def: AgentDef,
-  workspace: AgentWorkspace,
+  cwd: string,
   extraEnv: Record<string, string>,
   repoSlugs: string[],
 ): AgentConfig {
@@ -43,10 +42,10 @@ export function buildAgentConfig(
     scriptPath,
     agentName: def.displayName,
     whatItDoes: def.description,
-    workspacePath: workspace.path,
+    workspacePath: cwd,
     extraEnv: {
       ...extraEnv,
-      AGENT_WORKSPACE: workspace.path,
+      AGENT_WORKSPACE: cwd,
       ...(repoSlugs.length > 0 ? { REPO_LIST: repoSlugs.join(",") } : {}),
     },
   };

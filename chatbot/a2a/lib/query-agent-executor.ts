@@ -165,7 +165,10 @@ export class QueryAgentExecutor implements AgentExecutor {
         );
       }
 
-      const agentConfig = buildAgentConfig(this.def, workspace, extraEnv, repoSlugs);
+      // In group mode: cwd = shared group workspace; own workspace added as additionalDirectory
+      const cwd = groupOverrides?.groupWorkspacePath ?? workspace.path;
+
+      const agentConfig = buildAgentConfig(this.def, cwd, extraEnv, repoSlugs);
       const agentSourceDir = dirname(agentConfig.scriptPath);
 
       const registry = new PendingRegistry();
@@ -178,14 +181,11 @@ export class QueryAgentExecutor implements AgentExecutor {
         groupOverrides ? { isGroupChat: true, ...groupOverrides } : undefined,
       );
 
-      // In group mode: cwd = shared group workspace; own workspace added as additionalDirectory
-      const cwd = groupOverrides?.groupWorkspacePath ?? workspace.path;
-
       await withMcpQuery(
         [
           makeStartScriptTool(
             this.def,
-            groupOverrides ? { ...agentConfig, workspacePath: cwd } : agentConfig,
+            agentConfig,
             repoSlugs,
             this.abortController.signal,
             publishProgress,
