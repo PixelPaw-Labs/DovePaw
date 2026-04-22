@@ -129,11 +129,19 @@ function getDb(): Database.Database {
   return _db;
 }
 
+function messageContentKey(m: SessionMessage): string {
+  return `${m.role}:${JSON.stringify(m.segments)}`;
+}
+
 function mergeMessages(existing: SessionMessage[], incoming: SessionMessage[]): SessionMessage[] {
   const incomingById = new Map(incoming.map((m) => [m.id, m]));
   const merged = existing.map((m) => incomingById.get(m.id) ?? m);
   const existingIds = new Set(existing.map((m) => m.id));
-  return [...merged, ...incoming.filter((m) => !existingIds.has(m.id))];
+  const existingKeys = new Set(existing.map(messageContentKey));
+  return [
+    ...merged,
+    ...incoming.filter((m) => !existingIds.has(m.id) && !existingKeys.has(messageContentKey(m))),
+  ];
 }
 
 export function upsertSession(args: UpsertSessionArgs): void {

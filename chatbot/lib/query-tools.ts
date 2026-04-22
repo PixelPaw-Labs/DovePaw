@@ -393,15 +393,8 @@ export function makeStartGroupTool(
             memberTaskIds[memberDef.manifestKey] = taskId;
             if (backgroundTasks) backgroundTasks.push(...memberDrain);
             allMemberDrains.push(...memberDrain);
-            // Publish done event from this process when the drain resolves
             if (memberDrain.length > 0) {
               void memberDrain[0].then((collected) => {
-                publishSessionEvent(groupContextId, {
-                  type: "group_member",
-                  agentId: memberDef.name,
-                  text: collected.result.output,
-                  done: true,
-                });
                 setGroupMessage(taskId, collected.result.output);
               });
             }

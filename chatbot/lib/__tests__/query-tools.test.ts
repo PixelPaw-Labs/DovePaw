@@ -1049,6 +1049,24 @@ describe("makeStartGroupTool", () => {
       }),
     );
   });
+
+  it("does not publish a group_member done event from the drain — the A2A relay handles it", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      instruction: "do something",
+      members: ["test-agent"],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    // Flush microtasks so any drain .then() callbacks fire
+    await new Promise((r) => setTimeout(r, 0));
+    expect(vi.mocked(publishSessionEvent)).not.toHaveBeenCalledWith(
+      "gc-1",
+      expect.objectContaining({ type: "group_member", agentId: "test-agent", done: true }),
+    );
+  });
 });
 
 // ─── makeAwaitGroupTool ───────────────────────────────────────────────────────

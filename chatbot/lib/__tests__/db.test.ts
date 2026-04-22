@@ -52,6 +52,38 @@ describe("db", () => {
     expect(getSessionDetail("ctx-1")!.messages).toHaveLength(2);
   });
 
+  it("upsertSession deduplicates messages with same content but different id", () => {
+    upsertSession(base); // contains message id "m1" with role "user"
+    upsertSession({
+      ...base,
+      messages: [
+        {
+          id: "m1-duplicate",
+          role: "user" as const,
+          segments: [{ type: "text" as const, content: "hi" }],
+        },
+      ],
+      progress: [],
+    });
+    expect(getSessionDetail("ctx-1")!.messages).toHaveLength(1);
+  });
+
+  it("upsertSession appends messages with different content", () => {
+    upsertSession(base);
+    upsertSession({
+      ...base,
+      messages: [
+        {
+          id: "m2",
+          role: "assistant" as const,
+          segments: [{ type: "text" as const, content: "reply" }],
+        },
+      ],
+      progress: [],
+    });
+    expect(getSessionDetail("ctx-1")!.messages).toHaveLength(2);
+  });
+
   it("upsertSession deduplicates identical progress entries", () => {
     upsertSession(base);
     upsertSession({ ...base, messages: [] }); // same progress entry
