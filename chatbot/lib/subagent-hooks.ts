@@ -208,8 +208,9 @@ const GROUP_AWAIT_MATCHER = [
 ].join("|");
 
 const GROUP_START_SILENCE = `<reminder>
-You have started a handoff task. Do NOT output any text.
+You have started a handoff task. 
 Call the corresponding await tool immediately to collect the result.
+Do NOT output and respond with any text such as narration, status updates, or confirmations before calling the await tool.
 </reminder>`;
 
 const GROUP_AWAIT_SILENCE = `<reminder>

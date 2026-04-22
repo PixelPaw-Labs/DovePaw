@@ -642,6 +642,8 @@ describe("buildSubAgentHooks — group handoff silence hooks", () => {
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
     expect(hookSpecificOutput.additionalContext).toBeTruthy();
     expect(hookSpecificOutput.additionalContext).toContain("await");
+    expect(hookSpecificOutput.additionalContext).toContain("Do NOT output");
+    expect(hookSpecificOutput.additionalContext).toContain("narration");
   });
 
   it("injects additionalContext after await_* handoff tools", async () => {
