@@ -52,6 +52,7 @@ interface GroupPoolEvent {
   type: "progress" | "done" | "error";
   sessionId?: string;
   isSender?: boolean;
+  seq?: number;
 }
 
 function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
@@ -64,8 +65,9 @@ function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
       return null;
     const sessionId = typeof p.sessionId === "string" ? p.sessionId : undefined;
     const isSender = p.isSender === true;
+    const seq = typeof p.seq === "number" ? p.seq : undefined;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fields validated above
-    return { ...(p as unknown as GroupPoolEvent), sessionId, isSender };
+    return { ...(p as unknown as GroupPoolEvent), sessionId, isSender, seq };
   } catch {
     return null;
   }
@@ -312,16 +314,23 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
       // bubble and do not participate in activeGroupMembers loading tracking.
       if (event.isSender) {
         if (event.text) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: `sender-${event.agentId}-${crypto.randomUUID()}`,
-              role: "user" as const,
-              segments: [{ type: "text" as const, content: event.text }],
-              agentId: event.agentId,
-              senderAgentId: event.agentId,
-            },
-          ]);
+          const senderId =
+            event.seq != null
+              ? `sender-${event.agentId}-${event.seq}`
+              : `sender-${event.agentId}-${crypto.randomUUID()}`;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === senderId)) return prev;
+            return [
+              ...prev,
+              {
+                id: senderId,
+                role: "user" as const,
+                segments: [{ type: "text" as const, content: event.text }],
+                agentId: event.agentId,
+                senderAgentId: event.agentId,
+              },
+            ];
+          });
         }
         // A handoff instruction is a logical break — clear the sender's active
         // bubble so the next progress event opens a fresh response bubble.

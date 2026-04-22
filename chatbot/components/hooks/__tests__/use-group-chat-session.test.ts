@@ -5,9 +5,9 @@ function makePoolSseChunk(agentId: string, type: "progress" | "done" | "error"):
   return `data: ${JSON.stringify({ agentId, text: "text", type })}\n\n`;
 }
 
-function makeSenderSseChunk(agentId: string): string {
+function makeSenderSseChunk(agentId: string, seq?: number): string {
   // encodeGroupMember maps done:true → type:"done"; isSender events always have done:true
-  return `data: ${JSON.stringify({ agentId, text: "handoff instruction", type: "done", isSender: true })}\n\n`;
+  return `data: ${JSON.stringify({ agentId, text: "handoff instruction", type: "done", isSender: true, seq })}\n\n`;
 }
 
 /** Stream that pushes chunks then blocks forever (simulates an open SSE connection). */
@@ -246,6 +246,25 @@ describe("useGroupChatSession", () => {
         const responseMsgs = result.current.messages.filter((m) => m.id.startsWith("pool-agent-a"));
         expect(responseMsgs).toHaveLength(2);
         expect(responseMsgs[0].id).not.toBe(responseMsgs[1].id);
+      });
+      unmount();
+    });
+
+    it("deduplicates sender bubbles when the same seq is replayed", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeClosingStream([
+            makeSenderSseChunk("agent-a", 42),
+            makeSenderSseChunk("agent-a", 42), // duplicate replay
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => {
+        const senderMsgs = result.current.messages.filter((m) => m.id === "sender-agent-a-42");
+        expect(senderMsgs).toHaveLength(1);
       });
       unmount();
     });

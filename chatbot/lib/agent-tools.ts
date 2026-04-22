@@ -456,6 +456,7 @@ export function makeStartChatToTool(
   registry?: PendingRegistry,
   callerAgentId?: string,
   groupMeta?: Record<string, unknown>,
+  callerDisplayName?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -470,7 +471,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         .string()
         .describe(
           `The task or findings to hand off to ${displayName}. ${HANDOFF_COMPLETENESS} ` +
-            `Open by addressing ${displayName} by name (e.g. "${displayName}, I have done X and need Y"). ` +
+            `Open by addressing ${displayName} by name (e.g. "@${displayName}, I have done X and need Y"). ` +
             `Write in first person — never refer to yourself by name or in third person, ` +
             `because ${displayName} receives this as a direct message from you, not a report about you. ` +
             `Do not prescribe how ${displayName} should respond or instruct them on their style — that is their decision, not yours.`,
@@ -479,6 +480,9 @@ ${HANDOFF_PATTERNS(displayName)}`,
       justification: justificationField,
     },
     async ({ instruction, contextId }) => {
+      const replyHint = callerDisplayName
+        ? `<meta>Open your response by addressing the sender as @${callerDisplayName}.</meta>\n`
+        : "";
       return await new TaskPoller(
         manifestKey,
         displayName,
@@ -487,7 +491,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
-      ).start(withStartReminder(instruction, manifestKey), {
+      ).start(withStartReminder(`${replyHint}${instruction}`, manifestKey), {
         contextId,
         backgroundTasks,
         senderAgentId: callerAgentId,
@@ -543,6 +547,7 @@ export function makeStartReviewTool(
   registry?: PendingRegistry,
   callerAgentId?: string,
   groupMeta?: Record<string, unknown>,
+  callerDisplayName?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -556,7 +561,7 @@ export function makeStartReviewTool(
         .string()
         .describe(
           `Your review request — describe what you have done and what you need reviewed. ${HANDOFF_COMPLETENESS} ` +
-            `Open by addressing ${displayName} by name (e.g. "${displayName}, I have completed X, please review Y"). ` +
+            `Open by addressing ${displayName} by name (e.g. "@${displayName}, I have completed X, please review Y"). ` +
             `Write in first person — the reviewer reads this as your direct submission, not a third-party description. ` +
             `Must be complete, not a draft.`,
         ),
@@ -567,6 +572,9 @@ export function makeStartReviewTool(
       const instruction = [
         `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
         `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
+        ...(callerDisplayName
+          ? [`Open your response by addressing the sender as @${callerDisplayName}.`]
+          : []),
         `\nWork product:\n`,
         `${content}\n\n`,
         ...(context ? [`\nContext:\n${context}`] : []),
@@ -661,6 +669,7 @@ export function makeStartEscalateTool(
   registry?: PendingRegistry,
   callerAgentId?: string,
   groupMeta?: Record<string, unknown>,
+  callerDisplayName?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -673,7 +682,7 @@ export function makeStartEscalateTool(
         .string()
         .describe(
           `The specific decision or problem you cannot resolve alone. ${HANDOFF_COMPLETENESS} ` +
-            `Open by addressing ${displayName} by name (e.g. "${displayName}, I cannot decide X because Y"). ` +
+            `Open by addressing ${displayName} by name (e.g. "@${displayName}, I cannot decide X because Y"). ` +
             `Write in first person from your own perspective — not a third-party description. The receiving agent needs to understand your situation, not read a report about you.`,
         ),
       context: z
@@ -688,6 +697,9 @@ export function makeStartEscalateTool(
     async ({ blocker, context, justification }) => {
       const instruction = [
         `ESCALATION — confidence: ${justification?.confidence ?? "?"}/1\n`,
+        ...(callerDisplayName
+          ? [`Open your response by addressing the sender as @${callerDisplayName}.`]
+          : []),
         `Blocker: ${blocker}`,
         `\nContext:\n${context}`,
         `\nPlease provide guidance or make the decision so I can continue.`,

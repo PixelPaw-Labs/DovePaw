@@ -19,12 +19,14 @@ const SSE_HEADERS = {
 } as const;
 
 function encodeGroupMember(event: ChatSseGroupMember): string {
+  const rawSeq = (event as Record<string, unknown>)._seq;
   return `data: ${JSON.stringify({
     agentId: event.agentId,
     text: event.text,
     type: event.done ? "done" : "progress",
     sessionId: event.sessionId,
     isSender: event.isSender,
+    seq: typeof rawSeq === "number" ? rawSeq : undefined,
   })}\n\n`;
 }
 

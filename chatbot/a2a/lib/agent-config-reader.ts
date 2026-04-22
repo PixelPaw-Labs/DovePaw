@@ -60,6 +60,7 @@ export class AgentConfigReader {
 
     const resolvedLinks = resolveLinkedTargets(agentName, links);
     const tools: Parameters<typeof createSdkMcpServer>[0]["tools"] = [];
+    const callerDisplayName = allAgents.find((a) => a.name === agentName)?.displayName;
 
     for (const { targetName, strategy } of resolvedLinks) {
       const targetDef = allAgents.find((a) => a.name === targetName);
@@ -72,16 +73,42 @@ export class AgentConfigReader {
 
       switch (strategy) {
         case "review":
-          tools.push(makeStartReviewTool(targetDef, signal, registry, agentName, groupMeta));
+          tools.push(
+            makeStartReviewTool(
+              targetDef,
+              signal,
+              registry,
+              agentName,
+              groupMeta,
+              callerDisplayName,
+            ),
+          );
           tools.push(makeAwaitReviewTool(targetDef, signal, registry));
           break;
         case "escalation":
-          tools.push(makeStartEscalateTool(targetDef, signal, registry, agentName, groupMeta));
+          tools.push(
+            makeStartEscalateTool(
+              targetDef,
+              signal,
+              registry,
+              agentName,
+              groupMeta,
+              callerDisplayName,
+            ),
+          );
           tools.push(makeAwaitEscalateTool(targetDef, signal, registry));
           break;
         default: // "chat" and any future strategies default to start + await
           tools.push(
-            makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName, groupMeta),
+            makeStartChatToTool(
+              targetDef,
+              signal,
+              backgroundTasks,
+              registry,
+              agentName,
+              groupMeta,
+              callerDisplayName,
+            ),
           );
           tools.push(makeAwaitChatToTool(targetDef, signal, registry));
       }
