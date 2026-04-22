@@ -50,9 +50,11 @@ export interface QueryResponseDispatcher {
 
 export { ARTIFACT, TRANSIENT_ARTIFACT_NAMES } from "@/lib/artifact-names";
 import { ARTIFACT } from "@/lib/artifact-names";
+import { isHandoffToolName } from "@/lib/agent-tools";
 import { upsertSession } from "@/lib/db";
 import { getSessionCurrentSeq, publishSessionEvent } from "@/lib/session-events";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
+import { consola } from "consola";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -381,6 +383,12 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
   private readonly accumulator = new MessageAccumulator();
 
   private groupStreamText = "";
+  // Set when a handoff tool (chat_to_*, review_with_*, escalate_to_*) is attempted.
+  // Any text after that point is either handoff narration or declined-handoff reasoning —
+  // neither belongs in the group pool stream.
+  private handoffAttempted = false;
+  // Tracks the most recent handoff tool name so onToolInput can emit the instruction.
+  private pendingHandoffTool: string | null = null;
 
   /**
    * @param publisher   A2A event bus publisher (required)
@@ -426,7 +434,7 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.publisher.send(text, ARTIFACT.STREAM);
     this.accumulator.onTextDelta(text);
     this.emit({ type: "text", content: text });
-    if (this.groupRelay) {
+    if (this.groupRelay && !this.handoffAttempted) {
       this.groupStreamText += text;
       this.emit(
         {
@@ -443,7 +451,9 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
   onThinking(text: string): void {
     this.publisher.send(text, ARTIFACT.THINKING);
     this.accumulator.onThinking(text);
-    this.emit({ type: "thinking", content: text });
+    // Skip relaying thinking to session stream in group mode — it is noise that
+    // the group UI does not render, and saves unnecessary relay calls.
+    if (!this.groupRelay) this.emit({ type: "thinking", content: text });
   }
 
   onToolCall(name: string, toolUseId?: string): void {
@@ -456,6 +466,15 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     // because onTaskProgress is never called for background inner-agent tool calls.
     this.publisher.publishStatusToUI(key, { [ARTIFACT.TOOL_CALL]: name, label: name });
     const entry = this.accumulator.onToolCall(name, toolUseId);
+    if (this.groupRelay) {
+      // Discard text before this tool call — only post-tool text reaches the pool.
+      this.groupStreamText = "";
+      // Mark handoff attempts so any following text (narration or declined-handoff
+      // reasoning) is suppressed from the group pool stream.
+      this.handoffAttempted ||= isHandoffToolName(name);
+      // Track handoff tool so onToolInput can emit the instruction as a group message.
+      if (isHandoffToolName(name)) this.pendingHandoffTool = name;
+    }
     this.emit({ type: "tool_call", name });
     this.emit({ type: "progress", result: { output: "", progress: [entry] } });
   }
@@ -464,12 +483,56 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.publisher.send(content, ARTIFACT.TOOL_INPUT);
     this.accumulator.onToolInput(content);
     this.emit({ type: "tool_input", content });
+    // In group mode, when this input belongs to a handoff tool, emit the instruction
+    // text as the sender agent's final message bubble so the group chat shows what
+    // was handed off (e.g. "Can you review X?" appears as Agent A's message).
+    if (this.groupRelay && this.pendingHandoffTool) {
+      try {
+        const parsed: unknown = JSON.parse(content);
+        let instruction: string | null = null;
+        if (parsed !== null && typeof parsed === "object" && "instruction" in parsed) {
+          if (typeof parsed.instruction === "string") {
+            instruction = parsed.instruction;
+          }
+        }
+        // Only emit if there is actual instruction text; otherwise let onFinalOutput
+        // send the terminal done event.
+        if (instruction) {
+          this.emit(
+            {
+              type: "group_member",
+              agentId: this.groupRelay.agentName,
+              text: instruction,
+              done: true,
+            },
+            this.groupRelay.groupContextId,
+          );
+        }
+      } catch (err) {
+        consola.error("group relay: failed to parse tool input", err);
+      }
+      this.pendingHandoffTool = null;
+    }
   }
 
   onFinalOutput(result: string): void {
     if (result) this.publisher.send(result, ARTIFACT.FINAL_OUTPUT);
     if (result) this.emit({ type: "result", content: result });
     this.accumulator.onFinalOutput();
+    // Close the group bubble so subsequent responses create a new bubble.
+    // For Dove-orchestrated members the drain also sends done:true — that's fine,
+    // a second close is a no-op on the frontend.
+    if (this.groupRelay) {
+      this.emit(
+        {
+          type: "group_member",
+          agentId: this.groupRelay.agentName,
+          text: this.groupStreamText,
+          done: true,
+        },
+        this.groupRelay.groupContextId,
+      );
+    }
   }
 
   onArtifact(_name: string, _text: string): void {}

@@ -245,7 +245,7 @@ export function getGroupMessages(agentIds: string[]): GroupMessage[] {
       `SELECT id, agent_id, started_at, group_message
        FROM sessions
        WHERE agent_id IN (${placeholders}) AND group_message IS NOT NULL
-       ORDER BY started_at ASC`,
+       ORDER BY updated_at ASC`,
     )
     .all(...agentIds)
     .map((r) => ({

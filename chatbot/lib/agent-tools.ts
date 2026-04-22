@@ -118,6 +118,11 @@ export const withStartReminder = (instruction: string, manifestKey: string): str
 
 /** Tool name for sending a message to a linked agent (start_chat_to_* pattern). */
 export const startChatToToolName = (manifestKey: string): string => `start_chat_to_${manifestKey}`;
+/** Returns true when a tool name is a handoff-initiating agent-link tool. */
+export const isHandoffToolName = (name: string): boolean =>
+  name.includes(startChatToToolName("")) ||
+  name.includes(startReviewWithToolName("")) ||
+  name.includes(startEscalateToToolName(""));
 /** Tool name for collecting the result of a start_chat_to_* call. */
 export const awaitChatToToolName = (manifestKey: string): string => `await_chat_to_${manifestKey}`;
 /** Tool name for submitting work to a reviewing agent (start_review_with_* pattern). */
@@ -324,7 +329,7 @@ export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry)
 // ─── Sub-agent system prompt ───────────────────────────────────────────────────
 
 /** Builds the system prompt appended to the query() sub-agent inside QueryAgentExecutor. */
-export function buildSubAgentPrompt(agent: AgentDef): string {
+export function buildSubAgentPrompt(agent: AgentDef, isGroupMode = false): string {
   const opening =
     agent.personality ??
     "You are one of Dove's mice — a small, focused agent working on behalf of Dove, the orchestrator. Dove delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.";
@@ -384,7 +389,14 @@ You are responsible for installing and uninstalling ONLY yourself (\`${agent.lab
 | State | \`${agentPersistentStateDir(agent.name)}\` |
 
 Do NOT read, modify, or reference any files outside these paths.
-`;
+${
+  isGroupMode
+    ? `
+**Group chat mode — response discipline:**
+
+You are contributing to a shared group conversation. When your script completes, respond with your findings directly — no narration about tool execution. Do not say things like "I've kicked off the run", "waiting on output", "the run completed", or any similar status commentary. Deliver your analysis and conclusions only.`
+    : ""
+}`;
 }
 
 // ─── Agent link tool ──────────────────────────────────────────────────────────
@@ -415,7 +427,10 @@ ${HANDOFF_PATTERNS(displayName)}`,
       instruction: z
         .string()
         .describe(
-          `The task or findings to hand off to ${displayName}. Be specific — include relevant context and data.`,
+          `The task or findings to hand off to ${displayName}. Be specific — include relevant context and data. ` +
+            `Write in first person ("I have done X, I need Y") — never refer to yourself by name or in third person, ` +
+            `because ${displayName} receives this as a direct message from you, not a report about you. ` +
+            `Do not prescribe how ${displayName} should respond or instruct them on their style — that is their decision, not yours.`,
         ),
       contextId: z.string().optional().describe("Continue a prior session. Omit to start fresh."),
       justification: justificationField,
@@ -494,7 +509,13 @@ export function makeStartReviewTool(
       `The reviewer will respond with a JSON decision {"decision":"APPROVED"|"REJECTED","reason":"..."} and structured feedback.\n\n` +
       REVIEW_PATTERNS(displayName),
     {
-      content: z.string().describe("The work product to submit for review — must be complete."),
+      content: z
+        .string()
+        .describe(
+          `Your review request — describe what you have done and what you need reviewed. ` +
+            `Write in first person ("I have completed X, please review Y") — the reviewer reads this as your direct submission, not a third-party description. ` +
+            `Must be complete, not a draft.`,
+        ),
       context: z.string().optional().describe("Additional context the reviewer needs."),
       justification: justificationField,
     },
@@ -604,8 +625,20 @@ export function makeStartEscalateTool(
       `${displayName} specialises in: "${description}"\n\n` +
       ESCALATE_PATTERNS(displayName),
     {
-      blocker: z.string().describe("The specific decision or problem you cannot resolve alone."),
-      context: z.string().describe("What you have tried and what you know so far."),
+      blocker: z
+        .string()
+        .describe(
+          `The specific decision or problem you cannot resolve alone. ` +
+            `Write in first person from your own perspective ("I cannot decide X because Y") — ` +
+            `not your own name, not a third-party description. The receiving agent needs to understand your situation, not read a report about you.`,
+        ),
+      context: z
+        .string()
+        .describe(
+          `What you have tried and what you know so far. ` +
+            `Write in first person ("I tried X, it failed because Y. I know Z but not W.") — ` +
+            `this is your investigation log, not a summary written about you. Be concrete: include commands run, errors seen, assumptions made.`,
+        ),
       justification: justificationField,
     },
     async ({ blocker, context, justification }) => {

@@ -24,6 +24,7 @@ function encodeGroupMember(event: ChatSseGroupMember): string {
     text: event.text,
     type: event.done ? "done" : "progress",
     sessionId: event.sessionId,
+    isSender: event.isSender,
   })}\n\n`;
 }
 

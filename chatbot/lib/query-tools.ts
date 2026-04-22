@@ -31,8 +31,7 @@ import type { PendingRegistry } from "@/lib/pending-registry";
 import { withStartReminder } from "@/lib/agent-tools";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { publishSessionEvent } from "@/lib/session-events";
-import { ARTIFACT } from "@/lib/artifact-names";
-import { upsertSession, setActiveSession, setGroupMessage } from "@/lib/db";
+import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -357,6 +356,16 @@ export function makeStartGroupTool(
     async ({ instruction, members, groupWorkspacePath, groupContextId, groupName }) => {
       const groupMeta = { isGroupChat: true, groupWorkspacePath, groupContextId, groupName };
       const memberTaskIds: Record<string, string> = {};
+      const allMemberDrains: Promise<CollectedStream>[] = [];
+
+      // One sender bubble for Dove's instruction — shown before any member responds.
+      publishSessionEvent(groupContextId, {
+        type: "group_member",
+        agentId: "dove",
+        text: instruction,
+        done: true,
+        isSender: true,
+      });
 
       await Promise.all(
         members.map(async (memberName) => {
@@ -364,18 +373,8 @@ export function makeStartGroupTool(
           if (!memberDef) return;
           // Per-member drain bucket — captures the stream promise so we can
           // publish the final group_member event from this (Next.js) process.
+          // Streaming progress events are handled by the A2A dispatcher's groupRelay path.
           const memberDrain: Promise<CollectedStream>[] = [];
-          let streamText = "";
-          const onArtifact = (name: string, chunk: string) => {
-            if (name !== ARTIFACT.STREAM) return;
-            streamText += chunk;
-            publishSessionEvent(groupContextId, {
-              type: "group_member",
-              agentId: memberDef.name,
-              text: streamText,
-              done: false,
-            });
-          };
           const result = await new TaskPoller(
             memberDef.manifestKey,
             memberDef.displayName,
@@ -386,7 +385,6 @@ export function makeStartGroupTool(
             memberDef.name,
           ).start(withStartReminder(instruction, memberDef.manifestKey), {
             onProgress,
-            onArtifact,
             backgroundTasks: memberDrain,
             senderAgentId: "dove",
             extraMetadata: groupMeta,
@@ -395,13 +393,7 @@ export function makeStartGroupTool(
           if (taskId) {
             memberTaskIds[memberDef.manifestKey] = taskId;
             if (backgroundTasks) backgroundTasks.push(...memberDrain);
-            publishSessionEvent(groupContextId, {
-              type: "group_member",
-              agentId: memberDef.name,
-              text: `${memberDef.displayName} is working on the task…`,
-              done: false,
-              sessionId: taskId,
-            });
+            allMemberDrains.push(...memberDrain);
             // Publish done event from this process when the drain resolves
             if (memberDrain.length > 0) {
               void memberDrain[0].then((collected) => {
@@ -417,6 +409,16 @@ export function makeStartGroupTool(
           }
         }),
       );
+
+      // Close the group context after all member drains (including cascading
+      // member-to-member handoffs) have settled. This triggers the session-events
+      // TTL and marks the group session done in the DB.
+      if (allMemberDrains.length > 0) {
+        void Promise.allSettled(allMemberDrains).then(() => {
+          publishSessionEvent(groupContextId, { type: "done" });
+          setSessionStatus(groupContextId, "done");
+        });
+      }
 
       return {
         content: [

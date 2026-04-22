@@ -191,12 +191,34 @@ describe("useGroupChatSession", () => {
 
       // Wait until agent-a's pool message shows as complete
       await waitFor(() => {
-        const aDone = result.current.messages.find((m) => m.id === "pool-agent-a");
+        const aDone = result.current.messages.find((m) => m.id.startsWith("pool-agent-a"));
         expect(aDone?.isLoading).toBe(false);
       });
 
       // agent-b is still in progress — isLoading must remain true
       expect(result.current.isLoading).toBe(true);
+      unmount();
+    });
+
+    it("creates a new bubble when the same agent responds a second time", async () => {
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeClosingStream([
+            makePoolSseChunk("agent-a", "progress"),
+            makePoolSseChunk("agent-a", "done"),
+            makePoolSseChunk("agent-a", "progress"),
+            makePoolSseChunk("agent-a", "done"),
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => {
+        const agentMsgs = result.current.messages.filter((m) => m.id.startsWith("pool-agent-a"));
+        expect(agentMsgs).toHaveLength(2);
+        expect(agentMsgs[0].id).not.toBe(agentMsgs[1].id);
+      });
       unmount();
     });
 

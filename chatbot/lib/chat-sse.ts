@@ -83,6 +83,8 @@ export type ChatSseGroupMember = {
   text: string;
   done: boolean;
   sessionId?: string;
+  /** True when this event carries an instruction FROM agentId TO the group, not a response. */
+  isSender?: boolean;
 };
 
 export type ChatSseEvent =

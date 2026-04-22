@@ -118,14 +118,8 @@ export async function collectStreamResult(
   let pendingToolCall = "";
 
   const snapshot = (): StreamedResult => {
-    const output = progress
-      .flatMap((e) =>
-        Object.entries(e.artifacts)
-          .filter(([name]) => name !== ARTIFACT.TOOL_CALL)
-          .map(([, v]) => v),
-      )
-      .join("\n")
-      .trim();
+    const finalEntry = progress.toReversed().find((e) => ARTIFACT.FINAL_OUTPUT in e.artifacts);
+    const output = (finalEntry?.artifacts[ARTIFACT.FINAL_OUTPUT] ?? "").trim();
     return {
       output: output || noAgentOutput(agentName),
       progress: progress.map((e) => ({ ...e, artifacts: { ...e.artifacts } })),

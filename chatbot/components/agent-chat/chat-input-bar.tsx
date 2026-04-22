@@ -79,7 +79,7 @@ export function ChatInputBar({
           {/* Attach — absolute left */}
           <button
             type="button"
-            className="absolute left-3 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all z-10"
+            className="absolute left-3 bottom-3 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all z-10"
             title="Attach file"
           >
             <Paperclip className="w-4 h-4" />
@@ -92,7 +92,7 @@ export function ChatInputBar({
           />
 
           {/* Stop + Send — absolute right, always both visible when loading */}
-          <div className="absolute right-3 flex items-center gap-2 z-10">
+          <div className="absolute right-3 bottom-3 flex items-center gap-2 z-10">
             {isLoading && (
               <button
                 type="button"

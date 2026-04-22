@@ -50,6 +50,7 @@ vi.mock("@/lib/db", () => ({
   upsertSession: vi.fn(),
   setActiveSession: vi.fn(),
   setGroupMessage: vi.fn(),
+  setSessionStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/session-events", () => ({
@@ -461,8 +462,10 @@ describe("makeAwaitTool", () => {
           },
           final: false,
         },
-        { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "partial" }] } },
-        { kind: "artifact-update", artifact: { parts: [{ kind: "text", text: "result" }] } },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "partial result" }] },
+        },
       ),
     );
     vi.mocked(ClientFactory).mockImplementation(function () {
@@ -472,7 +475,7 @@ describe("makeAwaitTool", () => {
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
-    expect(result.structuredContent.result.output).toBe("partial\nresult");
+    expect(result.structuredContent.result.output).toBe("partial result");
   });
 
   it("always resubscribes regardless of task state", async () => {
@@ -1025,7 +1028,7 @@ describe("makeStartGroupTool", () => {
     expect(sc.groupContextId).toBe("gc-1");
   });
 
-  it("publishes a group_member progress event for each started member", async () => {
+  it("publishes a single sender event for Dove's instruction before member events", async () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
@@ -1037,7 +1040,13 @@ describe("makeStartGroupTool", () => {
     });
     expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
       "gc-1",
-      expect.objectContaining({ type: "group_member", agentId: "test-agent", done: false }),
+      expect.objectContaining({
+        type: "group_member",
+        agentId: "dove",
+        isSender: true,
+        done: true,
+        text: "do something",
+      }),
     );
   });
 });

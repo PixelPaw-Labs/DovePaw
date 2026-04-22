@@ -51,6 +51,7 @@ interface GroupPoolEvent {
   text: string;
   type: "progress" | "done" | "error";
   sessionId?: string;
+  isSender?: boolean;
 }
 
 function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
@@ -62,8 +63,9 @@ function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
     if (typeof p.agentId !== "string" || typeof p.text !== "string" || typeof p.type !== "string")
       return null;
     const sessionId = typeof p.sessionId === "string" ? p.sessionId : undefined;
+    const isSender = p.isSender === true;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fields validated above
-    return { ...(p as unknown as GroupPoolEvent), sessionId };
+    return { ...(p as unknown as GroupPoolEvent), sessionId, isSender };
   } catch {
     return null;
   }
@@ -89,7 +91,9 @@ async function readGroupStream(
         const dataLine = chunk.split("\n").find((l) => l.startsWith("data:"));
         if (!dataLine) continue;
         const event = parseGroupPoolEvent(dataLine.slice(5).trim());
-        if (event && event.text) onEvent(event);
+        // Fire all valid events, including done/error with empty text — those are
+        // needed to clear active bubble IDs even when the agent produced no final text.
+        if (event) onEvent(event);
       }
     }
   } finally {
@@ -125,6 +129,11 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
   // Keeps isLoading true during the async window between pool event arrival
   // and the individual member stream connecting (setting state.abort).
   const activeGroupMembersRef = useRef(new Set<string>());
+
+  // Tracks the current active bubble ID per agent. Cleared on done/error so
+  // the next progress event for that agent creates a new bubble rather than
+  // overwriting the previous response.
+  const activePoolMsgIdsRef = useRef(new Map<string, string>());
 
   // Lazy-init so the animation's onUpdate closes over setMessages at the right time
   const animationRef = useRef<ReturnType<typeof createDirectAnimation> | null>(null);
@@ -262,6 +271,35 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     [handleEvent, recomputeLoading],
   );
 
+  const memberAgentIdsRef = useRef(memberAgentIds);
+  memberAgentIdsRef.current = memberAgentIds;
+
+  const loadHistory = useCallback(() => {
+    const ids = memberAgentIdsRef.current;
+    if (ids.length === 0) return;
+    const agentIds = ids.join(",");
+    void (async () => {
+      const res = await fetch(`/api/groups/messages?agentIds=${encodeURIComponent(agentIds)}`);
+      if (!res.ok) return;
+      const raw: unknown = await res.json();
+      if (!Array.isArray(raw) || raw.length === 0) return;
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      const history = raw as { id: string; agentId: string; groupMessage: string }[];
+      const msgs: ChatMessage[] = history.map(({ id, agentId, groupMessage }) => ({
+        id,
+        role: "assistant" as const,
+        segments: [{ type: "text" as const, content: groupMessage }],
+        agentId,
+      }));
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newMsgs = msgs.filter((m) => !existingIds.has(m.id));
+        if (newMsgs.length === 0) return prev;
+        return [...newMsgs, ...prev];
+      });
+    })();
+  }, []);
+
   // Poll for an active group session. Runs immediately on mount (reconnect)
   // and every 2 s thereafter (live discovery when Dove starts a new group task).
   useEffect(() => {
@@ -270,39 +308,81 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     let groupStreamAbort: AbortController | null = null;
 
     const applyPoolEvent = (event: GroupPoolEvent) => {
+      // Sender events (e.g. Dove's instruction to the group) render as a user-role
+      // bubble and do not participate in activeGroupMembers loading tracking.
+      if (event.isSender) {
+        if (event.text) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `sender-${event.agentId}-${crypto.randomUUID()}`,
+              role: "user" as const,
+              segments: [{ type: "text" as const, content: event.text }],
+              agentId: event.agentId,
+              senderAgentId: event.agentId,
+            },
+          ]);
+        }
+        return;
+      }
+
       if (event.type === "progress") {
         activeGroupMembersRef.current.add(event.agentId);
+        // Assign a new bubble ID if there is no active one for this agent.
+        // This ensures a second response creates a fresh bubble below the first.
+        if (!activePoolMsgIdsRef.current.has(event.agentId)) {
+          activePoolMsgIdsRef.current.set(
+            event.agentId,
+            `pool-${event.agentId}-${crypto.randomUUID()}`,
+          );
+        }
       } else if (event.type === "done" || event.type === "error") {
         activeGroupMembersRef.current.delete(event.agentId);
         recomputeLoading();
       }
 
-      const agentMsgId = `pool-${event.agentId}`;
+      const agentMsgId = activePoolMsgIdsRef.current.get(event.agentId) ?? `pool-${event.agentId}`;
       const isDone = event.type === "done";
-      setMessages((prev) => {
-        const existing = prev.findIndex((m) => m.id === agentMsgId);
-        if (existing !== -1) {
-          return prev.map((m) =>
-            m.id !== agentMsgId
-              ? m
-              : {
-                  ...m,
-                  isLoading: !isDone,
-                  segments: [{ type: "text" as const, content: event.text }],
-                },
-          );
-        }
-        return [
-          ...prev,
-          {
-            id: agentMsgId,
-            role: "assistant" as const,
-            segments: [{ type: "text" as const, content: event.text }],
-            isLoading: !isDone,
-            agentId: event.agentId,
-          },
-        ];
-      });
+
+      if (event.text) {
+        // Update or create the bubble with the new text content.
+        setMessages((prev) => {
+          const existing = prev.findIndex((m) => m.id === agentMsgId);
+          if (existing !== -1) {
+            return prev.map((m) =>
+              m.id !== agentMsgId
+                ? m
+                : {
+                    ...m,
+                    isLoading: !isDone,
+                    segments: [{ type: "text" as const, content: event.text }],
+                  },
+            );
+          }
+          return [
+            ...prev,
+            {
+              id: agentMsgId,
+              role: "assistant" as const,
+              segments: [{ type: "text" as const, content: event.text }],
+              isLoading: !isDone,
+              agentId: event.agentId,
+            },
+          ];
+        });
+      } else if (isDone) {
+        // done with no text: mark the existing bubble done without changing its content.
+        // This happens when the agent completed via a handoff with no post-handoff text.
+        setMessages((prev) =>
+          prev.map((m) => (m.id === agentMsgId ? { ...m, isLoading: false } : m)),
+        );
+      }
+
+      // Clear active bubble ID after done/error so the next progress for this
+      // agent starts a new bubble instead of updating this one.
+      if (isDone || event.type === "error") {
+        activePoolMsgIdsRef.current.delete(event.agentId);
+      }
     };
 
     const subscribeGroupStream = (groupContextId: string) => {
@@ -329,6 +409,9 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
             subscribedContextId = null;
             activeGroupMembersRef.current.clear();
             recomputeLoading();
+            // Reload persisted messages now that the stream has completed
+            // and setGroupMessage will have been written to DB.
+            if (!cancelled) loadHistory();
           }
         }
       })();
@@ -360,7 +443,7 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     };
     // memberAgentIds and groupName are stable for the lifetime of the group view
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -433,34 +516,9 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
   }, []);
 
   // Load completed group message history on mount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    let cancelled = false;
-    if (memberAgentIds.length > 0) {
-      const agentIds = memberAgentIds.join(",");
-      void (async () => {
-        const res = await fetch(`/api/groups/messages?agentIds=${encodeURIComponent(agentIds)}`);
-        if (!res.ok || cancelled) return;
-        const raw: unknown = await res.json();
-        if (!Array.isArray(raw) || raw.length === 0 || cancelled) return;
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        const history = raw as { id: string; agentId: string; groupMessage: string }[];
-        const msgs: ChatMessage[] = history.map(({ id, agentId, groupMessage }) => ({
-          id,
-          role: "assistant" as const,
-          segments: [{ type: "text" as const, content: groupMessage }],
-          agentId,
-        }));
-        setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const newMsgs = msgs.filter((m) => !existingIds.has(m.id));
-          return [...newMsgs, ...prev];
-        });
-      })();
-    }
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadHistory();
   }, []);
 
   const clearMessages = useCallback(() => setMessages([]), []);

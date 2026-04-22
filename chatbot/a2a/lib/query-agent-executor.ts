@@ -226,7 +226,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
-                  append: buildSubAgentPrompt(this.def),
+                  append: buildSubAgentPrompt(this.def, !!groupOverrides),
                 },
                 additionalDirectories,
                 allowedTools: [
@@ -245,6 +245,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                   this.def.displayName,
                   agentSettings.notifications,
                   { ...process.env, ...agentConfig.extraEnv },
+                  !!groupOverrides,
                 ),
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",

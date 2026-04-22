@@ -139,6 +139,48 @@ async function* a2aEvents(...events: object[]): AsyncGenerator<A2AStreamEvent, v
 }
 
 describe("collectStreamResult", () => {
+  it("excludes label artifact values from output", async () => {
+    const { result } = await collectStreamResult(
+      a2aEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "toolu_abc123" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "tool-call", parts: [{ kind: "text", text: "ToolSearch" }] },
+        },
+        {
+          kind: "artifact-update",
+          artifact: {
+            name: "label",
+            parts: [{ kind: "text", text: "ToolSearch: select:mcp__agents__start_pixelpaw_qa" }],
+          },
+        },
+        {
+          kind: "artifact-update",
+          artifact: {
+            name: "final-output",
+            parts: [{ kind: "text", text: "Here is Taylor's QA analysis" }],
+          },
+        },
+      ),
+    );
+    expect(result.output).not.toContain("ToolSearch");
+    expect(result.output).not.toContain("mcp__agents__start_pixelpaw_qa");
+    expect(result.output).toBe("Here is Taylor's QA analysis");
+  });
+
   it("excludes tool-call artifact values from output", async () => {
     const { result } = await collectStreamResult(
       a2aEvents(

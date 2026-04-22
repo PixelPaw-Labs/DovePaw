@@ -18,6 +18,9 @@ import {
   startChatToToolName,
   startReviewWithToolName,
   startEscalateToToolName,
+  awaitChatToToolName,
+  awaitReviewWithToolName,
+  awaitEscalateToToolName,
 } from "@/lib/agent-tools";
 import { buildAgentHooks } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
@@ -139,20 +142,22 @@ function makeReflectionMatcher(matcher: string, reflectionPrompt: string): HookC
   };
 }
 
-const chatToReflectionMatcher = makeReflectionMatcher(
-  `mcp__agents__${startChatToToolName(".*")}`,
-  buildReflectionPrompt(HANDOFF_PATTERNS()),
-);
-
-const reviewReflectionMatcher = makeReflectionMatcher(
-  `mcp__agents__${startReviewWithToolName(".*")}`,
-  buildReflectionPrompt(REVIEW_PATTERNS()),
-);
-
-const escalateReflectionMatcher = makeReflectionMatcher(
-  `mcp__agents__${startEscalateToToolName(".*")}`,
-  buildReflectionPrompt(ESCALATE_PATTERNS()),
-);
+function buildReflectionMatchers(): HookCallbackMatcher[] {
+  return [
+    makeReflectionMatcher(
+      `mcp__agents__${startChatToToolName(".*")}`,
+      buildReflectionPrompt(HANDOFF_PATTERNS()),
+    ),
+    makeReflectionMatcher(
+      `mcp__agents__${startReviewWithToolName(".*")}`,
+      buildReflectionPrompt(REVIEW_PATTERNS()),
+    ),
+    makeReflectionMatcher(
+      `mcp__agents__${startEscalateToToolName(".*")}`,
+      buildReflectionPrompt(ESCALATE_PATTERNS()),
+    ),
+  ];
+}
 
 // ─── Stop hook: handoff consideration ────────────────────────────────────────
 
@@ -177,6 +182,35 @@ If no: stop immediately without replying.
 </reminder>`;
 }
 
+// ─── Group chat silence hook ──────────────────────────────────────────────────
+
+// Fires after any handoff start or await tool in group mode.
+// Prevents the agent from narrating between tool calls (e.g. "I've sent this to Agent B…").
+const GROUP_HANDOFF_MATCHER = [
+  `mcp__agents__${startChatToToolName(".*")}`,
+  `mcp__agents__${startReviewWithToolName(".*")}`,
+  `mcp__agents__${startEscalateToToolName(".*")}`,
+  `mcp__agents__${awaitChatToToolName(".*")}`,
+  `mcp__agents__${awaitReviewWithToolName(".*")}`,
+  `mcp__agents__${awaitEscalateToToolName(".*")}`,
+].join("|");
+
+const GROUP_SILENCE_REMINDER = `<reminder>
+Do NOT output any text or narration between tool calls. 
+Proceed directly to the next tool call. 
+Only deliver your response when you have fully completed your task with concrete results to share.
+</reminder>`;
+
+const groupHandoffSilenceHook: HookCallbackMatcher = {
+  matcher: GROUP_HANDOFF_MATCHER,
+  hooks: [
+    async (input) => {
+      if (input.hook_event_name !== "PostToolUse") return { continue: true };
+      return { decision: "block", reason: GROUP_SILENCE_REMINDER };
+    },
+  ],
+};
+
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
 /** Hooks for the QueryAgentExecutor sub-agent query(). */
@@ -189,6 +223,7 @@ export function buildSubAgentHooks(
   agentDisplayName?: string,
   notifications?: AgentNotificationConfig,
   env?: Record<string, string | undefined>,
+  isGroupMode?: boolean,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -223,11 +258,13 @@ export function buildSubAgentHooks(
     PreToolUse: [
       ...(base.PreToolUse ?? []),
       ...(notifHooks.PreToolUse ?? []),
-      chatToReflectionMatcher,
-      reviewReflectionMatcher,
-      escalateReflectionMatcher,
+      ...buildReflectionMatchers(),
     ],
-    PostToolUse: [...(base.PostToolUse ?? []), ...(notifHooks.PostToolUse ?? [])],
+    PostToolUse: [
+      ...(base.PostToolUse ?? []),
+      ...(notifHooks.PostToolUse ?? []),
+      ...(isGroupMode ? [groupHandoffSilenceHook] : []),
+    ],
     ...(hasAgentLinks && {
       Stop: [...(base.Stop ?? []), handoffConsiderationStop],
     }),

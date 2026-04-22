@@ -16,14 +16,23 @@
  */
 
 import { createServer } from "node:net";
+import { setMaxListeners } from "node:events";
 import { z } from "zod";
 import { consola } from "consola";
 import express from "express";
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import type { AgentCard } from "@a2a-js/sdk";
-import type { AgentExecutor } from "@a2a-js/sdk/server";
+import type {
+  AgentExecutor,
+  ExecutionEventBusManager,
+  ExecutionEventBus,
+} from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
-import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
+import {
+  DefaultRequestHandler,
+  InMemoryTaskStore,
+  DefaultExecutionEventBusManager,
+} from "@a2a-js/sdk/server";
 import {
   agentCardHandler,
   jsonRpcHandler,
@@ -34,6 +43,31 @@ import { QueryAgentExecutor } from "./query-agent-executor";
 export { portsManifestSchema, writePortsManifest, readPortsManifest } from "./ports-manifest";
 export type { PortsManifest } from "./ports-manifest";
 import { SessionManager } from "@/lib/session-manager";
+
+// ─── Event bus manager ────────────────────────────────────────────────────────
+
+// DefaultExecutionEventBus extends EventTarget, which Node.js caps at 10 listeners.
+// With many concurrent SSE clients (group mode, multiple tabs), that limit is hit.
+// This wrapper raises it to Infinity on each newly created bus.
+class UnboundedEventBusManager implements ExecutionEventBusManager {
+  private readonly inner = new DefaultExecutionEventBusManager();
+
+  createOrGetByTaskId(taskId: string): ExecutionEventBus {
+    const bus = this.inner.createOrGetByTaskId(taskId);
+    if (bus instanceof EventTarget) {
+      setMaxListeners(Infinity, bus);
+    }
+    return bus;
+  }
+
+  getByTaskId(taskId: string): ExecutionEventBus | undefined {
+    return this.inner.getByTaskId(taskId);
+  }
+
+  cleanupByTaskId(taskId: string): void {
+    this.inner.cleanupByTaskId(taskId);
+  }
+}
 
 // ─── Port utilities ───────────────────────────────────────────────────────────
 
@@ -77,7 +111,12 @@ export function createAgentServer(
     ],
   };
 
-  const handler = new DefaultRequestHandler(card, new InMemoryTaskStore(), executor);
+  const handler = new DefaultRequestHandler(
+    card,
+    new InMemoryTaskStore(),
+    executor,
+    new UnboundedEventBusManager(),
+  );
   const app = express();
 
   app.use(`/${AGENT_CARD_PATH}`, agentCardHandler({ agentCardProvider: handler }));
