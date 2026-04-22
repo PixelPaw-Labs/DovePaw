@@ -425,6 +425,27 @@ describe("A2AQueryDispatcher", () => {
       expect(calls[2][1]).toMatchObject({ text: "abc" });
     });
 
+    it("emits group_member with isSender:true when handoff tool input contains instruction", () => {
+      const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
+        groupContextId: "grp-1",
+        agentName: "agent-a",
+      });
+      dispatcher.onToolCall("start_chat_to_agent_b");
+      dispatcher.onToolInput(JSON.stringify({ instruction: "Morgan, I need you to review X." }));
+      const groupCalls = vi.mocked(relaySessionEvent).mock.calls.filter(([sid]) => sid === "grp-1");
+      const senderCall = groupCalls.find(
+        ([, e]) => (e as { isSender?: boolean }).isSender === true,
+      );
+      expect(senderCall).toBeDefined();
+      expect(senderCall![1]).toMatchObject({
+        type: "group_member",
+        agentId: "agent-a",
+        text: "Morgan, I need you to review X.",
+        done: true,
+        isSender: true,
+      });
+    });
+
     it("suppresses group relay after a handoff tool call", () => {
       const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
         groupContextId: "grp-1",

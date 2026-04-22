@@ -504,6 +504,7 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
               agentId: this.groupRelay.agentName,
               text: instruction,
               done: true,
+              isSender: true,
             },
             this.groupRelay.groupContextId,
           );

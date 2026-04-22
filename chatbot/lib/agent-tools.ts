@@ -428,7 +428,8 @@ ${HANDOFF_PATTERNS(displayName)}`,
         .string()
         .describe(
           `The task or findings to hand off to ${displayName}. Be specific — include relevant context and data. ` +
-            `Write in first person ("I have done X, I need Y") — never refer to yourself by name or in third person, ` +
+            `Open by addressing ${displayName} by name (e.g. "${displayName}, I have done X and need Y"). ` +
+            `Write in first person — never refer to yourself by name or in third person, ` +
             `because ${displayName} receives this as a direct message from you, not a report about you. ` +
             `Do not prescribe how ${displayName} should respond or instruct them on their style — that is their decision, not yours.`,
         ),
@@ -513,7 +514,8 @@ export function makeStartReviewTool(
         .string()
         .describe(
           `Your review request — describe what you have done and what you need reviewed. ` +
-            `Write in first person ("I have completed X, please review Y") — the reviewer reads this as your direct submission, not a third-party description. ` +
+            `Open by addressing ${displayName} by name (e.g. "${displayName}, I have completed X, please review Y"). ` +
+            `Write in first person — the reviewer reads this as your direct submission, not a third-party description. ` +
             `Must be complete, not a draft.`,
         ),
       context: z.string().optional().describe("Additional context the reviewer needs."),
@@ -629,8 +631,8 @@ export function makeStartEscalateTool(
         .string()
         .describe(
           `The specific decision or problem you cannot resolve alone. ` +
-            `Write in first person from your own perspective ("I cannot decide X because Y") — ` +
-            `not your own name, not a third-party description. The receiving agent needs to understand your situation, not read a report about you.`,
+            `Open by addressing ${displayName} by name (e.g. "${displayName}, I cannot decide X because Y"). ` +
+            `Write in first person from your own perspective — not a third-party description. The receiving agent needs to understand your situation, not read a report about you.`,
         ),
       context: z
         .string()
