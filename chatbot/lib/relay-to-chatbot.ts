@@ -16,15 +16,17 @@ const queues = new Map<string, Promise<void>>();
 export function relaySessionEvent(sessionId: string, event: Record<string, unknown>): void {
   const port = process.env.DOVEPAW_PORT ?? "7473";
   const prev = queues.get(sessionId) ?? Promise.resolve();
-  const next = prev.then(() =>
-    fetch(`http://127.0.0.1:${port}/api/internal/session-event`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sessionId, event }),
-    }).catch((err: unknown) => {
+  const next: Promise<void> = prev.then(async () => {
+    try {
+      await fetch(`http://127.0.0.1:${port}/api/internal/session-event`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, event }),
+      });
+    } catch (err: unknown) {
       consola.warn("relay-to-chatbot: failed to relay session event", err);
-    }),
-  );
+    }
+  });
   queues.set(sessionId, next);
   // Clean up once this batch is the last one (no newer events queued behind it).
   void next.then(() => {

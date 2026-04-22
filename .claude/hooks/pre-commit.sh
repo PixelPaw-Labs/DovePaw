@@ -53,6 +53,12 @@ if [ -n "$STAGED_TS" ]; then
   TEST_PID=$!
 fi
 
+TSC_PID=""
+if [ -n "$STAGED_TS" ]; then
+  (npx tsc --noEmit >"$TMP/tsc.out" 2>&1) &
+  TSC_PID=$!
+fi
+
 # --- Wait for all jobs ---
 FMT_EXIT=0
 if [ -n "$FMT_PID" ]; then
@@ -67,6 +73,11 @@ fi
 TEST_EXIT=0
 if [ -n "$TEST_PID" ]; then
   wait "$TEST_PID" || TEST_EXIT=$?
+fi
+
+TSC_EXIT=0
+if [ -n "$TSC_PID" ]; then
+  wait "$TSC_PID" || TSC_EXIT=$?
 fi
 
 # --- Collect errors ---
@@ -101,6 +112,15 @@ if [ $TEST_EXIT -ne 0 ]; then
   ERRORS="${ERRORS}Tests failed. Fix before committing.
 
 $(cat "$TMP/test.out")"
+fi
+
+if [ $TSC_EXIT -ne 0 ]; then
+  [ -n "$ERRORS" ] && ERRORS="$ERRORS
+
+"
+  ERRORS="${ERRORS}TypeScript errors found. Fix before committing.
+
+$(cat "$TMP/tsc.out")"
 fi
 
 if [ -n "$PARTIALLY_STAGED" ]; then
