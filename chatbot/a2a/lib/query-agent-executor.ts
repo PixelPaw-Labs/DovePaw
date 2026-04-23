@@ -225,7 +225,7 @@ export class QueryAgentExecutor implements AgentExecutor {
               prompt: instruction || startRunScriptToolName(this.def.manifestKey),
               options: {
                 cwd,
-                env: { ...process.env, ...agentConfig.extraEnv },
+                env: { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
                 ...(defaultModel ? { model: defaultModel } : {}),
                 agent: this.def.displayName,
                 ...(existingState ? { resume: existingState.subagentSessionId } : {}),
@@ -250,7 +250,7 @@ export class QueryAgentExecutor implements AgentExecutor {
                   this.def.manifestKey,
                   this.def.displayName,
                   agentSettings.notifications,
-                  { ...process.env, ...agentConfig.extraEnv },
+                  { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
                   !!groupOverrides,
                 ),
                 abortController: this.abortController ?? undefined,

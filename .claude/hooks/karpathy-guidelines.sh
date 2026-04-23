@@ -3,6 +3,12 @@
 # on every user turn, keeping them adjacent to the user message for maximum recency.
 # sourced from https://github.com/forrestchang/andrej-karpathy-skills
 
+# Skip when running inside a DovePaw agent session (Dove, task agents, etc.).
+# DOVEPAW_SUBAGENT=1 is set by both chat/route.ts and query-agent-executor.ts.
+if [ "${DOVEPAW_SUBAGENT}" = "1" ]; then
+  exit 0
+fi
+
 python3 -c "
 import json
 

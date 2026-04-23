@@ -244,6 +244,7 @@ export async function POST(request: Request) {
                 env: {
                   ...process.env, // Pass through all env vars so tools can read their configs
                   ...resolveSettingsEnv(settings), // Global settings env vars override process.env
+                  DOVEPAW_SUBAGENT: "1",
                 },
                 ...(defaultModel ? { model: defaultModel } : {}),
                 promptSuggestions: true,

@@ -210,6 +210,14 @@ describe("POST /api/chat — settings env var wiring", () => {
     if (original === undefined) delete process.env["PROCESS_ONLY_KEY"];
     else process.env["PROCESS_ONLY_KEY"] = original;
   });
+
+  it("sets DOVEPAW_SUBAGENT=1 so shell hooks skip inside agent sessions", async () => {
+    const response = await POST(makeRequest({ message: "hello", sessionId: null }));
+    await drainStream(response);
+
+    const callArg = vi.mocked(query).mock.calls[0][0];
+    expect(callArg.options?.env?.["DOVEPAW_SUBAGENT"]).toBe("1");
+  });
 });
 
 // ─── DELETE /api/chat ─────────────────────────────────────────────────────────
