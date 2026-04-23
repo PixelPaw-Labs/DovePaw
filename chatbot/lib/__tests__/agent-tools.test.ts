@@ -41,6 +41,8 @@ vi.mock("@/a2a/lib/workspace", () => ({
   recloneReposIntoWorkspace: vi.fn(),
 }));
 
+vi.mock("@/lib/relay-to-chatbot", () => ({ relaySessionEvent: vi.fn() }));
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import {
@@ -60,6 +62,7 @@ import {
   startEscalateToToolName,
   awaitEscalateToToolName,
   withStartReminder,
+  justificationField,
 } from "@/lib/agent-tools";
 import type { CollectedStream } from "@/lib/a2a-client";
 import {
@@ -75,6 +78,7 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
+import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -437,6 +441,10 @@ describe("tool name helpers", () => {
       'do the thing\n<reminder>Must call "start_fixer" tool</reminder>',
     );
   });
+
+  it("justificationField is required (not optional)", () => {
+    expect(() => justificationField.parse(undefined)).toThrow();
+  });
 });
 
 // ─── makeStartChatToTool — groupMeta propagation ──────────────────────────────
@@ -491,6 +499,43 @@ describe("makeStartChatToTool — groupMeta", () => {
       undefined,
       undefined,
       undefined,
+    );
+  });
+
+  it("emits isSender bubble via relaySessionEvent when groupMeta present", async () => {
+    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartChatToTool(
+      AGENT,
+      undefined,
+      undefined,
+      undefined,
+      "caller-agent",
+      groupMeta,
+    ) as any;
+    await handler({ instruction: "Hey, can you help?" });
+    expect(relaySessionEvent).toHaveBeenCalledWith("gc-1", {
+      type: "group_member",
+      agentId: "caller-agent",
+      text: "Hey, can you help?",
+      done: true,
+      isSender: true,
+    });
+  });
+
+  it("does not emit isSender when groupMeta is absent", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartChatToTool(
+      AGENT,
+      undefined,
+      undefined,
+      undefined,
+      "caller-agent",
+    ) as any;
+    await handler({ instruction: "Hey, can you help?" });
+    expect(relaySessionEvent).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ isSender: true }),
     );
   });
 });
@@ -631,11 +676,18 @@ describe("makeStartEscalateTool", () => {
     vi.mocked(streamCollect).mockImplementation(async function* () {});
   });
 
+  const JUSTIFICATION = {
+    impact: "high",
+    pattern: "Blocked by gap",
+    handoff: "Cannot decide DB schema.",
+    confidence: 0.9,
+  };
+
   it("forwards groupMeta as extraMetadata when provided", async () => {
     const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartEscalateTool(AGENT, undefined, undefined, undefined, groupMeta) as any;
-    await handler({ blocker: "stuck", context: "tried X" });
+    await handler({ blocker: "stuck", context: "tried X", justification: JUSTIFICATION });
     expect(startAgentStream).toHaveBeenCalledWith(
       9999,
       expect.any(String),
@@ -649,7 +701,7 @@ describe("makeStartEscalateTool", () => {
   it("passes undefined extraMetadata when groupMeta is not provided", async () => {
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartEscalateTool(AGENT) as any;
-    await handler({ blocker: "stuck", context: "tried X" });
+    await handler({ blocker: "stuck", context: "tried X", justification: JUSTIFICATION });
     expect(startAgentStream).toHaveBeenCalledWith(
       9999,
       expect.any(String),
@@ -663,7 +715,11 @@ describe("makeStartEscalateTool", () => {
   it("returns taskId in structuredContent", async () => {
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartEscalateTool(AGENT) as any;
-    const result = (await handler({ blocker: "stuck", context: "tried X" })) as any;
+    const result = (await handler({
+      blocker: "stuck",
+      context: "tried X",
+      justification: JUSTIFICATION,
+    })) as any;
     expect(result.structuredContent.taskId).toBe("task-123");
   });
 });

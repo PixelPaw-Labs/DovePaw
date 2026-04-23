@@ -54,7 +54,6 @@ import { isHandoffToolName } from "@/lib/agent-tools";
 import { upsertSession } from "@/lib/db";
 import { getSessionCurrentSeq, publishSessionEvent } from "@/lib/session-events";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
-import { consola } from "consola";
 
 // ─── MessageAccumulator ───────────────────────────────────────────────────────
 
@@ -387,8 +386,6 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
   // Any text after that point is either handoff narration or declined-handoff reasoning —
   // neither belongs in the group pool stream.
   private handoffAttempted = false;
-  // Tracks the most recent handoff tool name so onToolInput can emit the instruction.
-  private pendingHandoffTool: string | null = null;
 
   /**
    * @param publisher   A2A event bus publisher (required)
@@ -472,8 +469,6 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
       // Mark handoff attempts so any following text (narration or declined-handoff
       // reasoning) is suppressed from the group pool stream.
       this.handoffAttempted ||= isHandoffToolName(name);
-      // Track handoff tool so onToolInput can emit the instruction as a group message.
-      if (isHandoffToolName(name)) this.pendingHandoffTool = name;
     }
     this.emit({ type: "tool_call", name });
     this.emit({ type: "progress", result: { output: "", progress: [entry] } });
@@ -483,42 +478,6 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.publisher.send(content, ARTIFACT.TOOL_INPUT);
     this.accumulator.onToolInput(content);
     this.emit({ type: "tool_input", content });
-    // In group mode, when this input belongs to a handoff tool, emit the instruction
-    // text as the sender agent's final message bubble so the group chat shows what
-    // was handed off (e.g. "Can you review X?" appears as Agent A's message).
-    if (this.groupRelay && this.pendingHandoffTool) {
-      try {
-        const parsed: unknown = JSON.parse(content);
-        let instruction: string | null = null;
-        if (parsed !== null && typeof parsed === "object") {
-          // chat_to uses "instruction", review_with uses "content", escalate_to uses "blocker"
-          if ("instruction" in parsed && typeof parsed.instruction === "string") {
-            instruction = parsed.instruction;
-          } else if ("content" in parsed && typeof parsed.content === "string") {
-            instruction = parsed.content;
-          } else if ("blocker" in parsed && typeof parsed.blocker === "string") {
-            instruction = parsed.blocker;
-          }
-        }
-        // Only emit if there is actual instruction text; otherwise let onFinalOutput
-        // send the terminal done event.
-        if (instruction) {
-          this.emit(
-            {
-              type: "group_member",
-              agentId: this.groupRelay.agentName,
-              text: instruction,
-              done: true,
-              isSender: true,
-            },
-            this.groupRelay.groupContextId,
-          );
-        }
-      } catch (err) {
-        consola.error("group relay: failed to parse tool input", err);
-      }
-      this.pendingHandoffTool = null;
-    }
   }
 
   onFinalOutput(result: string): void {

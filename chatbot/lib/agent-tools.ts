@@ -32,6 +32,25 @@ import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import { relaySessionEvent } from "@/lib/relay-to-chatbot";
+
+/** Emits a sender bubble to the group pool stream when the caller is in group mode. */
+function emitGroupSenderBubble(
+  callerAgentId: string | undefined,
+  groupMeta: Record<string, unknown> | undefined,
+  text: string,
+): void {
+  if (!callerAgentId || !groupMeta) return;
+  const { groupContextId } = groupMeta;
+  if (typeof groupContextId !== "string") return;
+  relaySessionEvent(groupContextId, {
+    type: "group_member",
+    agentId: callerAgentId,
+    text,
+    done: true,
+    isSender: true,
+  });
+}
 
 // ─── Moments writing pattern ──────────────────────────────────────────────────
 
@@ -127,8 +146,7 @@ export const justificationField = z
       .max(1)
       .describe(`Confidence score (0–1). Threshold is impact-gated: ${thresholdClause}.`),
   })
-  .optional()
-  .describe("Required on retry after self-reflection.");
+  .describe("Required on every delegation call. Fill this out before handing off.");
 
 // ─── Management tool names ─────────────────────────────────────────────────────
 
@@ -485,6 +503,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
       justification: justificationField,
     },
     async ({ instruction, contextId }) => {
+      emitGroupSenderBubble(callerAgentId, groupMeta, instruction);
       const replyHint = callerDisplayName
         ? `<meta>Open your response by addressing the sender as @${callerDisplayName}.</meta>\n`
         : "";
@@ -574,6 +593,7 @@ export function makeStartReviewTool(
       justification: justificationField,
     },
     async ({ content, context }) => {
+      emitGroupSenderBubble(callerAgentId, groupMeta, content);
       const instruction = [
         `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
         `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
@@ -700,8 +720,9 @@ export function makeStartEscalateTool(
       justification: justificationField,
     },
     async ({ blocker, context, justification }) => {
+      emitGroupSenderBubble(callerAgentId, groupMeta, blocker);
       const instruction = [
-        `ESCALATION — confidence: ${justification?.confidence ?? "?"}/1\n`,
+        `ESCALATION — confidence: ${justification.confidence}/1\n`,
         ...(callerDisplayName
           ? [`Open your response by addressing the sender as @${callerDisplayName}.`]
           : []),
