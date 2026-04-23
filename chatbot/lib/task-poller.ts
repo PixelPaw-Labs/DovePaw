@@ -15,8 +15,9 @@ import {
   createAgentClient,
   startAgentStream,
   subscribeTaskStream,
-  collectStreamResult,
+  streamCollect,
   formatAgentStreamContext,
+  noAgentOutput,
 } from "@/lib/a2a-client";
 import type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 import type { PendingRegistry } from "@/lib/pending-registry";
@@ -113,15 +114,11 @@ export class TaskPoller {
     instruction: string,
     {
       contextId,
-      onProgress,
-      onArtifact,
       backgroundTasks,
       senderAgentId,
       extraMetadata,
     }: {
       contextId?: string;
-      onProgress?: (snapshot: StreamedResult) => void;
-      onArtifact?: (name: string, text: string) => void;
       backgroundTasks?: Promise<CollectedStream>[];
       senderAgentId?: string;
       extraMetadata?: Record<string, unknown>;
@@ -152,8 +149,19 @@ export class TaskPoller {
       const { registry, awaitTool } = this;
       if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
 
-      // Always drain to avoid stalling the EventQueue; forward progress if requested.
-      const drainTask = collectStreamResult(stream, onProgress, onArtifact);
+      // Always drain to avoid stalling the EventQueue.
+      // Returns CollectedStream so callers that track backgroundTasks can read the final output.
+      const drainTask = (async (): Promise<CollectedStream> => {
+        let out: CollectedStream = {
+          result: { output: noAgentOutput(this.agentName), progress: [] },
+        };
+        for await (const event of streamCollect(stream)) {
+          if (event.kind === "snapshot") {
+            out = { taskId: event.taskId, result: event.result };
+          }
+        }
+        return out;
+      })();
       if (backgroundTasks) {
         backgroundTasks.push(drainTask); // Promise.allSettled at call site absorbs rejections
       } else {
@@ -188,14 +196,7 @@ export class TaskPoller {
    * When registry + awaitTool are provided, re-registers on still_running and
    * resolves on completion (or TaskNotFoundError).
    */
-  async poll(
-    taskId: string,
-    {
-      onProgress,
-    }: {
-      onProgress?: (snapshot: StreamedResult) => void;
-    } = {},
-  ): Promise<PollToolResult> {
+  async poll(taskId: string): Promise<PollToolResult> {
     const { registry, awaitTool } = this;
     const port = resolveAgentPort(this.manifestKey);
     if (!port) {
@@ -207,30 +208,37 @@ export class TaskPoller {
 
       // Always collect via resubscribeTask. For a still-running task this streams
       // live events; for an already-completed task the A2A SDK yields only the Task
-      // snapshot — collectStreamResult extracts the output from task.artifacts, which
+      // snapshot — streamCollect extracts the output from task.artifacts, which
       // ResultManager populated during execution.
       let latestSnapshot: StreamedResult | undefined;
+      let out: CollectedStream = {
+        result: { output: noAgentOutput(this.agentName), progress: [] },
+      };
+
+      const subscribeGen = subscribeTaskStream(client, taskId, this.signal, this.agentName);
       const timeoutAc = new AbortController();
       const timeoutResult = Symbol("timeout");
       const timer = setTimeout(() => timeoutAc.abort(), this.timeoutMs);
+
+      const streamDone = (async () => {
+        for await (const event of subscribeGen) {
+          if (event.kind === "snapshot") {
+            latestSnapshot = event.result;
+            out = { taskId: event.taskId, result: event.result };
+          }
+        }
+        return out;
+      })().finally(() => clearTimeout(timer));
+
       const result: CollectedStream | typeof timeoutResult = await Promise.race([
-        subscribeTaskStream(
-          client,
-          taskId,
-          this.signal,
-          (snapshot) => {
-            latestSnapshot = snapshot;
-            onProgress?.(snapshot);
-          },
-          undefined,
-          this.agentName,
-        ).finally(() => clearTimeout(timer)),
+        streamDone,
         new Promise<typeof timeoutResult>((resolve) =>
           timeoutAc.signal.addEventListener("abort", () => resolve(timeoutResult), { once: true }),
         ),
       ]);
 
       if (result === timeoutResult) {
+        void subscribeGen.return(undefined); // stop generator and clean up
         // Re-affirm task is still in-flight — idempotent Map.set, semantically explicit.
         if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
         const progressLines: string[] = [`${this.displayName} is still working...`];

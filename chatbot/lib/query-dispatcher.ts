@@ -458,10 +458,10 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
 
   onToolCall(name: string, toolUseId?: string): void {
     const key = toolUseId ?? name;
-    // publishStatusToUI (not send) so a workflow ProgressEntry node is created.
-    // Use toolUseId as the key — onTaskProgress uses the same id, so the browser's
-    // mergeProgressEntries can add the description label to this node.
-    // Include label: name so the node title shows the tool name immediately — matching
+    // publishStatusToUI (not send) so a ProgressEntry is created for DB persistence.
+    // Use toolUseId as the key — onTaskProgress uses the same id so the accumulator
+    // can merge the description label into this entry.
+    // Include label: name so the entry title shows the tool name immediately — matching
     // SseQueryDispatcher behaviour. Without it the title falls back to the toolUseId UUID
     // because onTaskProgress is never called for background inner-agent tool calls.
     this.publisher.publishStatusToUI(key, { [ARTIFACT.TOOL_CALL]: name, label: name });

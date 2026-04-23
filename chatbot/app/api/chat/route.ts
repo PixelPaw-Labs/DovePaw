@@ -29,9 +29,7 @@ import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
-import { makeProgressSender } from "@/lib/chat-sse";
-import type { CollectedStream, StreamedResult } from "@/lib/query-tools";
-import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
+import type { CollectedStream } from "@/lib/query-tools";
 import { createSseResponse } from "@/lib/sse-response";
 import {
   makeAskTool,
@@ -51,7 +49,7 @@ import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession, closeStaleSessions, setSessionStatus, upsertSession } from "@/lib/db";
+import { deleteSession, closeStaleSessions, setSessionStatus } from "@/lib/db";
 import { SessionManager } from "@/lib/session-manager";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
 import { clearSessionBuffer } from "@/lib/session-events";
@@ -171,9 +169,6 @@ export async function POST(request: Request) {
     const doveRegistry = new PendingRegistry();
     const agents = await readAgentsConfig();
 
-    // Accumulates inner-agent progress for the final SessionManager.save.
-    const innerProgress: ProgressEntry[] = [];
-
     // On subsequent turns, load the persisted context map for this Dove session.
     // On the first turn (sessionId is null), start fresh — persist() will save it after.
     const ctxMap: Map<string, string> = sessionId
@@ -186,25 +181,6 @@ export async function POST(request: Request) {
     // resolved when the "session" SSE event fires (dispatcher buffers and flushes).
     const dispatcher = new SseQueryDispatcher(send, sessionId ?? undefined);
     const userMsgId = randomUUID();
-
-    const onInnerProgress = (result: StreamedResult): void => {
-      for (const entry of result.progress) {
-        upsertProgressEntry(innerProgress, entry.message, entry.artifacts);
-      }
-      // Only write to DB while the session is still running — don't resurrect
-      // a session that was stopped/aborted while background tasks wind down.
-      if (registeredSessionId && sessionRunner.isRunning(registeredSessionId)) {
-        upsertSession({
-          id: registeredSessionId,
-          agentId: "dove",
-          startedAt: new Date().toISOString(),
-          label: message.slice(0, 60) || "Session",
-          messages: [],
-          progress: innerProgress,
-          status: "running",
-        });
-      }
-    };
 
     const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
     const groupInitTools = eligibleGroups.map((group) =>
@@ -219,38 +195,20 @@ export async function POST(request: Request) {
         group,
         memberDefs,
         subprocessController.signal,
-        makeProgressSender(dispatcher.publish, onInnerProgress),
         backgroundTasks,
         doveRegistry,
       );
     });
     const groupAwaitTools = eligibleGroups.map((group) => {
       const memberDefs = agents.filter((a) => group.members.includes(a.name));
-      return makeAwaitGroupTool(
-        group,
-        memberDefs,
-        subprocessController.signal,
-        makeProgressSender(dispatcher.publish, onInnerProgress),
-        doveRegistry,
-      );
+      return makeAwaitGroupTool(group, memberDefs, subprocessController.signal, doveRegistry);
     });
 
     const tools = [
       ...agents.flatMap((agent) => [
         makeAskTool(agent, subprocessController.signal, ctxMap),
-        makeStartTool(
-          agent,
-          subprocessController.signal,
-          makeProgressSender(dispatcher.publish, onInnerProgress),
-          backgroundTasks,
-          doveRegistry,
-        ),
-        makeAwaitTool(
-          agent,
-          subprocessController.signal,
-          makeProgressSender(dispatcher.publish, onInnerProgress),
-          doveRegistry,
-        ),
+        makeStartTool(agent, subprocessController.signal, backgroundTasks, doveRegistry),
+        makeAwaitTool(agent, subprocessController.signal, doveRegistry),
       ]),
       ...groupInitTools,
       ...groupStartTools,

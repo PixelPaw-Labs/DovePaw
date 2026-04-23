@@ -15,6 +15,7 @@ vi.mock("@/a2a/lib/ports-manifest", () => ({
 import { ClientFactory } from "@a2a-js/sdk/client";
 import {
   startAgentStream,
+  streamCollect,
   collectStreamResult,
   extractArtifactResult,
   formatAgentStreamContext,
@@ -241,8 +242,7 @@ describe("collectStreamResult", () => {
     expect(result.output).toBe("done");
   });
 
-  it("passes thinking artifacts to onArtifact but excludes them from output", async () => {
-    const onArtifact = vi.fn();
+  it("thinking artifact value is excluded from output", async () => {
     const { result } = await collectStreamResult(
       a2aEvents(
         {
@@ -268,12 +268,97 @@ describe("collectStreamResult", () => {
           artifact: { name: "final-output", parts: [{ kind: "text", text: "response" }] },
         },
       ),
-      undefined,
-      onArtifact,
     );
-    expect(onArtifact).toHaveBeenCalledWith("thinking", "inner thoughts");
     expect(result.output).toBe("response");
     expect(result.output).not.toContain("inner thoughts");
+  });
+});
+
+// ─── streamCollect ────────────────────────────────────────────────────────────
+
+describe("streamCollect", () => {
+  it("yields chunk events for every artifact text part", async () => {
+    const chunks: { name: string; text: string }[] = [];
+    for await (const event of streamCollect(
+      a2aEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "step" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "thinking", parts: [{ kind: "text", text: "inner thoughts" }] },
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "response" }] },
+        },
+      ),
+    )) {
+      if (event.kind === "chunk") chunks.push({ name: event.name, text: event.text });
+    }
+    expect(chunks).toContainEqual({ name: "thinking", text: "inner thoughts" });
+    expect(chunks).toContainEqual({ name: "final-output", text: "response" });
+  });
+
+  it("yields snapshot events after each status-update and artifact accumulation", async () => {
+    const snapshots: string[] = [];
+    for await (const event of streamCollect(
+      a2aEvents(
+        {
+          kind: "status-update",
+          status: {
+            state: "working",
+            timestamp: "",
+            message: {
+              kind: "message",
+              messageId: "1",
+              role: "agent",
+              parts: [{ kind: "text", text: "working" }],
+            },
+          },
+          final: false,
+        },
+        {
+          kind: "artifact-update",
+          artifact: { name: "final-output", parts: [{ kind: "text", text: "done" }] },
+        },
+      ),
+    )) {
+      if (event.kind === "snapshot") snapshots.push(event.result.output);
+    }
+    // At least one snapshot should contain the final output
+    expect(snapshots.some((o) => o === "done")).toBe(true);
+  });
+
+  it("always yields a final snapshot even for an empty stream", async () => {
+    const snapshots: unknown[] = [];
+    for await (const event of streamCollect(a2aEvents())) {
+      if (event.kind === "snapshot") snapshots.push(event);
+    }
+    expect(snapshots).toHaveLength(1);
+  });
+
+  it("snapshot carries the taskId from the task event", async () => {
+    makeClientFactory({
+      resubscribeTask: vi.fn().mockReturnValue(asyncEvents({ kind: "task", id: "task-snap-id" })),
+    });
+    const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
+    let lastTaskId: string | undefined;
+    for await (const event of streamCollect(client.resubscribeTask({ id: "task-snap-id" }, {}))) {
+      if (event.kind === "snapshot") lastTaskId = event.taskId;
+    }
+    expect(lastTaskId).toBe("task-snap-id");
   });
 });
 

@@ -311,12 +311,17 @@ ${MOMENTS_PATTERN.split("\n")
         undefined,
         onProgress ? (slug: string) => onProgress(`Cloning`, { repo: slug }) : undefined,
       );
-      // Overwrite REPO_LIST with local paths so the agent script can do file I/O
-      const finalConfig =
-        clonedPaths.length > 0
-          ? { ...config, extraEnv: { ...config.extraEnv, REPO_LIST: clonedPaths.join(",") } }
-          : config;
-      const { runId } = startScript(finalConfig, finalInstruction, signal, onProgress, taskId);
+      // Overwrite REPO_LIST with local paths so the agent script can do file I/O.
+      // Inject DOVEPAW_TASK_ID so the script can POST progress to the A2A server.
+      const finalConfig = {
+        ...config,
+        extraEnv: {
+          ...config.extraEnv,
+          ...(taskId ? { DOVEPAW_TASK_ID: taskId } : {}),
+          ...(clonedPaths.length > 0 ? { REPO_LIST: clonedPaths.join(",") } : {}),
+        },
+      };
+      const { runId } = startScript(finalConfig, finalInstruction, signal, taskId);
       registry?.register({
         awaitTool: awaitRunScriptToolName(agent.manifestKey),
         idKey: "runId",

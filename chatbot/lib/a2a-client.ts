@@ -3,8 +3,9 @@
  *
  *   resolveAgentPort      — port lookup from the ports manifest
  *   createAgentClient     — create A2A Client for a port
- *   subscribeTaskStream   — resubscribe + collect stream → CollectedStream, cancels on abort
- *   collectStreamResult   — consume A2A event stream → CollectedStream
+ *   streamCollect         — async generator: yields chunk + snapshot events from an A2A stream
+ *   subscribeTaskStream   — async generator: resubscribe + yield events, cancels on abort
+ *   collectStreamResult   — thin drain wrapper: consumes streamCollect, returns final CollectedStream
  *   extractArtifactResult — build StreamedResult from terminal task artifacts
  */
 
@@ -50,6 +51,17 @@ export type StreamedResult = {
   finalState?: string;
 };
 
+/**
+ * Event emitted by streamCollect.
+ *
+ *   chunk    — a raw artifact text part (fires for every artifact, including thinking/tool-call)
+ *   snapshot — current StreamedResult after each status or artifact update; also fired once at the
+ *              end so drain callers always receive a final result even for empty streams
+ */
+export type StreamEvent =
+  | { kind: "chunk"; name: string; text: string }
+  | { kind: "snapshot"; taskId?: string; result: StreamedResult };
+
 function getManifestPort(manifest: PortsManifest, key: string): number | undefined {
   if (!Object.prototype.hasOwnProperty.call(manifest, key)) return undefined;
   const val = (manifest as Record<string, unknown>)[key];
@@ -63,52 +75,22 @@ export function resolveAgentPort(manifestKey: string): number | null {
   return getManifestPort(manifest, manifestKey) ?? null;
 }
 
-/**
- * Subscribe to a task's live event stream, forwarding snapshots via onProgress.
- * Aborts the stream and cancels the task when signal fires.
- */
-export function subscribeTaskStream(
-  client: Client,
-  taskId: string,
-  signal: AbortSignal | undefined,
-  onProgress: (result: StreamedResult) => void,
-  onArtifact?: (name: string, text: string) => void,
-  agentName?: string,
-): Promise<CollectedStream> {
-  const ac = new AbortController();
-  signal?.addEventListener(
-    "abort",
-    () => {
-      ac.abort();
-      void client.cancelTask({ id: taskId }).catch(() => {});
-    },
-    { once: true },
-  );
-  return collectStreamResult(
-    client.resubscribeTask({ id: taskId }, { signal: ac.signal }),
-    onProgress,
-    onArtifact,
-    undefined,
-    agentName,
-  );
-}
-
 function accumulate(target: Record<string, string>, name: string, text: string): void {
   target[name] = target[name] ? `${target[name]}\n${text}` : text;
 }
 
 /**
- * Consume an A2A event stream, building a StreamedResult.
- * Calls onSnapshot after each status-update or artifact-update so callers can
- * forward live progress to the UI.
+ * Consume an A2A event stream, yielding StreamEvents.
+ *
+ * Yields `{ kind: "chunk" }` for every artifact text part (including thinking, tool-call, etc.).
+ * Yields `{ kind: "snapshot" }` after each status-update or non-transient artifact-update so
+ * callers can forward live progress to the UI. Always yields a final snapshot before returning,
+ * so drain callers always receive at least one snapshot even for empty streams.
  */
-export async function collectStreamResult(
+export async function* streamCollect(
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
-  onSnapshot?: (result: StreamedResult) => void,
-  onArtifact?: (name: string, text: string) => void,
-  onComplete?: (result: StreamedResult) => void,
   agentName?: string,
-): Promise<CollectedStream> {
+): AsyncGenerator<StreamEvent, void, undefined> {
   let taskId: string | undefined;
   let finalState: string | undefined;
   const progress: ProgressEntry[] = [];
@@ -156,7 +138,7 @@ export async function collectStreamResult(
       const name = event.artifact.name ?? "";
       for (const p of event.artifact.parts) {
         if (p.kind === "text") {
-          onArtifact?.(name, p.text);
+          yield { kind: "chunk", name, text: p.text };
           if (name === ARTIFACT.THINKING) {
             thinkingChunks.push(p.text);
           } else if (name === ARTIFACT.TOOL_CALL) {
@@ -174,7 +156,7 @@ export async function collectStreamResult(
           }
           if (pendingEntry && !(TRANSIENT_ARTIFACT_NAMES as Set<string>).has(name)) {
             accumulate(pendingEntry.artifacts, name, p.text);
-            onSnapshot?.(snapshot());
+            yield { kind: "snapshot", taskId, result: snapshot() };
           }
         }
       }
@@ -199,15 +181,51 @@ export async function collectStreamResult(
             const entry: ProgressEntry = { message: p.text, artifacts: {} };
             progress.push(entry);
             pendingEntry = entry;
-            onSnapshot?.(snapshot());
+            yield { kind: "snapshot", taskId, result: snapshot() };
           }
         }
       }
     }
   }
 
-  onComplete?.(snapshot());
-  return { taskId, result: snapshot() };
+  yield { kind: "snapshot", taskId, result: snapshot() };
+}
+
+/**
+ * Subscribe to a task's live event stream, yielding StreamEvents.
+ * Aborts the stream and cancels the task when signal fires.
+ */
+export async function* subscribeTaskStream(
+  client: Client,
+  taskId: string,
+  signal?: AbortSignal,
+  agentName?: string,
+): AsyncGenerator<StreamEvent, void, undefined> {
+  const ac = new AbortController();
+  signal?.addEventListener(
+    "abort",
+    () => {
+      ac.abort();
+      void client.cancelTask({ id: taskId }).catch(() => {});
+    },
+    { once: true },
+  );
+  yield* streamCollect(client.resubscribeTask({ id: taskId }, { signal: ac.signal }), agentName);
+}
+
+/**
+ * Consume an A2A event stream and return the final CollectedStream.
+ * Thin drain wrapper around streamCollect for callers that only need the terminal result.
+ */
+export async function collectStreamResult(
+  stream: AsyncGenerator<A2AStreamEvent, void, undefined>,
+  agentName?: string,
+): Promise<CollectedStream> {
+  let out: CollectedStream = { result: { output: noAgentOutput(agentName), progress: [] } };
+  for await (const event of streamCollect(stream, agentName)) {
+    if (event.kind === "snapshot") out = { taskId: event.taskId, result: event.result };
+  }
+  return out;
 }
 
 // ─── Stream context formatter ─────────────────────────────────────────────────

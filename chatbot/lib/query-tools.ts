@@ -20,7 +20,7 @@ import { readSettings } from "@@/lib/settings";
 import { readOrCreateGroupConfig } from "@@/lib/group-config";
 import { z } from "zod";
 import { resolveAgentPort, createAgentClient } from "@/lib/a2a-client";
-import type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
+import type { CollectedStream } from "@/lib/a2a-client";
 import {
   TaskPoller,
   noServersMessage,
@@ -48,20 +48,13 @@ export type { TaskStartedWithKeyContent } from "@/lib/task-poller";
  * Structured result collected from a completed A2A task stream.
  * Separates content by type so the UI can render each category appropriately.
  */
-export type { CollectedStream, ProgressEntry, StreamedResult } from "@/lib/a2a-client";
+export type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 
 export type {
   TaskCompletedContent,
   TaskStillRunningContent,
   AwaitToolContent,
 } from "@/lib/task-poller";
-
-/** Shape of an MCP CallToolResult as returned in PostToolUseHookInput.tool_response. */
-export type ToolResponse<T = Record<string, unknown>> = {
-  content?: { type: string; text: string }[];
-  structuredContent?: T;
-  isError?: boolean;
-};
 
 // ─── Agent context store ──────────────────────────────────────────────────────
 
@@ -174,7 +167,6 @@ export function makeAskTool(
 export function makeStartTool(
   agent: AgentDef,
   signal?: AbortSignal,
-  onProgress?: (result: StreamedResult) => void,
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
 ) {
@@ -198,7 +190,6 @@ export function makeStartTool(
         undefined,
         agent.name,
       ).start(withStartReminder(instruction, agent.manifestKey), {
-        onProgress,
         backgroundTasks,
         senderAgentId: "dove",
       });
@@ -214,12 +205,7 @@ export function makeStartTool(
  * { status: "still_running", taskId } payload if it does not — so Dove
  * can call await_* again with the same taskId instead of starting a new task.
  */
-export function makeAwaitTool(
-  agent: AgentDef,
-  signal?: AbortSignal,
-  onProgress?: (result: StreamedResult) => void,
-  registry?: PendingRegistry,
-) {
+export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal, registry?: PendingRegistry) {
   return tool(
     doveAwaitToolName(agent),
     `Await a previously started ${agent.displayName} task. Returns the final result when complete, or { status: "still_running", taskId } if still in progress.`,
@@ -235,7 +221,7 @@ export function makeAwaitTool(
         doveAwaitToolName(agent),
         undefined,
         agent.name,
-      ).poll(taskId, { onProgress });
+      ).poll(taskId);
     },
   );
 }
@@ -328,7 +314,6 @@ export function makeStartGroupTool(
   group: AgentGroup,
   memberDefs: AgentDef[],
   signal?: AbortSignal,
-  onProgress?: (result: StreamedResult) => void,
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
 ) {
@@ -383,7 +368,6 @@ export function makeStartGroupTool(
             undefined,
             memberDef.name,
           ).start(withStartReminder(instruction, memberDef.manifestKey), {
-            onProgress,
             backgroundTasks: memberDrain,
             senderAgentId: "dove",
             extraMetadata: groupMeta,
@@ -435,7 +419,6 @@ export function makeAwaitGroupTool(
   group: AgentGroup,
   memberDefs: AgentDef[],
   signal?: AbortSignal,
-  onProgress?: (result: StreamedResult) => void,
   registry?: PendingRegistry,
 ) {
   return tool(
@@ -460,7 +443,7 @@ export function makeAwaitGroupTool(
             doveAwaitGroupToolName(group.name),
             undefined,
             memberDef?.name,
-          ).poll(taskId, { onProgress });
+          ).poll(taskId);
         }),
       );
 

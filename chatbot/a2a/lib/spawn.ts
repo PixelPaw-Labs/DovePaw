@@ -19,56 +19,12 @@ export type {
 } from "@/lib/script-types";
 import type { ScriptCompletedContent, AwaitScriptContent } from "@/lib/script-types";
 
-/** Sentinel for transient progress messages written by emitProgress(). */
-export const PROGRESS_PREFIX = "__PROGRESS__:";
-/** Sentinel for named artifact content written alongside emitProgress(). */
-export const ARTIFACT_PREFIX = "__ARTIFACT__:";
-
-/**
- * Stateful processor for a stream of stdout lines.
- *
- * Accumulates `__ARTIFACT__` lines internally and bundles them with the next
- * `__PROGRESS__` line so the status message and its artifacts always arrive
- * together — all the way through to publishStatusToUI and the UI.
- *
- *   process(line) → { message, artifacts } — progress with correlated artifacts
- *   process(line) → null                   — regular output, pushed to lines[]
- */
-export class OutputLineProcessor {
-  private pendingArtifacts: Record<string, string> = {};
-
-  process(
-    line: string,
-    lines: string[],
-    onLine?: (line: string) => void,
-  ): { message: string; artifacts: Record<string, string> } | null {
-    if (line.startsWith(PROGRESS_PREFIX)) {
-      const message = line.slice(PROGRESS_PREFIX.length);
-      const artifacts = this.pendingArtifacts;
-      this.pendingArtifacts = {};
-      return { message, artifacts };
-    }
-    if (line.startsWith(ARTIFACT_PREFIX)) {
-      const rest = line.slice(ARTIFACT_PREFIX.length).trim();
-      if (!rest) return null;
-      const sep = rest.indexOf(":");
-      if (sep !== -1) this.pendingArtifacts[rest.slice(0, sep)] = rest.slice(sep + 1);
-      return null;
-    }
-    lines.push(line);
-    onLine?.(line);
-    return null;
-  }
-}
-
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 /** Build the argv array for spawning the agent script. */
 export function buildScriptArgs(scriptPath: string, instruction: string): string[] {
   return instruction ? [scriptPath, instruction] : [scriptPath];
 }
-
-// ─── Script run structured content types ──────────────────────────────────────
 
 // ─── Script process registry ──────────────────────────────────────────────────
 
@@ -109,15 +65,13 @@ export function getPendingRunIds(): string[] {
  * Returns { promise, lines } so the caller can use lines[] as a live buffer
  * without needing a per-line callback.
  *
- * @param onProgress Optional callback invoked for each `__PROGRESS__` sentinel,
- *   carrying the message and any `__ARTIFACT__` lines that preceded it.
- *   Sentinel lines are stripped from the collected output.
+ * Agent scripts emit progress via HTTP POST to the A2A server (DOVEPAW_A2A_PORT +
+ * DOVEPAW_TASK_ID env vars), not via stdout sentinels.
  */
 export function spawnAndCollect(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
-  onProgress?: (message: string, artifacts: Record<string, string>) => void,
 ): { promise: Promise<string>; lines: string[] } {
   const lines: string[] = [];
 
@@ -148,13 +102,10 @@ export function spawnAndCollect(
     signal?.addEventListener("abort", killProc, { once: true });
   }
 
-  const processor = new OutputLineProcessor();
-
   const promise = new Promise<string>((resolve) => {
     const rl = createInterface({ input: proc.stdout, crlfDelay: Infinity });
     rl.on("line", (line) => {
-      const result = processor.process(line, lines);
-      if (result) onProgress?.(result.message, result.artifacts);
+      lines.push(line);
       while (lines.length > LATEST_LINES_CAP) lines.shift();
     });
 
@@ -190,10 +141,9 @@ export function startScript(
   config: AgentConfig,
   instruction: string,
   signal?: AbortSignal,
-  onProgress?: (message: string, artifacts: Record<string, string>) => void,
   runId: string = randomUUID(),
 ): { runId: string } {
-  const { promise, lines: latestLines } = spawnAndCollect(config, instruction, signal, onProgress);
+  const { promise, lines: latestLines } = spawnAndCollect(config, instruction, signal);
 
   runningScripts.set(runId, { phase: "running", promise, latestLines });
   // Cache the output when the process exits so awaitScript can collect it

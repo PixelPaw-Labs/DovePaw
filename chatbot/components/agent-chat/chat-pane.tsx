@@ -2,16 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import {
-  Bell,
-  Bot,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  GitBranch,
-  Settings,
-  Trash2,
-} from "lucide-react";
+import { Bell, Bot, ChevronLeft, ChevronRight, Clock, Settings, Trash2 } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
@@ -27,11 +18,9 @@ import { PermissionBanner } from "./permission-banner";
 import { QuestionBanner } from "./question-banner";
 import { ChatMessageItem } from "./chat-message";
 import { IntroCard } from "./intro-card";
-import { WorkflowPanel } from "@/components/workflow/workflow-panel";
 import { SessionHistoryPanel } from "./session-history-panel";
 import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import type { ChatMessage } from "@/components/hooks/use-messages";
-import type { ProgressEntry } from "@/lib/query-tools";
 import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 
 function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEntry[]) {
@@ -47,8 +36,6 @@ export interface ChatPaneProps {
   agentConfigs: AgentConfigEntry[];
   // session state
   messages: ChatMessage[];
-  sessionProgress: ProgressEntry[];
-  sessionCancelled: boolean;
   isLoading: boolean;
   currentSessionId: string | null;
   pendingPermissions: ChatSsePermission[];
@@ -72,8 +59,6 @@ export function ChatPane({
   agentId,
   agentConfigs,
   messages,
-  sessionProgress,
-  sessionCancelled,
   isLoading,
   currentSessionId,
   pendingPermissions,
@@ -93,7 +78,6 @@ export function ChatPane({
   const router = useRouter();
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(agentId, agentConfigs);
 
-  const [workflowOpen, setWorkflowOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(true);
   const [activeQuestionIdx, setActiveQuestionIdx] = React.useState(0);
   const [showAllAgents, setShowAllAgents] = React.useState(false);
@@ -104,24 +88,8 @@ export function ChatPane({
   // Keep active index in bounds when questions are resolved
   const clampedQuestionIdx = Math.min(activeQuestionIdx, Math.max(0, pendingQuestions.length - 1));
 
-  // Auto-open workflow panel when a history session has progress but no visible chat messages
-  // (e.g. scheduled sessions interrupted before the final assistant message was saved)
-  const userOpenedWorkflow = React.useRef(false);
-  React.useEffect(() => {
-    if (userOpenedWorkflow.current) return;
-    if (isLoading) return;
-    const hasVisibleMessages = messages.some((msg) =>
-      msg.segments.some((s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call"),
-    );
-    if (!hasVisibleMessages && sessionProgress.length > 0) {
-      setWorkflowOpen(true);
-    }
-  }, [messages, sessionProgress, isLoading]);
-
   const [panelWidth, setPanelWidth] = React.useState(480);
   const isResizing = React.useRef(false);
-  const [historyPanelHeight, setHistoryPanelHeight] = React.useState(220);
-  const verticalIsResizing = React.useRef(false);
 
   const onResizeStart = React.useCallback(
     (e: React.MouseEvent) => {
@@ -143,28 +111,6 @@ export function ChatPane({
       window.addEventListener("mouseup", onUp);
     },
     [panelWidth],
-  );
-
-  const onVerticalResizeStart = React.useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault();
-      verticalIsResizing.current = true;
-      const startY = e.clientY;
-      const startHeight = historyPanelHeight;
-      const onMove = (ev: MouseEvent) => {
-        if (!verticalIsResizing.current) return;
-        const delta = ev.clientY - startY;
-        setHistoryPanelHeight(Math.max(80, startHeight - delta));
-      };
-      const onUp = () => {
-        verticalIsResizing.current = false;
-        window.removeEventListener("mousemove", onMove);
-        window.removeEventListener("mouseup", onUp);
-      };
-      window.addEventListener("mousemove", onMove);
-      window.addEventListener("mouseup", onUp);
-    },
-    [historyPanelHeight],
   );
 
   return (
@@ -207,16 +153,6 @@ export function ChatPane({
                 <Trash2 className="w-4 h-4" />
               </button>
             )}
-            <button
-              onClick={() => {
-                userOpenedWorkflow.current = true;
-                setWorkflowOpen((v) => !v);
-              }}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${workflowOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-              title="Workflow"
-            >
-              <GitBranch className="w-4 h-4" />
-            </button>
             <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
               <Bell className="w-4 h-4" />
             </button>
@@ -343,8 +279,8 @@ export function ChatPane({
         <div className="fixed bottom-0 left-0 w-1/2 h-1/2 bg-linear-to-tr from-accent/10 to-transparent pointer-events-none z-0" />
       </main>
 
-      {/* Right sidebar — workflow + session history */}
-      {(workflowOpen || historyOpen) && (
+      {/* Right sidebar — session history */}
+      {historyOpen && (
         <aside
           style={{ width: panelWidth }}
           className="relative shrink-0 h-screen border-l border-border/20 bg-background/60 backdrop-blur-xl flex flex-col overflow-hidden"
@@ -354,52 +290,16 @@ export function ChatPane({
             onMouseDown={onResizeStart}
             className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
           />
-
-          {/* Workflow panel */}
-          {workflowOpen && (
-            <div className="flex flex-col flex-1 min-h-[80px]">
-              <div className="px-4 py-3 border-b border-border/20 flex items-center gap-2 shrink-0">
-                <GitBranch className="w-4 h-4 text-primary" />
-                <span className="text-sm font-semibold text-foreground">Workflow</span>
-                <span className="ml-auto text-[10px] text-muted-foreground uppercase tracking-wider">
-                  Agent execution trace
-                </span>
-              </div>
-              <div className="flex-1 min-h-0">
-                <WorkflowPanel progress={sessionProgress} isCancelled={sessionCancelled} />
-              </div>
-            </div>
-          )}
-
-          {/* Vertical resize handle between workflow and session history */}
-          {workflowOpen && historyOpen && (
-            <div
-              onMouseDown={onVerticalResizeStart}
-              className="h-1.5 w-full cursor-row-resize bg-border/20 hover:bg-primary/30 transition-colors shrink-0 z-10"
-            />
-          )}
-
-          {/* Session history panel */}
-          {historyOpen && (
-            <div
-              style={workflowOpen ? { height: historyPanelHeight } : undefined}
-              className={`flex flex-col shrink-0 min-h-[80px] ${!workflowOpen ? "flex-1" : ""}`}
-            >
-              <SessionHistoryPanel
-                sessions={sessions}
-                activeSessionId={currentSessionId}
-                runningSessionIds={runningSessionIds}
-                onSelect={(id) => {
-                  userOpenedWorkflow.current = false;
-                  void setSessionId(id);
-                }}
-                onNew={newSession}
-                onDelete={async (id) => {
-                  await deleteSession(id);
-                }}
-              />
-            </div>
-          )}
+          <SessionHistoryPanel
+            sessions={sessions}
+            activeSessionId={currentSessionId}
+            runningSessionIds={runningSessionIds}
+            onSelect={(id) => void setSessionId(id)}
+            onNew={newSession}
+            onDelete={async (id) => {
+              await deleteSession(id);
+            }}
+          />
         </aside>
       )}
     </>

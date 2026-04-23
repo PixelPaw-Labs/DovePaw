@@ -164,7 +164,6 @@ describe("useChatSession", () => {
     });
 
     await waitFor(() => !result.current.isLoading);
-    expect(result.current.sessionCancelled).toBe(true);
     expect(result.current.isLoading).toBe(false);
 
     resolveStream(makeSseResponse([]));
@@ -218,7 +217,6 @@ describe("useChatSession", () => {
 
     expect(result.current.messages).toHaveLength(0);
     expect(result.current.isLoading).toBe(false);
-    expect(result.current.sessionCancelled).toBe(false);
     expect(result.current.currentSessionId).toBeNull();
     expect(result.current.pendingQueue).toHaveLength(0);
   });

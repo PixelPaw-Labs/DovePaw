@@ -17,7 +17,6 @@ function makeCtx(overrides?: Partial<StreamEventContext>): StreamEventContext {
     pendingToolNameRef: { current: null },
     setPendingPermissions: vi.fn(),
     setPendingQuestions: vi.fn(),
-    setSessionCancelled: vi.fn(),
     ...overrides,
   };
 }
@@ -99,9 +98,10 @@ describe("processActiveStreamEvent — cancelled", () => {
     expect(ctx.setPendingQuestions).toHaveBeenCalledWith([]);
   });
 
-  it("marks session as cancelled", () => {
+  it("flushes animation and marks message as cancelled", () => {
     const ctx = makeCtx();
     processActiveStreamEvent({ type: "cancelled" }, "a1", ctx);
-    expect(ctx.setSessionCancelled).toHaveBeenCalledWith(true);
+    expect(ctx.animation.flush).toHaveBeenCalledWith("a1");
+    expect(ctx.updateActiveMessages).toHaveBeenCalled();
   });
 });

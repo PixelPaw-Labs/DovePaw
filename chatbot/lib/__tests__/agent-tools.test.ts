@@ -6,10 +6,11 @@ vi.mock("@/lib/a2a-client", () => ({
   resolveAgentPort: vi.fn(),
   startAgentStream: vi.fn(),
   collectStreamResult: vi.fn(),
-  collectAgentStreamContext: vi.fn(),
+  streamCollect: vi.fn().mockImplementation(async function* () {}),
   formatAgentStreamContext: vi.fn(),
   createAgentClient: vi.fn(),
-  subscribeTaskStream: vi.fn(),
+  subscribeTaskStream: vi.fn().mockImplementation(async function* () {}),
+  noAgentOutput: vi.fn().mockReturnValue(""),
 }));
 
 vi.mock("@/lib/launchd", () => ({
@@ -64,7 +65,7 @@ import type { CollectedStream } from "@/lib/a2a-client";
 import {
   resolveAgentPort,
   startAgentStream,
-  collectStreamResult,
+  streamCollect,
   formatAgentStreamContext,
   createAgentClient,
   subscribeTaskStream,
@@ -231,7 +232,6 @@ describe("makeStartScriptTool", () => {
       "",
       undefined,
       undefined,
-      undefined,
     );
   });
 
@@ -245,20 +245,15 @@ describe("makeStartScriptTool", () => {
     expect(result).toMatchObject({ structuredContent: { runId: "run-xyz" } });
   });
 
-  it("passes onProgress to startScript when provided", async () => {
+  it("passes onProgress as clone callback but not to startScript", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
     const onProgress = vi.fn();
     const handler = captureToolHandler(AGENT, BASE_CONFIG, [], undefined, onProgress);
 
     await handler({});
 
-    expect(startScript).toHaveBeenCalledWith(
-      expect.anything(),
-      "",
-      undefined,
-      onProgress,
-      undefined,
-    );
+    // startScript no longer receives onProgress — scripts POST progress via HTTP
+    expect(startScript).toHaveBeenCalledWith(expect.anything(), "", undefined, undefined);
   });
 
   it("wraps onProgress as a clone callback that prefixes the slug", async () => {
@@ -334,10 +329,7 @@ describe("makeStartChatToTool", () => {
       stream: mockStream(),
       client: {} as any,
     });
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: { output: "", progress: [], thinking: "", toolCalls: [] },
-    });
+    vi.mocked(streamCollect).mockImplementation(async function* () {});
   });
 
   it("uses startAgentStream — not sendMessage", async () => {
@@ -363,10 +355,10 @@ describe("makeStartChatToTool", () => {
     });
   });
 
-  it("drains stream via collectStreamResult in background", async () => {
+  it("drains stream via streamCollect in background", async () => {
     const handler = captureStartChatToHandler();
     await handler({ instruction: "do something" });
-    expect(collectStreamResult).toHaveBeenCalled();
+    expect(streamCollect).toHaveBeenCalled();
   });
 
   it("pushes drain task into backgroundTasks when provided", async () => {
@@ -463,10 +455,7 @@ describe("makeStartChatToTool — groupMeta", () => {
       stream: mockStream(),
       client: {} as any,
     });
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: { output: "", progress: [], thinking: "", toolCalls: [] },
-    });
+    vi.mocked(streamCollect).mockImplementation(async function* () {});
   });
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
@@ -522,10 +511,7 @@ describe("makeStartReviewTool", () => {
       stream: mockStream(),
       client: {} as any,
     });
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: { output: "", progress: [], thinking: "", toolCalls: [] },
-    });
+    vi.mocked(streamCollect).mockImplementation(async function* () {});
   });
 
   it("calls startAgentStream with review instruction and returns taskId", async () => {
@@ -571,16 +557,20 @@ describe("makeStartReviewTool", () => {
 // ─── makeAwaitReviewTool ──────────────────────────────────────────────────────
 
 describe("makeAwaitReviewTool", () => {
-  const completedStream = {
-    taskId: "task-123",
-    result: { output: "", progress: [], thinking: "", toolCalls: [] },
-  };
+  const baseResult = { progress: [] as any[], thinking: "", toolCalls: [] as string[] };
+
+  function mockSubscribeStream(output: string) {
+    vi.mocked(subscribeTaskStream).mockImplementation(async function* () {
+      yield { kind: "snapshot" as const, taskId: "task-123", result: { output, ...baseResult } };
+    });
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(resolveAgentPort).mockReturnValue(9999);
     vi.mocked(createAgentClient).mockResolvedValue({} as any);
     vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
+    mockSubscribeStream("");
   });
 
   function captureAwaitHandler() {
@@ -589,15 +579,7 @@ describe("makeAwaitReviewTool", () => {
   }
 
   it("returns APPROVED when reviewer JSON says APPROVED", async () => {
-    vi.mocked(subscribeTaskStream).mockResolvedValue({
-      ...completedStream,
-      result: {
-        output: '{"decision":"APPROVED","reason":"looks good"}\nFull feedback here.',
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
+    mockSubscribeStream('{"decision":"APPROVED","reason":"looks good"}\nFull feedback here.');
     const handler = captureAwaitHandler();
     const result = (await handler({ taskId: "task-123" })) as any;
     expect(result.structuredContent.decision).toBe("APPROVED");
@@ -607,15 +589,7 @@ describe("makeAwaitReviewTool", () => {
   });
 
   it("returns REJECTED when reviewer JSON says REJECTED", async () => {
-    vi.mocked(subscribeTaskStream).mockResolvedValue({
-      ...completedStream,
-      result: {
-        output: '{"decision":"REJECTED","reason":"missing tests"}\nFeedback.',
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
+    mockSubscribeStream('{"decision":"REJECTED","reason":"missing tests"}\nFeedback.');
     const handler = captureAwaitHandler();
     const result = (await handler({ taskId: "task-123" })) as any;
     expect(result.structuredContent.decision).toBe("REJECTED");
@@ -623,15 +597,7 @@ describe("makeAwaitReviewTool", () => {
   });
 
   it("returns NO_DECISION when output has no JSON", async () => {
-    vi.mocked(subscribeTaskStream).mockResolvedValue({
-      ...completedStream,
-      result: {
-        output: "I think it looks fine actually.",
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
+    mockSubscribeStream("I think it looks fine actually.");
     const handler = captureAwaitHandler();
     const result = (await handler({ taskId: "task-123" })) as any;
     expect(result.structuredContent.decision).toBe("NO_DECISION");
@@ -639,15 +605,7 @@ describe("makeAwaitReviewTool", () => {
   });
 
   it("returns NO_DECISION when JSON is malformed", async () => {
-    vi.mocked(subscribeTaskStream).mockResolvedValue({
-      ...completedStream,
-      result: {
-        output: '{"decision":APPROVED}\nFeedback.',
-        progress: [],
-        thinking: "",
-        toolCalls: [],
-      },
-    });
+    mockSubscribeStream('{"decision":APPROVED}\nFeedback.');
     const handler = captureAwaitHandler();
     const result = (await handler({ taskId: "task-123" })) as any;
     expect(result.structuredContent.decision).toBe("NO_DECISION");
@@ -670,10 +628,7 @@ describe("makeStartEscalateTool", () => {
       stream: mockStream(),
       client: {} as any,
     });
-    vi.mocked(collectStreamResult).mockResolvedValue({
-      taskId: "task-123",
-      result: { output: "", progress: [], thinking: "", toolCalls: [] },
-    });
+    vi.mocked(streamCollect).mockImplementation(async function* () {});
   });
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
@@ -721,9 +676,17 @@ describe("makeAwaitEscalateTool", () => {
     vi.mocked(resolveAgentPort).mockReturnValue(9999);
     vi.mocked(createAgentClient).mockResolvedValue({} as any);
     vi.mocked(formatAgentStreamContext).mockReturnValue("context output");
-    vi.mocked(subscribeTaskStream).mockResolvedValue({
-      taskId: "task-123",
-      result: { output: "Guidance: proceed with X.", progress: [], thinking: "", toolCalls: [] },
+    vi.mocked(subscribeTaskStream).mockImplementation(async function* () {
+      yield {
+        kind: "snapshot" as const,
+        taskId: "task-123",
+        result: {
+          output: "Guidance: proceed with X.",
+          progress: [] as any[],
+          thinking: "",
+          toolCalls: [] as string[],
+        },
+      };
     });
   });
 

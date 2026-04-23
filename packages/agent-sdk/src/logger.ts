@@ -1,11 +1,11 @@
 import { mkdirSync, appendFileSync, readdirSync, statSync, rmSync } from "node:fs";
 import { join } from "node:path";
 
-const PROGRESS_PREFIX = "__PROGRESS__:";
-const ARTIFACT_PREFIX = "__ARTIFACT__:";
-
 export type LogFn = (msg: string) => void;
-export type PublishStatusToUI = (message: string, artifacts?: Record<string, string>) => void;
+export type PublishStatusToUI = (
+  message: string,
+  artifacts?: Record<string, string>,
+) => Promise<void>;
 
 export function makeTimestamp(): string {
   return new Date().toLocaleString("sv-SE").replace(/[ :]/g, "_");
@@ -13,14 +13,21 @@ export function makeTimestamp(): string {
 
 /**
  * Emit a transient progress message and optional artifacts to the Workflow UI
- * via stdout sentinels consumed by the A2A executor's OutputLineProcessor.
+ * via HTTP POST to the A2A server's internal progress endpoint.
+ * Requires DOVEPAW_A2A_PORT and DOVEPAW_TASK_ID env vars to be set (injected at spawn time).
  */
-export function publishStatusToUI(message: string, artifacts?: Record<string, string>): void {
-  for (const [name, text] of Object.entries(artifacts ?? {})) {
-    const singleLine = text.replace(/\r?\n/g, " ");
-    process.stdout.write(`${ARTIFACT_PREFIX}${name}:${singleLine}\n`);
-  }
-  process.stdout.write(`${PROGRESS_PREFIX}${message}\n`);
+export async function publishStatusToUI(
+  message: string,
+  artifacts?: Record<string, string>,
+): Promise<void> {
+  const port = process.env.DOVEPAW_A2A_PORT;
+  const taskId = process.env.DOVEPAW_TASK_ID;
+  if (!port || !taskId) return;
+  await fetch(`http://localhost:${port}/internal/tasks/${taskId}/progress`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message, artifacts }),
+  });
 }
 
 export function createLogger(logDir: string, logFile: string) {

@@ -1,11 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import type { ProgressEntry } from "@/lib/query-tools";
-
 export type { ToolCall, MessageSegment, SessionMessage } from "@/lib/message-types";
 import type { MessageSegment, ToolCall } from "@/lib/message-types";
-export { mergeProgressEntries } from "@/lib/progress";
 
 export type MessageRole = "user" | "assistant";
 
@@ -18,7 +15,6 @@ export interface ChatMessage {
   isLoading?: boolean;
   isCancelled?: boolean;
   liveProgress?: string | null;
-  agentProgress?: ProgressEntry[];
   /** Which agent sent this message — "dove" or a subagent name */
   agentId?: string;
   /** For user-role messages in group chat: which agent sent the message */

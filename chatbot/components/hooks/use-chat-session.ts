@@ -2,9 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
-import { mergeProgressEntries } from "./use-messages";
 import type { ChatMessage } from "./use-messages";
-import type { ProgressEntry } from "@/lib/query-tools";
 import {
   agentChatUrl,
   sessionStreamUrl,
@@ -35,8 +33,6 @@ export type { SessionStatus };
 export function useChatSession(agentId: AgentId) {
   // ─── State ────────────────────────────────────────────────────────────────────
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [sessionProgress, setSessionProgress] = useState<ProgressEntry[]>([]);
-  const [sessionCancelled, setSessionCancelled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [pendingPermissions, setPendingPermissions] = useState<ChatSsePermission[]>([]);
@@ -100,7 +96,6 @@ export function useChatSession(agentId: AgentId) {
     pendingToolNameRef,
     setPendingPermissions,
     setPendingQuestions,
-    setSessionCancelled,
   };
 
   // ─── connectStream ────────────────────────────────────────────────────────────
@@ -156,8 +151,6 @@ export function useChatSession(agentId: AgentId) {
             if (event.type === "session") {
               sessionIdRef.current = event.sessionId;
               setCurrentSessionId(event.sessionId);
-            } else if (event.type === "progress") {
-              setSessionProgress((prev) => mergeProgressEntries(prev, event.result.progress));
             } else {
               // Lazily create the assistant message on first text/result content.
               if (!messageReady && (event.type === "text" || event.type === "result")) {
@@ -214,7 +207,6 @@ export function useChatSession(agentId: AgentId) {
 
       abortRef.current?.abort();
       animation.reset();
-      setSessionCancelled(false);
       setPendingPermissions([]);
       setPendingQuestions([]);
 
@@ -260,8 +252,6 @@ export function useChatSession(agentId: AgentId) {
           if (event.type === "session") {
             sessionIdRef.current = event.sessionId;
             setCurrentSessionId(event.sessionId);
-          } else if (event.type === "progress") {
-            setSessionProgress((prev) => mergeProgressEntries(prev, event.result.progress));
           } else {
             processActiveStreamEvent(event, assistantId, streamCtx, {
               skipResultIfHasText: true,
@@ -326,7 +316,6 @@ export function useChatSession(agentId: AgentId) {
           : m,
       ),
     );
-    setSessionCancelled(true);
     setIsLoading(false);
     if (sessionId) {
       void fetch(agentChatUrl(agentId), {
@@ -346,8 +335,6 @@ export function useChatSession(agentId: AgentId) {
     pendingQueueRef.current = [];
     setPendingQueue([]);
     setMessages([]);
-    setSessionProgress([]);
-    setSessionCancelled(false);
     setIsLoading(false);
     setCurrentSessionId(null);
     setPendingPermissions([]);
@@ -376,8 +363,6 @@ export function useChatSession(agentId: AgentId) {
         abortRef.current = null;
         sessionIdRef.current = null;
         setMessages([]);
-        setSessionProgress([]);
-        setSessionCancelled(false);
         setIsLoading(false);
         setCurrentSessionId(null);
       }
@@ -389,14 +374,11 @@ export function useChatSession(agentId: AgentId) {
   const handlePoll = useCallback(
     ({
       messages: polledMsgs,
-      progress: pollProgress,
       status: pollStatus,
     }: {
       messages: ChatMessage[];
-      progress: import("@/lib/query-tools").ProgressEntry[];
       status: "running" | "done" | "cancelled";
     }) => {
-      setSessionProgress(pollProgress);
       const pollAssistant = polledMsgs.toReversed().find((m) => m.role === "assistant");
       const newText =
         pollAssistant?.segments
@@ -432,7 +414,6 @@ export function useChatSession(agentId: AgentId) {
         if (aid) animation.flush(aid);
         setMessages(polledMsgs);
         setIsLoading(false);
-        setSessionCancelled(pollStatus === "cancelled");
         pollPrevTextRef.current = "";
         pollAssistantIdRef.current = null;
       }
@@ -508,24 +489,19 @@ export function useChatSession(agentId: AgentId) {
       lastSeqRef.current = 0;
       animation.reset();
       setMessages([]);
-      setSessionProgress([]);
       setIsLoading(false);
-      setSessionCancelled(false);
       setPendingPermissions([]);
       setPendingQuestions([]);
       void (async () => {
         try {
           const {
             messages: stamped,
-            progress,
             resumeSeq,
             status,
           } = await fetchSessionDetail(sessionDetailUrl(agentId, id), agentId);
           // Another setSessionId call may have fired while fetch was in flight.
           if (sessionIdRef.current !== id) return;
           setCurrentSessionId(id);
-          setSessionProgress(progress);
-          setSessionCancelled(status === "cancelled");
           if (status === "running") {
             reconnectRunningSession({
               sessionId: id,
@@ -617,7 +593,6 @@ export function useChatSession(agentId: AgentId) {
 
         const {
           messages: stamped,
-          progress,
           status,
           resumeSeq,
         } = await fetchSessionDetail(sessionDetailUrl(agentId, resolvedId), agentId);
@@ -626,7 +601,6 @@ export function useChatSession(agentId: AgentId) {
         sessionIdRef.current = resolvedId;
         setCurrentSessionId(resolvedId);
 
-        setSessionProgress(progress);
         if (status === "running") {
           reconnectRunningSession({
             sessionId: resolvedId,
@@ -657,8 +631,6 @@ export function useChatSession(agentId: AgentId) {
 
   return {
     messages,
-    sessionProgress,
-    sessionCancelled,
     isLoading,
     currentSessionId,
     pendingPermissions,

@@ -14,7 +14,7 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { makeProgressSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
-import { startAgentStream, collectStreamResult, resolveAgentPort } from "@/lib/a2a-client";
+import { startAgentStream, streamCollect, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession, setSessionStatus, getSessionWorkspacePath } from "@/lib/db";
 import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
@@ -97,7 +97,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         senderAgentId,
       });
 
-      await collectStreamResult(stream, onSnapshot, onArtifact);
+      for await (const event of streamCollect(stream)) {
+        if (event.kind === "snapshot") onSnapshot(event.result);
+        else if (event.kind === "chunk") onArtifact(event.name, event.text);
+      }
 
       if (subprocessController.signal.aborted) {
         setSessionStatus(resolvedContextId, "cancelled");

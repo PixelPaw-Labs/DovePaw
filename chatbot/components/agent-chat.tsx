@@ -100,8 +100,6 @@ function AgentChatSession({
       agentId={agentId}
       agentConfigs={agentConfigs}
       messages={session.messages}
-      sessionProgress={session.sessionProgress}
-      sessionCancelled={session.sessionCancelled}
       isLoading={session.isLoading}
       currentSessionId={session.currentSessionId}
       pendingPermissions={session.pendingPermissions}

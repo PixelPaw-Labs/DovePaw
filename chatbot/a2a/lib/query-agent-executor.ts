@@ -6,6 +6,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
+import type { CollectedStream } from "@/lib/a2a-client";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
@@ -25,14 +26,13 @@ import { extractInstruction } from "./message-parts";
 import { buildAgentConfig } from "./agent-config-builder";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
-import type { CollectedStream } from "@/lib/a2a-client";
+import { ExecutorPublisher } from "./executor-publisher";
 import { createAgentWorkspace, restoreAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
 import { setActiveSession, setSessionStatus, upsertSession } from "@/lib/db";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 import { markProcessing, markIdle } from "./processing-registry";
-import { ExecutorPublisher } from "./executor-publisher";
 
 /**
  * A2A executor that runs a query() sub-agent instead of spawning a script directly.
@@ -81,6 +81,8 @@ export class QueryAgentExecutor implements AgentExecutor {
   constructor(
     private readonly def: AgentDef,
     private readonly sessionManager: SessionManager,
+    private readonly publisherRegistry?: Map<string, ExecutorPublisher>,
+    private readonly port?: number,
   ) {}
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -96,6 +98,7 @@ export class QueryAgentExecutor implements AgentExecutor {
     );
 
     const publisher = new ExecutorPublisher(eventBus, taskId, contextId);
+    this.publisherRegistry?.set(taskId, publisher);
 
     // Restore session early so publishProgress can use the correct label from the start.
     // Without this, the first upsertSession call would create the DB row with label:"",
@@ -168,7 +171,12 @@ export class QueryAgentExecutor implements AgentExecutor {
       // In group mode: cwd = shared group workspace; member has no own workspace
       const cwd = groupOverrides?.groupWorkspacePath ?? workspace!.path;
 
-      const agentConfig = buildAgentConfig(this.def, cwd, extraEnv, repoSlugs);
+      const agentConfig = buildAgentConfig(
+        this.def,
+        cwd,
+        { ...extraEnv, ...(this.port ? { DOVEPAW_A2A_PORT: String(this.port) } : {}) },
+        repoSlugs,
+      );
       const agentSourceDir = dirname(agentConfig.scriptPath);
 
       const registry = new PendingRegistry();
@@ -333,6 +341,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       consola.error(`Failed to start ${this.def.displayName} sub-agent:`, err);
       relaySessionEvent(contextId, { type: "error", content: msg });
     } finally {
+      this.publisherRegistry?.delete(taskId);
       await Promise.allSettled(backgroundTasks);
       this.abortController?.abort();
       this.abortController = null;

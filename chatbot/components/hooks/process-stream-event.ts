@@ -11,7 +11,6 @@ export interface StreamEventContext {
   pendingToolNameRef: React.MutableRefObject<string | null>;
   setPendingPermissions: React.Dispatch<React.SetStateAction<ChatSsePermission[]>>;
   setPendingQuestions: React.Dispatch<React.SetStateAction<ChatSseQuestion[]>>;
-  setSessionCancelled: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export interface StreamEventCallbacks {
@@ -53,7 +52,6 @@ export function processActiveStreamEvent(
     pendingToolNameRef,
     setPendingPermissions,
     setPendingQuestions,
-    setSessionCancelled,
   } = ctx;
 
   if (event.type === "permission") {
@@ -188,7 +186,6 @@ export function processActiveStreamEvent(
           : m,
       ),
     );
-    setSessionCancelled(true);
     callbacks?.onCancelled?.();
     return;
   }

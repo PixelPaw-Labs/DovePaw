@@ -1,48 +1,50 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { publishStatusToUI } from "./logger.js";
 
-function captureStdout(fn: () => void): string[] {
-  const written: string[] = [];
-  const orig = process.stdout.write.bind(process.stdout);
-  process.stdout.write = (chunk: unknown) => {
-    written.push(String(chunk));
-    return true;
-  };
-  try {
-    fn();
-  } finally {
-    process.stdout.write = orig;
-  }
-  return written;
-}
-
 describe("publishStatusToUI", () => {
-  it("writes a __PROGRESS__ line to stdout", () => {
-    const lines = captureStdout(() => publishStatusToUI("Done"));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toBe("__PROGRESS__:Done\n");
+  beforeEach(() => {
+    process.env.DOVEPAW_A2A_PORT = "9999";
+    process.env.DOVEPAW_TASK_ID = "task-123";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
   });
 
-  it("writes __ARTIFACT__ lines before the __PROGRESS__ line", () => {
-    const lines = captureStdout(() => publishStatusToUI("Step", { key: "EC-1", status: "ok" }));
-    expect(lines).toHaveLength(3);
-    expect(lines[0]).toMatch(/^__ARTIFACT__:/);
-    expect(lines[1]).toMatch(/^__ARTIFACT__:/);
-    expect(lines[2]).toBe("__PROGRESS__:Step\n");
+  afterEach(() => {
+    delete process.env.DOVEPAW_A2A_PORT;
+    delete process.env.DOVEPAW_TASK_ID;
+    vi.unstubAllGlobals();
   });
 
-  it("strips newlines from artifact values", () => {
-    const lines = captureStdout(() =>
-      publishStatusToUI("Layers", { plan: '{\n  "layers": []\n}' }),
+  it("posts to the A2A server progress endpoint", async () => {
+    await publishStatusToUI("Done");
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:9999/internal/tasks/task-123/progress",
+      expect.objectContaining({ method: "POST" }),
     );
-    expect(lines).toHaveLength(2);
-    const value = lines[0].slice("__ARTIFACT__:plan:".length, -1);
-    expect(value).not.toMatch(/\n/);
-    expect(value).not.toMatch(/\r/);
   });
 
-  it("emits nothing extra for empty artifacts map", () => {
-    const lines = captureStdout(() => publishStatusToUI("Empty", {}));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toBe("__PROGRESS__:Empty\n");
+  it("includes message in request body", async () => {
+    await publishStatusToUI("Step");
+    const call = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(call[1]!.body as string);
+    expect(body.message).toBe("Step");
+  });
+
+  it("includes artifacts in request body when provided", async () => {
+    await publishStatusToUI("Step", { key: "EC-1", status: "ok" });
+    const call = vi.mocked(fetch).mock.calls[0];
+    const body = JSON.parse(call[1]!.body as string);
+    expect(body.artifacts).toEqual({ key: "EC-1", status: "ok" });
+  });
+
+  it("does nothing when DOVEPAW_A2A_PORT is not set", async () => {
+    delete process.env.DOVEPAW_A2A_PORT;
+    await publishStatusToUI("Hello");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("does nothing when DOVEPAW_TASK_ID is not set", async () => {
+    delete process.env.DOVEPAW_TASK_ID;
+    await publishStatusToUI("Hello");
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

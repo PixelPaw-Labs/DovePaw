@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, act, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ChatPane } from "../chat-pane";
 import type { ChatPaneProps } from "../chat-pane";
 
@@ -42,11 +42,6 @@ vi.mock("../chat-message", () => ({
 vi.mock("../intro-card", () => ({
   IntroCard: () => <div data-testid="intro-card" />,
 }));
-vi.mock("@/components/workflow/workflow-panel", () => ({
-  WorkflowPanel: ({ progress }: { progress: unknown[] }) => (
-    <div data-testid="workflow-panel" data-entries={progress.length} />
-  ),
-}));
 vi.mock("../session-history-panel", () => ({
   SessionHistoryPanel: () => <div data-testid="session-history-panel" />,
 }));
@@ -65,18 +60,11 @@ const visibleUserMsg = {
   segments: [{ type: "text" as const, content: "Hello" }],
 };
 
-const progressEntries = [
-  { message: "Starting…", artifacts: {} as Record<string, string> },
-  { message: "tool-call", artifacts: { "tool-call": "bash", label: "bash" } },
-];
-
 function makeProps(overrides: Partial<ChatPaneProps> = {}): ChatPaneProps {
   return {
     agentId: "oncall-analyzer",
     agentConfigs: [],
     messages: [],
-    sessionProgress: [],
-    sessionCancelled: false,
     isLoading: false,
     currentSessionId: "session-1",
     pendingPermissions: [],
@@ -125,47 +113,6 @@ describe("ChatPane — visible message detection", () => {
   it("shows Clear chat button when messages have visible content", () => {
     render(<ChatPane {...makeProps({ messages: [visibleUserMsg] })} />);
     expect(screen.getByTitle("Clear chat")).toBeTruthy();
-  });
-});
-
-describe("ChatPane — workflow auto-open for history sessions", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("auto-opens workflow panel when progress exists and no visible messages", async () => {
-    render(
-      <ChatPane {...makeProps({ messages: [emptyUserMsg], sessionProgress: progressEntries })} />,
-    );
-    // WorkflowPanel should be rendered after the useEffect fires
-    await act(async () => {});
-    expect(screen.getByTestId("workflow-panel")).toBeTruthy();
-  });
-
-  it("does not auto-open workflow panel when messages have visible content", async () => {
-    render(
-      <ChatPane {...makeProps({ messages: [visibleUserMsg], sessionProgress: progressEntries })} />,
-    );
-    await act(async () => {});
-    expect(screen.queryByTestId("workflow-panel")).toBeNull();
-  });
-
-  it("does not auto-open workflow panel when progress is empty", async () => {
-    render(<ChatPane {...makeProps({ messages: [emptyUserMsg], sessionProgress: [] })} />);
-    await act(async () => {});
-    expect(screen.queryByTestId("workflow-panel")).toBeNull();
-  });
-
-  it("does not auto-open while loading", async () => {
-    render(
-      <ChatPane
-        {...makeProps({
-          messages: [emptyUserMsg],
-          sessionProgress: progressEntries,
-          isLoading: true,
-        })}
-      />,
-    );
-    await act(async () => {});
-    expect(screen.queryByTestId("workflow-panel")).toBeNull();
   });
 });
 

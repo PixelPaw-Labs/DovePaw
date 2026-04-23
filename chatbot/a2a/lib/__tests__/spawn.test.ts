@@ -50,9 +50,6 @@ import {
   awaitScript,
   hasPendingScripts,
   getPendingRunIds,
-  OutputLineProcessor,
-  PROGRESS_PREFIX,
-  ARTIFACT_PREFIX,
 } from "../spawn.js";
 
 const BASE_CONFIG = {
@@ -211,20 +208,6 @@ describe("spawnAndCollect — readline line collection", () => {
     expect(lines).toContain("[stderr] error message");
   });
 
-  it("strips __PROGRESS__ lines and fires onProgress", async () => {
-    const proc = makeProc();
-    const onProgress = vi.fn();
-    const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run", undefined, onProgress);
-
-    proc.stdout.write(`${PROGRESS_PREFIX}Fetching data\nnormal line\n`);
-    proc.emit("close", 0);
-    await promise;
-
-    expect(onProgress).toHaveBeenCalledWith("Fetching data", {});
-    expect(lines).not.toContain(`${PROGRESS_PREFIX}Fetching data`);
-    expect(lines).toContain("normal line");
-  });
-
   it("caps lines at 200 and keeps the most recent", async () => {
     const proc = makeProc();
     const { promise, lines } = spawnAndCollect(BASE_CONFIG, "run");
@@ -277,92 +260,6 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
     // Verify structural shape: status and runId always present, latestOutput optional
     expect(result).toMatchObject({ status: "still_running", runId });
     expect("latestOutput" in result).toBe(true);
-  });
-});
-
-describe("OutputLineProcessor", () => {
-  it("returns null and pushes to lines[] for normal output", () => {
-    const processor = new OutputLineProcessor();
-    const lines: string[] = [];
-    const onLine = vi.fn();
-    const result = processor.process("hello world", lines, onLine);
-    expect(result).toBeNull();
-    expect(lines).toEqual(["hello world"]);
-    expect(onLine).toHaveBeenCalledWith("hello world");
-  });
-
-  it("returns progress with empty artifacts when no __ARTIFACT__ lines preceded it", () => {
-    const processor = new OutputLineProcessor();
-    const lines: string[] = [];
-    const result = processor.process(`${PROGRESS_PREFIX}Fetching tickets`, lines);
-    expect(result).toEqual({ message: "Fetching tickets", artifacts: {} });
-    expect(lines).toHaveLength(0);
-  });
-
-  it("does not call onLine for __PROGRESS__ lines", () => {
-    const processor = new OutputLineProcessor();
-    const onLine = vi.fn();
-    processor.process(`${PROGRESS_PREFIX}skip me`, [], onLine);
-    expect(onLine).not.toHaveBeenCalled();
-  });
-
-  it("bundles preceding __ARTIFACT__ lines with the next __PROGRESS__ line", () => {
-    const processor = new OutputLineProcessor();
-    processor.process(`${ARTIFACT_PREFIX}summary:Found 3 tickets`, []);
-    processor.process(`${ARTIFACT_PREFIX}output:key:value:pair`, []);
-    const result = processor.process(`${PROGRESS_PREFIX}Done`, []);
-    expect(result).toEqual({
-      message: "Done",
-      artifacts: { summary: "Found 3 tickets", output: "key:value:pair" },
-    });
-  });
-
-  it("skips __ARTIFACT__ lines whose content is empty after trim", () => {
-    const processor = new OutputLineProcessor();
-    processor.process(ARTIFACT_PREFIX, []);
-    processor.process(`${ARTIFACT_PREFIX}   `, []);
-    const result = processor.process(`${PROGRESS_PREFIX}Done`, []);
-    expect(result).toEqual({ message: "Done", artifacts: {} });
-  });
-
-  it("resets artifact buffer after each __PROGRESS__ flush", () => {
-    const processor = new OutputLineProcessor();
-    processor.process(`${ARTIFACT_PREFIX}a:first`, []);
-    processor.process(`${PROGRESS_PREFIX}Step 1`, []);
-    const result = processor.process(`${PROGRESS_PREFIX}Step 2`, []);
-    expect(result).toEqual({ message: "Step 2", artifacts: {} });
-  });
-
-  it("returns null for normal lines even when no onLine provided", () => {
-    const processor = new OutputLineProcessor();
-    const lines: string[] = [];
-    const result = processor.process("normal", lines);
-    expect(result).toBeNull();
-    expect(lines).toEqual(["normal"]);
-  });
-
-  it("truncates artifact value at the first newline if value contains newlines (documents the breakage)", () => {
-    // If emitProgress wrote a multi-line artifact value (e.g. formatted JSON),
-    // stdout is split line-by-line so only the first line is seen as an ARTIFACT
-    // sentinel — the rest fall through as regular output. This test documents why
-    // emitProgress must strip newlines from artifact values before writing.
-    const processor = new OutputLineProcessor();
-    const lines: string[] = [];
-
-    // Simulate what stdout would look like if emitProgress did NOT strip newlines:
-    //   __ARTIFACT__:plan:{
-    //     "layers": []
-    //   }
-    //   __PROGRESS__:Prioritized layers
-    processor.process(`${ARTIFACT_PREFIX}plan:{`, lines);
-    processor.process(`  "layers": []`, lines); // continuation line → falls to lines[]
-    processor.process(`}`, lines); // closing brace → falls to lines[]
-    const result = processor.process(`${PROGRESS_PREFIX}Prioritized layers`, lines);
-
-    // Artifact is truncated — only the first line was captured
-    expect(result).toEqual({ message: "Prioritized layers", artifacts: { plan: "{" } });
-    // The JSON continuation lines were misrouted as regular output
-    expect(lines).toEqual(['  "layers": []', "}"]);
   });
 });
 

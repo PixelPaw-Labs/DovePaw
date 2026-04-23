@@ -2,7 +2,6 @@
 
 import type { MutableRefObject } from "react";
 import type { ChatMessage } from "./use-messages";
-import type { ProgressEntry } from "@/lib/query-tools";
 import type { AgentId } from "@/lib/agent-api-urls";
 import { sessionDetailUrl } from "@/lib/agent-api-urls";
 import { fetchSessionDetail } from "./session-api-client";
@@ -11,7 +10,6 @@ export const POLL_INTERVAL_MS = 500;
 
 interface PollResult {
   messages: ChatMessage[];
-  progress: ProgressEntry[];
   status: "running" | "done" | "cancelled";
 }
 
@@ -43,14 +41,14 @@ export function startPolling({
   const poll = async () => {
     if (isCancelled()) return;
     try {
-      const { messages, progress, status } = await fetchSessionDetail(
+      const { messages, status } = await fetchSessionDetail(
         sessionDetailUrl(agentId, sessionId),
         agentId,
       );
       if (isCancelled()) return;
       if (getCurrentSessionId() !== sessionId) return;
 
-      onPoll({ messages, progress, status });
+      onPoll({ messages, status });
 
       if (status === "running") {
         pollTimeoutRef.current = setTimeout(() => {

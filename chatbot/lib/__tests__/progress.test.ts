@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { upsertProgressEntry, mergeProgress, mergeProgressEntries } from "../progress";
+import { upsertProgressEntry, mergeProgress } from "../progress";
 import type { ProgressEntry } from "../progress";
 
 // ─── upsertProgressEntry ──────────────────────────────────────────────────────
@@ -77,48 +77,5 @@ describe("mergeProgress", () => {
     const result = mergeProgress(existing, incoming);
     expect(result).toHaveLength(1);
     expect(result[0].artifacts).toEqual({ repo: "org/a", label: "done" });
-  });
-});
-
-// ─── mergeProgressEntries ─────────────────────────────────────────────────────
-
-describe("mergeProgressEntries", () => {
-  it("skips exact duplicates", () => {
-    const entry: ProgressEntry = { message: "Cloning", artifacts: { repo: "org/a" } };
-    expect(mergeProgressEntries([entry], [entry])).toHaveLength(1);
-  });
-
-  it("skips stale replay (incoming is value-subset of existing)", () => {
-    const existing: ProgressEntry[] = [
-      { message: "Running tool", artifacts: { toolId: "123", label: "Grep" } },
-    ];
-    const incoming: ProgressEntry[] = [{ message: "Running tool", artifacts: { toolId: "123" } }];
-    expect(mergeProgressEntries(existing, incoming)).toHaveLength(1);
-  });
-
-  it("updates in place when incoming is a superset of existing keys", () => {
-    const existing: ProgressEntry[] = [{ message: "Running tool", artifacts: { toolId: "123" } }];
-    const incoming: ProgressEntry[] = [
-      { message: "Running tool", artifacts: { toolId: "123", label: "Grep" } },
-    ];
-    const result = mergeProgressEntries(existing, incoming);
-    expect(result).toHaveLength(1);
-    expect(result[0].artifacts).toEqual({ toolId: "123", label: "Grep" });
-  });
-
-  it("appends when artifact key sets differ (parallel tickets with same step label)", () => {
-    // Different key sets: "ticket" vs "pr" — genuinely distinct operations
-    const existing: ProgressEntry[] = [{ message: "Forging", artifacts: { ticket: "PROJ-1" } }];
-    const incoming: ProgressEntry[] = [{ message: "Forging", artifacts: { pr: "42" } }];
-    const result = mergeProgressEntries(existing, incoming);
-    expect(result).toHaveLength(2);
-  });
-
-  it("appends when same key but different value (parallel ops with same label)", () => {
-    // Same key "repo" but different values — two distinct clone operations
-    const existing: ProgressEntry[] = [{ message: "Cloning", artifacts: { repo: "org/a" } }];
-    const incoming: ProgressEntry[] = [{ message: "Cloning", artifacts: { repo: "org/b" } }];
-    const result = mergeProgressEntries(existing, incoming);
-    expect(result).toHaveLength(2);
   });
 });

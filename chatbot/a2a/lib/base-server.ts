@@ -40,6 +40,7 @@ import {
   UserBuilder,
 } from "@a2a-js/sdk/server/express";
 import { QueryAgentExecutor } from "./query-agent-executor";
+import type { ExecutorPublisher } from "./executor-publisher";
 export { portsManifestSchema, writePortsManifest, readPortsManifest } from "./ports-manifest";
 export type { PortsManifest } from "./ports-manifest";
 import { SessionManager } from "@/lib/session-manager";
@@ -101,6 +102,7 @@ export function createAgentServer(
   executor: AgentExecutor,
   port: number,
   sessionManager?: SessionManager,
+  publisherRegistry?: Map<string, ExecutorPublisher>,
 ): void {
   const card: AgentCard = {
     ...agentCard,
@@ -129,13 +131,34 @@ export function createAgentServer(
     restHandler({ requestHandler: handler, userBuilder: UserBuilder.noAuthentication }),
   );
 
+  app.use(express.json());
+
   if (sessionManager) {
-    app.use(express.json());
     app.get("/sessions", (_req, res) => res.json(sessionManager.getSessions()));
     app.post("/session/clear", (req, res) => {
       const body: unknown = req.body;
       const { contextId } = z.object({ contextId: z.string() }).parse(body);
       sessionManager.delete(contextId);
+      res.json({ ok: true });
+    });
+  }
+
+  if (publisherRegistry) {
+    app.post("/internal/tasks/:taskId/progress", (req, res) => {
+      const { taskId } = req.params;
+      const parsed = z
+        .object({ message: z.string(), artifacts: z.record(z.string(), z.string()).optional() })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: parsed.error.message });
+        return;
+      }
+      const publisher = publisherRegistry.get(taskId);
+      if (!publisher) {
+        res.status(404).json({ error: `No active publisher for task ${taskId}` });
+        return;
+      }
+      publisher.publishStatusToUI(parsed.data.message, parsed.data.artifacts);
       res.json({ ok: true });
     });
   }
@@ -164,6 +187,7 @@ export function createServerFromDef(def: AgentDef, port: number): void {
   };
 
   const sessionManager = new SessionManager();
-  const executor = new QueryAgentExecutor(def, sessionManager);
-  createAgentServer(agentCard, executor, port, sessionManager);
+  const publisherRegistry = new Map<string, ExecutorPublisher>();
+  const executor = new QueryAgentExecutor(def, sessionManager, publisherRegistry, port);
+  createAgentServer(agentCard, executor, port, sessionManager, publisherRegistry);
 }
