@@ -51,7 +51,7 @@ const thresholdTable = Object.entries(CONFIDENCE_THRESHOLD)
 function buildReflectionPrompt(patterns: string, isGroupMode?: boolean): string {
   const ifNo = isGroupMode
     ? "If NO to any: do not re-call. Continue without the handoff and DO NOT explain your reasoning."
-    : "If NO to any: do not re-call. Continue without the handoff and explain your reasoning.";
+    : "If NO to any: do not re-call. Respond directly with your results.";
   return `<reminder>
 You are about to delegate work to another agent. Pause and answer:
 
@@ -173,6 +173,7 @@ function buildReflectionMatchers(isGroupMode?: boolean): HookCallbackMatcher[] {
 function buildHandoffConsiderationPrompt(
   tools: Array<{ name: string; description: string }>,
   isGroupMode?: boolean,
+  lastAssistantMessage?: string,
 ): string {
   const toolsXml = tools
     .map(
@@ -182,7 +183,7 @@ function buildHandoffConsiderationPrompt(
     .join("\n");
   const ifNo = isGroupMode
     ? "If no: stop immediately and DO NOT explain your reasoning."
-    : "If no: stop immediately and explain your reasoning.";
+    : `If no: respond with exactly:\n"${lastAssistantMessage ?? ""}"`;
   return `<reminder>
 Before you finish: have you considered whether to hand off your results to a linked agent?
 
@@ -268,7 +269,11 @@ export function buildSubAgentHooks(
         if (registry.hasPending()) return { continue: true };
         return {
           decision: "block",
-          reason: buildHandoffConsiderationPrompt(agentLinkTools, isGroupMode),
+          reason: buildHandoffConsiderationPrompt(
+            agentLinkTools,
+            isGroupMode,
+            input.last_assistant_message,
+          ),
         };
       },
     ],

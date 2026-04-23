@@ -41,11 +41,14 @@ function preToolUseInput(toolName: string, toolInput: unknown) {
   };
 }
 
-function stopInput(overrides?: { stop_hook_active?: boolean }) {
+function stopInput(overrides?: { stop_hook_active?: boolean; last_assistant_message?: string }) {
   return {
     hook_event_name: "Stop" as const,
     stop_reason: "end_turn" as const,
     stop_hook_active: overrides?.stop_hook_active ?? false,
+    ...(overrides?.last_assistant_message !== undefined && {
+      last_assistant_message: overrides.last_assistant_message,
+    }),
   };
 }
 
@@ -701,6 +704,21 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     const fn = getHandoffStopHook();
     const result = await callHook(fn, stopInput());
     expect((result as { reason: string }).reason).not.toMatch(/DO NOT output/i);
+  });
+
+  it("embeds last_assistant_message in block reason when not in group mode", async () => {
+    const fn = getHandoffStopHook();
+    const result = await callHook(
+      fn,
+      stopInput({ last_assistant_message: "Here are the results." }),
+    );
+    expect((result as { reason: string }).reason).toContain("Here are the results.");
+  });
+
+  it("uses empty string in block reason when last_assistant_message is absent", async () => {
+    const fn = getHandoffStopHook();
+    const result = await callHook(fn, stopInput());
+    expect((result as { reason: string }).reason).toContain("respond with exactly:");
   });
 });
 
