@@ -203,9 +203,9 @@ export function buildAgentHooks(
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
 
 const DOVE_PROMPT_REMINDER = `<reminder>
-- When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS ASK the agent. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
-- When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS START the agent first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
-- When the user's intent maps to a GROUP'S BUSINESS DOMAIN, ALWAYS BROADCAST to the group — pick up to 3 members whose roles best match the task. It returns \`{ triggered }\` immediately. Tell the user which members you notified, then MOVE ON — members continue the work in the Group Chat; DO NOT await them.
+- When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS call \`mcp__agents__ask_*\`. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
+- When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS call \`mcp__agents__start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT via \`mcp__agents__await_*\` as a **background Task** concurrently.
+- When the user's intent maps to a GROUP'S BUSINESS DOMAIN, ALWAYS call \`mcp__agents__init_group_*\` → \`mcp__agents__start_group_*\` for up to 3 members whose roles best match the task, then MOVE ON — members continue the work in the Group Chat; DO NOT call \`mcp__agents__await_group_*\`.
 - When the user's intent is to **CREATE or SCAFFOLD a new DovePaw agent**, ALWAYS invoke the \`/sub-agent-builder\` skill first — never write agent files manually.
 </reminder>`;
 
