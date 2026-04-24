@@ -30,7 +30,7 @@ hooks:
 1. **Purpose** — "What should this agent do?" — free text via Other
 2. **Plugin repo** — "Which plugin repo will this agent eventually live in?" — run `ls ~/.dovepaw/plugins/` and offer each dir basename as an option, plus "None / decide later"
 3. **Agent type** — "Which pattern fits this agent?" — present 3 options with code previews:
-   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.4"` in opts to use Codex instead of Claude
+   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.4"` in opts to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
    - **Skill-based** — dynamically builds a temporary skill, runs it, cleans up (for complex context assembly)
    - **Stateful** — lock + state dir + orchestration (for scheduled agents requiring mutual exclusion)
 

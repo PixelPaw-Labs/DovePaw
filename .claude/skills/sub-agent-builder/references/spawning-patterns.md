@@ -145,6 +145,8 @@ Use when Codex is a smarter or cheaper option than Claude CLI for the task.
 `AgentRunner` dispatches to Codex automatically when `model` starts with `gpt` or equals `"codex"`.  
 No worktree watchdog, no session chaining — one prompt, one result.
 
+> **When to use Claude instead:** If the agent writes to repositories or needs worktree isolation (Patterns B/C), use Claude (omit `model`). Codex does not support worktrees.
+
 ```typescript
 import { AgentRunner, agentPersistentLogDir, makeTimestamp } from "@dovepaw/agent-sdk";
 
