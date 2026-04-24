@@ -54,7 +54,7 @@ async function main() {
     cwd: WORK_DIR,
     taskName: "{{AGENT_NAME}}",
     timeoutMs: {{TIMEOUT_MS}},
-    permissionMode: "{{PERMISSION_MODE}}",
+    claudeOpts: { permissionMode: "{{PERMISSION_MODE}}" },
   });
 
   log(`Agent exited with code: ${code}`);

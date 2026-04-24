@@ -2,12 +2,12 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ClaudeRunner, type RunOpts } from "./claude-runner.js";
 import { CodexRunner, type CodexRunOpts } from "./codex-runner.js";
+import type { WebSearchMode } from "@openai/codex-sdk";
 
 interface ClaudeRunOpts {
   permissionMode?: string;
   worktree?: string;
   sessionId?: string;
-  resumeSession?: string;
   agent?: string;
   effort?: string;
   continueSession?: boolean;
@@ -16,6 +16,8 @@ interface ClaudeRunOpts {
 interface CodexOpts {
   agentRoster?: string;
   skipGitRepoCheck?: boolean;
+  webSearchEnabled?: boolean;
+  webSearchMode?: WebSearchMode;
 }
 
 /** Union of all opts supported across runners. Claude-specific fields are ignored for Codex and vice versa. */
@@ -29,6 +31,8 @@ export interface AgentRunOpts {
   additionalDirectories?: string[];
   /** API key override. Mapped to ANTHROPIC_API_KEY for Claude, apiKey for Codex. */
   apiKey?: string;
+  /** Resume a prior session. Uses --resume for Claude, resumeThread() for Codex. */
+  resumeSession?: string;
   claudeOpts?: ClaudeRunOpts;
   codexOpts?: CodexOpts;
 }
@@ -63,8 +67,11 @@ export class AgentRunner {
         ...(model !== "codex" ? { model } : {}),
         apiKey: opts.apiKey,
         additionalDirectories: opts.additionalDirectories,
+        resumeSession: opts.resumeSession,
         agentRoster: opts.codexOpts?.agentRoster,
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
+        webSearchEnabled: opts.codexOpts?.webSearchEnabled,
+        webSearchMode: opts.codexOpts?.webSearchMode,
       } satisfies CodexRunOpts);
     }
     if (!isClaudeModel(model)) {
@@ -80,7 +87,7 @@ export class AgentRunner {
       permissionMode: opts.claudeOpts?.permissionMode,
       worktree: opts.claudeOpts?.worktree,
       sessionId: opts.claudeOpts?.sessionId,
-      resumeSession: opts.claudeOpts?.resumeSession,
+      resumeSession: opts.resumeSession,
       agent: opts.claudeOpts?.agent,
       effort: opts.claudeOpts?.effort,
       continueSession: opts.claudeOpts?.continueSession,

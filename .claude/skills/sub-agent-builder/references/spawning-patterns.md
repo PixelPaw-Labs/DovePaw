@@ -35,10 +35,9 @@ Always run Claude in `AGENT_WORKSPACE`. Give Claude read access to repos via `--
 import { AgentRunner, makeTimestamp } from "@dovepaw/agent-sdk";
 
 const runner = new AgentRunner(LOG_DIR, LOG_FILE);
-const repoFlags = REPOS.flatMap((r) => ["--add-dir", r]);
 const { code, stdout } = await runner.run(prompt, {
   cwd: WORK_DIR,
-  repos: REPOS,
+  additionalDirectories: REPOS,
   taskName: "{{AGENT_NAME}}",
   timeoutMs: {{TIMEOUT_MS}},
 });
@@ -58,7 +57,7 @@ const results = await Promise.all(
   REPOS.map(async (repo) => {
     const { code, stdout } = await runner.run(buildPrompt(repo), {
       cwd: WORK_DIR,
-      repos: [repo],
+      additionalDirectories: [repo],
       taskName: `{{AGENT_NAME}}-${basename(repo)}`,
       timeoutMs: {{TIMEOUT_MS}},
     });
@@ -83,10 +82,10 @@ const targetRepo = REPOS[0]; // or: resolveRepoName("my-repo-name", REPOS)
 const branch = `{{AGENT_NAME}}-${makeTimestamp()}`;
 const { code, stdout } = await runner.run(prompt, {
   cwd: targetRepo,
-  repos: REPOS.filter((r) => r !== targetRepo),
-  worktree: branch,
+  additionalDirectories: REPOS.filter((r) => r !== targetRepo),
   taskName: "{{AGENT_NAME}}",
   timeoutMs: {{TIMEOUT_MS}},
+  claudeOpts: { worktree: branch },
 });
 ```
 
@@ -99,9 +98,9 @@ const results = await Promise.all(
     const branch = `{{AGENT_NAME}}-${item.id}-${makeTimestamp()}`;
     return runner.run(buildPrompt(item), {
       cwd: targetRepo,
-      worktree: branch,
       taskName: `{{AGENT_NAME}}-${item.id}`,
       timeoutMs: {{TIMEOUT_MS}},
+      claudeOpts: { worktree: branch },
     });
   }),
 );
@@ -122,9 +121,9 @@ const sessionId = randomUUID();
 // Step 1: discovery / read-only
 const { stdout: step1Output } = await runner.run(step1Prompt, {
   cwd: WORK_DIR,
-  sessionId,
   taskName: "{{AGENT_NAME}}-step1",
   timeoutMs: STEP1_TIMEOUT_MS,
+  claudeOpts: { sessionId },
 });
 
 // Step 2: act on step 1's findings (continues same session — full context retained)
@@ -157,7 +156,7 @@ const { code, stdout } = await runner.run(prompt, {
   taskName: "{{AGENT_NAME}}",
   timeoutMs: {{TIMEOUT_MS}},
   model: "gpt-5.4-mini",      // "gpt-*" → Codex; omit to use AGENT_SCRIPT_MODEL env var
-  agentRoster: "...",         // optional developer instructions
+  codexOpts: { agentRoster: "..." },  // optional developer instructions
 });
 ```
 

@@ -78,7 +78,7 @@ context: fork
       cwd: WORK_DIR,
       taskName: "{{AGENT_NAME}}",
       timeoutMs: {{TIMEOUT_MS}},
-      permissionMode: "acceptEdits",
+      claudeOpts: { permissionMode: "acceptEdits" },
     });
     log(`Agent exited with code: ${code}`);
     log(stdout);

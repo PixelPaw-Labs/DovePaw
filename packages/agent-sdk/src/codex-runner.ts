@@ -1,5 +1,5 @@
 import { Codex } from "@openai/codex-sdk";
-import type { Thread } from "@openai/codex-sdk";
+import type { Thread, WebSearchMode } from "@openai/codex-sdk";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -20,6 +20,10 @@ export interface CodexRunOpts {
   skipGitRepoCheck?: boolean;
   /** Additional directories to grant write access alongside the workspace */
   additionalDirectories?: string[];
+  /** Resume an existing Codex thread by its ID instead of starting a new one. */
+  resumeSession?: string;
+  webSearchEnabled?: boolean;
+  webSearchMode?: WebSearchMode;
 }
 
 interface CodexResult {
@@ -68,16 +72,21 @@ export class CodexRunner {
       ...(opts.agentRoster ? { config: { developer_instructions: opts.agentRoster } } : {}),
     });
 
-    this.thread = this.codex.startThread({
+    const threadOptions = {
       model: opts.model || "gpt-5.4-mini",
       workingDirectory: opts.cwd || process.cwd(),
       skipGitRepoCheck: opts.skipGitRepoCheck ?? true,
-      sandboxMode: "workspace-write",
-      approvalPolicy: "on-request",
+      sandboxMode: "workspace-write" as const,
+      approvalPolicy: "on-request" as const,
       ...(opts.additionalDirectories?.length
         ? { additionalDirectories: opts.additionalDirectories }
         : {}),
-    });
+      ...(opts.webSearchEnabled !== undefined ? { webSearchEnabled: opts.webSearchEnabled } : {}),
+      ...(opts.webSearchMode !== undefined ? { webSearchMode: opts.webSearchMode } : {}),
+    };
+    this.thread = opts.resumeSession
+      ? this.codex.resumeThread(opts.resumeSession, threadOptions)
+      : this.codex.startThread(threadOptions);
   }
 
   private async execute(prompt: string, timeoutMs: number): Promise<CodexResult> {

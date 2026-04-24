@@ -57,6 +57,21 @@ describe("AgentRunner", () => {
         expect(err.message).not.toContain("Unknown model");
       }
     });
+
+    it("passes resumeSession to Codex runner without error", async () => {
+      const err = await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gpt-5.4-mini",
+          resumeSession: "thread-abc",
+          timeoutMs: 100,
+        })
+        .catch((e: Error) => e);
+      if (err instanceof Error) {
+        expect(err.message).not.toContain("Unknown model");
+      }
+    });
   });
 
   describe("AGENT_SCRIPT_MODEL env var", () => {
