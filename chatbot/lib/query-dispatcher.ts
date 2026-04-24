@@ -29,7 +29,6 @@ import type {
   WebSearchInput,
   WebFetchInput,
   NotebookEditInput,
-  ConfigInput,
 } from "@anthropic-ai/claude-agent-sdk/sdk-tools";
 import type { ProgressEntry } from "@/lib/a2a-client";
 
@@ -84,7 +83,6 @@ const TOOL_LABEL_FIELDS: Partial<Record<string, readonly string[]>> = {
   WebSearch: ["query" satisfies keyof WebSearchInput],
   WebFetch: ["url" satisfies keyof WebFetchInput],
   NotebookEdit: ["notebook_path" satisfies keyof NotebookEditInput],
-  Config: ["setting" satisfies keyof ConfigInput],
 } as const;
 
 function describeToolCall(toolName: string, input: Record<string, unknown>): string {

@@ -32,7 +32,7 @@ export interface SessionInfo {
   label: string;
 }
 
-const MAX_SESSIONS = 5;
+export const MAX_SESSIONS = 20;
 
 export class SessionManager {
   private readonly sessions = new Map<string, SessionState>();

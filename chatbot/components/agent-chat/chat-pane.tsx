@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Bot, ChevronLeft, ChevronRight, Clock, Settings, Trash2 } from "lucide-react";
+import { Bell, Bot, ChevronLeft, ChevronRight, Clock, Info, Settings, Trash2 } from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
@@ -155,6 +155,13 @@ export function ChatPane({
             )}
             <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
               <Bell className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => router.push("/about")}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+              title="About DovePaw"
+            >
+              <Info className="w-4 h-4" />
             </button>
             <button
               onClick={() => router.push("/settings")}

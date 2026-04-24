@@ -3,7 +3,7 @@
  * getSessions(), LRU eviction, delete(), label/startedAt metadata.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SessionManager } from "@/lib/session-manager";
+import { MAX_SESSIONS, SessionManager } from "@/lib/session-manager";
 
 function mockWorkspace(path = "/tmp/ws") {
   return { path, cleanup: vi.fn() };
@@ -68,27 +68,30 @@ describe("SessionManager", () => {
 
   describe("LRU eviction", () => {
     it("evicts the oldest session when limit exceeded", () => {
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < MAX_SESSIONS; i++) {
         manager.set(`ctx-${i}`, makeState(`ctx-${i}`, `Label ${i}`, new Date(i * 1000)));
       }
       const oldest = manager.get("ctx-0")!;
 
-      manager.set("ctx-5", makeState("ctx-5", "Label 5", new Date(5000)));
+      manager.set(
+        `ctx-${MAX_SESSIONS}`,
+        makeState(`ctx-${MAX_SESSIONS}`, `Label ${MAX_SESSIONS}`, new Date(MAX_SESSIONS * 1000)),
+      );
 
       expect(oldest.workspace.cleanup).toHaveBeenCalledOnce();
       expect(manager.getSessions().map((s) => s.id)).not.toContain("ctx-0");
-      expect(manager.getSessions()).toHaveLength(5);
+      expect(manager.getSessions()).toHaveLength(MAX_SESSIONS);
     });
 
     it("does not evict when at exactly MAX_SESSIONS", () => {
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < MAX_SESSIONS; i++) {
         manager.set(`ctx-${i}`, makeState(`ctx-${i}`, `Label ${i}`, new Date(i * 1000)));
       }
       const oldest = manager.get("ctx-0")!;
 
       // No additional set — no eviction
       expect(oldest.workspace.cleanup).not.toHaveBeenCalled();
-      expect(manager.getSessions()).toHaveLength(5);
+      expect(manager.getSessions()).toHaveLength(MAX_SESSIONS);
     });
   });
 });
