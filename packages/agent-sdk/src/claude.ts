@@ -31,6 +31,7 @@ export interface SpawnClaudeOptions {
   timeoutMs?: number;
   stderrToLog?: string; // log file path to write stderr to
   suppressNotify?: boolean; // suppress scheduler notification on session end
+  apiKey?: string; // override ANTHROPIC_API_KEY for this invocation
 }
 
 export interface SpawnClaudeResult {
@@ -45,7 +46,11 @@ export interface SpawnClaudeHandle {
 }
 
 /** Build the env object for a spawned Claude process. Exported for testing. */
-export function buildSpawnEnv(taskName: string, suppressNotify?: boolean): NodeJS.ProcessEnv {
+export function buildSpawnEnv(
+  taskName: string,
+  suppressNotify?: boolean,
+  apiKey?: string,
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
     CLAUDECODE: undefined,
@@ -54,5 +59,6 @@ export function buildSpawnEnv(taskName: string, suppressNotify?: boolean): NodeJ
     SHELL: process.env.SHELL || "/bin/zsh",
     TERM: process.env.TERM || "xterm-256color",
     PATH: buildClaudePath(),
+    ...(apiKey ? { ANTHROPIC_API_KEY: apiKey } : {}),
   };
 }

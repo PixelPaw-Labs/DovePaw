@@ -22,7 +22,7 @@ function spawnClaude(args: string[], opts: SpawnClaudeOptions): SpawnClaudeHandl
   const result = new Promise<SpawnClaudeResult>((resolve) => {
     const child = spawn(CLAUDE_CLI, args, {
       cwd,
-      env: buildSpawnEnv(taskName, opts.suppressNotify),
+      env: buildSpawnEnv(taskName, opts.suppressNotify, opts.apiKey),
       stdio: ["ignore", "pipe", "pipe"],
     });
 
@@ -90,6 +90,8 @@ export interface RunOpts {
   sessionId?: string;
   /** Resume a prior session by its ID (--resume <id>). */
   resumeSession?: string;
+  /** Override ANTHROPIC_API_KEY for this invocation. */
+  apiKey?: string;
 }
 
 const WORKTREE_MAX_ATTEMPTS = 2;
@@ -155,6 +157,7 @@ export class ClaudeRunner {
       timeoutMs: opts.timeoutMs ?? 24 * 60 * 60 * 1000,
       stderrToLog: this.logFile,
       suppressNotify: canRetry || false,
+      apiKey: opts.apiKey,
     });
     this.currentHandle = handle;
 

@@ -69,7 +69,7 @@ export class CodexRunner {
     });
 
     this.thread = this.codex.startThread({
-      model: opts.model || "gpt-5.4",
+      model: opts.model || "gpt-5.4-mini",
       workingDirectory: opts.cwd || process.cwd(),
       skipGitRepoCheck: opts.skipGitRepoCheck ?? true,
       sandboxMode: "workspace-write",

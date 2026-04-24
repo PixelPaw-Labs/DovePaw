@@ -32,9 +32,9 @@ Always run Claude in `AGENT_WORKSPACE`. Give Claude read access to repos via `--
 **Never use `REPOS[0]` as cwd** — `REPOS` is a list and the agent may need all of them.
 
 ```typescript
-import { ClaudeRunner, makeTimestamp } from "@dovepaw/agent-sdk";
+import { AgentRunner, makeTimestamp } from "@dovepaw/agent-sdk";
 
-const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
+const runner = new AgentRunner(LOG_DIR, LOG_FILE);
 const repoFlags = REPOS.flatMap((r) => ["--add-dir", r]);
 const { code, stdout } = await runner.run(prompt, {
   cwd: WORK_DIR,
@@ -50,10 +50,10 @@ Use when each repo needs independent processing (e.g. per-repo summary, per-repo
 **Always use `Promise.all` — never loop sequentially.**
 
 ```typescript
-import { ClaudeRunner, makeTimestamp } from "@dovepaw/agent-sdk";
+import { AgentRunner, makeTimestamp } from "@dovepaw/agent-sdk";
 import { basename } from "node:path";
 
-const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
+const runner = new AgentRunner(LOG_DIR, LOG_FILE);
 const results = await Promise.all(
   REPOS.map(async (repo) => {
     const { code, stdout } = await runner.run(buildPrompt(repo), {
@@ -72,13 +72,13 @@ const results = await Promise.all(
 ## Pattern B — Write to one specific repo (worktree isolation)
 
 Pick the target repo explicitly. Add remaining repos via `RunOpts.repos` so Claude still sees them.  
-Use `ClaudeRunner` (from `@dovepaw/agent-sdk`) instead of `spawnClaudeWithSignals` — it wraps worktree
+Use `AgentRunner` (from `@dovepaw/agent-sdk`) instead of `spawnClaudeWithSignals` — it wraps worktree
 spawning with a watchdog that detects hung CLI processes and retries once automatically.
 
 ```typescript
-import { ClaudeRunner, makeTimestamp } from "@dovepaw/agent-sdk";
+import { AgentRunner, makeTimestamp } from "@dovepaw/agent-sdk";
 
-const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
+const runner = new AgentRunner(LOG_DIR, LOG_FILE);
 const targetRepo = REPOS[0]; // or: resolveRepoName("my-repo-name", REPOS)
 const branch = `{{AGENT_NAME}}-${makeTimestamp()}`;
 const { code, stdout } = await runner.run(prompt, {
@@ -90,10 +90,10 @@ const { code, stdout } = await runner.run(prompt, {
 });
 ```
 
-For **parallel worktrees** (e.g. one per Jira ticket or alert group) — share one `ClaudeRunner` instance:
+For **parallel worktrees** (e.g. one per Jira ticket or alert group) — share one `AgentRunner` instance:
 
 ```typescript
-const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
+const runner = new AgentRunner(LOG_DIR, LOG_FILE);
 const results = await Promise.all(
   workItems.map(async (item) => {
     const branch = `{{AGENT_NAME}}-${item.id}-${makeTimestamp()}`;
@@ -143,20 +143,20 @@ Only use when steps are genuinely sequential and share context. Single-step agen
 ## Pattern D — Codex (OpenAI Codex SDK instead of Claude CLI)
 
 Use when Codex is a smarter or cheaper option than Claude CLI for the task.  
-`CodexRunner` (from `@dovepaw/agent-sdk`) manages the Codex thread and handles abort.  
+`AgentRunner` dispatches to Codex automatically when `model` starts with `gpt` or equals `"codex"`.  
 No worktree watchdog, no session chaining — one prompt, one result.
 
 ```typescript
-import { CodexRunner, agentPersistentLogDir, makeTimestamp } from "@dovepaw/agent-sdk";
+import { AgentRunner, agentPersistentLogDir, makeTimestamp } from "@dovepaw/agent-sdk";
 
 const LOG_DIR = agentPersistentLogDir("{{AGENT_NAME}}");
-const runner = new CodexRunner(LOG_DIR);
+const runner = new AgentRunner(LOG_DIR);
 
 const { code, stdout } = await runner.run(prompt, {
   cwd: WORK_DIR,
   taskName: "{{AGENT_NAME}}",
   timeoutMs: {{TIMEOUT_MS}},
-  model: "gpt-5.4",           // optional, defaults to gpt-5.4
+  model: "gpt-5.4-mini",      // "gpt-*" → Codex; omit to use AGENT_SCRIPT_MODEL env var
   agentRoster: "...",         // optional developer instructions
 });
 ```
@@ -164,9 +164,10 @@ const { code, stdout } = await runner.run(prompt, {
 **Rules:**
 
 - Always pass `AGENT_WORKSPACE` as `cwd` — Codex operates on the workspace directory
-- `model` defaults to `gpt-5.4` — only override when explicitly needed
+- `model: "gpt-5.4-mini"` (or any `gpt-*`) routes to Codex; `model: "claude-*"` routes to Claude
+- Omitting `model` falls back to the `AGENT_SCRIPT_MODEL` env var (global setting)
 - No `repos` / `worktree` / `sessionId` options — not supported by Codex SDK
-- Abort is handled automatically — shutdown is built into `CodexRunner.run()`
+- Abort is handled automatically — shutdown is built into the Codex path of `AgentRunner.run()`
 
 ---
 

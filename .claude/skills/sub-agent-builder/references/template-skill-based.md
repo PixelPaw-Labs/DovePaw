@@ -23,7 +23,7 @@ import { join } from "node:path";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import {
-  ClaudeRunner,
+  AgentRunner,
   createLogger,
   makeTimestamp,
   cleanupOldLogs,
@@ -71,7 +71,7 @@ context: fork
 `,
   );
 
-  const runner = new ClaudeRunner(LOG_DIR, LOG_FILE);
+  const runner = new AgentRunner(LOG_DIR, LOG_FILE);
   try {
     publishStatusToUI("Running skill…");
     const { code, stdout } = await runner.run(`/${skillName}\n\n${INSTRUCTION}`, {
@@ -80,7 +80,7 @@ context: fork
       timeoutMs: {{TIMEOUT_MS}},
       permissionMode: "acceptEdits",
     });
-    log(`Claude CLI exited with code: ${code}`);
+    log(`Agent exited with code: ${code}`);
     log(stdout);
   } finally {
     // Always clean up skill dir — even if Claude throws
