@@ -1,5 +1,5 @@
 import { Codex } from "@openai/codex-sdk";
-import type { Thread, WebSearchMode } from "@openai/codex-sdk";
+import type { Thread, WebSearchMode, SandboxMode } from "@openai/codex-sdk";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ export interface CodexRunOpts {
   resumeSession?: string;
   webSearchEnabled?: boolean;
   webSearchMode?: WebSearchMode;
+  sandboxMode?: SandboxMode;
 }
 
 interface CodexResult {
@@ -81,6 +82,7 @@ export class CodexRunner {
         : {}),
       ...(opts.webSearchEnabled !== undefined ? { webSearchEnabled: opts.webSearchEnabled } : {}),
       ...(opts.webSearchMode !== undefined ? { webSearchMode: opts.webSearchMode } : {}),
+      ...(opts.sandboxMode !== undefined ? { sandboxMode: opts.sandboxMode } : {}),
     };
     this.thread = opts.resumeSession
       ? this.codex.resumeThread(opts.resumeSession, threadOptions)

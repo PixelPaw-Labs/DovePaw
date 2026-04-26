@@ -44,6 +44,20 @@ describe("CodexRunner", () => {
     });
   });
 
+  describe("sandboxMode option", () => {
+    it("is accepted in CodexRunOpts with danger-full-access", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          sandboxMode: "danger-full-access",
+        })
+        .catch(() => {}); // fails at connect with no API key — expected
+    });
+  });
+
   describe("additionalDirectories option", () => {
     it("is accepted in CodexRunOpts with directories", async () => {
       const runner = new CodexRunner(TMP_DIR);

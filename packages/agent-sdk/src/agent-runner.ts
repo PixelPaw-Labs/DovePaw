@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ClaudeRunner, type RunOpts } from "./claude-runner.js";
 import { CodexRunner, type CodexRunOpts } from "./codex-runner.js";
-import type { WebSearchMode } from "@openai/codex-sdk";
+import type { WebSearchMode, SandboxMode } from "@openai/codex-sdk";
 
 interface ClaudeRunOpts {
   permissionMode?: string;
@@ -18,6 +18,7 @@ interface CodexOpts {
   skipGitRepoCheck?: boolean;
   webSearchEnabled?: boolean;
   webSearchMode?: WebSearchMode;
+  sandboxMode?: SandboxMode;
 }
 
 /** Union of all opts supported across runners. Claude-specific fields are ignored for Codex and vice versa. */
@@ -72,6 +73,7 @@ export class AgentRunner {
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
         webSearchEnabled: opts.codexOpts?.webSearchEnabled,
         webSearchMode: opts.codexOpts?.webSearchMode,
+        sandboxMode: opts.codexOpts?.sandboxMode,
       } satisfies CodexRunOpts);
     }
     if (!isClaudeModel(model)) {

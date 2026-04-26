@@ -58,6 +58,21 @@ describe("AgentRunner", () => {
       }
     });
 
+    it("passes codexOpts.sandboxMode to Codex runner without error", async () => {
+      const err = await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gpt-5.4-mini",
+          timeoutMs: 100,
+          codexOpts: { sandboxMode: "danger-full-access" },
+        })
+        .catch((e: Error) => e);
+      if (err instanceof Error) {
+        expect(err.message).not.toContain("Unknown model");
+      }
+    });
+
     it("passes resumeSession to Codex runner without error", async () => {
       const err = await runner
         .run("prompt", {
