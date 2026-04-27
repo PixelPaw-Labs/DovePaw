@@ -158,7 +158,8 @@ const { code, stdout } = await runner.run(prompt, {
   taskName: "{{AGENT_NAME}}",
   timeoutMs: {{TIMEOUT_MS}},
   model: "gpt-5.4-mini",      // "gpt-*" → Codex; omit to use AGENT_SCRIPT_MODEL env var
-  codexOpts: { agentRoster: "..." },  // optional developer instructions
+  claudeOpts: { permissionMode: "acceptEdits" },
+  codexOpts: { sandboxMode: "danger-full-access" },
 });
 ```
 
@@ -167,6 +168,7 @@ const { code, stdout } = await runner.run(prompt, {
 - Always pass `AGENT_WORKSPACE` as `cwd` — Codex operates on the workspace directory
 - `model: "gpt-5.4-mini"` (or any `gpt-*`) routes to Codex; `model: "claude-*"` routes to Claude
 - Omitting `model` falls back to the `AGENT_SCRIPT_MODEL` env var (global setting)
+- **Always provide both `claudeOpts` and `codexOpts`** — the active runner picks its own opts and ignores the other. Without both, switching `AGENT_SCRIPT_MODEL` leaves the new runner unconfigured.
 - No `repos` / `worktree` / `sessionId` options — not supported by Codex SDK
 - Abort is handled automatically — shutdown is built into the Codex path of `AgentRunner.run()`
 

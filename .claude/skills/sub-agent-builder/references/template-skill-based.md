@@ -79,6 +79,7 @@ context: fork
       taskName: "{{AGENT_NAME}}",
       timeoutMs: {{TIMEOUT_MS}},
       claudeOpts: { permissionMode: "acceptEdits" },
+      codexOpts: { sandboxMode: "danger-full-access" },
     });
     log(`Agent exited with code: ${code}`);
     log(stdout);
