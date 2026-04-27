@@ -115,10 +115,15 @@ Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the c
      - **No** → `sandboxMode: "workspace-write"` (Codex stays sandboxed to the workspace)
 
 - If repos selected and agent is read-only: pass all repos as `--add-dir` flags: `REPOS.flatMap(r => ["--add-dir", r])`
-- If repos selected and agent writes to one specific repo: use that repo as cwd with `-w <branch>` (worktree); add remaining repos with `--add-dir`
-- If the agent processes each repo independently (one Claude run per repo): **always spawn in parallel with `Promise.all`** — never loop sequentially. See Pattern A (multi-repo) in `references/spawning-patterns.md`.
+- If repos selected and agent writes to one specific repo: use that repo as cwd with `claudeOpts: { worktree: branch }` — **Claude Code owns the worktree lifecycle**. It creates and removes the worktree automatically. The skill body must NOT contain `git worktree add` or `git worktree remove` commands. Orient the agent in the skill body with: "You are already checked out on branch `<branch>`. Work in the current directory."
+- If repos selected and agent is read-only: pass all repos as `additionalDirectories`; no worktree
+- If the agent processes each repo/target independently (one Claude run per target): **always spawn in parallel with `Promise.all`** — never loop sequentially. Extract a `fixItem(...)` / `processRepo(...)` function and map over entries. See Pattern A (multi-repo) in `references/spawning-patterns.md`.
 - If agent has sequential steps that share context: chain with `--session-id` / `--resume`
 - Single-step agents: plain `-p` prompt, no worktree, no session chaining
+
+**Skill-based agents — only pre-fetch what the skill needs to be configured:**
+
+In `main.ts`, only fetch the minimal data needed to _build_ the skill (e.g. PR branch names, repo paths, failing check names from a status rollup). Never pre-fetch data that requires the repo's runtime context — CI logs, authenticated API calls, log files — in `main.ts`. That data belongs in the skill body, where the agent has the right context, can handle errors dynamically, and can decide what to look at. Pre-fetching context-heavy data in `main.ts` is fragile: it runs before the worktree exists, may time out, and produces stale snapshots the agent can't adapt from.
 
 **Phase 2 gate — verify before proceeding:**
 
@@ -301,6 +306,7 @@ Skills and agents are listed independently — a skill can exist without a same-
 - [ ] `$ARGUMENTS` parsing documented at the top of the body
 - [ ] Output contract defined: structured JSON last line if agent calls in a loop; plain text otherwise
 - [ ] Skill invocation in `main.ts` uses correct format (`Skill("/skill-name args")`)
+- [ ] If the skill body invokes other skills via `Skill("/other-skill ...")`, every tool required by those sub-skills is present in `allowed-tools` (e.g. `Glob`, `Grep` for `/git-commit` and `/create-pr`)
 
 Fix any failures before continuing.
 
