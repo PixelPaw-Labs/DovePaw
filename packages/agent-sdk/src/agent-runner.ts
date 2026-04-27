@@ -36,6 +36,8 @@ export interface AgentRunOpts {
   resumeSession?: string;
   claudeOpts?: ClaudeRunOpts;
   codexOpts?: CodexOpts;
+  /** Called when Codex is the active runner. Return value replaces the prompt sent to Codex. */
+  onCodexPrompt?: (prompt: string) => string;
 }
 
 function isCodexModel(model: string): boolean {
@@ -61,7 +63,8 @@ export class AgentRunner {
   async run(prompt: string, opts: AgentRunOpts): Promise<{ code: number; stdout: string }> {
     const model = opts.model ?? (process.env.AGENT_SCRIPT_MODEL ?? "").trim();
     if (isCodexModel(model)) {
-      return new CodexRunner(this.logDir).run(prompt, {
+      const codexPrompt = opts.onCodexPrompt ? opts.onCodexPrompt(prompt) : prompt;
+      return new CodexRunner(this.logDir).run(codexPrompt, {
         cwd: opts.cwd,
         taskName: opts.taskName,
         timeoutMs: opts.timeoutMs,

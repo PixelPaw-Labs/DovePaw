@@ -89,6 +89,24 @@ describe("AgentRunner", () => {
     });
   });
 
+  describe("onCodexPrompt callback", () => {
+    const runner = new AgentRunner(TMP_DIR, "/dev/null");
+
+    it("calls onCodexPrompt with original prompt when Codex model is selected", async () => {
+      const transform = vi.fn((p: string) => p + " [appended]");
+      await runner
+        .run("base prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gpt-5.4-mini",
+          timeoutMs: 100,
+          onCodexPrompt: transform,
+        })
+        .catch(() => {});
+      expect(transform).toHaveBeenCalledWith("base prompt");
+    });
+  });
+
   describe("AGENT_SCRIPT_MODEL env var", () => {
     const runner = new AgentRunner(TMP_DIR, "/dev/null");
     let prev: string | undefined;
