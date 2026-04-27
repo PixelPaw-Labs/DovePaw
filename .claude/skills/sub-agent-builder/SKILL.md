@@ -104,6 +104,16 @@ Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the c
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
 - Default env var for repo list is `REPO_LIST` — use this name in `agent.json` envVars and in the `parseRepos("REPO_LIST")` call unless the user specifies a different name.
 - **Always provide both `claudeOpts` and `codexOpts`** in every `runner.run()` call — `AgentRunner` picks the active runner's opts and ignores the other. Omitting either means switching `AGENT_SCRIPT_MODEL` leaves the new runner unconfigured (no permission mode, no sandbox).
+- **Before writing runner opts**, ask 1 `AskUserQuestion` with two sub-questions (combine into one call):
+  1. **Claude permission mode** — "What level of access does the Claude subagent need?"
+     - `readOnly` — inspect files only, no writes or commands
+     - `acceptEdits` — read + write files, run commands (recommended for most agents)
+     - `bypassPermissions` — full autonomy, no prompts at all (for fully automated daemons)
+
+  2. **Codex sandbox mode** _(only ask if `model: "gpt-*"` is set)_ — "Does this agent need CLI tools that read credentials from the local machine (`gh`, `git`, `aws`, etc.)?"
+     - **Yes** → `sandboxMode: "danger-full-access"` (removes Codex's filesystem boundary so `~/.config/`, `~/.ssh/`, `~/.aws/` are accessible)
+     - **No** → `sandboxMode: "workspace-write"` (Codex stays sandboxed to the workspace)
+
 - If repos selected and agent is read-only: pass all repos as `--add-dir` flags: `REPOS.flatMap(r => ["--add-dir", r])`
 - If repos selected and agent writes to one specific repo: use that repo as cwd with `-w <branch>` (worktree); add remaining repos with `--add-dir`
 - If the agent processes each repo independently (one Claude run per repo): **always spawn in parallel with `Promise.all`** — never loop sequentially. See Pattern A (multi-repo) in `references/spawning-patterns.md`.
