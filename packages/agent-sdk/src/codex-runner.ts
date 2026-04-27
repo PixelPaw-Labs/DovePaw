@@ -1,5 +1,5 @@
 import { Codex } from "@openai/codex-sdk";
-import type { Thread, WebSearchMode, SandboxMode } from "@openai/codex-sdk";
+import type { Thread, WebSearchMode, SandboxMode, CodexOptions } from "@openai/codex-sdk";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -14,6 +14,8 @@ export interface CodexRunOpts {
   model?: string;
   /** Agent roster/developer instructions */
   agentRoster?: string;
+  /** Generic Codex CLI config overrides passed to `new Codex({ config })` */
+  config?: CodexOptions["config"];
   /** Timeout in milliseconds */
   timeoutMs?: number;
   /** Whether to skip git repo validation */
@@ -67,10 +69,14 @@ export class CodexRunner {
 
   private async connect(opts: CodexRunOpts): Promise<void> {
     const apiKey = opts.apiKey || process.env.OPENAI_API_KEY;
+    const config = {
+      ...opts.config,
+      ...(opts.agentRoster ? { developer_instructions: opts.agentRoster } : {}),
+    };
 
     this.codex = new Codex({
       ...(apiKey ? { apiKey } : {}),
-      ...(opts.agentRoster ? { config: { developer_instructions: opts.agentRoster } } : {}),
+      ...(Object.keys(config).length ? { config } : {}),
     });
 
     const threadOptions = {

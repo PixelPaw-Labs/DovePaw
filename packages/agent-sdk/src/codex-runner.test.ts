@@ -69,6 +69,20 @@ describe("CodexRunner", () => {
     });
   });
 
+  describe("config option", () => {
+    it("is accepted in CodexRunOpts with service_tier fast", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          config: { service_tier: "fast" },
+        })
+        .catch(() => {}); // fails at connect with no API key — expected
+    });
+  });
+
   describe("additionalDirectories option", () => {
     it("is accepted in CodexRunOpts with directories", async () => {
       const runner = new CodexRunner(TMP_DIR);
