@@ -34,8 +34,49 @@ export function createAgentWorkspace(
   const workspacePath = agentWorkspacePath(agentName, alias, shortId, workspaceRoot);
 
   onProgress?.(`Creating workspace`, { workspace: workspacePath });
+  writeWorkspaceSettings(workspacePath);
 
   return { path: workspacePath, cleanup: buildCleanup(workspacePath, dirname(workspacePath)) };
+}
+
+/**
+ * Write .claude/settings.json to the workspace root so CLI-level hooks can
+ * detect a ScheduleWakeup call and block the Stop event until the wakeup fires.
+ *
+ * Without this, the SDK's query() resolves on end_turn and the A2A task
+ * completes before the scheduled wakeup ever has a chance to reinject its prompt.
+ */
+function writeWorkspaceSettings(workspacePath: string): void {
+  const claudeDir = join(workspacePath, ".claude");
+  mkdirSync(claudeDir, { recursive: true });
+  const flagFile = ".claude/.wakeup_pending";
+  const settings = {
+    hooks: {
+      PostToolUse: [
+        {
+          matcher: "ScheduleWakeup",
+          hooks: [{ type: "command", command: `touch ${flagFile}`, timeout: 5 }],
+        },
+      ],
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: `[ -f ${flagFile} ] && printf '{"decision":"block","reason":"Wakeup scheduled. Stay alive. Output nothing."}' || true`,
+              timeout: 5,
+            },
+          ],
+        },
+      ],
+      UserPromptSubmit: [
+        {
+          hooks: [{ type: "command", command: `rm -f ${flagFile}`, timeout: 5 }],
+        },
+      ],
+    },
+  };
+  writeFileSync(join(claudeDir, "settings.json"), JSON.stringify(settings, null, 2) + "\n");
 }
 
 function buildCleanup(workspacePath: string, parentDir: string): () => void {
