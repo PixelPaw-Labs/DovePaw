@@ -87,6 +87,8 @@ const INSTRUCTION = process.argv[2] || "";
 
 Then pass it through to Claude — either appended to the prompt string (`Instruction: ${INSTRUCTION}`) or as part of the skill invocation (`/${skillName}\n\n${INSTRUCTION}`). Never silently discard it; it is the user's intent for that specific run.
 
+**Never parse `INSTRUCTION`.** `INSTRUCTION` is free-form natural language from the user — never split, tokenise, or extract structured data from it (no `.split("\n")`, no regex extraction of IDs, no format assumptions). The agent that receives it is responsible for interpreting it. If the agent needs to act on multiple repos or targets, it discovers them from `REPO_LIST` or external APIs — not by parsing the instruction string.
+
 **Use async/await throughout:**
 
 All agent functions that perform I/O must be `async`. Synchronous I/O (`readFileSync`, `execSync`, etc.) blocks the Node.js event loop — use async equivalents. The only acceptable exception is top-level module-init code that genuinely cannot be awaited (e.g. a static constant derived from a synchronous path resolution), and that must be a deliberate, commented choice.
@@ -128,7 +130,7 @@ In `main.ts`, only fetch the minimal data needed to _build_ the skill (e.g. PR b
 **Phase 2 gate — verify before proceeding:**
 
 - [ ] All `{{PLACEHOLDER}}` values substituted in every written file
-- [ ] `INSTRUCTION` read from `process.argv[2]` and passed through to Claude
+- [ ] `INSTRUCTION` read from `process.argv[2]` and passed through to Claude as plain text — never parsed, split, or regex-matched
 - [ ] No SDK function re-implemented — every utility traced to `@dovepaw/agent-sdk`
 - [ ] Spawning pattern (A/B/C) matches the agent's repo access needs
 - [ ] No dead code, no unused imports
