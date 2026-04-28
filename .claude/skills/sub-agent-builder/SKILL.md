@@ -102,7 +102,7 @@ Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the c
 **Spawning rules (use judgment):**
 
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
-- Default env var for repo list is `REPO_LIST` — use this name in `agent.json` envVars and in the `parseRepos("REPO_LIST")` call unless the user specifies a different name.
+- Default env var for repo list is `REPO_LIST` — use this name in the `parseRepos("REPO_LIST")` call. Do NOT add `REPO_LIST` to `agent.json` envVars — it is auto-injected by the executor from the agent's `repos` config (local paths resolved at spawn time).
 - **Always provide both `claudeOpts` and `codexOpts`** in every `runner.run()` call — `AgentRunner` picks the active runner's opts and ignores the other. Omitting either means switching `AGENT_SCRIPT_MODEL` leaves the new runner unconfigured (no permission mode, no sandbox).
 - **Before writing runner opts**, ask 1 `AskUserQuestion` with two sub-questions (combine into one call):
   1. **Claude permission mode** — "What level of access does the Claude subagent need?"
