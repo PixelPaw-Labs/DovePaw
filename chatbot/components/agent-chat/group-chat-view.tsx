@@ -9,6 +9,7 @@ import { Conversation, ConversationContent } from "@/components/ai-elements/conv
 import { ChatMessageItem } from "./chat-message";
 import { ChatInputBar } from "./chat-input-bar";
 import { ProcessingBar } from "./processing-bar";
+import { GroupRoundtableView } from "./group-roundtable-view";
 import { useGroupChatSession } from "@/components/hooks/use-group-chat-session";
 
 interface GroupChatViewProps {
@@ -44,6 +45,7 @@ export function GroupChatView({
     }
   }, [isLoading, onIsLoadingChange]);
   const [selectedAgentId, setSelectedAgentId] = React.useState(memberAgentIds[0] ?? "");
+  const [viewMode, setViewMode] = React.useState<"stacked" | "roundtable">("stacked");
 
   const configByName = React.useMemo(
     () => new Map(agentConfigs.map((a) => [a.name, a])),
@@ -66,7 +68,24 @@ export function GroupChatView({
           Group Chat
         </span>
 
-        <div className="flex -space-x-1 ml-auto">
+        <div className="ml-auto flex items-center gap-3">
+          <div className="flex items-center rounded-full border border-border/50 p-0.5 text-[10px] font-bold tracking-wider uppercase">
+            {(["stacked", "roundtable"] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setViewMode(mode)}
+                className={`px-2.5 py-0.5 rounded-full transition-colors ${
+                  viewMode === mode
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          <div className="flex -space-x-1">
           {memberAgentIds.map((agentId) => {
             const config = configByName.get(agentId);
             if (!config) return null;
@@ -81,6 +100,7 @@ export function GroupChatView({
               </div>
             );
           })}
+          </div>
         </div>
       </header>
 
@@ -92,6 +112,12 @@ export function GroupChatView({
                 No messages yet. Start the conversation.
               </p>
             </div>
+          ) : viewMode === "roundtable" ? (
+            <GroupRoundtableView
+              messages={messages}
+              memberAgentIds={memberAgentIds}
+              agentConfigs={agentConfigs}
+            />
           ) : (
             messages.map((msg, i) => {
               const prevMsg = messages[i - 1];
