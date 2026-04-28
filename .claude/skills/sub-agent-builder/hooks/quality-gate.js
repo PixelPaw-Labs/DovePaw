@@ -35,7 +35,8 @@ process.stdout.write(
       "Sub-agent-builder quality gate: Before stopping, evaluate ALL files you created or edited against the sub-agent-builder SKILL.md specification. " +
       "Check: (1) main.ts — all {{PLACEHOLDER}} values substituted, spawning pattern correct, INSTRUCTION passed through, agent script flow steps and logic are correct without flaw (no dead branches, correct error handling, publishStatusToUI called appropriately (awaited), subprocess env correct etc); " +
       "(2) agent.json — all required fields present, no pluginPath set, every envVars entry has an `id` UUID (missing id causes Zod to silently drop the agent from the Kiln group); " +
-      "(3) SKILL.md if created — frontmatter valid for Claude Code, argument pattern documented, output contract defined. " +
+      '(3) SKILL.md if created — frontmatter valid for Claude Code, argument pattern documented, output contract defined; and main.ts invokes it via Skill("/skill-name ${INSTRUCTION}") with no duplicate task prompt elsewhere; ' +
+      "(4) if the agent writes to repos and uses Claude (not Codex), claudeOpts.worktree must be set in runner.run() opts (Pattern B). " +
       "Fix all listed issues first, then — after all fixes are complete — " +
       'end your final message with a JSON object on its own line: ```json\n{"confidence": <0-100>, "issues": ["<remaining issue>", ...]}\n```. ' +
       "The JSON must come AFTER all fixes so it reflects the post-fix state.",
