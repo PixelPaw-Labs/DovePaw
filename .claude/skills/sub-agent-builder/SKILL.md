@@ -30,7 +30,7 @@ hooks:
 1. **Purpose** — "What should this agent do?" — free text via Other
 2. **Plugin repo** — "Which plugin repo will this agent eventually live in?" — run `ls ~/.dovepaw/plugins/` and offer each dir basename as an option, plus "None / decide later"
 3. **Agent type** — "Which pattern fits this agent?" — present 3 options with code previews:
-   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.4"` in opts to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
+   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.5"` in opts to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
    - **Skill-based** — dynamically builds a temporary skill, runs it, cleans up (for complex context assembly)
    - **Stateful** — lock + state dir + orchestration (for scheduled agents requiring mutual exclusion)
 
@@ -259,7 +259,13 @@ Fetch https://code.claude.com/docs/en/skills.md for the authoritative SKILL.md f
 
 #### Agent → skill invocation
 
-In `main.ts` (or `prompts.ts`), the agent embeds the skill call in the prompt string it passes to `runner.run`:
+**When a skill is created, the skill owns the core task logic.** Go back and update `main.ts`:
+
+1. Replace the main prompt string with `Skill("/skill-name ${INSTRUCTION}")`.
+2. If a `prompts.ts` was written in Phase 2 solely to build the task prompt, delete it — the skill body replaces it. Small utility prompts (e.g. a one-liner status message) may stay.
+3. Do NOT duplicate the task description in both `prompts.ts` and SKILL.md — one source of truth.
+
+In `main.ts`, the agent embeds the skill call in the prompt string it passes to `runner.run`:
 
 ```typescript
 // Positional args — simple single-value invocation
@@ -305,7 +311,7 @@ Skills and agents are listed independently — a skill can exist without a same-
 - [ ] SKILL.md frontmatter has `name`, `description`, and `argument-hint`; schema matches https://code.claude.com/docs/en/skills.md
 - [ ] `$ARGUMENTS` parsing documented at the top of the body
 - [ ] Output contract defined: structured JSON last line if agent calls in a loop; plain text otherwise
-- [ ] Skill invocation in `main.ts` uses correct format (`Skill("/skill-name args")`)
+- [ ] `main.ts` invokes the skill via `Skill("/skill-name ${INSTRUCTION}")` — task logic is not duplicated in a separate `prompts.ts`
 - [ ] If the skill body invokes other skills via `Skill("/other-skill ...")`, every tool required by those sub-skills is present in `allowed-tools` (e.g. `Glob`, `Grep` for `/git-commit` and `/create-pr`)
 
 Fix any failures before continuing.
