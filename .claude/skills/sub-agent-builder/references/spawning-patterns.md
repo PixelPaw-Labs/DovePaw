@@ -158,7 +158,8 @@ const { code, stdout } = await runner.run(prompt, {
   taskName: "{{AGENT_NAME}}",
   timeoutMs: {{TIMEOUT_MS}},
   model: "gpt-5.4-mini",      // "gpt-*" → Codex; omit to use AGENT_SCRIPT_MODEL env var
-  codexOpts: { agentRoster: "..." },  // optional developer instructions
+  claudeOpts: { permissionMode: "acceptEdits" },
+  codexOpts: { sandboxMode: "danger-full-access" },
 });
 ```
 
@@ -167,6 +168,8 @@ const { code, stdout } = await runner.run(prompt, {
 - Always pass `AGENT_WORKSPACE` as `cwd` — Codex operates on the workspace directory
 - `model: "gpt-5.4-mini"` (or any `gpt-*`) routes to Codex; `model: "claude-*"` routes to Claude
 - Omitting `model` falls back to the `AGENT_SCRIPT_MODEL` env var (global setting)
+- **Always provide both `claudeOpts` and `codexOpts`** — the active runner picks its own opts and ignores the other. Without both, switching `AGENT_SCRIPT_MODEL` leaves the new runner unconfigured.
+- **Why `danger-full-access` for Codex:** Codex defaults to `workspace-write` sandbox, which blocks filesystem access outside the workspace — this breaks CLI tools that read credentials from the home directory (`gh` reads `~/.config/gh/`, `git` reads `~/.ssh/`, AWS CLI reads `~/.aws/`). `danger-full-access` removes that boundary. Claude Code controls access via `permissionMode` (`readOnly` / `acceptEdits` / `bypassPermissions`) — an approval policy, not a filesystem boundary — so credential paths are always reachable regardless of mode.
 - No `repos` / `worktree` / `sessionId` options — not supported by Codex SDK
 - Abort is handled automatically — shutdown is built into the Codex path of `AgentRunner.run()`
 

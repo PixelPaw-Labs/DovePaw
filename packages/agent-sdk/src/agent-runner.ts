@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ClaudeRunner, type RunOpts } from "./claude-runner.js";
 import { CodexRunner, type CodexRunOpts } from "./codex-runner.js";
-import type { WebSearchMode, SandboxMode } from "@openai/codex-sdk";
+import type { WebSearchMode, SandboxMode, CodexOptions } from "@openai/codex-sdk";
 
 interface ClaudeRunOpts {
   permissionMode?: string;
@@ -15,6 +15,7 @@ interface ClaudeRunOpts {
 
 interface CodexOpts {
   agentRoster?: string;
+  config?: CodexOptions["config"];
   skipGitRepoCheck?: boolean;
   webSearchEnabled?: boolean;
   webSearchMode?: WebSearchMode;
@@ -36,6 +37,8 @@ export interface AgentRunOpts {
   resumeSession?: string;
   claudeOpts?: ClaudeRunOpts;
   codexOpts?: CodexOpts;
+  /** Called when Codex is the active runner. Return value replaces the prompt sent to Codex. */
+  onCodexPrompt?: (prompt: string) => string;
 }
 
 function isCodexModel(model: string): boolean {
@@ -61,7 +64,8 @@ export class AgentRunner {
   async run(prompt: string, opts: AgentRunOpts): Promise<{ code: number; stdout: string }> {
     const model = opts.model ?? (process.env.AGENT_SCRIPT_MODEL ?? "").trim();
     if (isCodexModel(model)) {
-      return new CodexRunner(this.logDir).run(prompt, {
+      const codexPrompt = opts.onCodexPrompt ? opts.onCodexPrompt(prompt) : prompt;
+      return new CodexRunner(this.logDir).run(codexPrompt, {
         cwd: opts.cwd,
         taskName: opts.taskName,
         timeoutMs: opts.timeoutMs,
@@ -70,6 +74,7 @@ export class AgentRunner {
         additionalDirectories: opts.additionalDirectories,
         resumeSession: opts.resumeSession,
         agentRoster: opts.codexOpts?.agentRoster,
+        config: opts.codexOpts?.config,
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
         webSearchEnabled: opts.codexOpts?.webSearchEnabled,
         webSearchMode: opts.codexOpts?.webSearchMode,

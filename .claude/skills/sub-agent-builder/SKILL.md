@@ -30,7 +30,7 @@ hooks:
 1. **Purpose** — "What should this agent do?" — free text via Other
 2. **Plugin repo** — "Which plugin repo will this agent eventually live in?" — run `ls ~/.dovepaw/plugins/` and offer each dir basename as an option, plus "None / decide later"
 3. **Agent type** — "Which pattern fits this agent?" — present 3 options with code previews:
-   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.4"` in opts to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
+   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.5"` in opts to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
    - **Skill-based** — dynamically builds a temporary skill, runs it, cleans up (for complex context assembly)
    - **Stateful** — lock + state dir + orchestration (for scheduled agents requiring mutual exclusion)
 
@@ -87,6 +87,8 @@ const INSTRUCTION = process.argv[2] || "";
 
 Then pass it through to Claude — either appended to the prompt string (`Instruction: ${INSTRUCTION}`) or as part of the skill invocation (`/${skillName}\n\n${INSTRUCTION}`). Never silently discard it; it is the user's intent for that specific run.
 
+**Never parse `INSTRUCTION`.** `INSTRUCTION` is free-form natural language from the user — never split, tokenise, or extract structured data from it (no `.split("\n")`, no regex extraction of IDs, no format assumptions). The agent that receives it is responsible for interpreting it. If the agent needs to act on multiple repos or targets, it discovers them from `REPO_LIST` or external APIs — not by parsing the instruction string.
+
 **Use async/await throughout:**
 
 All agent functions that perform I/O must be `async`. Synchronous I/O (`readFileSync`, `execSync`, etc.) blocks the Node.js event loop — use async equivalents. The only acceptable exception is top-level module-init code that genuinely cannot be awaited (e.g. a static constant derived from a synchronous path resolution), and that must be a deliberate, commented choice.
@@ -102,17 +104,33 @@ Before writing any utility code, read `~/.dovepaw/sdk/src/index.ts` to get the c
 **Spawning rules (use judgment):**
 
 - Always run Claude in `AGENT_WORKSPACE` — never change cwd to `REPOS[0]`. `REPOS` is a list; the agent may need all of them.
-- Default env var for repo list is `REPO_LIST` — use this name in `agent.json` envVars and in the `parseRepos("REPO_LIST")` call unless the user specifies a different name.
+- Default env var for repo list is `REPO_LIST` — use this name in the `parseRepos("REPO_LIST")` call. Do NOT add `REPO_LIST` to `agent.json` envVars — it is auto-injected by the executor from the agent's `repos` config (local paths resolved at spawn time).
+- **Always provide both `claudeOpts` and `codexOpts`** in every `runner.run()` call — `AgentRunner` picks the active runner's opts and ignores the other. Omitting either means switching `AGENT_SCRIPT_MODEL` leaves the new runner unconfigured (no permission mode, no sandbox).
+- **Before writing runner opts**, ask 1 `AskUserQuestion` with two sub-questions (combine into one call):
+  1. **Claude permission mode** — "What level of access does the Claude subagent need?"
+     - `readOnly` — inspect files only, no writes or commands
+     - `acceptEdits` — read + write files, run commands (recommended for most agents)
+     - `bypassPermissions` — full autonomy, no prompts at all (for fully automated daemons)
+
+  2. **Codex sandbox mode** _(only ask if `model: "gpt-*"` is set)_ — "Does this agent need CLI tools that read credentials from the local machine (`gh`, `git`, `aws`, etc.)?"
+     - **Yes** → `sandboxMode: "danger-full-access"` (removes Codex's filesystem boundary so `~/.config/`, `~/.ssh/`, `~/.aws/` are accessible)
+     - **No** → `sandboxMode: "workspace-write"` (Codex stays sandboxed to the workspace)
+
 - If repos selected and agent is read-only: pass all repos as `--add-dir` flags: `REPOS.flatMap(r => ["--add-dir", r])`
-- If repos selected and agent writes to one specific repo: use that repo as cwd with `-w <branch>` (worktree); add remaining repos with `--add-dir`
-- If the agent processes each repo independently (one Claude run per repo): **always spawn in parallel with `Promise.all`** — never loop sequentially. See Pattern A (multi-repo) in `references/spawning-patterns.md`.
+- If repos selected and agent writes to one specific repo: use that repo as cwd with `claudeOpts: { worktree: branch }` — **Claude Code owns the worktree lifecycle**. It creates and removes the worktree automatically. The skill body must NOT contain `git worktree add` or `git worktree remove` commands. Orient the agent in the skill body with: "You are already checked out on branch `<branch>`. Work in the current directory."
+- If repos selected and agent is read-only: pass all repos as `additionalDirectories`; no worktree
+- If the agent processes each repo/target independently (one Claude run per target): **always spawn in parallel with `Promise.all`** — never loop sequentially. Extract a `fixItem(...)` / `processRepo(...)` function and map over entries. See Pattern A (multi-repo) in `references/spawning-patterns.md`.
 - If agent has sequential steps that share context: chain with `--session-id` / `--resume`
 - Single-step agents: plain `-p` prompt, no worktree, no session chaining
+
+**Skill-based agents — only pre-fetch what the skill needs to be configured:**
+
+In `main.ts`, only fetch the minimal data needed to _build_ the skill (e.g. PR branch names, repo paths, failing check names from a status rollup). Never pre-fetch data that requires the repo's runtime context — CI logs, authenticated API calls, log files — in `main.ts`. That data belongs in the skill body, where the agent has the right context, can handle errors dynamically, and can decide what to look at. Pre-fetching context-heavy data in `main.ts` is fragile: it runs before the worktree exists, may time out, and produces stale snapshots the agent can't adapt from.
 
 **Phase 2 gate — verify before proceeding:**
 
 - [ ] All `{{PLACEHOLDER}}` values substituted in every written file
-- [ ] `INSTRUCTION` read from `process.argv[2]` and passed through to Claude
+- [ ] `INSTRUCTION` read from `process.argv[2]` and passed through to Claude as plain text — never parsed, split, or regex-matched
 - [ ] No SDK function re-implemented — every utility traced to `@dovepaw/agent-sdk`
 - [ ] Spawning pattern (A/B/C) matches the agent's repo access needs
 - [ ] No dead code, no unused imports
@@ -243,7 +261,13 @@ Fetch https://code.claude.com/docs/en/skills.md for the authoritative SKILL.md f
 
 #### Agent → skill invocation
 
-In `main.ts` (or `prompts.ts`), the agent embeds the skill call in the prompt string it passes to `runner.run`:
+**When a skill is created, the skill owns the core task logic.** Go back and update `main.ts`:
+
+1. Replace the main prompt string with `Skill("/skill-name ${INSTRUCTION}")`.
+2. If a `prompts.ts` was written in Phase 2 solely to build the task prompt, delete it — the skill body replaces it. Small utility prompts (e.g. a one-liner status message) may stay.
+3. Do NOT duplicate the task description in both `prompts.ts` and SKILL.md — one source of truth.
+
+In `main.ts`, the agent embeds the skill call in the prompt string it passes to `runner.run`:
 
 ```typescript
 // Positional args — simple single-value invocation
@@ -289,7 +313,8 @@ Skills and agents are listed independently — a skill can exist without a same-
 - [ ] SKILL.md frontmatter has `name`, `description`, and `argument-hint`; schema matches https://code.claude.com/docs/en/skills.md
 - [ ] `$ARGUMENTS` parsing documented at the top of the body
 - [ ] Output contract defined: structured JSON last line if agent calls in a loop; plain text otherwise
-- [ ] Skill invocation in `main.ts` uses correct format (`Skill("/skill-name args")`)
+- [ ] `main.ts` invokes the skill via `Skill("/skill-name ${INSTRUCTION}")` — task logic is not duplicated in a separate `prompts.ts`
+- [ ] If the skill body invokes other skills via `Skill("/other-skill ...")`, every tool required by those sub-skills is present in `allowed-tools` (e.g. `Glob`, `Grep` for `/git-commit` and `/create-pr`)
 
 Fix any failures before continuing.
 

@@ -90,6 +90,46 @@ describe("createAgentWorkspace", () => {
     ws2.cleanup();
   });
 
+  describe("writeWorkspaceSettings", () => {
+    it("writes .claude/settings.json into the workspace", () => {
+      const ws = createAgentWorkspace("my-agent", "ma");
+      const settingsPath = join(ws.path, ".claude", "settings.json");
+      expect(existsSync(settingsPath)).toBe(true);
+    });
+
+    it("settings.json contains PostToolUse hook for ScheduleWakeup that touches flag file", () => {
+      const ws = createAgentWorkspace("my-agent", "ma");
+      const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
+      const postHooks = settings.hooks?.PostToolUse;
+      expect(Array.isArray(postHooks)).toBe(true);
+      const scheduleHook = postHooks.find(
+        (h: { matcher?: string }) => h.matcher === "ScheduleWakeup",
+      );
+      expect(scheduleHook).toBeDefined();
+      expect(scheduleHook.hooks[0].command).toContain("touch");
+      expect(scheduleHook.hooks[0].command).toContain(".wakeup_pending");
+    });
+
+    it("settings.json contains Stop hook that blocks when flag file exists", () => {
+      const ws = createAgentWorkspace("my-agent", "ma");
+      const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
+      const stopHooks = settings.hooks?.Stop;
+      expect(Array.isArray(stopHooks)).toBe(true);
+      const cmd: string = stopHooks[0].hooks[0].command;
+      expect(cmd).toContain(".wakeup_pending");
+      expect(cmd).toContain('"decision":"block"');
+    });
+
+    it("settings.json contains UserPromptSubmit hook that removes flag file", () => {
+      const ws = createAgentWorkspace("my-agent", "ma");
+      const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
+      const upHooks = settings.hooks?.UserPromptSubmit;
+      expect(Array.isArray(upHooks)).toBe(true);
+      expect(upHooks[0].hooks[0].command).toContain("rm -f");
+      expect(upHooks[0].hooks[0].command).toContain(".wakeup_pending");
+    });
+  });
+
   describe("cleanup()", () => {
     it("removes the workspace directory", () => {
       const ws = createAgentWorkspace("my-agent", "ma");

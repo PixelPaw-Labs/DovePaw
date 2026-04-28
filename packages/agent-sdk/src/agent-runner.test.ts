@@ -73,6 +73,21 @@ describe("AgentRunner", () => {
       }
     });
 
+    it("passes codexOpts.config to Codex runner without error", async () => {
+      const err = await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gpt-5.4-mini",
+          timeoutMs: 100,
+          codexOpts: { config: { service_tier: "fast" } },
+        })
+        .catch((e: Error) => e);
+      if (err instanceof Error) {
+        expect(err.message).not.toContain("Unknown model");
+      }
+    });
+
     it("passes resumeSession to Codex runner without error", async () => {
       const err = await runner
         .run("prompt", {
@@ -86,6 +101,24 @@ describe("AgentRunner", () => {
       if (err instanceof Error) {
         expect(err.message).not.toContain("Unknown model");
       }
+    });
+  });
+
+  describe("onCodexPrompt callback", () => {
+    const runner = new AgentRunner(TMP_DIR, "/dev/null");
+
+    it("calls onCodexPrompt with original prompt when Codex model is selected", async () => {
+      const transform = vi.fn((p: string) => p + " [appended]");
+      await runner
+        .run("base prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gpt-5.4-mini",
+          timeoutMs: 100,
+          onCodexPrompt: transform,
+        })
+        .catch(() => {});
+      expect(transform).toHaveBeenCalledWith("base prompt");
     });
   });
 

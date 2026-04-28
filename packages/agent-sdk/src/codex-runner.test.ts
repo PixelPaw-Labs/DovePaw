@@ -44,6 +44,17 @@ describe("CodexRunner", () => {
     });
   });
 
+  describe("approvalPolicy", () => {
+    it("defaults to never so subagents spawn without user confirmation", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      // approvalPolicy: "never" is passed in threadOptions; the run will fail
+      // at connect (no API key) before reaching the thread — that's expected.
+      await runner
+        .run("prompt", { cwd: TMP_DIR, taskName: "test", timeoutMs: 100 })
+        .catch(() => {});
+    });
+  });
+
   describe("sandboxMode option", () => {
     it("is accepted in CodexRunOpts with danger-full-access", async () => {
       const runner = new CodexRunner(TMP_DIR);
@@ -53,6 +64,20 @@ describe("CodexRunner", () => {
           taskName: "test",
           timeoutMs: 100,
           sandboxMode: "danger-full-access",
+        })
+        .catch(() => {}); // fails at connect with no API key — expected
+    });
+  });
+
+  describe("config option", () => {
+    it("is accepted in CodexRunOpts with service_tier fast", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          config: { service_tier: "fast" },
         })
         .catch(() => {}); // fails at connect with no API key — expected
     });

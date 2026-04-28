@@ -55,6 +55,7 @@ async function main() {
     taskName: "{{AGENT_NAME}}",
     timeoutMs: {{TIMEOUT_MS}},
     claudeOpts: { permissionMode: "{{PERMISSION_MODE}}" },
+    codexOpts: { sandboxMode: "danger-full-access" },
   });
 
   log(`Agent exited with code: ${code}`);
