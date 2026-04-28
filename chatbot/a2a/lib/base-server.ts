@@ -188,6 +188,20 @@ export function createServerFromDef(def: AgentDef, port: number): void {
 
   const sessionManager = new SessionManager();
   const publisherRegistry = new Map<string, ExecutorPublisher>();
-  const executor = new QueryAgentExecutor(def, sessionManager, publisherRegistry, port);
+  const activeExecutors = new Map<string, QueryAgentExecutor>();
+  const executor: AgentExecutor = {
+    async execute(requestContext, eventBus) {
+      const inst = new QueryAgentExecutor(def, sessionManager, publisherRegistry, port);
+      activeExecutors.set(requestContext.taskId, inst);
+      try {
+        await inst.execute(requestContext, eventBus);
+      } finally {
+        activeExecutors.delete(requestContext.taskId);
+      }
+    },
+    async cancelTask(taskId) {
+      await activeExecutors.get(taskId)?.cancelTask();
+    },
+  };
   createAgentServer(agentCard, executor, port, sessionManager, publisherRegistry);
 }

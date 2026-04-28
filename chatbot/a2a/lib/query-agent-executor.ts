@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { consola } from "consola";
-import type { AgentExecutor, RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
+import type { RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
@@ -73,7 +73,7 @@ function resolveGroupChatOverrides(
 
 export { SessionInfo };
 
-export class QueryAgentExecutor implements AgentExecutor {
+export class QueryAgentExecutor {
   private abortController: AbortController | null = null;
   private currentContextId: string | null = null;
   private readonly agentConfigReader = new AgentConfigReader();
@@ -91,7 +91,12 @@ export class QueryAgentExecutor implements AgentExecutor {
     const msgMetadata = requestContext.userMessage.metadata as Record<string, unknown> | undefined;
     const groupOverrides = resolveGroupChatOverrides(msgMetadata);
     this.abortController = new AbortController();
-    markProcessing(this.def.manifestKey, this.abortController, instruction ? "dove" : "scheduled");
+    markProcessing(
+      this.def.manifestKey,
+      taskId,
+      this.abortController,
+      instruction ? "dove" : "scheduled",
+    );
 
     consola.start(
       `Running ${this.def.displayName} sub-agent${groupOverrides ? " (group mode)" : ""}…`,
@@ -345,7 +350,7 @@ export class QueryAgentExecutor implements AgentExecutor {
       await Promise.allSettled(backgroundTasks);
       this.abortController?.abort();
       this.abortController = null;
-      markIdle(this.def.manifestKey);
+      markIdle(this.def.manifestKey, taskId);
       eventBus.finished();
     }
   }
