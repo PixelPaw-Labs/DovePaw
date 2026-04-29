@@ -2,17 +2,17 @@
 
 ## Context
 
-Commit `b08662f` (April 22) refactored the group-chat reminder in `makeStartScriptTool`. The old reminder had a pre-act read bullet — *"Read `{workspacePath}/chat_histories/` to understand what other agents have already done"* — which was dropped when `chat_histories/` was replaced by `moments/`. No equivalent read bullet was ported over. Today members are told to **save** to `moments/` but never told to **read** peer moments before acting; the flat-file store also doesn't scale as conversations grow.
+Commit `b08662f` (April 22) refactored the group-chat reminder in `makeStartScriptTool`. The old reminder had a pre-act read bullet — _"Read `{workspacePath}/chat_histories/` to understand what other agents have already done"_ — which was dropped when `chat_histories/` was replaced by `moments/`. No equivalent read bullet was ported over. Today members are told to **save** to `moments/` but never told to **read** peer moments before acting; the flat-file store also doesn't scale as conversations grow.
 
 This plan restores the pre-act read step over the canonical `moments/` store, using OpenViking (https://github.com/volcengine/OpenViking) as the retrieval + storage layer. Members will query OpenViking with `ov find` before acting and write with `ov add-resource` instead of writing `.md` files directly. Store lifecycle matches the existing per-workspace lifecycle (no cross-session persistence).
 
 ## Decisions (confirmed with user)
 
-| Decision | Choice |
-|---|---|
-| Persistence | **Per workspace** — namespace keyed by the workspace identity; ephemeral, matches current behaviour |
-| Write path | **Replace** — reminder instructs agents to call `ov add-resource` instead of writing `.md`. No dual-write. |
-| Sidecar | **Spawn from `chatbot/a2a/start-all.ts`** alongside A2A servers; port registered in existing port manifest |
+| Decision    | Choice                                                                                                     |
+| ----------- | ---------------------------------------------------------------------------------------------------------- |
+| Persistence | **Per workspace** — namespace keyed by the workspace identity; ephemeral, matches current behaviour        |
+| Write path  | **Replace** — reminder instructs agents to call `ov add-resource` instead of writing `.md`. No dual-write. |
+| Sidecar     | **Spawn from `chatbot/a2a/start-all.ts`** alongside A2A servers; port registered in existing port manifest |
 
 ## Prerequisites
 
@@ -30,6 +30,7 @@ Document both commands in the existing README install section. No automation.
 - **`chatbot/lib/agent-tools.ts:316-324`** — the group-chat `<reminder>` block inside `makeStartScriptTool`. Add a pre-act **read** bullet and replace the **save** bullet so it uses `ov`. The `MOMENTS_PATTERN` constant (lines 57-79) stays — the caveman style rules still apply to resource content; only the "File rules" sub-section needs rewording from "one file per item / name clearly" to "one resource per item / clear resource name" (no behavioural change, just lexicon).
 
   New reminder shape (around the `viking://` URI keyed on the workspace):
+
   ```
   You are participating in a group task. Before starting:
   - Read {workspacePath}/members/roster.md ...                                  (unchanged)
@@ -40,6 +41,7 @@ Document both commands in the existing README install section. No automation.
     when: decision reached, artifact complete, insight worth sharing.
     Writing style: (MOMENTS_PATTERN as today)
   ```
+
   The `<workspaceId>` is derived from `config.workspacePath` — use the existing slug-contextId already in the path (set at `query-tools.ts:250-253`).
 
 - **`chatbot/lib/query-tools.ts:236-303`** — `makeInitGroupTool`. Remove the `mkdir(join(groupWorkspacePath, "moments"), { recursive: true })` at line 254 (no longer a filesystem folder). Replace with an `ov` bootstrap call that creates the namespace `viking://workspace/<slug-contextId>/moments`. Keep `members/roster.md` mkdir + write untouched.

@@ -1,8 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
-import { GroupRoundtableView, bucketOf, arcFor, USER_BUCKET } from "../group-roundtable-view";
+import {
+  GroupRoundtableView,
+  bucketOf,
+  arcFor,
+  buildHandoffPath,
+  samplePath,
+  USER_BUCKET,
+} from "../group-roundtable-view";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import type { ChatMessage } from "@/components/hooks/use-messages";
+
+global.ResizeObserver = class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
 
 const mockIcon = () => null;
 
@@ -50,6 +63,63 @@ const makeAgent = (name: string): AgentConfigEntry => ({
 const agentConfigs: AgentConfigEntry[] = [makeAgent("alpha"), makeAgent("beta")];
 
 const text = (content: string): ChatMessage["segments"] => [{ type: "text", content }];
+
+describe("buildHandoffPath", () => {
+  it("straight returns a line path", () => {
+    const d = buildHandoffPath(0, 0, 100, 0, "straight");
+    expect(d).toBe("M 0 0 L 100 0");
+  });
+
+  it("arc-cw returns a quadratic bezier path starting with M and containing Q", () => {
+    const d = buildHandoffPath(0, 50, 100, 50, "arc-cw");
+    expect(d).toMatch(/^M 0 50 Q .+ 100 50$/);
+  });
+
+  it("arc-ccw curves in the opposite direction from arc-cw", () => {
+    const cw = buildHandoffPath(0, 50, 100, 50, "arc-cw");
+    const ccw = buildHandoffPath(0, 50, 100, 50, "arc-ccw");
+    expect(cw).not.toBe(ccw);
+    // Both start and end at same points
+    expect(cw).toMatch(/^M 0 50/);
+    expect(ccw).toMatch(/^M 0 50/);
+    expect(cw).toMatch(/100 50$/);
+    expect(ccw).toMatch(/100 50$/);
+  });
+
+  it("wave returns a cubic bezier path containing C", () => {
+    const d = buildHandoffPath(0, 50, 100, 50, "wave");
+    expect(d).toMatch(/^M 0 50 C /);
+    expect(d).toMatch(/100 50$/);
+  });
+});
+
+describe("samplePath", () => {
+  it("straight returns exactly 2 endpoint objects", () => {
+    const pts = samplePath(0, 0, 100, 0, "straight");
+    expect(pts).toHaveLength(2);
+    expect(pts[0]).toEqual({ x: 0, y: 0 });
+    expect(pts[1]).toEqual({ x: 100, y: 0 });
+  });
+
+  it("arc-cw returns n=9 points starting and ending at the endpoints", () => {
+    const pts = samplePath(0, 50, 100, 50, "arc-cw");
+    expect(pts).toHaveLength(9);
+    expect(pts[0]).toEqual({ x: 0, y: 50 });
+    expect(pts[8]).toEqual({ x: 100, y: 50 });
+  });
+
+  it("arc-cw midpoint curves away from the straight line", () => {
+    const pts = samplePath(0, 50, 100, 50, "arc-cw");
+    expect(pts[4].y).not.toBe(50);
+  });
+
+  it("wave returns n=9 points starting and ending at the endpoints", () => {
+    const pts = samplePath(0, 50, 100, 50, "wave");
+    expect(pts).toHaveLength(9);
+    expect(pts[0]).toEqual({ x: 0, y: 50 });
+    expect(pts[8]).toEqual({ x: 100, y: 50 });
+  });
+});
 
 describe("bucketOf", () => {
   it("buckets assistant messages by agentId", () => {
