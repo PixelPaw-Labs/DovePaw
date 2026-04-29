@@ -41,9 +41,6 @@ export const MessageContent = ({ children, className, ...props }: MessageContent
       "group-[.is-assistant]:bg-muted group-[.is-assistant]:rounded-2xl group-[.is-assistant]:rounded-bl-none group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:border group-[.is-assistant]:border-border/30 group-[.is-assistant]:text-foreground",
       // Inline code: bg-muted shows as white on dark primary bg — replace with translucent overlay
       "group-[.is-user]:[&_code[data-streamdown]]:bg-white/15 group-[.is-user]:[&_code[data-streamdown]]:text-primary-foreground",
-      // Tables: table-wrapper has bg-background (white), but text-primary-foreground makes text white → invisible.
-      // Reset text to dark so the white table box remains readable.
-      "group-[.is-user]:[&_table]:text-foreground",
       className,
     )}
     {...props}

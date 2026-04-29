@@ -46,6 +46,7 @@ export function GroupChatView({
   }, [isLoading, onIsLoadingChange]);
   const [selectedAgentId, setSelectedAgentId] = React.useState(memberAgentIds[0] ?? "");
   const [viewMode, setViewMode] = React.useState<"stacked" | "roundtable">("stacked");
+  const [transcriptDrawerOpen, setTranscriptDrawerOpen] = React.useState(false);
 
   const configByName = React.useMemo(
     () => new Map(agentConfigs.map((a) => [a.name, a])),
@@ -56,6 +57,51 @@ export function GroupChatView({
   const handleSubmit = (text: string) => {
     if (selectedAgentId) void sendToAgent(selectedAgentId, text);
   };
+
+  const transcriptItems = messages.map((msg, i) => {
+    const prevMsg = messages[i - 1];
+    const showLabel =
+      msg.agentId &&
+      (msg.role === "user" ||
+        (msg.role === "assistant" &&
+          !(prevMsg?.role === "assistant" && prevMsg?.agentId === msg.agentId)));
+
+    if (!showLabel) {
+      return (
+        <ChatMessageItem
+          key={msg.id}
+          msg={msg}
+          agentConfigs={agentConfigs}
+          hideReasoning
+          hideAvatars
+        />
+      );
+    }
+
+    const isUser = msg.role === "user";
+    const senderAgentId = isUser ? msg.senderAgentId : msg.agentId;
+    const agentConfig = senderAgentId ? configByName.get(senderAgentId) : null;
+    const {
+      icon: AgentIcon,
+      iconBg,
+      iconColor,
+    } = agentConfig
+      ? buildAgentDef(agentConfig)
+      : { icon: Users2, iconBg: "bg-muted", iconColor: "text-muted-foreground" };
+    return (
+      <div key={msg.id} className="flex flex-col gap-1">
+        <div className={`flex items-center gap-2 ${isUser ? "justify-end" : ""}`}>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
+            <AgentIcon className={`w-5 h-5 ${iconColor}`} />
+          </div>
+          <span className="text-base font-semibold text-foreground">
+            {senderAgentId ? displayName(senderAgentId) : ""}
+          </span>
+        </div>
+        <ChatMessageItem msg={msg} agentConfigs={agentConfigs} hideReasoning hideAvatars />
+      </div>
+    );
+  });
 
   return (
     <main className="flex-1 flex flex-col bg-background relative min-w-0">
@@ -85,21 +131,34 @@ export function GroupChatView({
               </button>
             ))}
           </div>
+          {viewMode === "roundtable" && (
+            <button
+              type="button"
+              onClick={() => setTranscriptDrawerOpen((o) => !o)}
+              className={`px-2.5 py-0.5 rounded-full border border-border/50 text-[10px] font-bold tracking-wider uppercase transition-colors ${
+                transcriptDrawerOpen
+                  ? "bg-primary/10 text-primary border-primary/30"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Transcript
+            </button>
+          )}
           <div className="flex -space-x-1">
-          {memberAgentIds.map((agentId) => {
-            const config = configByName.get(agentId);
-            if (!config) return null;
-            const { icon: Icon, iconBg, iconColor, displayName: name } = buildAgentDef(config);
-            return (
-              <div
-                key={agentId}
-                title={name}
-                className={`w-6 h-6 rounded-md shrink-0 flex items-center justify-center ring-2 ring-background ${iconBg}`}
-              >
-                <Icon className={`w-3 h-3 ${iconColor}`} />
-              </div>
-            );
-          })}
+            {memberAgentIds.map((agentId) => {
+              const config = configByName.get(agentId);
+              if (!config) return null;
+              const { icon: Icon, iconBg, iconColor, displayName: name } = buildAgentDef(config);
+              return (
+                <div
+                  key={agentId}
+                  title={name}
+                  className={`w-6 h-6 rounded-md shrink-0 flex items-center justify-center ring-2 ring-background ${iconBg}`}
+                >
+                  <Icon className={`w-3 h-3 ${iconColor}`} />
+                </div>
+              );
+            })}
           </div>
         </div>
       </header>
@@ -119,57 +178,7 @@ export function GroupChatView({
               agentConfigs={agentConfigs}
             />
           ) : (
-            messages.map((msg, i) => {
-              const prevMsg = messages[i - 1];
-              const showLabel =
-                msg.agentId &&
-                (msg.role === "user" ||
-                  (msg.role === "assistant" &&
-                    !(prevMsg?.role === "assistant" && prevMsg?.agentId === msg.agentId)));
-
-              if (!showLabel) {
-                return (
-                  <ChatMessageItem
-                    key={msg.id}
-                    msg={msg}
-                    agentConfigs={agentConfigs}
-                    hideReasoning
-                    hideAvatars
-                  />
-                );
-              }
-
-              const isUser = msg.role === "user";
-              const senderAgentId = isUser ? msg.senderAgentId : msg.agentId;
-              const agentConfig = senderAgentId ? configByName.get(senderAgentId) : null;
-              const {
-                icon: AgentIcon,
-                iconBg,
-                iconColor,
-              } = agentConfig
-                ? buildAgentDef(agentConfig)
-                : { icon: Users2, iconBg: "bg-muted", iconColor: "text-muted-foreground" };
-              return (
-                <div key={msg.id} className="flex flex-col gap-1">
-                  <div className={`flex items-center gap-2 ${isUser ? "justify-end" : ""}`}>
-                    <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}
-                    >
-                      <AgentIcon className={`w-5 h-5 ${iconColor}`} />
-                    </div>
-                    <span className="text-base font-semibold text-foreground">
-                      {senderAgentId ? displayName(senderAgentId) : ""}
-                    </span>
-                  </div>
-                  <ChatMessageItem
-                    msg={msg}
-                    agentConfigs={agentConfigs}
-                    hideReasoning
-                    hideAvatars
-                  />
-                </div>
-              );
-            })
+            transcriptItems
           )}
           {isLoading && <ProcessingBar />}
         </ConversationContent>
@@ -224,6 +233,27 @@ export function GroupChatView({
 
       <div className="fixed top-0 right-0 w-1/3 h-full bg-linear-to-l from-primary/5 to-transparent pointer-events-none z-0" />
       <div className="fixed bottom-0 left-0 w-1/2 h-1/2 bg-linear-to-tr from-accent/10 to-transparent pointer-events-none z-0" />
+
+      <aside
+        aria-hidden={!transcriptDrawerOpen}
+        className={`absolute top-0 right-0 h-full w-96 max-w-[90vw] z-40 bg-background border-l border-border/40 shadow-xl flex flex-col transform transition-transform duration-300 ease-out ${
+          transcriptDrawerOpen ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/30 shrink-0">
+          <h2 className="text-sm font-bold tracking-tight">Transcript</h2>
+          <button
+            type="button"
+            onClick={() => setTranscriptDrawerOpen(false)}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            Close
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 py-3 flex flex-col gap-3">
+          {transcriptItems}
+        </div>
+      </aside>
     </main>
   );
 }
