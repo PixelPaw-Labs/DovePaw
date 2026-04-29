@@ -791,6 +791,64 @@ describe("buildSubAgentHooks — group handoff silence hooks", () => {
   });
 });
 
+// ─── buildSubAgentHooks — group script await tone hook ───────────────────────
+
+describe("buildSubAgentHooks — group script await tone hook", () => {
+  function getGroupPostToolUseHooks() {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      true,
+    );
+    return hooks.PostToolUse!;
+  }
+
+  it("is at index 3 in group mode (after base, start-silence, await-silence)", () => {
+    const matchers = getGroupPostToolUseHooks();
+    expect(matchers).toHaveLength(4);
+  });
+
+  it("injects tone additionalContext after await_test_agent completes", async () => {
+    const matchers = getGroupPostToolUseHooks();
+    const fn = matchers[3]!.hooks[0]!;
+    const result = await callHook(fn, postToolUseByName("mcp__agents__await_test_agent"));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain("agent script role");
+  });
+
+  it("skips tone hint when script is still_running", async () => {
+    const matchers = getGroupPostToolUseHooks();
+    const fn = matchers[3]!.hooks[0]!;
+    const input = {
+      hook_event_name: "PostToolUse" as const,
+      tool_name: "mcp__agents__await_test_agent",
+      tool_input: {},
+      tool_use_id: "tu-1",
+      tool_response: JSON.stringify({ status: "still_running" }),
+    };
+    const result = await callHook(fn, input);
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("passes through non-PostToolUse events", async () => {
+    const matchers = getGroupPostToolUseHooks();
+    const fn = matchers[3]!.hooks[0]!;
+    const result = await callHook(fn, {
+      hook_event_name: "PreToolUse" as const,
+      tool_name: "foo",
+      tool_input: {},
+      tool_use_id: "t1",
+    });
+    expect(result).toEqual({ continue: true });
+  });
+});
+
 // ─── buildDoveCanUseTool ──────────────────────────────────────────────────────
 
 function makeCanUseToolCtx(overrides?: { signal?: AbortSignal }) {

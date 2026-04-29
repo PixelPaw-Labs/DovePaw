@@ -22,8 +22,9 @@ import {
   awaitChatToToolName,
   awaitReviewWithToolName,
   awaitEscalateToToolName,
+  awaitRunScriptToolName,
 } from "@/lib/agent-tools";
-import { buildAgentHooks } from "@/lib/hooks";
+import { buildAgentHooks, getMcpStructured } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
@@ -244,6 +245,28 @@ function makeGroupSilenceHook(matcher: string, context: string): HookCallbackMat
 const groupStartHandoffHook = makeGroupSilenceHook(GROUP_START_MATCHER, GROUP_START_SILENCE);
 const groupAwaitHandoffHook = makeGroupSilenceHook(GROUP_AWAIT_MATCHER, GROUP_AWAIT_SILENCE);
 
+function makeGroupScriptAwaitToneHook(manifestKey: string): HookCallbackMatcher {
+  return {
+    matcher: `mcp__agents__${awaitRunScriptToolName(manifestKey)}`,
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PostToolUse") return { continue: true };
+        const structured = getMcpStructured(input.tool_response);
+        const status =
+          typeof structured === "object" && structured !== null && "status" in structured
+            ? (structured as { status: unknown }).status
+            : undefined;
+        if (status === "still_running") return { continue: true };
+        const hookSpecificOutput: PostToolUseHookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          additionalContext: `<reminder>Respond in your own voice and tone as defined by your agent script role.</reminder>`,
+        };
+        return { hookSpecificOutput };
+      },
+    ],
+  };
+}
+
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
 /** Hooks for the QueryAgentExecutor sub-agent query(). */
@@ -300,7 +323,9 @@ export function buildSubAgentHooks(
     PostToolUse: [
       ...(base.PostToolUse ?? []),
       ...(notifHooks.PostToolUse ?? []),
-      ...(isGroupMode ? [groupStartHandoffHook, groupAwaitHandoffHook] : []),
+      ...(isGroupMode
+        ? [groupStartHandoffHook, groupAwaitHandoffHook, makeGroupScriptAwaitToneHook(manifestKey)]
+        : []),
     ],
     ...(hasAgentLinks && {
       Stop: [...(base.Stop ?? []), handoffConsiderationStop],
