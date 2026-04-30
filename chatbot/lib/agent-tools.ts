@@ -578,7 +578,7 @@ export function makeStartReviewTool(
     startReviewWithToolName(manifestKey),
     `Submit your output to ${displayName} for review before it goes upstream.\n\n` +
       `${displayName} specialises in: "${description}"\n\n` +
-      `The reviewer will respond with a JSON decision {"decision":"APPROVED"|"REJECTED","reason":"..."} and structured feedback.\n\n` +
+      `The reviewer will respond with only a JSON object: {"decision":"APPROVED"|"REJECTED","reason":"<comprehensive feedback>"}\n\n` +
       REVIEW_PATTERNS(displayName),
     {
       content: z
@@ -595,10 +595,12 @@ export function makeStartReviewTool(
     async ({ content, context }) => {
       emitGroupSenderBubble(callerAgentId, groupMeta, content);
       const instruction = [
-        `You are reviewing the following work product. Respond with a JSON object on the first line, then your feedback.`,
-        `The JSON must have this shape: {"decision":"APPROVED"|"REJECTED","reason":"<one sentence>"}`,
+        `You are reviewing the following work product.`,
+        `Your entire final response must be ONLY a JSON object — no text before or after it.`,
+        `The JSON must have exactly this shape:`,
+        `{"decision":"APPROVED"|"REJECTED","reason":"<comprehensive explanation: cover what is correct, what is missing or wrong, what must change for approval, and any risks — be thorough>"}`,
         ...(callerDisplayName
-          ? [`Open your response by addressing the sender as @${callerDisplayName}.`]
+          ? [`In the reason field, address the sender as @${callerDisplayName}.`]
           : []),
         `\nWork product:\n`,
         `${content}\n\n`,
@@ -652,29 +654,34 @@ export function makeAwaitReviewTool(
       if (!sc || !("result" in sc)) return pollResult;
 
       const output = sc.result.output ?? "";
-      const jsonMatch = output.match(/\{[^}]*"decision"\s*:[^}]*\}/);
       let decision: "APPROVED" | "REJECTED" | "NO_DECISION" = "NO_DECISION";
       let reason: string | undefined;
-      if (jsonMatch) {
+      const reviewSchema = z.object({
+        decision: z.enum(["APPROVED", "REJECTED"]).optional(),
+        reason: z.string().optional(),
+      });
+      const tryParseReview = (text: string) => {
         try {
-          const reviewSchema = z.object({
-            decision: z.enum(["APPROVED", "REJECTED"]).optional(),
-            reason: z.string().optional(),
-          });
-          const parsed = reviewSchema.safeParse(JSON.parse(jsonMatch[0]));
-          if (parsed.success) {
-            if (parsed.data.decision) decision = parsed.data.decision;
-            reason = parsed.data.reason;
-          }
+          return reviewSchema.safeParse(JSON.parse(text.trim()));
         } catch {
-          // fall through to NO_DECISION
+          return null;
         }
+      };
+      // Reviewer is prompted to output only JSON — try the full output first.
+      // Fall back to extracting the first {...} block spanning multiple lines.
+      const parsed =
+        tryParseReview(output) ??
+        (() => {
+          const m = output.match(/\{[\s\S]*"decision"[\s\S]*\}/);
+          return m ? tryParseReview(m[0]) : null;
+        })();
+      if (parsed?.success) {
+        if (parsed.data.decision) decision = parsed.data.decision;
+        reason = parsed.data.reason;
       }
       const decisionLine = `Review decision: ${decision}${reason ? `\nReason: ${reason}` : ""}`;
       return {
-        content: [
-          { type: "text" as const, text: `${decisionLine}\n${pollResult.content[0].text}` },
-        ],
+        content: [{ type: "text" as const, text: decisionLine }],
         structuredContent: { ...sc, decision, reason },
       };
     },
