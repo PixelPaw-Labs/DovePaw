@@ -198,7 +198,17 @@ export function makeAgentMgmtTools(agent: AgentDef) {
     `Build and install only the ${agent.displayName} agent (scoped tsup build → deploy script → write plist → bootstrap)`,
     {},
     async () => {
-      const { loaded } = await installAgent(agent);
+      const { loaded, skipped } = await installAgent(agent);
+      if (skipped) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `✅ ${agent.displayName} is not scheduling-enabled — launchd install skipped.`,
+            },
+          ],
+        };
+      }
       return {
         content: [
           {

@@ -50,7 +50,10 @@ export async function unloadAgent(agent: AgentDef): Promise<void> {
  * Build and install only this agent (scoped tsup build → deploy script → copy native deps → write plist → bootstrap).
  * Returns whether the agent is loaded after installation.
  */
-export async function installAgent(agent: AgentDef): Promise<{ loaded: boolean }> {
+export async function installAgent(
+  agent: AgentDef,
+): Promise<{ loaded: boolean; skipped?: boolean }> {
+  if (agent.schedulingEnabled === false) return { loaded: false, skipped: true };
   const u = getUid();
 
   // Step 1: Build only this agent's entry.

@@ -47,6 +47,7 @@ vi.mock("@/lib/relay-to-chatbot", () => ({ relaySessionEvent: vi.fn() }));
 
 import {
   buildSubAgentPrompt,
+  makeAgentMgmtTools,
   makeStartScriptTool,
   makeStartChatToTool,
   makeStartReviewTool,
@@ -63,6 +64,7 @@ import {
   awaitEscalateToToolName,
   withStartReminder,
   justificationField,
+  MGMT_TOOL,
 } from "@/lib/agent-tools";
 import type { CollectedStream } from "@/lib/a2a-client";
 import {
@@ -760,5 +762,29 @@ describe("makeAwaitEscalateTool", () => {
     const handler = makeAwaitEscalateTool(AGENT) as any;
     const result = (await handler({ taskId: "task-123" })) as any;
     expect(result.content[0].text).toContain("not running");
+  });
+});
+
+// ─── makeAgentMgmtTools ───────────────────────────────────────────────────────
+
+import { installAgent } from "@/lib/launchd";
+
+describe("makeAgentMgmtTools install tool", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns skipped message when agent has schedulingEnabled: false", async () => {
+    vi.mocked(installAgent).mockResolvedValue({ loaded: false, skipped: true } as any);
+
+    let installHandler: ((args: Record<string, unknown>) => Promise<unknown>) | undefined;
+    vi.mocked(tool).mockImplementation((name, _d, _s, handler) => {
+      if (name === MGMT_TOOL.install) installHandler = handler as any;
+      return handler as any;
+    });
+
+    makeAgentMgmtTools({ ...AGENT, schedulingEnabled: false });
+    const result = (await installHandler!({})) as any;
+    expect(result.content[0].text).toMatch(/✅.*not scheduling-enabled/i);
   });
 });

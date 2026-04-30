@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentDef } from "@@/lib/agents";
 
 const mockRm = vi.fn().mockResolvedValue(undefined);
 const mockCp = vi.fn().mockResolvedValue(undefined);
@@ -58,5 +59,25 @@ describe("deployAgentSdk", () => {
       '{"type":"module"}\n',
       "utf-8",
     );
+  });
+});
+
+describe("installAgent", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns { skipped: true } and writes no plist when schedulingEnabled is false", async () => {
+    const { installAgent } = await import("@@/lib/installer");
+    const { writeFile } = await import("node:fs/promises");
+
+    const result = await installAgent(
+      { name: "my-agent", label: "lbl", schedulingEnabled: false } as unknown as AgentDef,
+      "501",
+      [],
+    );
+
+    expect(result).toEqual({ skipped: true });
+    expect(writeFile).not.toHaveBeenCalled();
   });
 });

@@ -207,7 +207,8 @@ export async function installAgent(
   agent: AgentDef,
   uid: string,
   nativePackages: string[],
-): Promise<void> {
+): Promise<{ skipped: boolean }> {
+  if (agent.schedulingEnabled === false) return { skipped: true };
   await Promise.all([
     deployAgentScript(agent.name),
     deployTriggerScript(),
@@ -216,6 +217,7 @@ export async function installAgent(
   await uninstallAgent(agent, uid);
   await writePlistFile(agent);
   await loadAgent(agent, uid);
+  return { skipped: false };
 }
 
 /** Bootstrap (load) this agent's plist into launchd. */

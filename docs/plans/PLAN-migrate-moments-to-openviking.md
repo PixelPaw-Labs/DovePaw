@@ -8,11 +8,12 @@ This plan restores the pre-act read step over the canonical `moments/` store, us
 
 ## Decisions (confirmed with user)
 
-| Decision    | Choice                                                                                                     |
-| ----------- | ---------------------------------------------------------------------------------------------------------- |
-| Persistence | **Per workspace** — namespace keyed by the workspace identity; ephemeral, matches current behaviour        |
-| Write path  | **Replace** — reminder instructs agents to call `ov add-resource` instead of writing `.md`. No dual-write. |
-| Sidecar     | **Spawn from `chatbot/a2a/start-all.ts`** alongside A2A servers; port registered in existing port manifest |
+| Decision    | Choice                                                                                                                                                                                                                                                                                        |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Persistence | **Per workspace** — namespace keyed by the workspace identity; ephemeral, matches current behaviour                                                                                                                                                                                           |
+| Write path  | **Replace** — reminder instructs agents to call `ov add-resource` instead of writing `.md`. No dual-write.                                                                                                                                                                                    |
+| Sidecar     | **Spawn from `chatbot/a2a/start-all.ts`** alongside A2A servers; port registered in existing port manifest                                                                                                                                                                                    |
+| Scope model | **One group = one `agent_id`** — each group chat uses a dedicated `agent_id` (e.g. derived from the group workspace slug). All members pass `--agent-id <group_id>` to every `ov` call. The `viking://agent/<group_id>/` scope is isolated by OpenViking — no cross-group reads are possible. |
 
 ## Prerequisites
 
@@ -29,28 +30,32 @@ Document both commands in the existing README install section. No automation.
 
 - **`chatbot/lib/agent-tools.ts:316-324`** — the group-chat `<reminder>` block inside `makeStartScriptTool`. Add a pre-act **read** bullet and replace the **save** bullet so it uses `ov`. The `MOMENTS_PATTERN` constant (lines 57-79) stays — the caveman style rules still apply to resource content; only the "File rules" sub-section needs rewording from "one file per item / name clearly" to "one resource per item / clear resource name" (no behavioural change, just lexicon).
 
-  New reminder shape (around the `viking://` URI keyed on the workspace):
+  New reminder shape (using the `viking://agent/<group_id>/` scope):
 
   ```
   You are participating in a group task. Before starting:
   - Read {workspacePath}/members/roster.md ...                                  (unchanged)
-  - Query past moments before acting: run `ov find <topic>` against             (new read bullet)
-    viking://workspace/<workspaceId>/moments to see what members already
+  - Query past moments before acting: run                                       (new read bullet)
+    `ov find <topic> --agent-id <groupContextId>` against
+    viking://agent/<groupContextId>/moments to see what members already
     decided or produced.
-  - Save moments with `ov add-resource viking://workspace/<workspaceId>/moments/<name>` (replaces the raw .md save bullet)
+  - Save moments with                                                           (replaces the raw .md save bullet)
+    `ov add-resource --to viking://agent/<groupContextId>/moments/<name> --agent-id <groupContextId>`
     when: decision reached, artifact complete, insight worth sharing.
     Writing style: (MOMENTS_PATTERN as today)
   ```
 
-  The `<workspaceId>` is derived from `config.workspacePath` — use the existing slug-contextId already in the path (set at `query-tools.ts:250-253`).
+  The `<groupContextId>` is derived from the group workspace slug (set at `query-tools.ts:250-253`). All members in the same group share the same `agent_id` value, which is also the group boundary — no member of another group can read or write to this scope.
 
-- **`chatbot/lib/query-tools.ts:236-303`** — `makeInitGroupTool`. Remove the `mkdir(join(groupWorkspacePath, "moments"), { recursive: true })` at line 254 (no longer a filesystem folder). Replace with an `ov` bootstrap call that creates the namespace `viking://workspace/<slug-contextId>/moments`. Keep `members/roster.md` mkdir + write untouched.
+  **Why `viking://agent/<groupContextId>/` instead of `viking://workspace/<workspaceId>/`:** OpenViking's `viking://agent/{agent_id}/` scope is natively isolated by `agent_id` — other callers using a different `agent_id` receive an access-denied error. This gives us group isolation for free without any application-layer enforcement. The `agent_id` is our group identity.
+
+- **`chatbot/lib/query-tools.ts:236-303`** — `makeInitGroupTool`. Remove the `mkdir(join(groupWorkspacePath, "moments"), { recursive: true })` at line 254 (no longer a filesystem folder). Replace with an `ov` bootstrap call that initialises the namespace `viking://agent/<groupContextId>/moments` using `--agent-id <groupContextId>`, where `groupId` is the workspace slug. Keep `members/roster.md` mkdir + write untouched.
 
 - **`chatbot/a2a/start-all.ts`** — spawn `openviking-server` as a sidecar alongside A2A servers. Allocate a port via the existing `getAvailablePort()` (`chatbot/a2a/lib/base-server.ts:79-92`). Pass the port to `writePortsManifest` (`chatbot/a2a/lib/ports-manifest.ts:19`) under key `openviking`. Health-check with a simple HTTP probe before declaring boot complete — if the server isn't running, `ov` calls will silently fail and members will lose memory with no fallback, so boot should fail loudly.
 
 - **`chatbot/lib/__tests__/agent-tools.test.ts:308-312`** — existing assertions check the reminder contains `roster.md`, `moments/` path, and `MOMENTS_PATTERN` text. Update:
   - Keep the `roster.md` assertion.
-  - Replace the `moments/` path assertion with one that asserts the reminder contains `ov find` **and** `ov add-resource` **and** a `viking://workspace/` URI.
+  - Replace the `moments/` path assertion with one that asserts the reminder contains `ov find` **and** `ov add-resource` **and** a `viking://agent/` URI **and** an `--agent-id` flag.
   - Keep the `MOMENTS_PATTERN` content assertion.
 
   Follow "tests first" — write the updated assertions before editing the reminder source, watch them fail, then make them pass.
@@ -60,7 +65,7 @@ Document both commands in the existing README install section. No automation.
 - **`chatbot/a2a/lib/openviking-sidecar.ts`** — new module mirroring the shape of `base-server.ts`. Responsibilities:
   - `startOpenVikingSidecar(port: number): Promise<ChildProcess>` — spawn `openviking-server --port <port>`, return the handle.
   - `waitForOpenVikingReady(port: number): Promise<void>` — poll `GET http://localhost:<port>/health` (or equivalent; confirm the exact endpoint by reading the OpenViking README on adoption) until it responds, with a bounded timeout.
-  - `ensureOpenVikingNamespace(port: number, uri: string): Promise<void>` — used by `makeInitGroupTool` to bootstrap `viking://workspace/<id>/moments` at group init. Shell out to `ov` with `OV_SERVER_URL=http://localhost:<port>`.
+  - `ensureOpenVikingNamespace(port: number, groupId: string): Promise<void>` — used by `makeInitGroupTool` to bootstrap `viking://agent/<groupContextId>/moments` at group init. Shells out to `ov` with `OV_SERVER_URL=http://localhost:<port>` and `--agent-id <groupContextId>`.
 
   Reuse the existing child-process patterns from `chatbot/a2a/lib/spawn.ts` for consistency.
 
@@ -85,8 +90,8 @@ End-to-end check to confirm the migration works before declaring done:
 
 1. **Unit** — `npm test -- agent-tools.test.ts` passes with the updated reminder assertions.
 2. **Boot** — start DovePaw locally (`npm run dev` in chatbot/). Confirm `~/.dovepaw/.ports.7473.json` contains an `openviking` entry and `curl http://localhost:<port>/health` returns 200.
-3. **Init** — in the chatbot UI, trigger `init_group_*` on any group. Confirm `ov tree viking://workspace/<id>/moments` returns an empty namespace (not "not found").
-4. **Round-trip** — send a task via `start_group_*` that should produce a moment. Confirm via `ov ls viking://workspace/<id>/moments` that at least one resource was written. Then send a follow-up task referencing prior context; confirm the member's transcript shows an `ov find` call and uses the returned content in its response.
+3. **Init** — in the chatbot UI, trigger `init_group_*` on any group. Confirm `ov tree viking://agent/<groupContextId>/moments --agent-id <groupContextId>` returns an empty namespace (not "not found").
+4. **Round-trip** — send a task via `start_group_*` that should produce a moment. Confirm via `ov ls viking://agent/<groupContextId>/moments --agent-id <groupContextId>` that at least one resource was written. Then send a follow-up task referencing prior context; confirm the member's transcript shows an `ov find --agent-id <groupContextId>` call and uses the returned content in its response.
 5. **Failure mode** — kill `openviking-server` mid-session. Confirm the next agent turn surfaces a visible error (not silent drop) — this validates the boot-fail-loudly design survives runtime crashes too.
 
 ## Open questions for implementation time (not blockers for approval)
