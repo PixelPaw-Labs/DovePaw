@@ -29,9 +29,10 @@ hooks:
 
 1. **Purpose** — "What should this agent do?" — free text via Other
 2. **Plugin repo** — "Which plugin repo will this agent eventually live in?" — run `ls ~/.dovepaw/plugins/` and offer each dir basename as an option, plus "None / decide later"
-3. **Agent type** — "Which pattern fits this agent?" — present 3 options with code previews:
-   - **Simple** — single agent spawn with a prompt (most agents); set `model: "gpt-5.5"` in opts to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
-   - **Skill-based** — dynamically builds a temporary skill, runs it, cleans up (for complex context assembly)
+3. **Agent type** — "Which pattern fits this agent?" — present 4 options with code previews:
+   - **Simple** — single agent spawn with a short inline prompt. Use when the task is trivial (< 15 prompt lines) and needs no separate skill file. Set `model: "gpt-5.5"` to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
+   - **Static Skill** (Recommended for multi-step agents) — `main.ts` is a thin launcher; all task logic lives in a `SKILL.md` in the `skills/` folder. `main.ts` invokes it via `Skill("/skill-name ${INSTRUCTION}")`. Use this when the prompt is substantial (> 15 lines), multi-phase, or the skill should be independently invocable as `/skill-name`.
+   - **Dynamic Skill** — `main.ts` pre-fetches runtime data (PR branches, CI failures, API status), injects it into a temporary skill built in memory, runs Claude, then deletes the skill dir. **Only use when the pre-fetched data must be structurally embedded in the skill body** — not merely for passing the user's instruction through (Static Skill handles that cleanly).
    - **Stateful** — lock + state dir + orchestration (for scheduled agents requiring mutual exclusion)
 
 **Round 2** — read `~/.dovepaw/settings.json`, extract `repositories` array (each has `id`, `path`), then ask 3 questions in a single `AskUserQuestion` call:
@@ -51,11 +52,14 @@ hooks:
 
 Read the one template that matches the chosen agent type — do not read the others:
 
-| Type        | Read now                                  |
-| ----------- | ----------------------------------------- |
-| Simple      | `references/template-simple.md`           |
-| Skill-based | `references/template-skill-based.md`      |
-| Stateful    | `references/template-complex-stateful.md` |
+| Type          | Read now                                  |
+| ------------- | ----------------------------------------- |
+| Simple        | `references/template-simple.md`           |
+| Static Skill  | `references/template-simple.md`           |
+| Dynamic Skill | `references/template-skill-based.md`      |
+| Stateful      | `references/template-complex-stateful.md` |
+
+For **Static Skill** agents: `main.ts` follows the Simple template structure (thin launcher, no skill dir management), but the task logic goes into `SKILL.md` in Phase 4 instead of inline in the prompt.
 
 Also read `references/spawning-patterns.md` now — required for the spawning rules below.
 
@@ -200,7 +204,9 @@ if not os.path.exists(link):
 
 ### Phase 4 — Associated Skill
 
-**Skip Phase 4 entirely** if the agent type is **Skill-based** — it already generates a skill dynamically at runtime and must not have a static SKILL.md alongside it. Proceed directly to Phase 5.
+**Skip Phase 4 entirely** if the agent type is **Dynamic Skill** — it generates a skill in memory at runtime and must not have a static SKILL.md alongside it. Proceed directly to Phase 5.
+
+**If the agent type is Static Skill**, the skill body must be created now — it IS Phase 4. The agent already has a thin `main.ts` from Phase 2; the skill file gives it its logic. Proceed with Phase 4 to create `SKILL.md` in `skills/<name>/`.
 
 Ask 2 questions in a single `AskUserQuestion` call:
 
