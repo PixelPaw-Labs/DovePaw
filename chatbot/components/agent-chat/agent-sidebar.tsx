@@ -277,22 +277,20 @@ export function AgentSidebar({
             Agent Links
           </span>
         </Link>
-        {plugins.length > 0 && (
-          <Link
-            href="/settings/plugins"
-            className={cn(
-              "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
-              isPlugins
-                ? "bg-primary/10 text-primary border-l-4 border-primary"
-                : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
-            )}
-          >
-            <Package className={cn("w-4 h-4 shrink-0", isPlugins ? "text-primary" : "")} />
-            <span className={cn("text-sm font-medium", !isPlugins && "text-foreground/80")}>
-              Plugins
-            </span>
-          </Link>
-        )}
+        <Link
+          href="/settings/plugins"
+          className={cn(
+            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+            isPlugins
+              ? "bg-primary/10 text-primary border-l-4 border-primary"
+              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+          )}
+        >
+          <Package className={cn("w-4 h-4 shrink-0", isPlugins ? "text-primary" : "")} />
+          <span className={cn("text-sm font-medium", !isPlugins && "text-foreground/80")}>
+            Plugins
+          </span>
+        </Link>
         <Link
           href="/settings"
           className={cn(
