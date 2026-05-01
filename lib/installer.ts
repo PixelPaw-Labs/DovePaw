@@ -39,7 +39,8 @@ import {
   schedulerScript,
   SCHEDULER_ROOT,
 } from "./paths";
-import { generatePlist, plistLabel } from "./plist-generate";
+import { generateJobPlist, generatePlist, jobPlistLabel, plistLabel } from "./plist-generate";
+import type { ScheduledJob } from "./agents-config-schemas";
 
 const execAsync = promisify(exec);
 
@@ -131,6 +132,40 @@ export async function removePlistFile(agent: AgentDef): Promise<void> {
   await rm(plistFilePath(plistLabel(agent)), { force: true });
 }
 
+/** Write a job-specific plist to ~/Library/LaunchAgents. */
+export async function writeJobPlistFile(agent: AgentDef, job: ScheduledJob): Promise<void> {
+  const HOME = process.env.HOME!;
+  await mkdir(LAUNCH_AGENTS_DIR, { recursive: true });
+  await writeFile(
+    plistFilePath(jobPlistLabel(agent.name, job.id, job.label)),
+    generateJobPlist(agent, job, HOME),
+  );
+  await mkdir(agentPersistentLogDir(agent.name), { recursive: true });
+}
+
+/** Delete a job-specific plist. No-op if already absent. */
+export async function removeJobPlistFile(agent: AgentDef, job: ScheduledJob): Promise<void> {
+  await rm(plistFilePath(jobPlistLabel(agent.name, job.id, job.label)), { force: true });
+}
+
+/** Bootstrap (load) a single job's plist into launchd. */
+export async function loadJobPlist(agent: AgentDef, job: ScheduledJob, uid: string): Promise<void> {
+  await tryExec(
+    `launchctl bootstrap gui/${uid} ${plistFilePath(jobPlistLabel(agent.name, job.id, job.label))}`,
+  );
+}
+
+/** Bootout (unload) a single job's plist from launchd. */
+export async function unloadJobPlist(
+  agent: AgentDef,
+  job: ScheduledJob,
+  uid: string,
+): Promise<void> {
+  await tryExec(
+    `launchctl bootout gui/${uid} ${plistFilePath(jobPlistLabel(agent.name, job.id, job.label))}`,
+  );
+}
+
 /** Returns true if the given launchd label is currently loaded. */
 export async function isAgentLoaded(label: string): Promise<boolean> {
   try {
@@ -165,7 +200,7 @@ export interface AgentStatusDetail {
 /** Return parsed state/pid/last-exit for a single agent via `launchctl print`. */
 export async function getAgentStatus(agent: AgentDef, uid: string): Promise<AgentStatusDetail> {
   try {
-    const { stdout } = await execAsync(`launchctl print gui/${uid}/${agent.label}`);
+    const { stdout } = await execAsync(`launchctl print gui/${uid}/${plistLabel(agent)}`);
     return {
       state: stdout.match(/state\s*=\s*(\S+)/)?.[1] ?? null,
       pid: stdout.match(/\bpid\s*=\s*(\d+)/)?.[1] ?? null,
@@ -193,16 +228,25 @@ export async function unloadAgent(agent: AgentDef, uid: string): Promise<void> {
   await killChildren(agent, uid);
   const plistPath = plistFilePath(plistLabel(agent));
   await tryExec(`launchctl bootout gui/${uid} ${plistPath}`);
-  await tryExec(`launchctl bootout gui/${uid}/${agent.label}`);
+  await tryExec(`launchctl bootout gui/${uid}/${plistLabel(agent)}`);
 }
 
-/** Bootout the agent and remove its plist. */
+/** Bootout the agent (all jobs + legacy plist) and remove all plists. */
 export async function uninstallAgent(agent: AgentDef, uid: string): Promise<void> {
+  if (agent.scheduledJobs?.length) {
+    await Promise.all(
+      agent.scheduledJobs.map(async (job) => {
+        await unloadJobPlist(agent, job, uid);
+        await removeJobPlistFile(agent, job);
+      }),
+    );
+  }
+  // Always clean up legacy single plist too (migration case)
   await unloadAgent(agent, uid);
   await removePlistFile(agent);
 }
 
-/** Deploy, configure, and load one agent. */
+/** Deploy, configure, and load one agent (all jobs if scheduledJobs present, else legacy single plist). */
 export async function installAgent(
   agent: AgentDef,
   uid: string,
@@ -215,8 +259,17 @@ export async function installAgent(
     copyNativePackages(nativePackages),
   ]);
   await uninstallAgent(agent, uid);
-  await writePlistFile(agent);
-  await loadAgent(agent, uid);
+  if (agent.scheduledJobs?.length) {
+    await Promise.all(
+      agent.scheduledJobs.map(async (job) => {
+        await writeJobPlistFile(agent, job);
+        await loadJobPlist(agent, job, uid);
+      }),
+    );
+  } else {
+    await writePlistFile(agent);
+    await loadAgent(agent, uid);
+  }
   return { skipped: false };
 }
 

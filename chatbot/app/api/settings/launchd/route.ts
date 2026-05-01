@@ -1,55 +1,85 @@
 import { existsSync } from "node:fs";
 import { NextResponse } from "next/server";
 import { readAgentsConfig } from "@@/lib/agents-config";
-import { plistLabel } from "@@/lib/plist-generate";
+import { jobPlistLabel, plistLabel } from "@@/lib/plist-generate";
 import {
-  agentPlistPath,
-  isLoaded,
+  isAgentLoaded,
   areAgentsLoaded,
-  writePlist,
+  writePlistFile as writePlist,
   loadAgent,
   unloadAgent,
   installAgent,
   uninstallAgent,
-} from "@/lib/launchd";
+  writeJobPlistFile,
+  removeJobPlistFile,
+  loadJobPlist,
+  unloadJobPlist,
+  getUid,
+} from "@@/lib/installer";
 import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 import { join } from "node:path";
 import { z } from "zod";
 
 const launchdActionSchema = z.object({
   agentName: z.string().optional(),
+  jobId: z.string().optional(),
   action: z.string().optional(),
 });
+
+/** Build per-job status for a single agent */
+async function agentJobStatuses(agent: Awaited<ReturnType<typeof readAgentsConfig>>[number]) {
+  if (!agent.scheduledJobs?.length) {
+    // Legacy single-plist fallback
+    const label = plistLabel(agent);
+    const plistPath = join(LAUNCH_AGENTS_DIR, `${label}.plist`);
+    return {
+      legacy: {
+        plistExists: existsSync(plistPath),
+        loaded: await isAgentLoaded(label),
+        plistPath,
+        instruction: "",
+        schedule: agent.schedule,
+      },
+    };
+  }
+  const loadedMap = await areAgentsLoaded(
+    agent.scheduledJobs.map((j) => jobPlistLabel(agent.name, j.id, j.label)),
+  );
+  return Object.fromEntries(
+    agent.scheduledJobs.map((job) => {
+      const label = jobPlistLabel(agent.name, job.id, job.label);
+      const plistPath = join(LAUNCH_AGENTS_DIR, `${label}.plist`);
+      return [
+        job.id,
+        {
+          plistExists: existsSync(plistPath),
+          loaded: loadedMap[label] ?? false,
+          plistPath,
+          plistLabel: label,
+          label: job.label ?? "",
+          instruction: job.instruction,
+          schedule: job.schedule,
+        },
+      ];
+    }),
+  );
+}
 
 export async function GET(request: Request) {
   const agents = await readAgentsConfig();
   const { searchParams } = new URL(request.url);
   const agentName = searchParams.get("agentName");
 
-  // Single-agent mode
   if (agentName) {
     const agent = agents.find((a) => a.name === agentName);
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
-    const plistPath = await agentPlistPath(agent.name);
-    return NextResponse.json({
-      plistExists: existsSync(plistPath),
-      loaded: await isLoaded(agent.label),
-      plistPath,
-    });
+    return NextResponse.json({ jobs: await agentJobStatuses(agent) });
   }
 
-  // All-agents mode — single launchctl list call for all labels
-  const loadedMap = await areAgentsLoaded(agents.map((a) => a.label));
   const entries = await Promise.all(
-    agents.map(async (agent) => {
-      const plistPath = await agentPlistPath(agent.name);
-      return [
-        agent.name,
-        { plistExists: existsSync(plistPath), loaded: loadedMap[agent.label] ?? false, plistPath },
-      ] as const;
-    }),
+    agents.map(async (agent) => [agent.name, { jobs: await agentJobStatuses(agent) }] as const),
   );
   return NextResponse.json({ agents: Object.fromEntries(entries) });
 }
@@ -57,44 +87,70 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const agents = await readAgentsConfig();
   const body = launchdActionSchema.parse(await request.json());
-  const { agentName, action } = body;
+  const { agentName, jobId, action } = body;
 
   const agent = agents.find((a) => a.name === agentName);
   if (!agent) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
-  const label = plistLabel(agent);
-  const plistPath = join(LAUNCH_AGENTS_DIR, `${label}.plist`);
+  const uid = getUid();
 
-  switch (action) {
-    case "upload": {
-      await writePlist(agent);
-      break;
+  if (jobId) {
+    // Job-scoped actions
+    const job = agent.scheduledJobs?.find((j) => j.id === jobId);
+    if (!job) {
+      return NextResponse.json({ error: "Job not found" }, { status: 404 });
     }
-    case "load": {
-      await loadAgent(agent);
-      break;
+    switch (action) {
+      case "install": {
+        await writeJobPlistFile(agent, job);
+        await loadJobPlist(agent, job, uid);
+        break;
+      }
+      case "load": {
+        await loadJobPlist(agent, job, uid);
+        break;
+      }
+      case "unload": {
+        await unloadJobPlist(agent, job, uid);
+        break;
+      }
+      case "delete": {
+        await unloadJobPlist(agent, job, uid);
+        await removeJobPlistFile(agent, job);
+        break;
+      }
+      default:
+        return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
-    case "unload": {
-      await unloadAgent(agent);
-      break;
+  } else {
+    // Agent-scoped actions (all jobs)
+    switch (action) {
+      case "upload": {
+        await writePlist(agent);
+        break;
+      }
+      case "load": {
+        await loadAgent(agent, uid);
+        break;
+      }
+      case "unload": {
+        await unloadAgent(agent, uid);
+        break;
+      }
+      case "delete": {
+        await uninstallAgent(agent, uid);
+        break;
+      }
+      case "install": {
+        await installAgent(agent, uid, []);
+        break;
+      }
+      default:
+        return NextResponse.json({ error: "Unknown action" }, { status: 400 });
     }
-    case "delete": {
-      await uninstallAgent(agent);
-      break;
-    }
-    case "install": {
-      await installAgent(agent);
-      break;
-    }
-    default:
-      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
   }
 
-  return NextResponse.json({
-    plistExists: existsSync(plistPath),
-    loaded: await isLoaded(agent.label),
-    plistPath,
-  });
+  return NextResponse.json({ jobs: await agentJobStatuses(agent) });
 }

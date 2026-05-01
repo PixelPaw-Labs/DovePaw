@@ -23,6 +23,7 @@ import {
   linkPluginSkills,
   unlinkPluginSkills,
 } from "./lib/installer.js";
+import { plistLabel } from "./lib/plist-generate.js";
 import { listPlugins } from "./lib/plugin-manager.js";
 
 const NATIVE_PACKAGES = ["@ladybugdb/core"];
@@ -68,7 +69,7 @@ console.log("  Done");
 console.log("\nStep 4: Verifying...\n");
 await Promise.all(
   agents.map(async (agent) => {
-    const ok = await isAgentLoaded(agent.label);
+    const ok = await isAgentLoaded(plistLabel(agent));
     console.log(`  ${ok ? "OK" : "WARN"}: ${agent.name}`);
   }),
 );

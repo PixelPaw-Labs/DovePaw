@@ -76,6 +76,7 @@ import {
   subscribeTaskStream,
 } from "@/lib/a2a-client";
 import type { AgentDef } from "@@/lib/agents";
+import { plistLabel } from "@@/lib/plist-generate";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
@@ -168,9 +169,9 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).not.toContain("<reminder>");
   });
 
-  it("includes the agent label in the launchd section", () => {
+  it("includes the plist label in the launchd section", () => {
     const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain(AGENT.label);
+    expect(prompt).toContain(plistLabel(AGENT));
   });
 
   it("shows infer-intent guidance for a scheduled agent", () => {

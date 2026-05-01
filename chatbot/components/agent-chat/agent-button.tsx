@@ -16,6 +16,7 @@ function nextRunMs(schedule: AgentDef["schedule"]): number | null {
     const ms = schedule.seconds * 1000;
     return Math.floor(now / ms) * ms + ms;
   }
+  if (schedule.type === "onetime") return null;
   const next = new Date();
   next.setSeconds(0, 0);
   next.setHours(schedule.hour, schedule.minute);

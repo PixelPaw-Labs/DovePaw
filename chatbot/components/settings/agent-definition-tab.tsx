@@ -8,13 +8,26 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { IconPicker } from "./icon-picker";
 import { DEFAULT_ICON_STYLE } from "@@/lib/icon-registry";
-import type { AgentConfigEntry, AgentSchedule } from "@@/lib/agents-config-schemas";
+import type { AgentConfigEntry, AgentSchedule, ScheduledJob } from "@@/lib/agents-config-schemas";
 import { z } from "zod";
 import { agentConfigEntrySchema } from "@@/lib/agents-config-schemas";
 import { type ScheduleType, isScheduleType, Section, Row } from "./agent-form-helpers";
 
 const apiErrorSchema = z.object({ error: z.string().optional() });
 const agentsResponseSchema = z.object({ agents: z.array(agentConfigEntrySchema) });
+
+interface JobFormState {
+  id: string;
+  label: string;
+  scheduleType: ScheduleType;
+  intervalSeconds: string;
+  calendarHour: string;
+  calendarMinute: string;
+  calendarWeekday: string;
+  onetimeDatetime: string; // "YYYY-MM-DDTHH:MM"
+  runAtLoad: boolean;
+  instruction: string;
+}
 
 interface FormState {
   alias: string;
@@ -23,13 +36,8 @@ interface FormState {
   iconName: string;
   iconBg: string;
   iconColor: string;
-  scheduleType: ScheduleType;
-  intervalSeconds: string;
-  calendarHour: string;
-  calendarMinute: string;
-  calendarWeekday: string;
-  runAtLoad: boolean;
   schedulingEnabled: boolean;
+  scheduledJobs: JobFormState[];
   personality: string;
   doveCardTitle: string;
   doveCardDescription: string;
@@ -39,11 +47,93 @@ interface FormState {
 
 function scheduleToType(schedule: AgentSchedule | undefined): ScheduleType {
   if (!schedule) return "none";
-  return schedule.type === "interval" ? "interval" : "calendar";
+  if (schedule.type === "interval") return "interval";
+  if (schedule.type === "onetime") return "onetime";
+  return "calendar";
+}
+
+function scheduleToOnetimeDatetime(schedule: AgentSchedule | undefined): string {
+  if (schedule?.type !== "onetime") return "";
+  const y = schedule.year;
+  const mo = String(schedule.month).padStart(2, "0");
+  const d = String(schedule.day).padStart(2, "0");
+  const h = String(schedule.hour).padStart(2, "0");
+  const mi = String(schedule.minute).padStart(2, "0");
+  return `${y}-${mo}-${d}T${h}:${mi}`;
+}
+
+function jobToFormState(job: ScheduledJob): JobFormState {
+  return {
+    id: job.id,
+    label: job.label ?? "",
+    scheduleType: scheduleToType(job.schedule),
+    intervalSeconds: job.schedule?.type === "interval" ? String(job.schedule.seconds) : "300",
+    calendarHour: job.schedule?.type === "calendar" ? String(job.schedule.hour) : "0",
+    calendarMinute: job.schedule?.type === "calendar" ? String(job.schedule.minute) : "0",
+    calendarWeekday:
+      job.schedule?.type === "calendar" && job.schedule.weekday !== undefined
+        ? String(job.schedule.weekday)
+        : "",
+    onetimeDatetime: scheduleToOnetimeDatetime(job.schedule),
+    runAtLoad: job.runAtLoad ?? false,
+    instruction: job.instruction,
+  };
+}
+
+function legacyToJobFormState(
+  schedule: AgentSchedule | undefined,
+  runAtLoad: boolean | undefined,
+): JobFormState {
+  return {
+    id: crypto.randomUUID().slice(0, 8),
+    scheduleType: scheduleToType(schedule),
+    intervalSeconds: schedule?.type === "interval" ? String(schedule.seconds) : "300",
+    calendarHour: schedule?.type === "calendar" ? String(schedule.hour) : "0",
+    calendarMinute: schedule?.type === "calendar" ? String(schedule.minute) : "0",
+    calendarWeekday:
+      schedule?.type === "calendar" && schedule.weekday !== undefined
+        ? String(schedule.weekday)
+        : "",
+    onetimeDatetime: scheduleToOnetimeDatetime(schedule),
+    runAtLoad: runAtLoad ?? false,
+    label: "",
+    instruction: "",
+  };
+}
+
+function buildJobSchedule(j: JobFormState): AgentSchedule | undefined {
+  if (j.scheduleType === "interval") {
+    return { type: "interval", seconds: parseInt(j.intervalSeconds, 10) };
+  }
+  if (j.scheduleType === "calendar") {
+    return {
+      type: "calendar",
+      hour: parseInt(j.calendarHour, 10),
+      minute: parseInt(j.calendarMinute, 10),
+      ...(j.calendarWeekday !== "" ? { weekday: parseInt(j.calendarWeekday, 10) } : {}),
+    };
+  }
+  if (j.scheduleType === "onetime" && j.onetimeDatetime) {
+    const d = new Date(j.onetimeDatetime);
+    return {
+      type: "onetime",
+      year: d.getFullYear(),
+      month: d.getMonth() + 1,
+      day: d.getDate(),
+      hour: d.getHours(),
+      minute: d.getMinutes(),
+    };
+  }
+  return undefined;
 }
 
 function entryToForm(entry: AgentConfigEntry): FormState {
-  const schedType = scheduleToType(entry.schedule);
+  const scheduledJobs: JobFormState[] = entry.scheduledJobs?.length
+    ? entry.scheduledJobs.map(jobToFormState)
+    : entry.schedule
+      ? [legacyToJobFormState(entry.schedule, entry.runAtLoad)]
+      : [];
+
   return {
     alias: entry.alias,
     displayName: entry.displayName,
@@ -51,16 +141,8 @@ function entryToForm(entry: AgentConfigEntry): FormState {
     iconName: entry.iconName ?? "Bot",
     iconBg: entry.iconBg ?? DEFAULT_ICON_STYLE.iconBg,
     iconColor: entry.iconColor ?? DEFAULT_ICON_STYLE.iconColor,
-    scheduleType: schedType,
-    intervalSeconds: entry.schedule?.type === "interval" ? String(entry.schedule.seconds) : "300",
-    calendarHour: entry.schedule?.type === "calendar" ? String(entry.schedule.hour) : "0",
-    calendarMinute: entry.schedule?.type === "calendar" ? String(entry.schedule.minute) : "0",
-    calendarWeekday:
-      entry.schedule?.type === "calendar" && entry.schedule.weekday !== undefined
-        ? String(entry.schedule.weekday)
-        : "",
-    runAtLoad: entry.runAtLoad ?? false,
     schedulingEnabled: entry.schedulingEnabled !== false,
+    scheduledJobs,
     personality: entry.personality ?? "",
     doveCardTitle: entry.doveCard.title,
     doveCardDescription: entry.doveCard.description,
@@ -73,18 +155,6 @@ function entryToForm(entry: AgentConfigEntry): FormState {
 }
 
 function buildPatch(name: string, f: FormState): AgentConfigEntry {
-  const schedule =
-    f.scheduleType === "interval"
-      ? { type: "interval" as const, seconds: parseInt(f.intervalSeconds, 10) }
-      : f.scheduleType === "calendar"
-        ? {
-            type: "calendar" as const,
-            hour: parseInt(f.calendarHour, 10),
-            minute: parseInt(f.calendarMinute, 10),
-            ...(f.calendarWeekday !== "" ? { weekday: parseInt(f.calendarWeekday, 10) } : {}),
-          }
-        : undefined;
-
   return {
     name,
     alias: f.alias.trim(),
@@ -93,9 +163,14 @@ function buildPatch(name: string, f: FormState): AgentConfigEntry {
     iconName: f.iconName,
     iconBg: f.iconBg,
     iconColor: f.iconColor,
-    ...(schedule ? { schedule } : {}),
-    ...(f.runAtLoad ? { runAtLoad: true } : {}),
     schedulingEnabled: f.schedulingEnabled,
+    scheduledJobs: f.scheduledJobs.map((j) => ({
+      id: j.id,
+      label: j.label.trim(),
+      instruction: j.instruction.trim(),
+      ...(buildJobSchedule(j) ? { schedule: buildJobSchedule(j) } : {}),
+      ...(j.runAtLoad ? { runAtLoad: true } : {}),
+    })),
     ...(f.personality.trim() ? { personality: f.personality.trim() } : {}),
     doveCard: {
       title: f.doveCardTitle.trim(),
@@ -109,6 +184,21 @@ function buildPatch(name: string, f: FormState): AgentConfigEntry {
         description: s.description.trim() || s.title.trim(),
         prompt: s.prompt.trim(),
       })),
+  };
+}
+
+function emptyJob(): JobFormState {
+  return {
+    id: crypto.randomUUID().slice(0, 8),
+    label: "",
+    scheduleType: "none",
+    intervalSeconds: "300",
+    calendarHour: "9",
+    calendarMinute: "0",
+    calendarWeekday: "",
+    onetimeDatetime: "",
+    runAtLoad: false,
+    instruction: "",
   };
 }
 
@@ -137,6 +227,24 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
     setForm((prev) => ({ ...prev, [key]: value }));
     setError(null);
     setSaved(false);
+  }
+
+  function addJob() {
+    set("scheduledJobs", [...form.scheduledJobs, emptyJob()]);
+  }
+
+  function removeJob(i: number) {
+    set(
+      "scheduledJobs",
+      form.scheduledJobs.filter((_, idx) => idx !== i),
+    );
+  }
+
+  function updateJob<K extends keyof JobFormState>(i: number, key: K, value: JobFormState[K]) {
+    set(
+      "scheduledJobs",
+      form.scheduledJobs.map((j, idx) => (idx === i ? { ...j, [key]: value } : j)),
+    );
   }
 
   function addSuggestion() {
@@ -180,6 +288,15 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
     if (!form.alias.trim()) return setError("Alias is required");
     if (!form.displayName.trim()) return setError("Display name is required");
     if (!form.description.trim()) return setError("Description is required");
+
+    for (const job of form.scheduledJobs) {
+      if (job.scheduleType === "onetime") {
+        const d = job.onetimeDatetime ? new Date(job.onetimeDatetime) : null;
+        if (!d || isNaN(d.getTime()))
+          return setError("One-time job requires a valid date and time");
+        if (d <= new Date()) return setError("One-time job must be scheduled in the future");
+      }
+    }
 
     setSaving(true);
     setError(null);
@@ -273,80 +390,141 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
             </p>
           </div>
         </label>
+
         <div
           className={`flex flex-col gap-3${!form.schedulingEnabled ? " opacity-40 pointer-events-none" : ""}`}
         >
-          <Row label="Schedule type">
-            <select
-              value={form.scheduleType}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (isScheduleType(v)) set("scheduleType", v);
-              }}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          {form.scheduledJobs.map((job, i) => (
+            <div
+              key={job.id}
+              className="flex flex-col gap-3 rounded-lg border border-border/50 p-3"
             >
-              <option value="none">On demand</option>
-              <option value="interval">Interval</option>
-              <option value="calendar">Calendar (time of day)</option>
-            </select>
-          </Row>
-          {form.scheduleType === "interval" && (
-            <Row label="Every N seconds">
-              <Input
-                type="number"
-                value={form.intervalSeconds}
-                onChange={(e) => set("intervalSeconds", e.target.value)}
-                min={1}
-                className="font-mono text-sm"
-              />
-            </Row>
-          )}
-          {form.scheduleType === "calendar" && (
-            <>
-              <Row label="Hour (0–23)">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Job {i + 1}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeJob(i)}
+                  className="text-muted-foreground/50 hover:text-destructive"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <Row label="Label" hint="Short name for this job">
                 <Input
-                  type="number"
-                  value={form.calendarHour}
-                  onChange={(e) => set("calendarHour", e.target.value)}
-                  min={0}
-                  max={23}
-                  className="font-mono text-sm"
+                  value={job.label}
+                  onChange={(e) => updateJob(i, "label", e.target.value)}
+                  placeholder="e.g. Nightly cleanup"
+                  className="text-sm"
                 />
               </Row>
-              <Row label="Minute (0–59)">
-                <Input
-                  type="number"
-                  value={form.calendarMinute}
-                  onChange={(e) => set("calendarMinute", e.target.value)}
-                  min={0}
-                  max={59}
-                  className="font-mono text-sm"
+
+              <Row label="Schedule">
+                <select
+                  value={job.scheduleType}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (isScheduleType(v)) updateJob(i, "scheduleType", v);
+                  }}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="none">On demand</option>
+                  <option value="interval">Interval</option>
+                  <option value="calendar">Calendar (time of day)</option>
+                  <option value="onetime">One-time (future date)</option>
+                </select>
+              </Row>
+
+              {job.scheduleType === "interval" && (
+                <Row label="Every N seconds">
+                  <Input
+                    type="number"
+                    value={job.intervalSeconds}
+                    onChange={(e) => updateJob(i, "intervalSeconds", e.target.value)}
+                    min={1}
+                    className="font-mono text-sm"
+                  />
+                </Row>
+              )}
+
+              {job.scheduleType === "calendar" && (
+                <>
+                  <Row label="Hour (0–23)">
+                    <Input
+                      type="number"
+                      value={job.calendarHour}
+                      onChange={(e) => updateJob(i, "calendarHour", e.target.value)}
+                      min={0}
+                      max={23}
+                      className="font-mono text-sm"
+                    />
+                  </Row>
+                  <Row label="Minute (0–59)">
+                    <Input
+                      type="number"
+                      value={job.calendarMinute}
+                      onChange={(e) => updateJob(i, "calendarMinute", e.target.value)}
+                      min={0}
+                      max={59}
+                      className="font-mono text-sm"
+                    />
+                  </Row>
+                  <Row label="Weekday (1=Mon…7=Sun, optional)">
+                    <Input
+                      type="number"
+                      value={job.calendarWeekday}
+                      onChange={(e) => updateJob(i, "calendarWeekday", e.target.value)}
+                      min={1}
+                      max={7}
+                      placeholder="Leave blank for daily"
+                      className="font-mono text-sm"
+                    />
+                  </Row>
+                </>
+              )}
+
+              {job.scheduleType === "onetime" && (
+                <Row label="Date & Time" hint="Fires once then self-unloads">
+                  <Input
+                    type="datetime-local"
+                    value={job.onetimeDatetime}
+                    onChange={(e) => updateJob(i, "onetimeDatetime", e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                </Row>
+              )}
+
+              {job.scheduleType !== "onetime" && (
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={job.runAtLoad}
+                    onChange={(e) => updateJob(i, "runAtLoad", e.target.checked)}
+                    className="w-4 h-4 shrink-0"
+                  />
+                  <span className="text-sm font-medium text-on-surface">
+                    Start immediately when loaded
+                  </span>
+                </label>
+              )}
+
+              <Row label="Instruction" hint="Sent to the agent when launchd fires it">
+                <Textarea
+                  value={job.instruction}
+                  onChange={(e) => updateJob(i, "instruction", e.target.value)}
+                  rows={2}
+                  placeholder="Leave blank to send no instruction"
                 />
               </Row>
-              <Row label="Weekday (1=Mon…7=Sun, optional)">
-                <Input
-                  type="number"
-                  value={form.calendarWeekday}
-                  onChange={(e) => set("calendarWeekday", e.target.value)}
-                  min={1}
-                  max={7}
-                  placeholder="Leave blank for daily"
-                  className="font-mono text-sm"
-                />
-              </Row>
-            </>
-          )}
-          <label className="flex items-center gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={form.runAtLoad}
-              onChange={(e) => set("runAtLoad", e.target.checked)}
-              className="w-4 h-4 shrink-0"
-            />
-            <span className="text-sm font-medium text-on-surface">
-              Start immediately when loaded
-            </span>
-          </label>
+            </div>
+          ))}
+
+          <Button type="button" variant="outline" size="sm" onClick={addJob}>
+            <Plus className="w-3.5 h-3.5 mr-1.5" />
+            Add job
+          </Button>
         </div>
       </Section>
 

@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import type { AgentConfigEntry } from "./agents-config-schemas";
+import type { AgentConfigEntry, AgentSchedule, ScheduledJob } from "./agents-config-schemas";
 import { resolveIcon, DEFAULT_ICON_STYLE } from "./icon-registry";
 
 const TOOL_PREFIX = "yolo";
@@ -33,9 +33,7 @@ export interface AgentDef {
   /** Short description for MCP tool and system prompt */
   description: string;
   /** launchd schedule */
-  schedule?:
-    | { type: "interval"; seconds: number }
-    | { type: "calendar"; hour: number; minute: number; weekday?: number };
+  schedule?: AgentSchedule;
   /** Icon component for UI display */
   icon: LucideIcon;
   /** Tailwind classes for the agent icon background */
@@ -57,6 +55,8 @@ export interface AgentDef {
   /** Personality paragraph injected at the top of the sub-agent system prompt.
    *  Replaces the generic "You are one of Dove's mice…" line. */
   personality?: string;
+  /** Multiple scheduled jobs — each gets its own launchd plist. */
+  scheduledJobs?: ScheduledJob[];
 }
 
 /** Build a full AgentDef (including icon and derived fields) from a serializable config entry. */
@@ -106,5 +106,6 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
     schedulingEnabled: entry.schedulingEnabled ?? true,
     pluginPath: entry.pluginPath,
     personality: entry.personality,
+    scheduledJobs: entry.scheduledJobs,
   };
 }

@@ -3,40 +3,53 @@
 import * as React from "react";
 import { ChevronDown, Package } from "lucide-react";
 import type { AgentDef } from "@@/lib/agents";
-import { formatScheduleDisplay } from "@@/lib/agents-config-schemas";
+import { agentScheduleSchema, formatScheduleDisplay } from "@@/lib/agents-config-schemas";
 import { resolvePluginName } from "@@/lib/agent-groups";
 import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
 import { z } from "zod";
 
-const agentLaunchdStatusSchema = z.object({
+const jobStatusSchema = z.object({
   plistExists: z.boolean(),
   loaded: z.boolean(),
   plistPath: z.string(),
+  plistLabel: z.string().optional(),
+  label: z.string().optional(),
+  instruction: z.string(),
+  schedule: agentScheduleSchema.optional(),
 });
+
+const agentJobsSchema = z.object({
+  jobs: z.record(z.string(), jobStatusSchema),
+});
+
 const actionErrorSchema = z.object({ error: z.string().optional() });
 
-interface AgentLaunchdStatus {
-  plistExists: boolean;
-  loaded: boolean;
-  plistPath: string;
-}
-
-type AllAgentsStatus = Record<string, AgentLaunchdStatus>;
+type JobStatus = z.infer<typeof jobStatusSchema>;
+type AgentJobStatuses = z.infer<typeof agentJobsSchema>;
+type AllAgentsStatus = Record<string, AgentJobStatuses>;
 type Action = "install" | "load" | "unload" | "delete";
 
-async function callAction(agentName: string, action: Action): Promise<AgentLaunchdStatus> {
+async function callAction(
+  agentName: string,
+  action: Action,
+  jobId?: string,
+): Promise<AgentJobStatuses> {
   const res = await fetch("/api/settings/launchd", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ agentName, action }),
+    body: JSON.stringify({ agentName, action, jobId }),
   });
   if (!res.ok) {
     const data = actionErrorSchema.parse(await res.json());
     throw new Error(data.error ?? "Action failed");
   }
-  return agentLaunchdStatusSchema.parse(await res.json());
+  return agentJobsSchema.parse(await res.json());
+}
+
+function busyKey(agentName: string, jobId?: string) {
+  return jobId ? `${agentName}.${jobId}` : agentName;
 }
 
 interface AgentDefGroup {
@@ -78,7 +91,7 @@ interface AgentManagementContentProps {
 
 export function AgentManagementContent({ agents, plugins = [] }: AgentManagementContentProps) {
   const [statuses, setStatuses] = React.useState<AllAgentsStatus | null>(null);
-  const [busy, setBusy] = React.useState<string | null>(null); // agentName currently acting
+  const [busy, setBusy] = React.useState<Set<string>>(new Set());
   const [installingAll, setInstallingAll] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -89,16 +102,21 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
       .catch(() => setError("Failed to load agent statuses"));
   }, []);
 
-  async function handleAction(agentName: string, action: Action) {
-    setBusy(agentName);
+  async function handleAction(agentName: string, action: Action, jobId?: string) {
+    const key = busyKey(agentName, jobId);
+    setBusy((prev) => new Set(prev).add(key));
     setError(null);
     try {
-      const updated = await callAction(agentName, action);
+      const updated = await callAction(agentName, action, jobId);
       setStatuses((prev) => ({ ...prev, [agentName]: updated }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
     } finally {
-      setBusy(null);
+      setBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   }
 
@@ -107,18 +125,26 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
     setError(null);
     try {
       for (const agent of agents) {
-        setBusy(agent.name);
+        const key = busyKey(agent.name);
+        setBusy((prev) => new Set(prev).add(key));
         // eslint-disable-next-line no-await-in-loop -- sequential install required; launchd plist ordering matters
         const updated = await callAction(agent.name, "install");
         setStatuses((prev) => ({ ...prev, [agent.name]: updated }));
+        setBusy((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Install all failed");
     } finally {
-      setBusy(null);
+      setBusy(new Set());
       setInstallingAll(false);
     }
   }
+
+  const anyBusy = busy.size > 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -135,11 +161,11 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
         </div>
         <button
           type="button"
-          disabled={installingAll || busy !== null}
+          disabled={installingAll || anyBusy}
           onClick={() => void handleInstallAll()}
           className="shrink-0 rounded-xl px-5 py-2.5 text-sm font-bold bg-primary text-primary-foreground transition-all hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {installingAll ? `Scheduling ${busy ?? ""}…` : "Schedule All Agents"}
+          {installingAll ? "Scheduling…" : "Schedule All Agents"}
         </button>
       </div>
 
@@ -168,8 +194,8 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
 interface PluginSectionProps {
   group: AgentDefGroup;
   statuses: AllAgentsStatus | null;
-  busy: string | null;
-  onAction: (agentName: string, action: Action) => void;
+  busy: Set<string>;
+  onAction: (agentName: string, action: Action, jobId?: string) => void;
 }
 
 function PluginSection({ group, statuses, busy, onAction }: PluginSectionProps) {
@@ -181,9 +207,9 @@ function PluginSection({ group, statuses, busy, onAction }: PluginSectionProps) 
         <AgentCard
           key={agent.name}
           agent={agent}
-          status={statuses?.[agent.name] ?? null}
-          isBusy={busy === agent.name}
-          onAction={(action) => onAction(agent.name, action)}
+          agentStatus={statuses?.[agent.name] ?? null}
+          busy={busy}
+          onAction={(action, jobId) => onAction(agent.name, action, jobId)}
         />
       ))}
     </div>
@@ -217,15 +243,18 @@ function PluginSection({ group, statuses, busy, onAction }: PluginSectionProps) 
 
 interface AgentCardProps {
   agent: AgentDef;
-  status: AgentLaunchdStatus | null;
-  isBusy: boolean;
-  onAction: (action: Action) => void;
+  agentStatus: AgentJobStatuses | null;
+  busy: Set<string>;
+  onAction: (action: Action, jobId?: string) => void;
 }
 
-function AgentCard({ agent, status, isBusy, onAction }: AgentCardProps) {
+function AgentCard({ agent, agentStatus, busy, onAction }: AgentCardProps) {
   const Icon = agent.icon;
-  const loaded = status?.loaded ?? false;
-  const plistExists = status?.plistExists ?? false;
+  const jobs = agentStatus ? Object.entries(agentStatus.jobs) : null;
+  const anyLoaded = jobs?.some(([, j]) => j.loaded) ?? false;
+  const agentBusy = Array.from(busy).some(
+    (k) => k === agent.name || k.startsWith(`${agent.name}.`),
+  );
 
   return (
     <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex flex-col gap-4 p-6 transition-all">
@@ -239,66 +268,116 @@ function AgentCard({ agent, status, isBusy, onAction }: AgentCardProps) {
           </div>
           <div>
             <h3 className="font-bold text-on-surface text-sm leading-tight">{agent.displayName}</h3>
-            <p className="text-xs text-on-surface-variant mt-0.5">
-              {formatScheduleDisplay(agent.schedule)}
-            </p>
           </div>
         </div>
 
-        {/* Toggle: load ↔ unload */}
-        <label className="inline-flex items-center cursor-pointer shrink-0 mt-0.5">
-          <input
-            type="checkbox"
-            className="sr-only peer"
-            checked={loaded}
-            disabled={isBusy || (!loaded && !plistExists)}
-            onChange={() => onAction(loaded ? "unload" : "load")}
-            aria-label={loaded ? `Unload ${agent.displayName}` : `Load ${agent.displayName}`}
-          />
-          <div className="relative w-10 h-5 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-disabled:opacity-40 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
-        </label>
+        {/* Agent-level install button */}
+        <ActionBtn
+          label="Install All"
+          variant="primary"
+          disabled={agentBusy}
+          onClick={() => onAction("install")}
+        />
       </div>
 
-      {/* Status badge */}
-      <StatusBadge loaded={loaded} plistExists={plistExists} loading={status === null} />
+      {/* Per-job rows */}
+      {jobs === null ? (
+        <span className="text-xs text-on-surface-variant opacity-60">Loading…</span>
+      ) : jobs.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">
+          No scheduled jobs — add one in agent settings.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {jobs.map(([jobId, jobStatus]) => (
+            <JobRow
+              key={jobId}
+              jobId={jobId}
+              jobStatus={jobStatus}
+              isBusy={busy.has(`${agent.name}.${jobId}`)}
+              agentBusy={agentBusy}
+              onAction={(action) => onAction(action, jobId)}
+            />
+          ))}
+        </div>
+      )}
 
-      {/* Action buttons */}
-      <div className="flex flex-wrap gap-2 mt-auto pt-2 border-t border-outline-variant/20">
-        {status === null ? (
-          <span className="text-xs text-on-surface-variant opacity-60">Loading…</span>
-        ) : loaded ? (
+      {/* Agent-level status summary */}
+      {jobs !== null && (
+        <div className="pt-2 border-t border-outline-variant/20">
+          <StatusBadge
+            loaded={anyLoaded}
+            plistExists={jobs.some(([, j]) => j.plistExists)}
+            loading={false}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── JobRow ───────────────────────────────────────────────────────────────────
+
+interface JobRowProps {
+  jobId: string;
+  jobStatus: JobStatus;
+  isBusy: boolean;
+  agentBusy: boolean;
+  onAction: (action: Action) => void;
+}
+
+function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) {
+  const { loaded, plistExists, schedule, label, plistLabel } = jobStatus;
+  const isLegacy = jobId === "legacy";
+  const displayLabel = label || formatScheduleDisplay(schedule);
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2">
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-on-surface truncate">{displayLabel}</p>
+        {!isLegacy && label && (
+          <p className="text-[10px] text-muted-foreground truncate">
+            {formatScheduleDisplay(schedule)}
+          </p>
+        )}
+        {!isLegacy && (
+          <p className="text-[10px] text-muted-foreground font-mono truncate">
+            {plistLabel ?? jobId}
+          </p>
+        )}
+      </div>
+
+      <StatusBadge loaded={loaded} plistExists={plistExists} loading={false} compact />
+
+      {/* Toggle load/unload */}
+      <label className="inline-flex items-center cursor-pointer shrink-0">
+        <input
+          type="checkbox"
+          className="sr-only peer"
+          checked={loaded}
+          disabled={isBusy || agentBusy || (!loaded && !plistExists)}
+          onChange={() => onAction(loaded ? "unload" : "load")}
+          aria-label={loaded ? "Unload" : "Load"}
+        />
+        <div className="relative w-8 h-4 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-disabled:opacity-40 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-4" />
+      </label>
+
+      {/* Job-level actions */}
+      <div className="flex gap-1.5 shrink-0">
+        {plistExists ? (
           <>
-            <ActionBtn
-              label="Unload"
-              variant="secondary"
-              disabled={isBusy}
-              onClick={() => onAction("unload")}
-            />
-            <ActionBtn
-              label="Re-install & Run"
-              variant="primary"
-              disabled={isBusy}
-              onClick={() => onAction("install")}
-            />
+            {!loaded && (
+              <ActionBtn
+                label="Load"
+                variant="secondary"
+                disabled={isBusy || agentBusy}
+                onClick={() => onAction("load")}
+              />
+            )}
             <ActionBtn
               label="Remove"
               variant="danger"
-              disabled={isBusy}
-              onClick={() => onAction("delete")}
-            />
-          </>
-        ) : plistExists ? (
-          <>
-            <ActionBtn
-              label="Load"
-              variant="primary"
-              disabled={isBusy}
-              onClick={() => onAction("load")}
-            />
-            <ActionBtn
-              label="Remove"
-              variant="danger"
-              disabled={isBusy}
+              disabled={isBusy || agentBusy}
               onClick={() => onAction("delete")}
             />
           </>
@@ -306,7 +385,7 @@ function AgentCard({ agent, status, isBusy, onAction }: AgentCardProps) {
           <ActionBtn
             label="Install"
             variant="primary"
-            disabled={isBusy}
+            disabled={isBusy || agentBusy}
             onClick={() => onAction("install")}
           />
         )}
@@ -319,41 +398,45 @@ function StatusBadge({
   loaded,
   plistExists,
   loading,
+  compact = false,
 }: {
   loaded: boolean;
   plistExists: boolean;
   loading: boolean;
+  compact?: boolean;
 }) {
+  const base = compact
+    ? "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest"
+    : "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest";
+
   if (loading) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-70">
+      <span className={`${base} bg-muted text-muted-foreground opacity-70`}>
         <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-        Checking…
+        {!compact && "Checking…"}
       </span>
     );
   }
   if (loaded) {
-    // No success token in the design system — use accent (primary-container) which is the
-    // nearest "positive" tone in the Material Design 3 palette (#cce6fb / on-primary-container)
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-accent-foreground">
+      <span className={`${base} bg-accent text-accent-foreground`}>
         <span className="w-1.5 h-1.5 rounded-full bg-accent-foreground" />
-        Active &amp; Running
+        {compact ? "On" : "Active & Running"}
       </span>
     );
   }
   if (plistExists) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+      <span className={`${base} bg-primary/20 text-primary`}>
         <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />
-        Installed, Not Running
+        {compact ? "Off" : "Installed, Not Running"}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+    <span className={`${base} bg-primary/10 text-primary`}>
       <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-      Automated Scheduling
+      {compact ? "–" : "Automated Scheduling"}
     </span>
   );
 }

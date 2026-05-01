@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import type { AgentDef } from "@@/lib/agents";
 import { AGENTS_ROOT, plistFilePath } from "@@/lib/paths";
-import { plistLabel } from "@@/lib/plist-generate";
+import { jobPlistLabel, plistLabel } from "@@/lib/plist-generate";
 import { externalPackagesInBundle } from "@/lib/bundle-utils";
 import {
   getUid,
@@ -22,18 +22,30 @@ import {
   unloadAgent as installerUnloadAgent,
   uninstallAgent as installerUninstallAgent,
 } from "@@/lib/installer";
-export { writePlistFile as writePlist, areAgentsLoaded } from "@@/lib/installer";
+export {
+  writePlistFile as writePlist,
+  areAgentsLoaded,
+  writeJobPlistFile,
+  removeJobPlistFile,
+  loadJobPlist,
+  unloadJobPlist,
+} from "@@/lib/installer";
 import type { AgentStatusDetail } from "@@/lib/installer";
 import type { LaunchdStatus } from "@/a2a/heartbeat-types";
 export { getUid as uid, isAgentLoaded as isLoaded, getAgentLogs };
 
 const execAsync = promisify(exec);
 
-/** Resolves the ~/Library/LaunchAgents plist path for a given agent name. */
+/** Resolves the ~/Library/LaunchAgents plist path for a given agent name (legacy single plist). */
 export async function agentPlistPath(agentName: string): Promise<string> {
   const agent = (await readAgentsConfig()).find((a) => a.name === agentName);
   if (!agent) throw new Error(`Unknown agent: ${agentName}`);
   return plistFilePath(plistLabel(agent));
+}
+
+/** Resolves the ~/Library/LaunchAgents plist path for a specific job. */
+export function jobPlistPath(agentName: string, jobId: string): string {
+  return plistFilePath(jobPlistLabel(agentName, jobId));
 }
 
 /** Bootstrap (load) this agent's plist into launchd. */
@@ -66,7 +78,7 @@ export async function installAgent(
   // Steps 2+3: Deploy, configure, unload, write plist, bootstrap
   await installerInstallAgent(agent, u, externalPackagesInBundle(agent.name));
 
-  return { loaded: await isAgentLoaded(agent.label) };
+  return { loaded: await isAgentLoaded(plistLabel(agent)) };
 }
 
 /** Unload and delete only this agent's plist. */
@@ -95,11 +107,21 @@ export async function getLaunchdStatuses(): Promise<Record<string, LaunchdStatus
     const agents = await readAgentsConfig();
     return Object.fromEntries(
       agents.map((a) => {
-        const running = loaded.get(a.label);
-        return [
-          a.manifestKey,
-          running !== undefined ? { loaded: true, running } : { loaded: false, running: false },
-        ];
+        let isLoaded: boolean;
+        let isRunning: boolean;
+        if (a.scheduledJobs?.length) {
+          // Agent is "loaded" if ANY job plist is loaded
+          const jobEntries = a.scheduledJobs.map((j) =>
+            loaded.get(jobPlistLabel(a.name, j.id, j.label)),
+          );
+          isLoaded = jobEntries.some((v) => v !== undefined);
+          isRunning = jobEntries.some((v) => v === true);
+        } else {
+          const running = loaded.get(plistLabel(a));
+          isLoaded = running !== undefined;
+          isRunning = running === true;
+        }
+        return [a.manifestKey, { loaded: isLoaded, running: isRunning }];
       }),
     );
   } catch {

@@ -17,9 +17,22 @@ export const agentCalendarScheduleSchema = z.object({
   weekday: z.number().int().min(1).max(7).optional(),
 });
 
+export const agentOnetimeScheduleSchema = z.object({
+  type: z.literal("onetime"),
+  /** Stored for display only — launchd StartCalendarInterval has no Year key */
+  year: z.number().int().min(2024),
+  month: z.number().int().min(1).max(12),
+  day: z.number().int().min(1).max(31),
+  hour: z.number().int().min(0).max(23),
+  minute: z.number().int().min(0).max(59),
+});
+
+export type AgentOnetimeSchedule = z.infer<typeof agentOnetimeScheduleSchema>;
+
 export const agentScheduleSchema = z.discriminatedUnion("type", [
   agentIntervalScheduleSchema,
   agentCalendarScheduleSchema,
+  agentOnetimeScheduleSchema,
 ]);
 
 export type AgentSchedule = z.infer<typeof agentScheduleSchema>;
@@ -40,10 +53,34 @@ export function formatScheduleDisplay(schedule: AgentSchedule | undefined): stri
   const hh = String(schedule.hour).padStart(2, "0");
   const mm = String(schedule.minute).padStart(2, "0");
   const time = `${hh}:${mm}`;
+  if (schedule.type === "onetime") {
+    const d = `${schedule.year}-${String(schedule.month).padStart(2, "0")}-${String(schedule.day).padStart(2, "0")}`;
+    return `Once ${d} ${time}`;
+  }
   if (schedule.weekday !== undefined) {
     return `${ISO_WEEKDAY_NAMES[schedule.weekday - 1]} ${time}`;
   }
   return `Daily ${time}`;
+}
+
+// ─── Scheduled job ────────────────────────────────────────────────────────────
+
+export const scheduledJobSchema = z.object({
+  /** 8-char hex ID, unique per agent — used as plist filename suffix */
+  id: z.string().min(1),
+  /** Short label describing what this job does — shown in the UI and config */
+  label: z.string().default(""),
+  schedule: agentScheduleSchema.optional(),
+  instruction: z.string().default(""),
+  runAtLoad: z.boolean().optional(),
+});
+
+export type ScheduledJob = z.infer<typeof scheduledJobSchema>;
+
+export function formatJobsDisplay(jobs: ScheduledJob[]): string {
+  if (jobs.length === 0) return "on demand";
+  if (jobs.length === 1) return formatScheduleDisplay(jobs[0].schedule);
+  return `${jobs.length} jobs`;
 }
 
 // ─── Suggestion (serializable — no LucideIcon) ───────────────────────────────
@@ -97,6 +134,8 @@ export const agentConfigEntrySchema = z.object({
   /** Personality paragraph injected at the top of the sub-agent system prompt.
    *  Replaces the generic "You are one of Dove's mice…" line. Keep it 1–3 sentences. */
   personality: z.string().optional(),
+  /** Multiple scheduled jobs — each gets its own launchd plist. Replaces top-level schedule/runAtLoad. */
+  scheduledJobs: z.array(scheduledJobSchema).optional(),
 });
 
 export type AgentConfigEntry = z.infer<typeof agentConfigEntrySchema>;
