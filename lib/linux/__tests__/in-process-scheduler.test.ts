@@ -8,16 +8,16 @@ vi.mock("@@/lib/a2a-trigger", () => ({
   triggerAgent: vi.fn().mockResolvedValue("completed"),
 }));
 
-vi.mock("../ports-manifest", () => ({
+vi.mock("@/a2a/lib/ports-manifest", () => ({
   readPortsManifest: vi.fn(),
 }));
 
 import { readScheduledAgentsConfig } from "@@/lib/agents-config";
 import { triggerAgent } from "@@/lib/a2a-trigger";
-import { readPortsManifest } from "../ports-manifest";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { InProcessScheduler } from "../in-process-scheduler";
 import type { AgentDef } from "@@/lib/agents";
-import type { PortsManifest } from "../ports-manifest";
+import type { PortsManifest } from "@/a2a/lib/ports-manifest";
 
 function makeAgent(overrides: Partial<AgentDef> = {}): AgentDef {
   return {

@@ -11,7 +11,7 @@ import { getAvailablePort, writePortsManifest, createServerFromDef } from "./lib
 import { startHeartbeatServer } from "./heartbeat-server.js";
 import { PORTS_FILE, A2A_SERVERS_PID_FILE } from "@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
-import { InProcessScheduler } from "./lib/in-process-scheduler.js";
+import { InProcessScheduler } from "@@/lib/linux/in-process-scheduler.js";
 
 const AGENTS = await readAgentsConfig();
 

@@ -17,7 +17,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { readScheduledAgentsConfig } from "@@/lib/agents-config";
 import type { AgentSchedule } from "@@/lib/agents-config-schemas";
 import { triggerAgent } from "@@/lib/a2a-trigger";
-import { readPortsManifest } from "./ports-manifest";
+import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 
 // ─── Calendar helpers ─────────────────────────────────────────────────────────
 

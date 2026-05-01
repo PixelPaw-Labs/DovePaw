@@ -14,6 +14,12 @@ const agentsRoot = resolve(root, "agents");
 const agentsLive = existsSync(agentsRoot) && statSync(agentsRoot).isDirectory();
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@": resolve(root, "chatbot"),
+      "@@": root,
+    },
+  },
   test: {
     include: [
       "lib/**/*.test.ts",
