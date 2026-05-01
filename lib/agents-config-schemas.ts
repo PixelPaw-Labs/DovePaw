@@ -19,7 +19,7 @@ export const agentCalendarScheduleSchema = z.object({
 
 export const agentOnetimeScheduleSchema = z.object({
   type: z.literal("onetime"),
-  /** Stored for display only — launchd StartCalendarInterval has no Year key */
+  /** Stored for display only — scheduler has no Year key in interval specs */
   year: z.number().int().min(2024),
   month: z.number().int().min(1).max(12),
   day: z.number().int().min(1).max(31),
@@ -66,7 +66,7 @@ export function formatScheduleDisplay(schedule: AgentSchedule | undefined): stri
 // ─── Scheduled job ────────────────────────────────────────────────────────────
 
 export const scheduledJobSchema = z.object({
-  /** 8-char hex ID, unique per agent — used as plist filename suffix */
+  /** 8-char hex ID, unique per agent — used as scheduler config filename suffix */
   id: z.string().min(1),
   /** Short label describing what this job does — shown in the UI and config */
   label: z.string().default(""),
@@ -106,11 +106,11 @@ export const agentConfigEntrySchema = z.object({
   displayName: z.string().min(1),
   /** Short description for MCP tool and system prompt */
   description: z.string().min(1),
-  /** launchd schedule — absent means on-demand */
+  /** Agent schedule — absent means on-demand */
   schedule: agentScheduleSchema.optional(),
-  /** Whether to run immediately when launchd loads the plist */
+  /** Whether to run immediately when the scheduler activates this agent */
   runAtLoad: z.boolean().optional(),
-  /** Env vars to embed in the launchd plist and seed into user settings on fresh install.
+  /** Env vars to embed in the scheduler config and seed into user settings on fresh install.
    *  Uses a simplified shape (no id) — id is assigned by makeEnvVar at install time. */
   envVars: z
     .array(z.object({ key: z.string(), value: z.string(), isSecret: z.boolean().default(false) }))
@@ -134,7 +134,7 @@ export const agentConfigEntrySchema = z.object({
   /** Personality paragraph injected at the top of the sub-agent system prompt.
    *  Replaces the generic "You are one of Dove's mice…" line. Keep it 1–3 sentences. */
   personality: z.string().optional(),
-  /** Multiple scheduled jobs — each gets its own launchd plist. Replaces top-level schedule/runAtLoad. */
+  /** Multiple scheduled jobs — each gets its own scheduler config entry. Replaces top-level schedule/runAtLoad. */
   scheduledJobs: z.array(scheduledJobSchema).optional(),
 });
 

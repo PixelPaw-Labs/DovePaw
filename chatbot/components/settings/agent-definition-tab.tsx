@@ -510,7 +510,7 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
                 </label>
               )}
 
-              <Row label="Instruction" hint="Sent to the agent when launchd fires it">
+              <Row label="Instruction" hint="Sent to the agent when the scheduler fires it">
                 <Textarea
                   value={job.instruction}
                   onChange={(e) => updateJob(i, "instruction", e.target.value)}

@@ -24,11 +24,11 @@ const SLIDES: Slide[] = [
     title: "DovePaw",
     subtitle: "Plugin-based multi-agent orchestration",
     description:
-      "Run autonomous AI agents from a chatbot UI, trigger them via other agents, or schedule them as macOS launchd daemons — all without touching a single config file.",
+      "Run autonomous AI agents from a chatbot UI, trigger them via other agents, or schedule them as persistent daemons — all without touching a single config file.",
     points: [
       "Chat with any registered agent directly in the browser UI",
       "Chain agents — orchestrators delegate tasks to specialists",
-      "Schedule any agent as a persistent macOS launchd daemon",
+      "Schedule any agent as a persistent daemon",
       "Install agents from any git repo as a DovePaw plugin",
     ],
     gif: "/slides/slide-1-overview.gif",
@@ -46,7 +46,7 @@ const SLIDES: Slide[] = [
       "Browser UI on port 7473 — SSE for real-time streaming output",
       "Claude Agent SDK as in-process MCP server — zero network overhead",
       "One A2A Express server per agent — OS-assigned dynamic ports",
-      "Agent scripts via tsx + launchd — no bundling required",
+      "Agent scripts via tsx + scheduler — no bundling required",
     ],
     gif: "/slides/slide-2-runtime.gif",
     gifAlt: "Three-layer runtime architecture",

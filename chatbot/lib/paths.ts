@@ -16,7 +16,6 @@ export {
   agentEntryPath,
   agentPersistentLogDir,
   agentPersistentStateDir,
-  plistFilePath,
   portsFile,
   A2A_SERVERS_PID_FILE,
 } from "@@/lib/paths";

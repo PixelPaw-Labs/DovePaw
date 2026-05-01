@@ -11,7 +11,7 @@ function makeStatus(overrides: Partial<AgentStatus> = {}): AgentStatus {
     latency: null,
     processing: false,
     processingTrigger: null,
-    launchd: null,
+    scheduler: null,
     ...overrides,
   };
 }
@@ -66,7 +66,7 @@ describe("useAgentRunState", () => {
     expect(result.current.isRunning).toBe(false);
   });
 
-  it("isRunning=true for scheduled launchd run regardless of isLoading", () => {
+  it("isRunning=true for scheduled daemon run regardless of isLoading", () => {
     const { result } = renderHook(
       () =>
         useAgentRunState(false, makeStatus({ processing: true, processingTrigger: "scheduled" })),

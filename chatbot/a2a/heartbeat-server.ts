@@ -12,7 +12,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import { consola } from "consola";
 import type { AgentStatus, StatusMessage } from "./heartbeat-types.js";
-import { getLaunchdStatuses } from "@/lib/launchd";
+import { getSchedulerStatuses } from "@/lib/agent-scheduler";
 import {
   isProcessing,
   getProcessingTrigger,
@@ -57,16 +57,16 @@ async function pingAgent(port: number): Promise<Pick<AgentStatus, "online" | "la
 
 async function checkAll(agentPorts: Record<string, number>): Promise<Record<string, AgentStatus>> {
   const keys = Object.keys(agentPorts);
-  const [pingResults, launchdMap] = await Promise.all([
+  const [pingResults, schedulerMap] = await Promise.all([
     Promise.all(keys.map((k) => pingAgent(agentPorts[k]))),
-    getLaunchdStatuses(),
+    getSchedulerStatuses(),
   ]);
   return Object.fromEntries(
     keys.map((k, i) => [
       k,
       {
         ...pingResults[i],
-        launchd: launchdMap[k] ?? null,
+        scheduler: schedulerMap[k] ?? null,
         processing: isProcessing(k),
         processingTrigger: getProcessingTrigger(k),
       },

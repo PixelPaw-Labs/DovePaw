@@ -9,33 +9,28 @@
  */
 
 import { execSync } from "node:child_process";
-import { agents } from "./plist/configs.js";
+import { agents } from "./scheduler-config/configs.js";
 import { SCHEDULER_ROOT } from "./lib/paths.js";
 import {
-  getUid,
   copyNativePackages,
   deployAgentSdk,
-  installAgent,
-  uninstallAgent,
-  isAgentLoaded,
   linkAgents,
   linkAgentSdkToPlugin,
   linkPluginSkills,
   unlinkPluginSkills,
 } from "./lib/installer.js";
-import { plistLabel } from "./lib/plist-generate.js";
+import { scheduler } from "./lib/scheduler.js";
 import { listPlugins } from "./lib/plugin-manager.js";
 
 const NATIVE_PACKAGES = ["@ladybugdb/core"];
-const uid = getUid();
 const uninstall = process.argv.includes("--uninstall");
 
 // ─── Uninstall ───────────────────────────────────────────────────────────────
 
 if (uninstall) {
-  if (process.platform === "darwin") {
+  if (process.platform !== "win32") {
     console.log("Uninstalling all scheduler agents...\n");
-    await Promise.all(agents.map((agent) => uninstallAgent(agent, uid)));
+    await Promise.all(agents.map((agent) => scheduler.uninstallAgent(agent)));
   }
   const pluginsToUnlink = await listPlugins();
   if (pluginsToUnlink.length > 0) {
@@ -61,24 +56,22 @@ await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
 await Promise.all(plugins.map((p) => linkPluginSkills(p.path, p.skillNames)));
 console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 
-if (process.platform === "darwin") {
-  console.log("\nStep 3: Installing and loading agents...\n");
+if (process.platform === "win32") {
+  console.log("\nStep 3: Skipped (unsupported platform).");
+  console.log("Step 4: Skipped.");
+} else {
+  console.log("\nStep 3: Installing scheduler entries...\n");
   await copyNativePackages(NATIVE_PACKAGES);
-  await Promise.all(agents.map((agent) => installAgent(agent, uid, [])));
+  await Promise.all(agents.map((agent) => scheduler.installAgent(agent, NATIVE_PACKAGES)));
   console.log("  Done");
-
-  // ─── Verify ────────────────────────────────────────────────────────────────
 
   console.log("\nStep 4: Verifying...\n");
   await Promise.all(
     agents.map(async (agent) => {
-      const ok = await isAgentLoaded(plistLabel(agent));
+      const ok = await scheduler.isAgentLoaded(scheduler.agentLabel(agent));
       console.log(`  ${ok ? "OK" : "WARN"}: ${agent.name}`);
     }),
   );
-} else {
-  console.log("\nStep 3: Skipped (launchd not available on this platform).");
-  console.log("Step 4: Skipped.");
 }
 
 console.log("\nDone!");

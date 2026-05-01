@@ -100,7 +100,7 @@ describe("useAgentHeartbeat", () => {
         my_agent: {
           online: true,
           latency: 42,
-          launchd: null,
+          scheduler: null,
           processing: false,
           processingTrigger: null,
         },

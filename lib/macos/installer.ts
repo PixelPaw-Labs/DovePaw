@@ -1,38 +1,14 @@
 import { exec, execSync } from "node:child_process";
-import {
-  access,
-  chmod,
-  copyFile,
-  cp,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
-import { join } from "node:path";
 import type { AgentDef } from "../agents";
-import {
-  A2A_TRIGGER_SCRIPT,
-  AGENTS_DIST,
-  AGENTS_ROOT,
-  LAUNCH_AGENTS_DIR,
-  agentDistScript,
-  agentPersistentLogDir,
-  plistFilePath,
-  schedulerNodeModule,
-  schedulerScript,
-  SCHEDULER_ROOT,
-} from "../paths";
+import { deployAgentScript, deployTriggerScript, copyNativePackages } from "../installer";
+import { LAUNCH_AGENTS_DIR, plistFilePath } from "./launchd-paths";
 import { generateJobPlist, generatePlist, jobPlistLabel, plistLabel } from "./plist-generate";
 import type { ScheduledJob } from "../agents-config-schemas";
+import { agentPersistentLogDir } from "../paths";
 
 const execAsync = promisify(exec);
-
-/** Deduplicates concurrent deployTriggerScript calls; reset after each run so the next install re-deploys. */
-let _deployTriggerScriptOnce: Promise<void> | null = null;
 
 /** Returns the current user's numeric UID. */
 export function getUid(): string {
@@ -46,65 +22,6 @@ async function tryExec(cmd: string): Promise<void> {
   } catch {
     // ignore errors (e.g., agent not loaded)
   }
-}
-
-/** Copy compiled .mjs to ~/.dovepaw/cron and make it executable.
- *  Triggers a full build first if the compiled output is missing. */
-export async function deployAgentScript(agentName: string): Promise<void> {
-  await mkdir(SCHEDULER_ROOT, { recursive: true });
-  const src = agentDistScript(agentName);
-  try {
-    await access(src);
-  } catch {
-    await execAsync("npm run build", { cwd: AGENTS_ROOT });
-  }
-  await copyFile(src, schedulerScript(agentName));
-  await chmod(schedulerScript(agentName), 0o755);
-}
-
-/** Copy compiled a2a-trigger.mjs to ~/.dovepaw/cron and make it executable.
- *  Runs npm run build first if the compiled output is missing.
- *  Also copies @a2a-js/sdk and its dependency uuid to cron/node_modules.
- *  Concurrent calls share one run; the promise is cleared after each run so
- *  the next install call always re-deploys the latest binary. */
-export async function deployTriggerScript(): Promise<void> {
-  _deployTriggerScriptOnce ??= _doDeployTriggerScript().finally(() => {
-    _deployTriggerScriptOnce = null;
-  });
-  return _deployTriggerScriptOnce;
-}
-
-async function _doDeployTriggerScript(): Promise<void> {
-  await mkdir(SCHEDULER_ROOT, { recursive: true });
-  const src = join(AGENTS_DIST, "a2a-trigger.mjs");
-  try {
-    await access(src);
-  } catch {
-    await execAsync("npm run build", { cwd: AGENTS_ROOT });
-  }
-  await copyFile(src, A2A_TRIGGER_SCRIPT);
-  await chmod(A2A_TRIGGER_SCRIPT, 0o755);
-  await copyNativePackages(["@a2a-js/sdk", "uuid"]);
-}
-
-/**
- * Copy native addon packages (those that can't be bundled) from DovePaw/node_modules
- * into ~/.dovepaw/cron/node_modules.
- */
-export async function copyNativePackages(packages: string[]): Promise<void> {
-  await Promise.all(
-    packages.map(async (pkg) => {
-      const src = `${AGENTS_ROOT}/node_modules/${pkg}`;
-      try {
-        await access(src);
-      } catch {
-        return;
-      }
-      await mkdir(schedulerNodeModule(""), { recursive: true });
-      await rm(schedulerNodeModule(pkg), { recursive: true, force: true });
-      await cp(src, schedulerNodeModule(pkg), { recursive: true });
-    }),
-  );
 }
 
 /** Write the agent's plist to ~/Library/LaunchAgents and create its log directory. */
@@ -267,27 +184,6 @@ export async function installAgent(
 export async function loadAgent(agent: AgentDef, uid: string): Promise<void> {
   const plistPath = plistFilePath(plistLabel(agent));
   await tryExec(`launchctl bootstrap gui/${uid} ${plistPath}`);
-}
-
-/** Return the last N lines from the most recent log file for an agent. */
-export async function getAgentLogs(agent: AgentDef, lines = 100): Promise<string> {
-  const logDir = agentPersistentLogDir(agent.name);
-  let files: string[];
-  try {
-    files = await readdir(logDir);
-  } catch {
-    return `No log directory found at ${logDir}`;
-  }
-  const logFiles = await Promise.all(
-    files
-      .filter((f) => f.endsWith(".log"))
-      .map(async (f) => ({ name: f, mtime: (await stat(join(logDir, f))).mtime })),
-  );
-  logFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-  if (logFiles.length === 0) return "No log files found.";
-  const content = await readFile(join(logDir, logFiles[0].name), "utf-8");
-  const all = content.split("\n");
-  return `${logFiles[0].name} (last ${lines} lines):\n\n${all.slice(-lines).join("\n")}`;
 }
 
 /** Bootout and re-bootstrap one agent without rebuilding. */

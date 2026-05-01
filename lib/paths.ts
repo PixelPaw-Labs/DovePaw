@@ -2,7 +2,6 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export * from "./launchd-paths";
 export * from "./plugin-paths";
 export * from "./group-paths";
 
@@ -91,3 +90,19 @@ export const tmpAgentDefinitionFile = (agentName: string) =>
   join(DOVEPAW_TMP_DIR, agentName, "agent.json");
 /** DovePaw/.claude/hooks/karpathy-guidelines.sh — UserPromptSubmit hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
+
+// ─── Scheduler paths (cross-platform) ────────────────────────────────────────
+
+/** DovePaw/dist — compiled agent scripts */
+export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
+/** ~/.dovepaw/cron — deployed agent scripts and native node_modules */
+export const SCHEDULER_ROOT = join(DOVEPAW_DIR, "cron");
+/** ~/.dovepaw/cron/a2a-trigger.mjs — A2A trigger script used by all scheduled jobs */
+export const A2A_TRIGGER_SCRIPT = join(SCHEDULER_ROOT, "a2a-trigger.mjs");
+/** DovePaw/dist/agents/<agentName>.mjs — compiled agent script */
+export const agentDistScript = (agentName: string) =>
+  join(AGENTS_DIST, "agents", `${agentName}.mjs`);
+/** ~/.dovepaw/cron/<agentName>.mjs — deployed agent script */
+export const schedulerScript = (agentName: string) => join(SCHEDULER_ROOT, `${agentName}.mjs`);
+/** ~/.dovepaw/cron/node_modules/<pkg> */
+export const schedulerNodeModule = (pkg: string) => join(SCHEDULER_ROOT, "node_modules", pkg);

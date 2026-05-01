@@ -7,7 +7,7 @@ import { useAgentRunState } from "@/components/hooks/use-agent-run-state";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
 import type { AgentDef } from "@@/lib/agents";
 import { cn } from "@/lib/utils";
-import type { AgentStatus, LaunchdStatus } from "@/a2a/heartbeat-types";
+import type { AgentStatus, SchedulerStatus } from "@/a2a/heartbeat-types";
 
 function nextRunMs(schedule: AgentDef["schedule"]): number | null {
   if (!schedule) return null;
@@ -58,12 +58,12 @@ function ScheduleCountdown({ schedule }: { schedule: AgentDef["schedule"] }) {
 }
 
 function LaunchdBadge({
-  launchd,
+  scheduler,
   processing,
   processingTrigger,
   schedule,
 }: {
-  launchd: LaunchdStatus | null;
+  scheduler: SchedulerStatus | null;
   processing: boolean;
   processingTrigger: "scheduled" | "dove" | null;
   schedule: AgentDef["schedule"];
@@ -75,13 +75,13 @@ function LaunchdBadge({
       </span>
     );
 
-  if (!launchd)
+  if (!scheduler)
     return (
       <span className="text-[9px] text-muted-foreground/50 uppercase tracking-wide">
         not installed
       </span>
     );
-  if (!launchd.loaded)
+  if (!scheduler.loaded)
     return (
       <span className="text-[9px] text-amber-500/80 font-medium uppercase tracking-wide">
         unloaded
@@ -182,7 +182,7 @@ export function AgentButton({
           {agent.displayName}
         </span>
         <LaunchdBadge
-          launchd={status?.launchd ?? null}
+          scheduler={status?.scheduler ?? null}
           processing={isRunning}
           processingTrigger={processingTrigger}
           schedule={agent.schedule}

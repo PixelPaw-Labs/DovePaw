@@ -1,13 +1,8 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { formatScheduleDisplay } from "@@/lib/agents-config-schemas";
-import { plistLabel } from "@@/lib/plist-generate";
-import {
-  agentEntryPath,
-  agentPersistentLogDir,
-  agentPersistentStateDir,
-  plistFilePath,
-} from "@/lib/paths";
+import { scheduler } from "@@/lib/scheduler";
+import { agentEntryPath, agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { z } from "zod";
 import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
@@ -181,7 +176,7 @@ ${agent.description}
 - What inputs it requires
 - What the workflow is
 - When it normally runs: ${formatScheduleDisplay(agent.schedule)}
-- Whether it is already loaded in launchd
+- Whether it is already scheduled/active
 - Any other dependencies
 
 ${
@@ -195,15 +190,15 @@ This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and pro
     : `**This agent runs on-demand only** — there are no scheduled runs and no past output to look for. When the user's intent is to run this agent, call \`${startRunScriptToolName(agent.manifestKey)}\` directly without looking for prior output.`
 }
 
-**Managing this agent (launchd):**
+**Managing this agent:**
 
-Label: \`${plistLabel(agent)}\`
+Label: \`${scheduler.agentLabel(agent)}\`
 Schedule: ${formatScheduleDisplay(agent.schedule)}
 
-You are responsible for installing and uninstalling ONLY yourself (\`${plistLabel(agent)}\`).
-- Install means: build only YOUR TypeScript entry, then load YOUR plist — do not touch other agents.
-- Uninstall means: unload YOUR plist and delete it only — do not touch other agents.
-- Never install or uninstall any agent other than \`${plistLabel(agent)}\`.
+You are responsible for installing and uninstalling ONLY yourself (\`${scheduler.agentLabel(agent)}\`).
+- Install means: build only YOUR TypeScript entry, then activate YOUR scheduler entry — do not touch other agents.
+- Uninstall means: deactivate YOUR scheduler entry and delete its config only — do not touch other agents.
+- Never install or uninstall any agent other than \`${scheduler.agentLabel(agent)}\`.
 
 | Task | Command |
 |---|---|
@@ -213,13 +208,13 @@ You are responsible for installing and uninstalling ONLY yourself (\`${plistLabe
 | Unload | Call the \`${MGMT_TOOL.unload}\` MCP tool |
 | Check status / PID / last exit | Call the \`${MGMT_TOOL.status}\` MCP tool |
 | Read logs | Call the \`${MGMT_TOOL.logs}\` MCP tool |
-| Show plist content | Read \`~/Library/LaunchAgents/${plistLabel(agent)}.plist\` using the Read tool |
+${scheduler.configFilePath(scheduler.agentLabel(agent)) ? `| Show config file | Read \`${scheduler.configFilePath(scheduler.agentLabel(agent))}\` using the Read tool |` : ""}
 
 **Your file boundaries — only access YOUR files, never other agents':**
 
 | Resource | Path |
 |---|---|
-| Plist | \`${plistFilePath(plistLabel(agent))}\` |
+${scheduler.configFilePath(scheduler.agentLabel(agent)) ? `| Config | \`${scheduler.configFilePath(scheduler.agentLabel(agent))}\` |` : ""}
 | Source | \`${agentEntryPath(agent.entryPath)}\` |
 | Logs | \`${agentPersistentLogDir(agent.name)}\` |
 | State | \`${agentPersistentStateDir(agent.name)}\` |

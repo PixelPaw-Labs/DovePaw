@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { generatePlist, generateJobPlist, jobPlistLabel, plistLabel } from "./plist-generate.js";
-import type { AgentDef } from "./agents.js";
-import type { ScheduledJob } from "./agents-config-schemas.js";
+import { generatePlist, generateJobPlist, jobPlistLabel, plistLabel } from "../plist-generate";
+import type { AgentDef } from "@@/lib/agents";
+import type { ScheduledJob } from "@@/lib/agents-config-schemas";
 import { Brain } from "lucide-react";
 
 const BASE: AgentDef = {
@@ -222,7 +222,10 @@ describe("generateJobPlist — non-onetime includes job id in args", () => {
   });
 
   it("includes job id in the shell command for calendar job", () => {
-    const job: ScheduledJob = { ...BASE_JOB, schedule: { type: "calendar", hour: 9, minute: 0 } };
+    const job: ScheduledJob = {
+      ...BASE_JOB,
+      schedule: { type: "calendar", hour: 9, minute: 0 },
+    };
     const plist = generateJobPlist(BASE, job, HOME);
     expect(plist).toContain(job.id);
   });

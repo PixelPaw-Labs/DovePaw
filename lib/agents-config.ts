@@ -212,7 +212,7 @@ export async function patchAgentFile(
 }
 
 /** Update only the definition fields of an agent (everything except repos/envVars/locked).
- * envVars is omitted from defPatch because AgentConfigEntry.envVars (plist static vars) is
+ * envVars is omitted from defPatch because AgentConfigEntry.envVars (scheduler static vars) is
  * a different type to AgentFile.envVars (user-configured runtime vars). */
 export async function patchAgentDefinition(
   agentName: string,

@@ -17,7 +17,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consola } from "consola";
 import { AGENTS_ROOT, PORTS_FILE } from "@/lib/paths";
 import { DOVEPAW_TMP_DIR, DOVEPAW_DIR } from "@@/lib/paths";
-import { getLaunchdAdditionalDirs, buildLaunchdSystemPromptSection } from "@/lib/launchd-feature";
+import { getLaunchdAdditionalDirs, buildLaunchdSystemPromptSection } from "@/lib/scheduler-feature";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
@@ -214,8 +214,8 @@ export async function POST(request: Request) {
                 ...(defaultModel ? { model: defaultModel } : {}),
                 promptSuggestions: true,
                 cwd: AGENTS_ROOT,
-                // Expose the launchd install directory so Claude can inspect
-                // installed plist files (written by `npm run install`)
+                // Expose the scheduler config directory so Claude can inspect
+                // installed scheduler configs (written by `npm run install`)
                 additionalDirectories,
                 systemPrompt: {
                   type: "preset",

@@ -46,7 +46,7 @@ export type { PortsManifest } from "./ports-manifest";
 import { SessionManager } from "@/lib/session-manager";
 import { upsertSession, setActiveSession, setSessionStatus } from "@/lib/db";
 import { makeAgentMgmtTools } from "@/lib/agent-tools";
-import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
+import { scheduler } from "@@/lib/scheduler";
 
 // ─── Event bus manager ────────────────────────────────────────────────────────
 
@@ -206,7 +206,7 @@ export function createServerFromDef(def: AgentDef, port: number): void {
         port,
         persistence,
         makeAgentMgmtTools(def),
-        [LAUNCH_AGENTS_DIR],
+        scheduler.getSchedulerDirs(),
       );
       activeExecutors.set(requestContext.taskId, inst);
       try {

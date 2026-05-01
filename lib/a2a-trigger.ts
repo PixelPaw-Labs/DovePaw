@@ -8,7 +8,7 @@
  * terminal state.
  *
  * When jobId is provided, reads the job's instruction from agent settings and
- * sends it as the A2A message. Self-cleans plist for onetime jobs after firing.
+ * sends it as the A2A message. Self-cleans scheduler config for onetime jobs after firing.
  *
  * @a2a-js/sdk is treated as external (not bundled) and deployed alongside
  * this script in ~/.claude/scheduler/node_modules/ — same pattern as
@@ -18,15 +18,14 @@
  *   0 — task completed successfully
  *   1 — task failed, canceled, or server unavailable
  */
-import { execSync } from "node:child_process";
-import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { consola } from "consola";
 import { z } from "zod";
 import { scheduledJobSchema, type ScheduledJob } from "./agents-config-schemas";
 import { startAgentStream } from "./a2a-client";
 import { agentDefinitionFile, portsFile } from "./paths";
-import { jobPlistLabel } from "./plist-generate";
+import { scheduler } from "./scheduler";
 
 const agentFileSchema = z.object({ scheduledJobs: z.array(scheduledJobSchema).optional() });
 
@@ -81,29 +80,13 @@ export function readJobConfig(agentName: string, jobId: string): ScheduledJob | 
   }
 }
 
-/** Bootout and unlink the plist for a completed onetime job. Errors are logged, not thrown. */
-export function cleanupOnetimeJob(
+/** Unload and remove the scheduler entry for a completed onetime job. */
+export async function cleanupOnetimeJob(
   agentName: string,
   jobId: string,
   label: string | undefined,
-  home: string,
-  uid: number,
-): void {
-  const plistLabelStr = jobPlistLabel(agentName, jobId, label);
-  const plistPath = `${home}/Library/LaunchAgents/${plistLabelStr}.plist`;
-  try {
-    execSync(`launchctl bootout gui/${uid} '${plistPath}'`, { stdio: "ignore" });
-  } catch (err) {
-    consola.warn(
-      `[a2a-trigger] launchctl bootout failed for "${plistLabelStr}" — may already be unloaded`,
-      err,
-    );
-  }
-  try {
-    if (existsSync(plistPath)) unlinkSync(plistPath);
-  } catch (err) {
-    consola.warn(`[a2a-trigger] Could not remove plist "${plistPath}"`, err);
-  }
+): Promise<void> {
+  await scheduler.cleanupOnetimeJob(agentName, jobId, label);
 }
 
 async function main(): Promise<void> {
@@ -149,13 +132,7 @@ async function main(): Promise<void> {
     consola.info(`[a2a-trigger] ${manifestKey} finished — state: ${state}`);
 
     if (jobId && jobConfig?.schedule?.type === "onetime") {
-      cleanupOnetimeJob(
-        agentName,
-        jobId,
-        jobConfig.label || undefined,
-        process.env.HOME ?? "",
-        process.getuid!(),
-      );
+      await cleanupOnetimeJob(agentName, jobId, jobConfig.label || undefined);
     }
 
     process.exit(state === "completed" ? 0 : 1);

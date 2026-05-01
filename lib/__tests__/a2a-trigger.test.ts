@@ -7,14 +7,11 @@ function makeStream(events: object[]): AsyncGenerator<object, void, undefined> {
   })();
 }
 
-const { mockSendMessageStream, mockReadFileSync, mockExistsSync, mockUnlinkSync, mockExecSync } =
-  vi.hoisted(() => ({
-    mockSendMessageStream: vi.fn(),
-    mockReadFileSync: vi.fn(),
-    mockExistsSync: vi.fn(),
-    mockUnlinkSync: vi.fn(),
-    mockExecSync: vi.fn(),
-  }));
+const { mockSendMessageStream, mockReadFileSync, mockCleanupOnetimeJob } = vi.hoisted(() => ({
+  mockSendMessageStream: vi.fn(),
+  mockReadFileSync: vi.fn(),
+  mockCleanupOnetimeJob: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@a2a-js/sdk/client", () => ({
   ClientFactory: class {
@@ -29,12 +26,10 @@ vi.mock("@a2a-js/sdk/client", () => ({
 
 vi.mock("node:fs", () => ({
   readFileSync: mockReadFileSync,
-  existsSync: mockExistsSync,
-  unlinkSync: mockUnlinkSync,
 }));
 
-vi.mock("node:child_process", () => ({
-  execSync: mockExecSync,
+vi.mock("../scheduler", () => ({
+  scheduler: { cleanupOnetimeJob: mockCleanupOnetimeJob },
 }));
 
 vi.mock("../paths", () => ({
@@ -145,40 +140,13 @@ describe("readJobConfig", () => {
 describe("cleanupOnetimeJob", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("boots out and unlinks the plist when it exists", () => {
-    mockExistsSync.mockReturnValue(true);
-    cleanupOnetimeJob("my-agent", "job-1", undefined, "/Users/test", 501);
-    expect(mockExecSync).toHaveBeenCalledWith(
-      "launchctl bootout gui/501 '/Users/test/Library/LaunchAgents/com.pixelpaw.scheduler.my-agent.job-1.plist'",
-      { stdio: "ignore" },
-    );
-    expect(mockUnlinkSync).toHaveBeenCalledWith(
-      "/Users/test/Library/LaunchAgents/com.pixelpaw.scheduler.my-agent.job-1.plist",
-    );
+  it("delegates to scheduler.cleanupOnetimeJob with correct args", async () => {
+    await cleanupOnetimeJob("my-agent", "job-1", undefined);
+    expect(mockCleanupOnetimeJob).toHaveBeenCalledWith("my-agent", "job-1", undefined);
   });
 
-  it("uses a slugified label in the plist path when label is provided", () => {
-    mockExistsSync.mockReturnValue(true);
-    cleanupOnetimeJob("my-agent", "job-1", "Nightly Run", "/Users/test", 501);
-    expect(mockExecSync).toHaveBeenCalledWith(
-      expect.stringContaining("nightly-run.job-1.plist"),
-      expect.anything(),
-    );
-  });
-
-  it("skips unlinkSync when the plist file does not exist", () => {
-    mockExistsSync.mockReturnValue(false);
-    cleanupOnetimeJob("my-agent", "job-1", undefined, "/Users/test", 501);
-    expect(mockUnlinkSync).not.toHaveBeenCalled();
-  });
-
-  it("does not throw when bootout fails", () => {
-    mockExistsSync.mockReturnValue(true);
-    mockExecSync.mockImplementation(() => {
-      throw new Error("bootout failed");
-    });
-    expect(() =>
-      cleanupOnetimeJob("my-agent", "job-1", undefined, "/Users/test", 501),
-    ).not.toThrow();
+  it("forwards the label to scheduler.cleanupOnetimeJob", async () => {
+    await cleanupOnetimeJob("my-agent", "job-1", "Nightly Run");
+    expect(mockCleanupOnetimeJob).toHaveBeenCalledWith("my-agent", "job-1", "Nightly Run");
   });
 });

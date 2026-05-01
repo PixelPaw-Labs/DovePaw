@@ -1,4 +1,4 @@
-import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
+import { scheduler } from "@@/lib/scheduler";
 import {
   AGENTS_ROOT,
   AGENT_SETTINGS_DIR,
@@ -7,26 +7,26 @@ import {
   SCHEDULER_ROOT,
 } from "@/lib/paths";
 
-/** Additional directories Dove needs to inspect launchd artifacts. */
+/** Additional directories Dove needs to inspect scheduler artifacts. */
 export function getLaunchdAdditionalDirs(): string[] {
-  return [LAUNCH_AGENTS_DIR, SCHEDULER_ROOT];
+  return [...scheduler.getSchedulerDirs(), SCHEDULER_ROOT];
 }
 
-/** System prompt section covering the launchd/cron/scheduler workflow. */
+/** System prompt section covering the scheduler workflow. */
 export function buildLaunchdSystemPromptSection(): string {
   return `**How changes work — codebase is the source of truth:**
 
-The installed plist files and \`.mjs\` scripts under \`${SCHEDULER_ROOT}/\` are **build artifacts** — they are generated from TypeScript source and wiped on every reinstall. Any direct edit to them will be lost the next time the user runs build commands.
+The deployed \`.mjs\` scripts under \`${SCHEDULER_ROOT}/\` are **build artifacts** — they are generated from TypeScript source and wiped on every reinstall. Any direct edit to them will be lost the next time the user runs build commands.
 
 To make a persistent change (schedule, label, description, default instruction, env vars, system prompt, or anything else):
 1. Edit the **source code** in \`${AGENTS_ROOT}/\` — agent definitions (displayName, description, schedule, icon) live in \`${AGENT_SETTINGS_DIR}/<agent-name>/agent.json\`, Dove and per-agent chat behaviour live in the chatbot API routes
-2. Run \`cd ${AGENTS_ROOT} && npm run install\` to build, generate plists, and reload launchd
+2. Run \`cd ${AGENTS_ROOT} && npm run install\` to build, deploy scripts, and reload the scheduler
 
-The \`additionalDirectories\` (installed plists + scheduler scripts) are exposed to you for **read-only** purposes only — auditing what is currently installed, monitoring status, tailing logs, and unloading or deleting agents. Never write to them directly.
+The \`additionalDirectories\` (scheduler config + scripts) are exposed to you for **read-only** purposes only — auditing what is currently installed, monitoring status, tailing logs, and deactivating agents. Never write to them directly.
 
 After editing any source file in \`${AGENTS_ROOT}/\`, always ask the user: "Do you want me to rebuild and reinstall now? — never run it automatically.
 
-**launchd global management:**
+**Scheduler global management:**
 
 Scripts location: ${SCHEDULER_ROOT}/
 Logs location:    ${DOVEPAW_AGENT_LOGS}/
@@ -35,7 +35,6 @@ Logs location:    ${DOVEPAW_AGENT_LOGS}/
 |---|---|
 | Install / reinstall all agents | \`cd ${AGENTS_ROOT} && npm run build && npm run install\` |
 | Uninstall all agents | \`cd ${AGENTS_ROOT} && npm run uninstall\` |
-| List all loaded agents | \`launchctl list | grep claude\` |
 
 For per-agent commands (install, uninstall, load, unload, status, tail logs) — call the agent's tool, the sub-agent owns its own lifecycle.
 

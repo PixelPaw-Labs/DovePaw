@@ -11,10 +11,10 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { z } from "zod";
 
 const jobStatusSchema = z.object({
-  plistExists: z.boolean(),
+  configExists: z.boolean(),
   loaded: z.boolean(),
-  plistPath: z.string(),
-  plistLabel: z.string().optional(),
+  configPath: z.string(),
+  configLabel: z.string().optional(),
   label: z.string().optional(),
   instruction: z.string(),
   schedule: agentScheduleSchema.optional(),
@@ -36,7 +36,7 @@ async function callAction(
   action: Action,
   jobId?: string,
 ): Promise<AgentJobStatuses> {
-  const res = await fetch("/api/settings/launchd", {
+  const res = await fetch("/api/settings/scheduler", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ agentName, action, jobId }),
@@ -96,7 +96,7 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    fetch("/api/settings/launchd")
+    fetch("/api/settings/scheduler")
       .then((r) => r.json())
       .then((data: { agents: AllAgentsStatus }) => setStatuses(data.agents))
       .catch(() => setError("Failed to load agent statuses"));
@@ -127,7 +127,7 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
       for (const agent of agents) {
         const key = busyKey(agent.name);
         setBusy((prev) => new Set(prev).add(key));
-        // eslint-disable-next-line no-await-in-loop -- sequential install required; launchd plist ordering matters
+        // eslint-disable-next-line no-await-in-loop -- sequential install required; scheduler config ordering matters
         const updated = await callAction(agent.name, "install");
         setStatuses((prev) => ({ ...prev, [agent.name]: updated }));
         setBusy((prev) => {
@@ -155,7 +155,7 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
             Scheduled Agents Management
           </h2>
           <p className="text-sm text-on-surface-variant mt-1 max-w-2xl">
-            Install and manage agents as launchd daemons. Each agent runs on its own schedule —
+            Install and manage agents as scheduled daemons. Each agent runs on its own schedule —
             enable or disable them individually, or install all at once.
           </p>
         </div>
@@ -307,7 +307,7 @@ function AgentCard({ agent, agentStatus, busy, onAction }: AgentCardProps) {
         <div className="pt-2 border-t border-outline-variant/20">
           <StatusBadge
             loaded={anyLoaded}
-            plistExists={jobs.some(([, j]) => j.plistExists)}
+            configExists={jobs.some(([, j]) => j.configExists)}
             loading={false}
           />
         </div>
@@ -327,7 +327,7 @@ interface JobRowProps {
 }
 
 function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) {
-  const { loaded, plistExists, schedule, label, plistLabel } = jobStatus;
+  const { loaded, configExists, schedule, label, configLabel } = jobStatus;
   const isLegacy = jobId === "legacy";
   const displayLabel = label || formatScheduleDisplay(schedule);
 
@@ -342,12 +342,12 @@ function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) 
         )}
         {!isLegacy && (
           <p className="text-[10px] text-muted-foreground font-mono truncate">
-            {plistLabel ?? jobId}
+            {configLabel ?? jobId}
           </p>
         )}
       </div>
 
-      <StatusBadge loaded={loaded} plistExists={plistExists} loading={false} compact />
+      <StatusBadge loaded={loaded} configExists={configExists} loading={false} compact />
 
       {/* Toggle load/unload */}
       <label className="inline-flex items-center cursor-pointer shrink-0">
@@ -355,7 +355,7 @@ function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) 
           type="checkbox"
           className="sr-only peer"
           checked={loaded}
-          disabled={isBusy || agentBusy || (!loaded && !plistExists)}
+          disabled={isBusy || agentBusy || (!loaded && !configExists)}
           onChange={() => onAction(loaded ? "unload" : "load")}
           aria-label={loaded ? "Unload" : "Load"}
         />
@@ -364,7 +364,7 @@ function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) 
 
       {/* Job-level actions */}
       <div className="flex gap-1.5 shrink-0">
-        {plistExists ? (
+        {configExists ? (
           <>
             {!loaded && (
               <ActionBtn
@@ -396,12 +396,12 @@ function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) 
 
 function StatusBadge({
   loaded,
-  plistExists,
+  configExists,
   loading,
   compact = false,
 }: {
   loaded: boolean;
-  plistExists: boolean;
+  configExists: boolean;
   loading: boolean;
   compact?: boolean;
 }) {
@@ -425,7 +425,7 @@ function StatusBadge({
       </span>
     );
   }
-  if (plistExists) {
+  if (configExists) {
     return (
       <span className={`${base} bg-primary/20 text-primary`}>
         <span className="w-1.5 h-1.5 rounded-full bg-primary/60" />

@@ -16,7 +16,7 @@ export interface AgentSuggestion {
 }
 
 export interface AgentDef {
-  /** kebab-case identifier — used for file names, plist label suffix, log dirs */
+  /** kebab-case identifier — used for file names, scheduler label suffix, log dirs */
   name: string;
   /** Short alias used as workspace directory prefix (e.g. "gsd", "zt") */
   alias: string;
@@ -24,7 +24,7 @@ export interface AgentDef {
   entryPath: string;
   /** Human-readable display name */
   displayName: string;
-  /** launchd service label — derived: "Claude Code Agent - <displayName>" */
+  /** Scheduler service label — derived: "Claude Code Agent - <displayName>" */
   label: string;
   /** Underscore key used in .ports.json manifest — derived: name with - → _ */
   manifestKey: string;
@@ -32,7 +32,7 @@ export interface AgentDef {
   toolName: string;
   /** Short description for MCP tool and system prompt */
   description: string;
-  /** launchd schedule */
+  /** Agent schedule */
   schedule?: AgentSchedule;
   /** Icon component for UI display */
   icon: LucideIcon;
@@ -46,7 +46,7 @@ export interface AgentDef {
   suggestions: AgentSuggestion[];
   /** Whether to run immediately when loaded */
   runAtLoad?: boolean;
-  /** Extra static env vars to embed in the launchd plist */
+  /** Extra static env vars to embed in the scheduler config */
   envVars?: Record<string, string>;
   /** When false, hidden from Scheduled Agents Management and A2A servers. Defaults to true. */
   schedulingEnabled?: boolean;
@@ -55,7 +55,7 @@ export interface AgentDef {
   /** Personality paragraph injected at the top of the sub-agent system prompt.
    *  Replaces the generic "You are one of Dove's mice…" line. */
   personality?: string;
-  /** Multiple scheduled jobs — each gets its own launchd plist. */
+  /** Multiple scheduled jobs — each gets its own scheduler config entry. */
   scheduledJobs?: ScheduledJob[];
 }
 
