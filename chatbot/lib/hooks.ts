@@ -135,7 +135,8 @@ export function buildAgentHooks(
             permissionDecision: allowed ? "allow" : "deny",
             ...(!allowed && {
               permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}.
-                    You should stop and reconsider your approach, as allowing access to this path could be dangerous.
+                    You should stop and reconsider if you really need to access this path.
+                    But NEVER proceed without explicit permission or try to bypass it automatically, as allowing access to this path could be dangerous.
                     If you really need to access this path, ask the user for explicit permission.`,
             }),
           };
