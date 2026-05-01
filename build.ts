@@ -33,8 +33,10 @@ const uninstall = process.argv.includes("--uninstall");
 // ─── Uninstall ───────────────────────────────────────────────────────────────
 
 if (uninstall) {
-  console.log("Uninstalling all scheduler agents...\n");
-  await Promise.all(agents.map((agent) => uninstallAgent(agent, uid)));
+  if (process.platform === "darwin") {
+    console.log("Uninstalling all scheduler agents...\n");
+    await Promise.all(agents.map((agent) => uninstallAgent(agent, uid)));
+  }
   const pluginsToUnlink = await listPlugins();
   if (pluginsToUnlink.length > 0) {
     console.log("\nUnlinking skills...\n");
@@ -59,19 +61,24 @@ await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
 await Promise.all(plugins.map((p) => linkPluginSkills(p.path, p.skillNames)));
 console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 
-console.log("\nStep 3: Installing and loading agents...\n");
-await copyNativePackages(NATIVE_PACKAGES);
-await Promise.all(agents.map((agent) => installAgent(agent, uid, [])));
-console.log("  Done");
+if (process.platform === "darwin") {
+  console.log("\nStep 3: Installing and loading agents...\n");
+  await copyNativePackages(NATIVE_PACKAGES);
+  await Promise.all(agents.map((agent) => installAgent(agent, uid, [])));
+  console.log("  Done");
 
-// ─── Verify ──────────────────────────────────────────────────────────────────
+  // ─── Verify ────────────────────────────────────────────────────────────────
 
-console.log("\nStep 4: Verifying...\n");
-await Promise.all(
-  agents.map(async (agent) => {
-    const ok = await isAgentLoaded(plistLabel(agent));
-    console.log(`  ${ok ? "OK" : "WARN"}: ${agent.name}`);
-  }),
-);
+  console.log("\nStep 4: Verifying...\n");
+  await Promise.all(
+    agents.map(async (agent) => {
+      const ok = await isAgentLoaded(plistLabel(agent));
+      console.log(`  ${ok ? "OK" : "WARN"}: ${agent.name}`);
+    }),
+  );
+} else {
+  console.log("\nStep 3: Skipped (launchd not available on this platform).");
+  console.log("Step 4: Skipped.");
+}
 
 console.log("\nDone!");
