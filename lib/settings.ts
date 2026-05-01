@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { z } from "zod";
 import { DOVEPAW_DIR, SETTINGS_FILE } from "./paths";
+import { pushConfig } from "./s3-config-sync";
 import {
   globalSettingsSchema,
   type GlobalSettings,
@@ -63,8 +64,10 @@ export async function readSettings(): Promise<GlobalSettings> {
 
 export async function writeSettings(settings: GlobalSettings): Promise<void> {
   mkdirSync(DOVEPAW_DIR, { recursive: true });
-  writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  const body = JSON.stringify(settings, null, 2) + "\n";
+  writeFileSync(SETTINGS_FILE, body, "utf-8");
   copyFileSync(SETTINGS_FILE, `${SETTINGS_FILE}.bak`);
+  await pushConfig("settings.json", body);
 }
 
 // ─── Per-Agent Read / Write ───────────────────────────────────────────────────

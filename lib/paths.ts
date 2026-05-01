@@ -21,8 +21,8 @@ function resolveAgentsRoot(): string {
 export const AGENTS_ROOT = resolveAgentsRoot();
 /** DovePaw/chatbot/public — Next.js static assets directory */
 export const CHATBOT_PUBLIC_DIR = join(AGENTS_ROOT, "chatbot", "public");
-/** ~/.dovepaw/ — user-scoped DovePaw data directory (outside the repo) */
-export const DOVEPAW_DIR = join(process.env.HOME!, ".dovepaw");
+/** ~/.dovepaw/ — user-scoped DovePaw data directory (outside the repo). Override with DOVEPAW_DATA_DIR for server deployments. */
+export const DOVEPAW_DIR = process.env.DOVEPAW_DATA_DIR ?? join(process.env.HOME!, ".dovepaw");
 /** ~/.dovepaw/settings.json — global settings (watched repositories, etc.) */
 export const SETTINGS_FILE = join(DOVEPAW_DIR, "settings.json");
 /** ~/.dovepaw/agent-links.json — global agent communication link topology */

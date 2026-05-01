@@ -19,6 +19,7 @@ import {
   agentDefinitionFile,
   tmpAgentDefinitionFile,
 } from "./paths";
+import { pushConfig } from "./s3-config-sync";
 import type { AgentDef } from "./agents";
 import { readAgentLinksFile, writeAgentLinksFile } from "./agent-links";
 
@@ -173,6 +174,7 @@ export async function writeAgentFile(agentName: string, file: AgentFile): Promis
   const data = JSON.stringify(rest, null, 2) + "\n";
   await writeFile(dest, data, "utf-8");
   await copyFile(dest, `${dest}.bak`);
+  await pushConfig(`settings.agents/${agentName}/agent.json`, data);
 }
 
 /** Create a new agent file with empty repos/envVars. */
