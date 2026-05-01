@@ -2,8 +2,8 @@
 
 import * as React from "react";
 
-export type ScheduleType = "none" | "interval" | "calendar";
-const SCHEDULE_TYPES = ["none", "interval", "calendar"] as const;
+export type ScheduleType = "none" | "interval" | "calendar" | "onetime";
+const SCHEDULE_TYPES = ["none", "interval", "calendar", "onetime"] as const;
 export function isScheduleType(v: string): v is ScheduleType {
   return (SCHEDULE_TYPES as readonly string[]).includes(v);
 }

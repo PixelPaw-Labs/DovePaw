@@ -18,6 +18,7 @@ import {
 import { cancelProcessing } from "@/a2a/lib/processing-registry";
 import type { AgentDef } from "@@/lib/agents";
 import { formatScheduleDisplay } from "@@/lib/agents-config-schemas";
+import { plistLabel } from "@@/lib/plist-generate";
 import {
   agentEntryPath,
   agentPersistentLogDir,
@@ -243,7 +244,7 @@ export function makeAgentMgmtTools(agent: AgentDef) {
     {},
     async () => {
       await loadAgent(agent);
-      const loaded = await isLoaded(agent.label);
+      const loaded = await isLoaded(plistLabel(agent));
       return {
         content: [
           {
@@ -277,7 +278,7 @@ export function makeAgentMgmtTools(agent: AgentDef) {
     async () => {
       const [{ state, pid, lastExitCode, raw }, loaded] = await Promise.all([
         getAgentStatus(agent),
-        isLoaded(agent.label),
+        isLoaded(plistLabel(agent)),
       ]);
       const summary = `loaded=${loaded}  state=${state ?? "unknown"}  pid=${pid ?? "-"}  last_exit=${lastExitCode ?? "-"}`;
       return { content: [{ type: "text" as const, text: `${summary}\n\n${raw}` }] };
@@ -436,13 +437,13 @@ This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and pro
 
 **Managing this agent (launchd):**
 
-Label: \`${agent.label}\`
+Label: \`${plistLabel(agent)}\`
 Schedule: ${formatScheduleDisplay(agent.schedule)}
 
-You are responsible for installing and uninstalling ONLY yourself (\`${agent.label}\`).
+You are responsible for installing and uninstalling ONLY yourself (\`${plistLabel(agent)}\`).
 - Install means: build only YOUR TypeScript entry, then load YOUR plist — do not touch other agents.
 - Uninstall means: unload YOUR plist and delete it only — do not touch other agents.
-- Never install or uninstall any agent other than \`${agent.label}\`.
+- Never install or uninstall any agent other than \`${plistLabel(agent)}\`.
 
 | Task | Command |
 |---|---|
@@ -452,13 +453,13 @@ You are responsible for installing and uninstalling ONLY yourself (\`${agent.lab
 | Unload | Call the \`${MGMT_TOOL.unload}\` MCP tool |
 | Check status / PID / last exit | Call the \`${MGMT_TOOL.status}\` MCP tool |
 | Read logs | Call the \`${MGMT_TOOL.logs}\` MCP tool |
-| Show plist content | Read \`~/Library/LaunchAgents/${agent.label}.plist\` using the Read tool |
+| Show plist content | Read \`~/Library/LaunchAgents/${plistLabel(agent)}.plist\` using the Read tool |
 
 **Your file boundaries — only access YOUR files, never other agents':**
 
 | Resource | Path |
 |---|---|
-| Plist | \`${plistFilePath(agent.label)}\` |
+| Plist | \`${plistFilePath(plistLabel(agent))}\` |
 | Source | \`${agentEntryPath(agent.entryPath)}\` |
 | Logs | \`${agentPersistentLogDir(agent.name)}\` |
 | State | \`${agentPersistentStateDir(agent.name)}\` |
