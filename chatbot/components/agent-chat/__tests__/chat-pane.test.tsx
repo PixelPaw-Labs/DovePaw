@@ -73,13 +73,9 @@ function makeProps(overrides: Partial<ChatPaneProps> = {}): ChatPaneProps {
     sendMessage: vi.fn(),
     cancelMessage: vi.fn(),
     newSession: vi.fn(),
-    deleteSession: vi.fn(),
-    setSessionId: vi.fn(),
     resolvePermission: vi.fn(),
     resolveQuestion: vi.fn(),
     removeFromQueue: vi.fn(),
-    sessions: [],
-    runningSessionIds: new Set(),
     ...overrides,
   };
 }

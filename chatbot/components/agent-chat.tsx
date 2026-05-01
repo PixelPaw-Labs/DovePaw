@@ -8,6 +8,7 @@ import { useChatSession } from "@/components/hooks/use-chat-session";
 import { useAgentSessions } from "@/components/hooks/use-agent-sessions";
 import { ChatPane } from "@/components/agent-chat/chat-pane";
 import { GroupChatView } from "@/components/agent-chat/group-chat-view";
+import { SessionHistoryPanel } from "@/components/agent-chat/session-history-panel";
 
 interface AgentChatProps {
   agentId: string;
@@ -108,13 +109,19 @@ function AgentChatSession({
       sendMessage={session.sendMessage}
       cancelMessage={session.cancelMessage}
       newSession={session.newSession}
-      deleteSession={session.deleteSession}
-      setSessionId={session.setSessionId}
       resolvePermission={session.resolvePermission}
       resolveQuestion={session.resolveQuestion}
       removeFromQueue={session.removeFromQueue}
-      sessions={sessions}
-      runningSessionIds={runningSessionIds}
+      historyPanel={
+        <SessionHistoryPanel
+          sessions={sessions}
+          activeSessionId={session.currentSessionId}
+          runningSessionIds={runningSessionIds}
+          onSelect={(id) => void session.setSessionId(id)}
+          onNew={session.newSession}
+          onDelete={session.deleteSession}
+        />
+      }
     />
   );
 }
