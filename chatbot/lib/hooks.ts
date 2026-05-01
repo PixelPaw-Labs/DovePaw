@@ -17,6 +17,7 @@ import type {
   CanUseTool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
+import { bashHasWriteOperation } from "@@/lib/dove-mode-strategy";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 //import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
@@ -66,6 +67,11 @@ export interface AgentHooksConfig {
    * permitted to modify. Paths outside this set are denied via PreToolUse.
    */
   allowedDirectories?: string[];
+  /**
+   * Tools to block via PreToolUse hook (2nd-level gate, in addition to SDK disallowedTools).
+   * Matcher is built dynamically from this list.
+   */
+  disallowedTools?: string[];
 }
 
 function buildPendingBlockReason(entries: PendingEntry[]): string {
@@ -86,7 +92,8 @@ function buildPendingBlockReason(entries: PendingEntry[]): string {
 export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories } = config;
+  const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories, disallowedTools } =
+    config;
   //const retryCounter = new StillRunningRetryCounter();
   const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
 
@@ -114,6 +121,50 @@ export function buildAgentHooks(
       ],
     },
   ];
+
+  // 2nd-level gate: deny tools in the disallowedTools list (SDK disallowedTools is the 1st gate).
+  // Filter out Bash(command *) patterns — those are SDK-level; hooks only match on plain tool names.
+  const hookBlockedTools = disallowedTools?.filter((t) => !t.includes("(")) ?? [];
+  if (hookBlockedTools.length > 0) {
+    const matcher = hookBlockedTools.join("|");
+    preToolUseHooks.push({
+      matcher,
+      hooks: [
+        async (input) => {
+          if (input.hook_event_name !== "PreToolUse") return { continue: true };
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Tool is not permitted in this mode.`,
+          };
+          return { hookSpecificOutput };
+        },
+      ],
+    });
+  }
+
+  // Block Bash write operations (redirects, rm, mv, etc.) when in a write-restricted mode.
+  if (disallowedTools?.includes("Write")) {
+    preToolUseHooks.push({
+      matcher: "Bash",
+      hooks: [
+        async (input) => {
+          if (input.hook_event_name !== "PreToolUse") return { continue: true };
+          if (typeof input.tool_input !== "object" || input.tool_input === null)
+            return { continue: true };
+          const rawCommand: unknown = Reflect.get(input.tool_input, "command");
+          const command = typeof rawCommand === "string" ? rawCommand : "";
+          if (!bashHasWriteOperation(command)) return { continue: true };
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: "Read-only mode: Bash write operations are not allowed.",
+          };
+          return { hookSpecificOutput };
+        },
+      ],
+    });
+  }
 
   if (resolvedAllowed && resolvedAllowed.length > 0) {
     preToolUseHooks.push({
@@ -223,13 +274,14 @@ export function buildDoveHooks(
   registry: PendingRegistry,
   cwd: string,
   additionalDirectories: string[],
-  options: { includeGroupReminder?: boolean } = {},
+  options: { includeGroupReminder?: boolean; disallowedTools?: string[] } = {},
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
     registry,
     userPromptReminder: options.includeGroupReminder ? DOVE_PROMPT_REMINDER : DOVE_LEAN_REMINDER,
     allowedDirectories: [cwd, ...additionalDirectories],
+    disallowedTools: options.disallowedTools,
   });
 }
 

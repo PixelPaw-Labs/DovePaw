@@ -8,7 +8,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { IconPicker } from "./icon-picker";
 import { Section, Row } from "./agent-form-helpers";
-import { type DoveSettings, doveSettingsSchema } from "@@/lib/settings-schemas";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  type DoveSettings,
+  type DoveMode,
+  DOVE_MODES,
+  doveSettingsSchema,
+} from "@@/lib/settings-schemas";
 import { z } from "zod";
 
 const DEFAULT_DISPLAY_NAME = "Dove";
@@ -19,6 +31,12 @@ const DEFAULT_LANDING_DESCRIPTION =
   "Yang's cat and your agent wrangler. I've got agents napping until you need them. Just say the word — or a treat works too. 🐾";
 
 const apiErrorSchema = z.object({ error: z.string().optional() });
+
+const DOVE_MODE_LABELS: Record<DoveMode, string> = {
+  "read-only": "Read-only",
+  supervised: "Supervised",
+  autonomous: "Autonomous",
+};
 
 interface FormState {
   displayName: string;
@@ -31,6 +49,8 @@ interface FormState {
   iconBg: string;
   iconColor: string;
   defaultModel: string;
+  doveMode: DoveMode;
+  allowWebTools: boolean;
 }
 
 function settingsToForm(s: DoveSettings): FormState {
@@ -45,6 +65,8 @@ function settingsToForm(s: DoveSettings): FormState {
     iconBg: s.iconBg,
     iconColor: s.iconColor,
     defaultModel: s.defaultModel,
+    doveMode: s.doveMode,
+    allowWebTools: s.allowWebTools,
   };
 }
 
@@ -216,6 +238,44 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             placeholder="sonnet"
             className="font-mono text-sm"
           />
+        </Row>
+      </Section>
+
+      {/* Permissions */}
+      <Section label="Permissions">
+        <Row
+          label="Mode"
+          hint="read-only: no writes. supervised: prompts for edits. autonomous: no restrictions."
+        >
+          <Select
+            value={form.doveMode}
+            onValueChange={(v) => {
+              const mode = DOVE_MODES.find((m) => m === v);
+              if (mode) set("doveMode", mode);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {DOVE_MODES.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {DOVE_MODE_LABELS[m]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Row>
+        <Row label="Web Tools" hint="Allow Dove to use WebFetch and WebSearch">
+          <label className="flex items-center gap-2 cursor-pointer pt-2">
+            <input
+              type="checkbox"
+              checked={form.allowWebTools}
+              onChange={(e) => set("allowWebTools", e.target.checked)}
+              className="w-4 h-4 accent-primary"
+            />
+            <span className="text-sm">Enable WebFetch and WebSearch</span>
+          </label>
         </Row>
       </Section>
 

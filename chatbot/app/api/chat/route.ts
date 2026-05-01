@@ -22,6 +22,7 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
+import { getDoveModeStrategy } from "@@/lib/dove-mode-strategy";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import type { CollectedStream } from "@/lib/query-tools";
 import { createSseResponse } from "@/lib/sse-response";
@@ -200,7 +201,14 @@ export async function POST(request: Request) {
             DOVEPAW_DIR,
           ];
           const settings = await readSettings();
-          const defaultModel = effectiveDoveSettings(settings).defaultModel.trim();
+          const doveSettings = effectiveDoveSettings(settings);
+          const doveStrategy = getDoveModeStrategy(doveSettings.doveMode);
+          // Compose final disallowedTools: mode-based list + web tools (blocked when disabled).
+          const disallowedTools = [
+            ...doveStrategy.disallowedTools,
+            ...(!doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
+          ];
+          const defaultModel = doveSettings.defaultModel.trim();
           resolvedSessionId = await consumeQueryEvents(
             query({
               prompt: message,
@@ -222,7 +230,9 @@ export async function POST(request: Request) {
                   preset: "claude_code",
                   append: await buildSystemPrompt(settings),
                 },
-                permissionMode: "acceptEdits",
+                permissionMode: doveStrategy.permissionMode,
+                allowDangerouslySkipPermissions: doveStrategy.allowDangerouslySkipPermissions,
+                disallowedTools,
                 allowedTools: [
                   ...agents.flatMap((a) => [
                     `mcp__agents__${doveAskToolName(a)}`,
@@ -236,6 +246,7 @@ export async function POST(request: Request) {
                         `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
                       ])
                     : []),
+                  ...(doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
                 ],
                 mcpServers: { agents: mcpServer },
                 // Resume the existing session so the full conversation history is preserved.
@@ -243,9 +254,10 @@ export async function POST(request: Request) {
                 ...(sessionId ? { resume: sessionId } : {}),
                 // Stream text tokens as they are generated
                 includePartialMessages: true,
-                settingSources: ["project", "user", "local"],
+                settingSources: doveStrategy.settingSources,
                 hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
                   includeGroupReminder: eligibleGroups.length > 0,
+                  disallowedTools,
                 }),
                 canUseTool: doveCanUseTool,
               },

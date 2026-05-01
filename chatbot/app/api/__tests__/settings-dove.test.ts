@@ -23,6 +23,8 @@ const CUSTOM_DOVE = {
   iconBg: "bg-pink-100",
   iconColor: "text-pink-700",
   defaultModel: "",
+  doveMode: "supervised" as const,
+  allowWebTools: false,
 };
 
 beforeEach(() => {

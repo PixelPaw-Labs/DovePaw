@@ -24,6 +24,9 @@ export const envVarSchema = z.object({
   keychainAccount: z.string().optional(),
 });
 
+export const DOVE_MODES = ["read-only", "supervised", "autonomous"] as const;
+export type DoveMode = (typeof DOVE_MODES)[number];
+
 export const doveSettingsSchema = z.object({
   /** Human-readable name shown in UI and system prompt. Defaults to "Dove". */
   displayName: z.string().default("Dove"),
@@ -49,6 +52,10 @@ export const doveSettingsSchema = z.object({
    * Empty string (default) defers to the SDK's built-in default.
    */
   defaultModel: z.string().default(""),
+  /** Controls what Dove itself can do. Sub-agents always run autonomously. */
+  doveMode: z.enum(DOVE_MODES).default("supervised"),
+  /** Allow Dove to use WebFetch and WebSearch tools. */
+  allowWebTools: z.boolean().default(false),
 });
 
 export type DoveSettings = z.infer<typeof doveSettingsSchema>;
