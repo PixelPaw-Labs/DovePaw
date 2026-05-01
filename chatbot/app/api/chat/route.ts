@@ -141,26 +141,36 @@ export async function POST(request: Request) {
     const userMsgId = randomUUID();
 
     const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
-    const groupInitTools = eligibleGroups.map((group) =>
-      makeInitGroupTool(
-        group,
-        agents.filter((a) => group.members.includes(a.name)),
-      ),
-    );
-    const groupStartTools = eligibleGroups.map((group) => {
-      const memberDefs = agents.filter((a) => group.members.includes(a.name));
-      return makeStartGroupTool(
-        group,
-        memberDefs,
-        subprocessController.signal,
-        backgroundTasks,
-        doveRegistry,
-      );
-    });
-    const groupAwaitTools = eligibleGroups.map((group) => {
-      const memberDefs = agents.filter((a) => group.members.includes(a.name));
-      return makeAwaitGroupTool(group, memberDefs, subprocessController.signal, doveRegistry);
-    });
+    const groupTools =
+      eligibleGroups.length > 0
+        ? [
+            ...eligibleGroups.map((group) =>
+              makeInitGroupTool(
+                group,
+                agents.filter((a) => group.members.includes(a.name)),
+              ),
+            ),
+            ...eligibleGroups.map((group) => {
+              const memberDefs = agents.filter((a) => group.members.includes(a.name));
+              return makeStartGroupTool(
+                group,
+                memberDefs,
+                subprocessController.signal,
+                backgroundTasks,
+                doveRegistry,
+              );
+            }),
+            ...eligibleGroups.map((group) => {
+              const memberDefs = agents.filter((a) => group.members.includes(a.name));
+              return makeAwaitGroupTool(
+                group,
+                memberDefs,
+                subprocessController.signal,
+                doveRegistry,
+              );
+            }),
+          ]
+        : [];
 
     const tools = [
       ...agents.flatMap((agent) => [
@@ -168,9 +178,7 @@ export async function POST(request: Request) {
         makeStartTool(agent, subprocessController.signal, backgroundTasks, doveRegistry),
         makeAwaitTool(agent, subprocessController.signal, doveRegistry),
       ]),
-      ...groupInitTools,
-      ...groupStartTools,
-      ...groupAwaitTools,
+      ...groupTools,
     ];
 
     const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
@@ -221,11 +229,13 @@ export async function POST(request: Request) {
                     `mcp__agents__${doveStartToolName(a)}`,
                     `mcp__agents__${doveAwaitToolName(a)}`,
                   ]),
-                  ...eligibleGroups.flatMap((g) => [
-                    `mcp__agents__${doveInitGroupToolName(g.name)}`,
-                    `mcp__agents__${doveStartGroupToolName(g.name)}`,
-                    `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
-                  ]),
+                  ...(eligibleGroups.length > 0
+                    ? eligibleGroups.flatMap((g) => [
+                        `mcp__agents__${doveInitGroupToolName(g.name)}`,
+                        `mcp__agents__${doveStartGroupToolName(g.name)}`,
+                        `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
+                      ])
+                    : []),
                 ],
                 mcpServers: { agents: mcpServer },
                 // Resume the existing session so the full conversation history is preserved.
@@ -235,7 +245,7 @@ export async function POST(request: Request) {
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
                 hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
-                  includeGroupReminder: true,
+                  includeGroupReminder: eligibleGroups.length > 0,
                 }),
                 canUseTool: doveCanUseTool,
               },
