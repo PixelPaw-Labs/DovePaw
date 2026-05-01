@@ -73,6 +73,8 @@ export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
 /** Resolve an agent's entry point to an absolute path under agents/ root */
 export const agentEntryPath = (entryPath: string) => join(AGENTS_ROOT, entryPath);
+/** DovePaw/agent-local/ — locally developed agents (auto-linked on install/electron:dev) */
+export const AGENT_LOCAL_DIR = join(AGENTS_ROOT, "agent-local");
 /** DovePaw/node_modules/<pkg> */
 export const agentNodeModule = (pkg: string) => join(AGENTS_ROOT, "node_modules", pkg);
 /** <repoPath>/.claude/worktrees/<wtName> — Claude Code worktree directory for a named worktree */

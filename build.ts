@@ -16,6 +16,7 @@ import {
   deployAgentSdk,
   linkAgents,
   linkAgentSdkToPlugin,
+  linkLocalAgentSkills,
   linkPluginSkills,
   unlinkPluginSkills,
 } from "./lib/installer.js";
@@ -53,7 +54,10 @@ await linkAgents();
 await deployAgentSdk();
 const plugins = await listPlugins();
 await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
-await Promise.all(plugins.map((p) => linkPluginSkills(p.path, p.skillNames)));
+await Promise.all([
+  ...plugins.map((p) => linkPluginSkills(p.path, p.skillNames)),
+  linkLocalAgentSkills(),
+]);
 console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 
 if (process.platform === "win32") {

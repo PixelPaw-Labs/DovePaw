@@ -7,16 +7,18 @@ const mockRm = vi.fn().mockResolvedValue(undefined);
 const mockCp = vi.fn().mockResolvedValue(undefined);
 const mockMkdir = vi.fn().mockResolvedValue(undefined);
 const mockSymlink = vi.fn().mockResolvedValue(undefined);
+const mockReaddir = vi.fn().mockResolvedValue([]);
+const mockAccess = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("node:fs/promises", () => ({
   rm: mockRm,
   cp: mockCp,
   mkdir: mockMkdir,
   symlink: mockSymlink,
-  access: vi.fn().mockResolvedValue(undefined),
+  access: mockAccess,
   chmod: vi.fn().mockResolvedValue(undefined),
   copyFile: vi.fn().mockResolvedValue(undefined),
-  readdir: vi.fn().mockResolvedValue([]),
+  readdir: mockReaddir,
   readFile: vi.fn().mockResolvedValue(""),
   stat: vi.fn().mockResolvedValue({ mtime: new Date() }),
   writeFile: vi.fn().mockResolvedValue(undefined),
@@ -59,6 +61,47 @@ describe("deployAgentSdk", () => {
       '{"type":"module"}\n',
       "utf-8",
     );
+  });
+});
+
+describe("linkLocalAgentSkills", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("no-ops silently when agent-local/ does not exist", async () => {
+    const { linkLocalAgentSkills } = await import("@@/lib/installer");
+    mockReaddir.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    await linkLocalAgentSkills();
+    expect(mockSymlink).not.toHaveBeenCalled();
+  });
+
+  it("skips agent dirs that have no skill/ subdir", async () => {
+    const { linkLocalAgentSkills } = await import("@@/lib/installer");
+    mockReaddir.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    mockAccess.mockRejectedValue(new Error("ENOENT"));
+    await linkLocalAgentSkills();
+    expect(mockSymlink).not.toHaveBeenCalled();
+  });
+
+  it("symlinks skill/ into ~/.claude/skills/<name> and ~/.codex/skills/<name>", async () => {
+    const { linkLocalAgentSkills } = await import("@@/lib/installer");
+    mockReaddir.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    mockAccess.mockResolvedValue(undefined);
+    await linkLocalAgentSkills();
+    const dests = mockSymlink.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".claude/skills") && d.endsWith("my-agent"))).toBe(true);
+    expect(dests.some((d) => d.includes(".codex/skills") && d.endsWith("my-agent"))).toBe(true);
+  });
+
+  it("removes existing link before symlinking in both roots", async () => {
+    const { linkLocalAgentSkills } = await import("@@/lib/installer");
+    mockReaddir.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    mockAccess.mockResolvedValue(undefined);
+    await linkLocalAgentSkills();
+    const rmPaths = mockRm.mock.calls.map((args) => String(args[0]));
+    expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("my-agent"))).toBe(true);
+    expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("my-agent"))).toBe(true);
   });
 });
 

@@ -26,6 +26,7 @@ import type { AgentDef } from "./agents";
 import { agentPersistentLogDir } from "./paths";
 import {
   A2A_TRIGGER_SCRIPT,
+  AGENT_LOCAL_DIR,
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
   AGENTS_DIST,
@@ -188,5 +189,35 @@ export async function unlinkPluginSkills(skillNames: string[]): Promise<void> {
     [SKILLS_ROOT, CODEX_SKILLS_ROOT].flatMap((root) =>
       skillNames.map((skill) => rm(join(root, skill), { recursive: true, force: true })),
     ),
+  );
+}
+
+/** Symlink skills from agent-local/<name>/skill/ into ~/.claude/skills/ and ~/.codex/skills/. */
+export async function linkLocalAgentSkills(): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(AGENT_LOCAL_DIR, { withFileTypes: true });
+  } catch {
+    return; // agent-local/ doesn't exist yet
+  }
+  await Promise.all(
+    entries
+      .filter((d) => d.isDirectory())
+      .map(async (d) => {
+        const skillDir = join(AGENT_LOCAL_DIR, d.name, "skill");
+        try {
+          await access(skillDir);
+        } catch {
+          return;
+        }
+        await Promise.all(
+          [SKILLS_ROOT, CODEX_SKILLS_ROOT].map(async (root) => {
+            await mkdir(root, { recursive: true });
+            const link = join(root, d.name);
+            await rm(link, { recursive: true, force: true });
+            await symlink(skillDir, link);
+          }),
+        );
+      }),
   );
 }

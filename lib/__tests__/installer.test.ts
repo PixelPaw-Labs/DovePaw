@@ -123,6 +123,64 @@ describe("unlinkPluginSkills", () => {
   });
 });
 
+describe("linkLocalAgentSkills", () => {
+  let linkLocalAgentSkills: () => Promise<void>;
+  let symlinkMock: ReturnType<typeof vi.fn>;
+  let rmMock: ReturnType<typeof vi.fn>;
+  let readdirMock: ReturnType<typeof vi.fn>;
+  let accessMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    linkLocalAgentSkills = mod.linkLocalAgentSkills;
+    const fs = await import("node:fs/promises");
+    symlinkMock = vi.mocked(fs.symlink);
+    rmMock = vi.mocked(fs.rm);
+    readdirMock = vi.mocked(fs.readdir);
+    accessMock = vi.mocked(fs.access);
+  });
+
+  it("no-ops silently when agent-local/ does not exist", async () => {
+    readdirMock.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    await linkLocalAgentSkills();
+    expect(symlinkMock).not.toHaveBeenCalled();
+  });
+
+  it("skips agent dirs that have no skill/ subdir", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockRejectedValue(new Error("ENOENT"));
+    await linkLocalAgentSkills();
+    expect(symlinkMock).not.toHaveBeenCalled();
+  });
+
+  it("symlinks skill/ into ~/.claude/skills/<name>", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await linkLocalAgentSkills();
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".claude/skills") && d.endsWith("my-agent"))).toBe(true);
+  });
+
+  it("symlinks skill/ into ~/.codex/skills/<name>", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await linkLocalAgentSkills();
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".codex/skills") && d.endsWith("my-agent"))).toBe(true);
+  });
+
+  it("removes existing link before symlinking", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await linkLocalAgentSkills();
+    const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
+    expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("my-agent"))).toBe(true);
+    expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("my-agent"))).toBe(true);
+  });
+});
+
 describe("deployTriggerScript", () => {
   let deployTriggerScript: () => Promise<void>;
 
