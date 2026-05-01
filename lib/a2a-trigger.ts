@@ -23,10 +23,10 @@ import { existsSync, readFileSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { consola } from "consola";
 import { z } from "zod";
-import { scheduledJobSchema } from "./agents-config-schemas";
+import { scheduledJobSchema, type ScheduledJob } from "./agents-config-schemas";
 import { startAgentStream } from "./a2a-client";
 import { agentDefinitionFile, portsFile } from "./paths";
-import { slugifyJobLabel } from "./plist-generate";
+import { jobPlistLabel } from "./plist-generate";
 
 const agentFileSchema = z.object({ scheduledJobs: z.array(scheduledJobSchema).optional() });
 
@@ -59,6 +59,53 @@ export async function triggerAgent(
   return finalState;
 }
 
+/** Returns the numeric port for `manifestKey` from a parsed ports manifest, or null if absent/wrong type. */
+export function resolvePort(ports: Record<string, unknown>, manifestKey: string): number | null {
+  const port = ports[manifestKey];
+  return typeof port === "number" ? port : null;
+}
+
+/** Reads the job config for `jobId` from the agent's settings file. Returns null on any error or if not found. */
+export function readJobConfig(agentName: string, jobId: string): ScheduledJob | null {
+  try {
+    const parsed = agentFileSchema.parse(
+      JSON.parse(readFileSync(agentDefinitionFile(agentName), "utf-8")),
+    );
+    return parsed.scheduledJobs?.find((j) => j.id === jobId) ?? null;
+  } catch (err) {
+    consola.warn(
+      `[a2a-trigger] Could not read agent settings for "${agentName}" — proceeding without instruction`,
+      err,
+    );
+    return null;
+  }
+}
+
+/** Bootout and unlink the plist for a completed onetime job. Errors are logged, not thrown. */
+export function cleanupOnetimeJob(
+  agentName: string,
+  jobId: string,
+  label: string | undefined,
+  home: string,
+  uid: number,
+): void {
+  const plistLabelStr = jobPlistLabel(agentName, jobId, label);
+  const plistPath = `${home}/Library/LaunchAgents/${plistLabelStr}.plist`;
+  try {
+    execSync(`launchctl bootout gui/${uid} '${plistPath}'`, { stdio: "ignore" });
+  } catch (err) {
+    consola.warn(
+      `[a2a-trigger] launchctl bootout failed for "${plistLabelStr}" — may already be unloaded`,
+      err,
+    );
+  }
+  try {
+    if (existsSync(plistPath)) unlinkSync(plistPath);
+  } catch (err) {
+    consola.warn(`[a2a-trigger] Could not remove plist "${plistPath}"`, err);
+  }
+}
+
 async function main(): Promise<void> {
   const manifestKey = process.argv[2];
   const agentName = process.argv[3];
@@ -82,31 +129,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const port = ports[manifestKey];
-  if (typeof port !== "number") {
+  const port = resolvePort(ports, manifestKey);
+  if (port === null) {
     consola.error(`Agent "${manifestKey}" not found in ports manifest`);
     process.exit(1);
   }
 
-  // Read instruction and job config from agent settings
   let instruction = "";
-  let jobConfig: { schedule?: { type: string }; label?: string } | null = null;
+  let jobConfig: ScheduledJob | null = null;
   if (jobId) {
-    try {
-      const parsed = agentFileSchema.parse(
-        JSON.parse(readFileSync(agentDefinitionFile(agentName), "utf-8")),
-      );
-      const job = parsed.scheduledJobs?.find((j) => j.id === jobId);
-      if (job) {
-        instruction = job.instruction ?? "";
-        jobConfig = job;
-      }
-    } catch (err) {
-      consola.warn(
-        `[a2a-trigger] Could not read agent settings for "${agentName}" — proceeding without instruction`,
-        err,
-      );
-    }
+    jobConfig = readJobConfig(agentName, jobId);
+    if (jobConfig) instruction = jobConfig.instruction;
   }
 
   consola.info(`[a2a-trigger] ${manifestKey} → port ${port}`);
@@ -116,26 +149,13 @@ async function main(): Promise<void> {
     consola.info(`[a2a-trigger] ${manifestKey} finished — state: ${state}`);
 
     if (jobId && jobConfig?.schedule?.type === "onetime") {
-      const slug = jobConfig.label ? slugifyJobLabel(jobConfig.label) : "";
-      const label = slug
-        ? `com.pixelpaw.scheduler.${agentName}.${slug}.${jobId}`
-        : `com.pixelpaw.scheduler.${agentName}.${jobId}`;
-      const home = process.env.HOME ?? "";
-      const plistPath = `${home}/Library/LaunchAgents/${label}.plist`;
-      const uid = process.getuid!();
-      try {
-        execSync(`launchctl bootout gui/${uid} '${plistPath}'`, { stdio: "ignore" });
-      } catch (err) {
-        consola.warn(
-          `[a2a-trigger] launchctl bootout failed for "${label}" — may already be unloaded`,
-          err,
-        );
-      }
-      try {
-        if (existsSync(plistPath)) unlinkSync(plistPath);
-      } catch (err) {
-        consola.warn(`[a2a-trigger] Could not remove plist "${plistPath}"`, err);
-      }
+      cleanupOnetimeJob(
+        agentName,
+        jobId,
+        jobConfig.label || undefined,
+        process.env.HOME ?? "",
+        process.getuid!(),
+      );
     }
 
     process.exit(state === "completed" ? 0 : 1);
