@@ -9,11 +9,10 @@ import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
-import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
+import { agentConfigDir } from "@@/lib/paths";
 import { readAgentSettings, readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import {
-  makeAgentMgmtTools,
   makeStartScriptTool,
   makeAwaitScriptTool,
   buildSubAgentPrompt,
@@ -98,6 +97,8 @@ export class QueryAgentExecutor {
     private readonly publisherRegistry?: Map<string, ExecutorPublisher>,
     private readonly port?: number,
     private readonly persistence?: ExecutorPersistence,
+    private readonly mgmtTools: NonNullable<Parameters<typeof withMcpQuery>[0]> = [],
+    private readonly extraDirs: string[] = [],
   ) {}
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -222,12 +223,12 @@ export class QueryAgentExecutor {
             groupOverrides ? true : undefined,
           ),
           makeAwaitScriptTool(this.def, registry),
-          ...makeAgentMgmtTools(this.def),
+          ...this.mgmtTools,
           ...chatToTools,
         ],
         async (innerMcpServer) => {
           const additionalDirectories = [
-            LAUNCH_AGENTS_DIR,
+            ...this.extraDirs,
             agentPersistentLogDir(this.def.name),
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),

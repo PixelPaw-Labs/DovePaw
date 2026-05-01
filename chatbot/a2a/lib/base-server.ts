@@ -45,6 +45,8 @@ export { portsManifestSchema, writePortsManifest, readPortsManifest } from "./po
 export type { PortsManifest } from "./ports-manifest";
 import { SessionManager } from "@/lib/session-manager";
 import { upsertSession, setActiveSession, setSessionStatus } from "@/lib/db";
+import { makeAgentMgmtTools } from "@/lib/agent-tools";
+import { LAUNCH_AGENTS_DIR } from "@@/lib/paths";
 
 // ─── Event bus manager ────────────────────────────────────────────────────────
 
@@ -203,6 +205,8 @@ export function createServerFromDef(def: AgentDef, port: number): void {
         publisherRegistry,
         port,
         persistence,
+        makeAgentMgmtTools(def),
+        [LAUNCH_AGENTS_DIR],
       );
       activeExecutors.set(requestContext.taskId, inst);
       try {
