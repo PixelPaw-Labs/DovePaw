@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 export * from "./launchd-paths";
 export * from "./plugin-paths";
+export * from "./group-paths";
 
 function resolveAgentsRoot(): string {
   try {
@@ -29,17 +30,8 @@ export const SETTINGS_FILE = join(DOVEPAW_DIR, "settings.json");
 export const AGENT_LINKS_FILE = join(DOVEPAW_DIR, "agent-links.json");
 /** ~/.dovepaw/settings.agents/ — per-agent settings directory */
 export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
-/** ~/.dovepaw/settings.groups/ — per-group settings directory */
-export const GROUP_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.groups");
-/** ~/.dovepaw/settings.groups/<groupName>/ — per-group config directory */
-export const groupConfigDir = (groupName: string): string => join(GROUP_SETTINGS_DIR, groupName);
-/** ~/.dovepaw/settings.groups/<groupName>/group.json — group config (repos + env vars) */
-export const groupConfigFile = (groupName: string): string =>
-  join(groupConfigDir(groupName), "group.json");
 /** ~/.dovepaw/workspaces/ — isolated execution workspace roots for all agents */
 export const WORKSPACES_DIR = join(DOVEPAW_DIR, "workspaces");
-/** ~/.dovepaw/workspaces/group/ — shared group workspace root */
-export const GROUP_WORKSPACE_ROOT = join(WORKSPACES_DIR, "group");
 /** ~/.dovepaw/workspaces/.{agentName}/ — per-agent workspace root */
 export const agentWorkspaceDir = (agentName: string): string => {
   const dir = join(WORKSPACES_DIR, `.${agentName}`);
