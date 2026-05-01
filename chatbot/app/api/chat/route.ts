@@ -280,7 +280,9 @@ export async function POST(request: Request) {
                 // Stream text tokens as they are generated
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
-                hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories),
+                hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
+                  includeGroupReminder: true,
+                }),
                 canUseTool: doveCanUseTool,
               },
             }),
