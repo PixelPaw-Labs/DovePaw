@@ -2,11 +2,11 @@
 
 import { z } from "zod";
 
-const launchdStatusSchema = z.object({ loaded: z.boolean(), running: z.boolean() });
+const schedulerStatusSchema = z.object({ loaded: z.boolean(), running: z.boolean() });
 const agentStatusSchema = z.object({
   online: z.boolean(),
   latency: z.number().nullable(),
-  launchd: launchdStatusSchema.nullable(),
+  scheduler: schedulerStatusSchema.nullable(),
   processing: z.boolean(),
   processingTrigger: z.enum(["scheduled", "dove"]).nullable(),
 });
@@ -15,6 +15,6 @@ export const statusMessageSchema = z.object({
   agents: z.record(z.string(), agentStatusSchema),
 });
 
-export type LaunchdStatus = z.infer<typeof launchdStatusSchema>;
+export type SchedulerStatus = z.infer<typeof schedulerStatusSchema>;
 export type AgentStatus = z.infer<typeof agentStatusSchema>;
 export type StatusMessage = z.infer<typeof statusMessageSchema>;

@@ -48,7 +48,7 @@ export class CodexRunner {
   /**
    * Run a prompt through Codex and return the result.
    * Registers SIGTERM/SIGINT handlers for the duration of the run so
-   * launchd unload / Ctrl-C / killProc() all kill the Codex subprocess cleanly.
+   * scheduler unload / Ctrl-C / killProc() all kill the Codex subprocess cleanly.
    */
   async run(prompt: string, opts: CodexRunOpts): Promise<CodexResult> {
     const shutdown = () => {

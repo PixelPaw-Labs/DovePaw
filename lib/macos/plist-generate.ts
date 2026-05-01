@@ -1,6 +1,6 @@
-import type { AgentDef } from "./agents";
-import type { AgentSchedule, ScheduledJob } from "./agents-config-schemas";
-import { A2A_TRIGGER_SCRIPT, agentPersistentLogDir } from "./paths";
+import type { AgentDef } from "../agents";
+import type { AgentSchedule, ScheduledJob } from "../agents-config-schemas";
+import { A2A_TRIGGER_SCRIPT, agentPersistentLogDir } from "../paths";
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

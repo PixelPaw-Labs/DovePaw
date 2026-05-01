@@ -44,6 +44,9 @@ import type { ExecutorPublisher } from "./executor-publisher";
 export { portsManifestSchema, writePortsManifest, readPortsManifest } from "./ports-manifest";
 export type { PortsManifest } from "./ports-manifest";
 import { SessionManager } from "@/lib/session-manager";
+import { upsertSession, setActiveSession, setSessionStatus } from "@/lib/db";
+import { makeAgentMgmtTools } from "@/lib/agent-tools";
+import { scheduler } from "@@/lib/scheduler";
 
 // ─── Event bus manager ────────────────────────────────────────────────────────
 
@@ -189,9 +192,22 @@ export function createServerFromDef(def: AgentDef, port: number): void {
   const sessionManager = new SessionManager();
   const publisherRegistry = new Map<string, ExecutorPublisher>();
   const activeExecutors = new Map<string, QueryAgentExecutor>();
+  const persistence = {
+    upsertSession,
+    setActive: setActiveSession,
+    setStatus: setSessionStatus,
+  };
   const executor: AgentExecutor = {
     async execute(requestContext, eventBus) {
-      const inst = new QueryAgentExecutor(def, sessionManager, publisherRegistry, port);
+      const inst = new QueryAgentExecutor(
+        def,
+        sessionManager,
+        publisherRegistry,
+        port,
+        persistence,
+        makeAgentMgmtTools(def),
+        scheduler.getSchedulerDirs(),
+      );
       activeExecutors.set(requestContext.taskId, inst);
       try {
         await inst.execute(requestContext, eventBus);

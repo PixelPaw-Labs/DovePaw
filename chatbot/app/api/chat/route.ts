@@ -15,15 +15,9 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consola } from "consola";
-import {
-  AGENTS_ROOT,
-  SCHEDULER_ROOT,
-  DOVEPAW_AGENT_LOGS,
-  DOVEPAW_AGENT_STATE,
-  PORTS_FILE,
-  AGENT_SETTINGS_DIR,
-} from "@/lib/paths";
-import { LAUNCH_AGENTS_DIR, DOVEPAW_TMP_DIR, DOVEPAW_DIR } from "@@/lib/paths";
+import { AGENTS_ROOT, PORTS_FILE } from "@/lib/paths";
+import { DOVEPAW_TMP_DIR, DOVEPAW_DIR } from "@@/lib/paths";
+import { getLaunchdAdditionalDirs, buildLaunchdSystemPromptSection } from "@/lib/scheduler-feature";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
@@ -35,21 +29,24 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
+  doveAskToolName,
+  doveStartToolName,
+  doveAwaitToolName,
+} from "@/lib/query-tools";
+import {
   makeInitGroupTool,
   makeStartGroupTool,
   makeAwaitGroupTool,
   doveInitGroupToolName,
   doveStartGroupToolName,
   doveAwaitGroupToolName,
-  doveAskToolName,
-  doveStartToolName,
-  doveAwaitToolName,
-} from "@/lib/query-tools";
+} from "@/lib/group-tools";
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession, closeStaleSessions, setSessionStatus } from "@/lib/db";
+import { deleteSession, setSessionStatus } from "@/lib/db";
+import { enablePersistence } from "@/lib/persistence";
 import { SessionManager } from "@/lib/session-manager";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
 import { clearSessionBuffer } from "@/lib/session-events";
@@ -66,7 +63,7 @@ const chatRequestSchema = z.object({
 export const maxDuration = 86400; // 24 hours for long-running agents
 
 // One-time server startup: close any sessions left running from a previous process.
-closeStaleSessions();
+enablePersistence();
 
 process.on("SIGTERM", () => sessionRunner.abortAll());
 process.on("exit", () => sessionRunner.abortAll());
@@ -106,46 +103,7 @@ Trust your instincts. If something feels lazy or hallucinated, push back. You ar
 Agents run on dynamically allocated ports discovered from ${PORTS_FILE}.
 If a tool reports servers are not running, tell the user to run the appropriate npm command.
 
-**How changes work — codebase is the source of truth:**
-
-The installed plist files and \`.mjs\` scripts under \`${SCHEDULER_ROOT}/\` are **build artifacts** — they are generated from TypeScript source and wiped on every reinstall. Any direct edit to them will be lost the next time the user runs build commands.
-
-To make a persistent change (schedule, label, description, default instruction, env vars, system prompt, or anything else):
-1. Edit the **source code** in \`${AGENTS_ROOT}/\` — agent definitions (displayName, description, schedule, icon) live in \`${AGENT_SETTINGS_DIR}/<agent-name>/agent.json\`, Dove and per-agent chat behaviour live in the chatbot API routes
-2. Run \`cd ${AGENTS_ROOT} && npm run install\` to build, generate plists, and reload launchd
-
-The \`additionalDirectories\` (installed plists + scheduler scripts) are exposed to you for **read-only** purposes only — auditing what is currently installed, monitoring status, tailing logs, and unloading or deleting agents. Never write to them directly.
-
-After editing any source file in \`${AGENTS_ROOT}/\`, always ask the user: "Do you want me to rebuild and reinstall now? — never run it automatically.
-
-**launchd global management:**
-
-Scripts location: ${SCHEDULER_ROOT}/
-Logs location:    ${DOVEPAW_AGENT_LOGS}/
-
-| Task | Command |
-|---|---|
-| Install / reinstall all agents | \`cd ${AGENTS_ROOT} && npm run build && npm run install\` |
-| Uninstall all agents | \`cd ${AGENTS_ROOT} && npm run uninstall\` |
-| List all loaded agents | \`launchctl list | grep claude\` |
-
-For per-agent commands (install, uninstall, load, unload, status, tail logs) — call the agent's tool, the sub-agent owns its own lifecycle.
-
-**Cron directory rules** (\`${SCHEDULER_ROOT}/\`)**:
-
-This directory contains deployed .mjs scripts and native node_modules. Treat it as read-only.
-
-| Path | Rule |
-|---|---|
-| \`${SCHEDULER_ROOT}/*.mjs\` | READ ONLY — never modify scripts |
-| \`${SCHEDULER_ROOT}/node_modules/\` | READ ONLY — never modify |
-| \`${DOVEPAW_AGENT_LOGS}/\` | RESTRICTED — may only be modified or deleted with explicit user permission |
-| \`${DOVEPAW_AGENT_STATE}/\` | RESTRICTED — may only be modified with explicit user permission |
-
-The \`state/\` folder contains lock, processed files and other state persistence files.
-- You MAY query these state files at any time to read current status, progress, and results of your agents.
-- You MUST NOT modify, delete, or write to any file in \`state/\` unless the user explicitly instructs you to. This includes lock files — never delete or modify them yourself to work around a stuck agent. Instead, ask the user to intervene and run the appropriate command.
-- If you need to reset an agent's state as part of its normal operation, ask the user for permission first and explain the consequences (e.g. "This will delete all progress and results for that agent, are you sure?").
+${buildLaunchdSystemPromptSection()}
 `;
 }
 
@@ -183,26 +141,36 @@ export async function POST(request: Request) {
     const userMsgId = randomUUID();
 
     const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
-    const groupInitTools = eligibleGroups.map((group) =>
-      makeInitGroupTool(
-        group,
-        agents.filter((a) => group.members.includes(a.name)),
-      ),
-    );
-    const groupStartTools = eligibleGroups.map((group) => {
-      const memberDefs = agents.filter((a) => group.members.includes(a.name));
-      return makeStartGroupTool(
-        group,
-        memberDefs,
-        subprocessController.signal,
-        backgroundTasks,
-        doveRegistry,
-      );
-    });
-    const groupAwaitTools = eligibleGroups.map((group) => {
-      const memberDefs = agents.filter((a) => group.members.includes(a.name));
-      return makeAwaitGroupTool(group, memberDefs, subprocessController.signal, doveRegistry);
-    });
+    const groupTools =
+      eligibleGroups.length > 0
+        ? [
+            ...eligibleGroups.map((group) =>
+              makeInitGroupTool(
+                group,
+                agents.filter((a) => group.members.includes(a.name)),
+              ),
+            ),
+            ...eligibleGroups.map((group) => {
+              const memberDefs = agents.filter((a) => group.members.includes(a.name));
+              return makeStartGroupTool(
+                group,
+                memberDefs,
+                subprocessController.signal,
+                backgroundTasks,
+                doveRegistry,
+              );
+            }),
+            ...eligibleGroups.map((group) => {
+              const memberDefs = agents.filter((a) => group.members.includes(a.name));
+              return makeAwaitGroupTool(
+                group,
+                memberDefs,
+                subprocessController.signal,
+                doveRegistry,
+              );
+            }),
+          ]
+        : [];
 
     const tools = [
       ...agents.flatMap((agent) => [
@@ -210,9 +178,7 @@ export async function POST(request: Request) {
         makeStartTool(agent, subprocessController.signal, backgroundTasks, doveRegistry),
         makeAwaitTool(agent, subprocessController.signal, doveRegistry),
       ]),
-      ...groupInitTools,
-      ...groupStartTools,
-      ...groupAwaitTools,
+      ...groupTools,
     ];
 
     const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
@@ -229,8 +195,7 @@ export async function POST(request: Request) {
         tools,
         async (mcpServer) => {
           const additionalDirectories = [
-            LAUNCH_AGENTS_DIR,
-            SCHEDULER_ROOT,
+            ...getLaunchdAdditionalDirs(),
             DOVEPAW_TMP_DIR,
             DOVEPAW_DIR,
           ];
@@ -249,8 +214,8 @@ export async function POST(request: Request) {
                 ...(defaultModel ? { model: defaultModel } : {}),
                 promptSuggestions: true,
                 cwd: AGENTS_ROOT,
-                // Expose the launchd install directory so Claude can inspect
-                // installed plist files (written by `npm run install`)
+                // Expose the scheduler config directory so Claude can inspect
+                // installed scheduler configs (written by `npm run install`)
                 additionalDirectories,
                 systemPrompt: {
                   type: "preset",
@@ -264,11 +229,13 @@ export async function POST(request: Request) {
                     `mcp__agents__${doveStartToolName(a)}`,
                     `mcp__agents__${doveAwaitToolName(a)}`,
                   ]),
-                  ...eligibleGroups.flatMap((g) => [
-                    `mcp__agents__${doveInitGroupToolName(g.name)}`,
-                    `mcp__agents__${doveStartGroupToolName(g.name)}`,
-                    `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
-                  ]),
+                  ...(eligibleGroups.length > 0
+                    ? eligibleGroups.flatMap((g) => [
+                        `mcp__agents__${doveInitGroupToolName(g.name)}`,
+                        `mcp__agents__${doveStartGroupToolName(g.name)}`,
+                        `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
+                      ])
+                    : []),
                 ],
                 mcpServers: { agents: mcpServer },
                 // Resume the existing session so the full conversation history is preserved.
@@ -277,7 +244,9 @@ export async function POST(request: Request) {
                 // Stream text tokens as they are generated
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],
-                hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories),
+                hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
+                  includeGroupReminder: eligibleGroups.length > 0,
+                }),
                 canUseTool: doveCanUseTool,
               },
             }),

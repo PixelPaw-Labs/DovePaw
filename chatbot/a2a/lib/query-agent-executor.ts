@@ -9,11 +9,10 @@ import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
-import { LAUNCH_AGENTS_DIR, agentConfigDir } from "@@/lib/paths";
+import { agentConfigDir } from "@@/lib/paths";
 import { readAgentSettings, readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import {
-  makeAgentMgmtTools,
   makeStartScriptTool,
   makeAwaitScriptTool,
   buildSubAgentPrompt,
@@ -30,8 +29,22 @@ import { ExecutorPublisher } from "./executor-publisher";
 import { createAgentWorkspace, restoreAgentWorkspace } from "./workspace";
 import type { AgentWorkspace } from "./workspace";
 import { SessionManager, type SessionInfo } from "@/lib/session-manager";
-import { setActiveSession, setSessionStatus, upsertSession } from "@/lib/db";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
+
+export interface ExecutorPersistence {
+  upsertSession(args: {
+    id: string;
+    agentId: string;
+    startedAt: string;
+    label: string;
+    messages: unknown[];
+    progress: ProgressEntry[];
+    status?: string;
+    senderAgentId?: string;
+  }): void;
+  setActive(agentId: string, contextId: string): void;
+  setStatus(contextId: string, status: string): void;
+}
 import { markProcessing, markIdle } from "./processing-registry";
 
 /**
@@ -83,6 +96,9 @@ export class QueryAgentExecutor {
     private readonly sessionManager: SessionManager,
     private readonly publisherRegistry?: Map<string, ExecutorPublisher>,
     private readonly port?: number,
+    private readonly persistence?: ExecutorPersistence,
+    private readonly mgmtTools: NonNullable<Parameters<typeof withMcpQuery>[0]> = [],
+    private readonly extraDirs: string[] = [],
   ) {}
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -131,7 +147,7 @@ export class QueryAgentExecutor {
     const publishProgress = (text: string, artifacts: Record<string, string> = {}): void => {
       publisher.publishStatusToUI(text, artifacts);
       upsertProgressEntry(innerProgress, text, artifacts);
-      upsertSession({
+      this.persistence?.upsertSession({
         id: contextId,
         agentId: this.def.name,
         startedAt: new Date().toISOString(),
@@ -148,7 +164,7 @@ export class QueryAgentExecutor {
     // ResultManager.currentTask is only set when it sees a kind:"task" event.
     publisher.publishTask();
 
-    setActiveSession(this.def.name, contextId);
+    this.persistence?.setActive(this.def.name, contextId);
     publishProgress("Starting…");
 
     const [{ extraEnv, repoSlugs }, agentSettings, globalSettings] = await Promise.all([
@@ -207,12 +223,12 @@ export class QueryAgentExecutor {
             groupOverrides ? true : undefined,
           ),
           makeAwaitScriptTool(this.def, registry),
-          ...makeAgentMgmtTools(this.def),
+          ...this.mgmtTools,
           ...chatToTools,
         ],
         async (innerMcpServer) => {
           const additionalDirectories = [
-            LAUNCH_AGENTS_DIR,
+            ...this.extraDirs,
             agentPersistentLogDir(this.def.name),
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
@@ -282,7 +298,7 @@ export class QueryAgentExecutor {
                     workspacePath: cwd,
                   },
                 );
-                setSessionStatus(contextId, "running");
+                this.persistence?.setStatus(contextId, "running");
               }
               // Always enable incremental saves — applies to both fresh and resumed turns
               // so onTaskProgress labels are persisted to DB during the session.

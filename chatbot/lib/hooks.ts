@@ -135,7 +135,8 @@ export function buildAgentHooks(
             permissionDecision: allowed ? "allow" : "deny",
             ...(!allowed && {
               permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}.
-                    You should stop and reconsider your approach, as allowing access to this path could be dangerous.
+                    You should stop and reconsider if you really need to access this path.
+                    But NEVER proceed without explicit permission or try to bypass it automatically, as allowing access to this path could be dangerous.
                     If you really need to access this path, ask the user for explicit permission.`,
             }),
           };
@@ -202,6 +203,12 @@ export function buildAgentHooks(
 
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
 
+const DOVE_LEAN_REMINDER = `<reminder>
+- When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS call \`mcp__agents__ask_*\`. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
+- When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS call \`mcp__agents__start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT via \`mcp__agents__await_*\` as a **background Task** concurrently.
+NEVER invoke SKILLs unless the user explicitly asks you to. If you think a skill is relevant, AskUserQuestion about it and let them decide whether to use it but the priority is always to use the most specific agent tools available for the task.
+</reminder>`;
+
 const DOVE_PROMPT_REMINDER = `<reminder>
 - When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS call \`mcp__agents__ask_*\`. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
 - When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS call \`mcp__agents__start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT via \`mcp__agents__await_*\` as a **background Task** concurrently.
@@ -216,11 +223,12 @@ export function buildDoveHooks(
   registry: PendingRegistry,
   cwd: string,
   additionalDirectories: string[],
+  options: { includeGroupReminder?: boolean } = {},
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
     registry,
-    userPromptReminder: DOVE_PROMPT_REMINDER,
+    userPromptReminder: options.includeGroupReminder ? DOVE_PROMPT_REMINDER : DOVE_LEAN_REMINDER,
     allowedDirectories: [cwd, ...additionalDirectories],
   });
 }

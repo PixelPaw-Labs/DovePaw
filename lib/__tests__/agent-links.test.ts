@@ -71,8 +71,8 @@ describe("agentLinksFileSchema", () => {
       links: [],
     });
     expect(result.groups).toEqual([
-      { name: "Review Chain", members: ["a", "b"] },
-      { name: "Data Pipeline", members: [] },
+      { name: "Review Chain", members: ["a", "b"], description: "" },
+      { name: "Data Pipeline", members: [], description: "" },
     ]);
   });
 
@@ -83,8 +83,8 @@ describe("agentLinksFileSchema", () => {
       links: [],
     });
     expect(result.groups).toEqual([
-      { name: "Review Chain", members: [] },
-      { name: "Data Pipeline", members: [] },
+      { name: "Review Chain", members: [], description: "" },
+      { name: "Data Pipeline", members: [], description: "" },
     ]);
   });
 

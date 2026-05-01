@@ -18,8 +18,6 @@ import { PermissionBanner } from "./permission-banner";
 import { QuestionBanner } from "./question-banner";
 import { ChatMessageItem } from "./chat-message";
 import { IntroCard } from "./intro-card";
-import { SessionHistoryPanel } from "./session-history-panel";
-import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import type { ChatMessage } from "@/components/hooks/use-messages";
 import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 
@@ -45,14 +43,11 @@ export interface ChatPaneProps {
   sendMessage: (content: string) => Promise<void>;
   cancelMessage: () => void;
   newSession: () => void;
-  deleteSession: (id: string) => Promise<void>;
-  setSessionId: (id: string | null) => Promise<void>;
   resolvePermission: (requestId: string, allowed: boolean) => Promise<void>;
   resolveQuestion: (requestId: string, answers: Record<string, string>) => Promise<void>;
   removeFromQueue: (index: number) => void;
-  // history
-  sessions: AgentSession[];
-  runningSessionIds: Set<string>;
+  // history panel — caller constructs and owns this node
+  historyPanel?: React.ReactNode;
 }
 
 export function ChatPane({
@@ -67,13 +62,10 @@ export function ChatPane({
   sendMessage,
   cancelMessage,
   newSession,
-  deleteSession,
-  setSessionId,
   resolvePermission,
   resolveQuestion,
   removeFromQueue,
-  sessions,
-  runningSessionIds,
+  historyPanel,
 }: ChatPaneProps) {
   const router = useRouter();
   const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(agentId, agentConfigs);
@@ -287,7 +279,7 @@ export function ChatPane({
       </main>
 
       {/* Right sidebar — session history */}
-      {historyOpen && (
+      {historyOpen && historyPanel && (
         <aside
           style={{ width: panelWidth }}
           className="relative shrink-0 h-screen border-l border-border/20 bg-background/60 backdrop-blur-xl flex flex-col overflow-hidden"
@@ -297,16 +289,7 @@ export function ChatPane({
             onMouseDown={onResizeStart}
             className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
           />
-          <SessionHistoryPanel
-            sessions={sessions}
-            activeSessionId={currentSessionId}
-            runningSessionIds={runningSessionIds}
-            onSelect={(id) => void setSessionId(id)}
-            onNew={newSession}
-            onDelete={async (id) => {
-              await deleteSession(id);
-            }}
-          />
+          {historyPanel}
         </aside>
       )}
     </>

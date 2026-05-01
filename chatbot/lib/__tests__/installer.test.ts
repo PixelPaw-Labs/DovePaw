@@ -67,17 +67,17 @@ describe("installAgent", () => {
     vi.clearAllMocks();
   });
 
-  it("returns { skipped: true } and writes no plist when schedulingEnabled is false", async () => {
-    const { installAgent } = await import("@@/lib/installer");
+  it("returns { skipped: true } and writes no config when schedulingEnabled is false", async () => {
+    const { installAgent } = await import("@/lib/agent-scheduler");
     const { writeFile } = await import("node:fs/promises");
 
-    const result = await installAgent(
-      { name: "my-agent", label: "lbl", schedulingEnabled: false } as unknown as AgentDef,
-      "501",
-      [],
-    );
+    const result = await installAgent({
+      name: "my-agent",
+      label: "lbl",
+      schedulingEnabled: false,
+    } as unknown as AgentDef);
 
-    expect(result).toEqual({ skipped: true });
+    expect(result).toEqual({ loaded: false, skipped: true });
     expect(writeFile).not.toHaveBeenCalled();
   });
 });

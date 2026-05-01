@@ -13,7 +13,7 @@ vi.mock("@/lib/a2a-client", () => ({
   noAgentOutput: vi.fn().mockReturnValue(""),
 }));
 
-vi.mock("@/lib/launchd", () => ({
+vi.mock("@/lib/agent-scheduler", () => ({
   installAgent: vi.fn(),
   uninstallAgent: vi.fn(),
   loadAgent: vi.fn(),
@@ -29,7 +29,6 @@ vi.mock("@/lib/paths", () => ({
   agentEntryPath: (p: string) => `/mock/agents/${p}`,
   agentPersistentLogDir: (n: string) => `/mock/logs/${n}`,
   agentPersistentStateDir: (n: string) => `/mock/state/${n}`,
-  plistFilePath: (l: string) => `/mock/plists/${l}.plist`,
 }));
 
 vi.mock("@/a2a/lib/spawn", () => ({
@@ -76,7 +75,7 @@ import {
   subscribeTaskStream,
 } from "@/lib/a2a-client";
 import type { AgentDef } from "@@/lib/agents";
-import { plistLabel } from "@@/lib/plist-generate";
+import { scheduler } from "@@/lib/scheduler";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
@@ -169,9 +168,9 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).not.toContain("<reminder>");
   });
 
-  it("includes the plist label in the launchd section", () => {
+  it("includes the agent scheduler label in the managing section", () => {
     const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain(plistLabel(AGENT));
+    expect(prompt).toContain(scheduler.agentLabel(AGENT));
   });
 
   it("shows infer-intent guidance for a scheduled agent", () => {
@@ -768,7 +767,7 @@ describe("makeAwaitEscalateTool", () => {
 
 // ─── makeAgentMgmtTools ───────────────────────────────────────────────────────
 
-import { installAgent } from "@/lib/launchd";
+import { installAgent } from "@/lib/agent-scheduler";
 
 describe("makeAgentMgmtTools install tool", () => {
   beforeEach(() => {
