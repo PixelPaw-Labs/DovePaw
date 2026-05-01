@@ -51,7 +51,8 @@ import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
-import { deleteSession, closeStaleSessions, setSessionStatus } from "@/lib/db";
+import { deleteSession, setSessionStatus } from "@/lib/db";
+import { enablePersistence } from "@/lib/persistence";
 import { SessionManager } from "@/lib/session-manager";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
 import { clearSessionBuffer } from "@/lib/session-events";
@@ -68,7 +69,7 @@ const chatRequestSchema = z.object({
 export const maxDuration = 86400; // 24 hours for long-running agents
 
 // One-time server startup: close any sessions left running from a previous process.
-closeStaleSessions();
+enablePersistence();
 
 process.on("SIGTERM", () => sessionRunner.abortAll());
 process.on("exit", () => sessionRunner.abortAll());

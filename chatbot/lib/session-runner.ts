@@ -1,12 +1,20 @@
-import { setSessionStatus } from "@/lib/db";
-
 interface RunnerEntry {
   controller: AbortController;
   label: string;
 }
 
+export interface SessionStatusCallbacks {
+  onComplete?: (sessionId: string) => void;
+  onAbort?: (sessionId: string) => void;
+}
+
 class SessionRunner {
   private readonly sessions = new Map<string, RunnerEntry>();
+  private callbacks: SessionStatusCallbacks = {};
+
+  configure(callbacks: SessionStatusCallbacks): void {
+    this.callbacks = callbacks;
+  }
 
   register(sessionId: string, controller: AbortController, label: string): void {
     this.sessions.set(sessionId, { controller, label });
@@ -17,12 +25,12 @@ class SessionRunner {
     if (!entry) return;
     entry.controller.abort();
     this.sessions.delete(sessionId);
-    setSessionStatus(sessionId, "cancelled");
+    this.callbacks.onAbort?.(sessionId);
   }
 
   complete(sessionId: string): void {
     this.sessions.delete(sessionId);
-    setSessionStatus(sessionId, "done");
+    this.callbacks.onComplete?.(sessionId);
   }
 
   isRunning(sessionId: string): boolean {
@@ -36,9 +44,8 @@ class SessionRunner {
   abortAll(): void {
     for (const [sessionId, entry] of this.sessions) {
       entry.controller.abort();
-      // DB write may fail if SQLite is closing during process exit — ignore
       try {
-        setSessionStatus(sessionId, "cancelled");
+        this.callbacks.onAbort?.(sessionId);
       } catch {
         // best-effort during shutdown
       }

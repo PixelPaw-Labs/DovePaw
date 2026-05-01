@@ -91,6 +91,7 @@ vi.mock("@/lib/session-events", () => ({
 
 vi.mock("@/lib/session-runner", () => ({
   sessionRunner: {
+    configure: vi.fn(),
     register: vi.fn(),
     abort: vi.fn(),
     complete: vi.fn(),
