@@ -11,6 +11,7 @@ import { getAvailablePort, writePortsManifest, createServerFromDef } from "./lib
 import { startHeartbeatServer } from "./heartbeat-server.js";
 import { PORTS_FILE, A2A_SERVERS_PID_FILE } from "@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
+import { InProcessScheduler } from "./lib/in-process-scheduler.js";
 
 const AGENTS = await readAgentsConfig();
 
@@ -38,6 +39,16 @@ consola.box(
 
 consola.info("Ready — waiting for chatbot connections via A2A SSE");
 
+// Start in-process scheduler on non-macOS or when explicitly enabled.
+// On macOS, launchd handles scheduling; the env var opt-in allows testing on macOS.
+const useInProcessScheduler =
+  process.platform !== "darwin" || process.env.DOVEPAW_IN_PROCESS_SCHEDULER === "1";
+const scheduler = useInProcessScheduler ? new InProcessScheduler() : null;
+if (scheduler) {
+  await scheduler.start();
+  consola.info("[scheduler] In-process scheduler started");
+}
+
 // Write PID so the chatbot UI can signal a restart via /api/servers/restart
 writeFileSync(A2A_SERVERS_PID_FILE, String(process.pid), "utf-8");
 const cleanupPid = () => {
@@ -48,11 +59,13 @@ const cleanupPid = () => {
 
 process.on("SIGINT", () => {
   consola.info("Shutting down A2A servers…");
+  scheduler?.stop();
   cleanupPid();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
+  scheduler?.stop();
   cleanupPid();
   process.exit(0);
 });
