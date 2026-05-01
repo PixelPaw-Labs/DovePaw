@@ -44,9 +44,6 @@ import type { ScheduledJob } from "./agents-config-schemas";
 
 const execAsync = promisify(exec);
 
-/** Deduplicates concurrent deployTriggerScript calls — only one run per process. */
-let _deployTriggerScriptOnce: Promise<void> | null = null;
-
 /** Returns the current user's numeric UID. */
 export function getUid(): string {
   return execSync("id -u", { stdio: "pipe" }).toString().trim();
@@ -77,14 +74,8 @@ export async function deployAgentScript(agentName: string): Promise<void> {
 
 /** Copy compiled a2a-trigger.mjs to ~/.dovepaw/cron and make it executable.
  *  Runs npm run build first if the compiled output is missing.
- *  Also copies @a2a-js/sdk and its dependency uuid to cron/node_modules.
- *  Deduplicated: concurrent calls share one execution per process. */
+ *  Also copies @a2a-js/sdk and its dependency uuid to cron/node_modules. */
 export async function deployTriggerScript(): Promise<void> {
-  _deployTriggerScriptOnce ??= _doDeployTriggerScript();
-  return _deployTriggerScriptOnce;
-}
-
-async function _doDeployTriggerScript(): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   const src = join(AGENTS_DIST, "a2a-trigger.mjs");
   try {
