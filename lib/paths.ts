@@ -2,6 +2,8 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+export * from "./launchd-paths";
+
 function resolveAgentsRoot(): string {
   try {
     // Native ESM (Node.js / tsx / Electron tsup bundle): derive from this file's location.
@@ -18,8 +20,6 @@ function resolveAgentsRoot(): string {
 export const AGENTS_ROOT = resolveAgentsRoot();
 /** DovePaw/chatbot/public — Next.js static assets directory */
 export const CHATBOT_PUBLIC_DIR = join(AGENTS_ROOT, "chatbot", "public");
-/** DovePaw/dist — compiled agent scripts */
-export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
 /** ~/.dovepaw/ — user-scoped DovePaw data directory (outside the repo) */
 export const DOVEPAW_DIR = join(process.env.HOME!, ".dovepaw");
 /** ~/.dovepaw/settings.json — global settings (watched repositories, etc.) */
@@ -75,29 +75,14 @@ export const agentDefinitionFile = (agentName: string) =>
 /** ~/.dovepaw/settings.agents/<agentName>/<filename> — a specific agent config file */
 export const agentConfigFile = (agentName: string, filename: string) =>
   join(agentConfigDir(agentName), filename);
-/** ~/.dovepaw/cron — launchd agent scripts and native node_modules */
-export const SCHEDULER_ROOT = join(DOVEPAW_DIR, "cron");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 /** ~/.codex/skills — Codex skills directory */
 export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
-/** ~/Library/LaunchAgents — macOS launchd user agents directory */
-export const LAUNCH_AGENTS_DIR = join(process.env.HOME!, "Library/LaunchAgents");
 /** Resolve an agent's entry point to an absolute path under agents/ root */
 export const agentEntryPath = (entryPath: string) => join(AGENTS_ROOT, entryPath);
 /** DovePaw/node_modules/<pkg> */
 export const agentNodeModule = (pkg: string) => join(AGENTS_ROOT, "node_modules", pkg);
-/** DovePaw/dist/agents/<agentName>.mjs — compiled agent script */
-export const agentDistScript = (agentName: string) =>
-  join(AGENTS_DIST, "agents", `${agentName}.mjs`);
-/** ~/.dovepaw/cron/<agentName>.mjs — deployed agent script */
-export const schedulerScript = (agentName: string) => join(SCHEDULER_ROOT, `${agentName}.mjs`);
-/** ~/.dovepaw/cron/node_modules/<pkg> */
-export const schedulerNodeModule = (pkg: string) => join(SCHEDULER_ROOT, "node_modules", pkg);
-/** ~/Library/LaunchAgents/<label>.plist */
-export const plistFilePath = (label: string) => join(LAUNCH_AGENTS_DIR, `${label}.plist`);
-/** ~/.dovepaw/cron/a2a-trigger.mjs — compiled A2A trigger script used by all launchd plists */
-export const A2A_TRIGGER_SCRIPT = join(SCHEDULER_ROOT, "a2a-trigger.mjs");
 /** <repoPath>/.claude/worktrees/<wtName> — Claude Code worktree directory for a named worktree */
 export const claudeWorktreePath = (repoPath: string, wtName: string) =>
   join(repoPath, ".claude", "worktrees", wtName);
