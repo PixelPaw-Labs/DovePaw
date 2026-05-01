@@ -9,8 +9,6 @@
  * collectStreamText — the only difference is which stream they subscribe to.
  */
 
-export * from "./group-tools";
-
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";

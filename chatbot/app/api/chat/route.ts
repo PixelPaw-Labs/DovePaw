@@ -35,16 +35,18 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
+  doveAskToolName,
+  doveStartToolName,
+  doveAwaitToolName,
+} from "@/lib/query-tools";
+import {
   makeInitGroupTool,
   makeStartGroupTool,
   makeAwaitGroupTool,
   doveInitGroupToolName,
   doveStartGroupToolName,
   doveAwaitGroupToolName,
-  doveAskToolName,
-  doveStartToolName,
-  doveAwaitToolName,
-} from "@/lib/query-tools";
+} from "@/lib/group-tools";
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";

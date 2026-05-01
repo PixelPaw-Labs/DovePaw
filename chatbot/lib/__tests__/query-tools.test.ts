@@ -66,16 +66,18 @@ import {
   makeAskTool,
   makeStartTool,
   makeAwaitTool,
-  makeInitGroupTool,
-  makeStartGroupTool,
-  makeAwaitGroupTool,
   doveAskToolName,
   doveStartToolName,
   doveAwaitToolName,
+} from "@/lib/query-tools";
+import {
+  makeInitGroupTool,
+  makeStartGroupTool,
+  makeAwaitGroupTool,
   doveInitGroupToolName,
   doveStartGroupToolName,
   doveAwaitGroupToolName,
-} from "@/lib/query-tools";
+} from "@/lib/group-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
 import { upsertSession, setActiveSession } from "@/lib/db";
