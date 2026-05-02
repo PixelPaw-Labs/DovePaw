@@ -333,8 +333,9 @@ Read `references/integration-checklist.md` now for lint/fmt commands and path re
 Read each created file back and verify against this checklist. Fix any issue found, then re-check until every item passes:
 
 - **main.ts** — all `{{PLACEHOLDER}}` values substituted; spawning pattern matches the chosen Option A/B/C; `INSTRUCTION` is passed through to Claude; no dead branches; `publishStatusToUI` called at meaningful steps (awaited); subprocess env is correct (no `CLAUDECODE`, clean PATH)
-- **agent.json** — all required fields present; `pluginPath` is NOT set; every entry in `envVars` has an `id` UUID (missing `id` causes Zod to silently drop the agent from the Kiln group)
+- **agent.json** (`~/.dovepaw/tmp/<name>/agent.json`) — all required fields present; `pluginPath` is NOT set; every entry in `envVars` has an `id` UUID (missing `id` causes Zod to silently drop the agent from the Kiln group)
 - **SKILL.md** (if created) — frontmatter is valid for Claude Code; argument pattern is documented; output contract is defined
+- **agent-local check** — if `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` exists, verify: `agent.json` has no `pluginPath`; all `envVars[*].value` are `""` (no secrets in source); `main.ts` is present and not empty
 
 End with a confidence score JSON on its own line:
 
@@ -346,40 +347,39 @@ The Stop hook requires `confidence >= 90` to proceed. Emit this only after all f
 
 Tell the user: "Your agent is ready. **Refresh the page** to see it appear under the **Kiln** group in the sidebar (Sparkles icon)."
 
-Ask 2 questions in a single `AskUserQuestion` call:
+Ask 1 question via `AskUserQuestion`:
 
-1. **Restart A2A servers?** — "Restart DovePaw A2A servers to register the new agent?" — options:
-   - Yes — restart `npm run chatbot:servers` now (Recommended)
-   - No, I'll handle it later
+- **Restart A2A servers?** — "Restart DovePaw A2A servers to register the new agent?" — options:
+  - Yes — restart `npm run chatbot:servers` now (Recommended)
+  - No, I'll handle it later
 
-2. **Add to agent-local?** — "Add this agent to `agent-local/` in the current codebase?" — options:
-   - Yes — copy to `agent-local/` (Recommended if agent is self-contained)
-   - No
-
-If the user selects **Yes** for question 1, remind them to run `npm run chatbot:servers` in the DovePaw project root.
-
-**If the user selects Yes for question 2 — agent-local:**
-
-1. Create `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` and write:
-   - `main.ts` — copy from `~/.dovepaw/tmp/<name>/main.ts`
-   - `agent.json` — copy from `~/.dovepaw/tmp/<name>/agent.json`, but strip `pluginPath` (must not be set for agent-local agents) and clear all `envVars[*].value` to `""` (no secrets in source)
-
-2. Confirm to the user: "Agent `<name>` added to `agent-local/`."
+If the user selects **Yes**, remind them to run `npm run chatbot:servers` in the DovePaw project root.
 
 ---
 
-### Phase 6 — Publish to Plugin Repo
+### Phase 6 — Publish to Plugin Repo or agent-local
 
-Ask 2 questions in a single `AskUserQuestion` call:
+Ask 3 questions in a single `AskUserQuestion` call:
 
 1. "Move agent from Kiln to plugin repo and push?" — options:
    - Yes, move and push now (Recommended)
    - Move locally only, push later
    - Keep in Kiln for now
 
-2. "Install and restart DovePaw servers?" — options:
+2. **Add to agent-local?** — "Also add this agent to `agent-local/` in the current codebase?" — options:
+   - Yes — copy to `agent-local/` (for agents that run without a plugin repo)
+   - No
+
+3. "Install and restart DovePaw servers?" — options:
    - Yes — run `npm run install` + restart servers (Recommended)
    - No, I'll handle it later
+
+**If adding to agent-local (question 2 = Yes):**
+
+1. Create `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` and write:
+   - `main.ts` — copy from `~/.dovepaw/tmp/<name>/main.ts`
+   - `agent.json` — copy from `~/.dovepaw/tmp/<name>/agent.json`, strip `pluginPath`, clear all `envVars[*].value` to `""` (no secrets in source)
+2. Confirm: "Agent `<name>` added to `agent-local/`."
 
 **If publishing:**
 
