@@ -14,6 +14,7 @@ Write to `~/.dovepaw/tmp/<name>/agent.json`. Do NOT include `pluginPath` — it 
   "displayName": "{{DISPLAY_NAME}}",
   "description": "{{MCP_TOOL_DESCRIPTION}}",
   "personality": "{{PERSONALITY}}",
+  "scriptFile": "main.ts",
   "schedulingEnabled": false,
   "iconName": "{{LUCIDE_ICON_NAME}}",
   "iconBg": "{{ICON_BG}}",
