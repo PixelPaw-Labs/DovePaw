@@ -94,6 +94,7 @@ export class ClaudeRunner {
         options: {
           cwd,
           model: opts.model ?? "claude-sonnet-4-6",
+          systemPrompt: { type: "preset", preset: "claude_code" },
           ...(opts.agent ? { agent: opts.agent } : {}),
           ...(opts.effort ? { effort: opts.effort } : {}),
           ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
