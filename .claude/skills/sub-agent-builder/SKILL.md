@@ -352,28 +352,19 @@ Ask 2 questions in a single `AskUserQuestion` call:
    - Yes — restart `npm run chatbot:servers` now (Recommended)
    - No, I'll handle it later
 
-2. **Add to agent-local and sync to Lite?** — "Add this agent to `agent-local/` in the current codebase and sync to the Lite repo?" — options:
-   - Yes — copy to `agent-local/` here and push to Lite (Recommended if agent is self-contained)
+2. **Add to agent-local?** — "Add this agent to `agent-local/` in the current codebase?" — options:
+   - Yes — copy to `agent-local/` (Recommended if agent is self-contained)
    - No
 
 If the user selects **Yes** for question 1, remind them to run `npm run chatbot:servers` in the DovePaw project root.
 
-**If the user selects Yes for question 2 — agent-local sync:**
+**If the user selects Yes for question 2 — agent-local:**
 
 1. Create `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` and write:
    - `main.ts` — copy from `~/.dovepaw/tmp/<name>/main.ts`
    - `agent.json` — copy from `~/.dovepaw/tmp/<name>/agent.json`, but strip `pluginPath` (must not be set for agent-local agents) and clear all `envVars[*].value` to `""` (no secrets in source)
 
-2. Determine the Lite repo path — check if `/tmp/DovePaw-Lite` exists; if not, ask the user for the path via `AskUserQuestion`.
-
-3. Create `<lite-repo>/agent-local/<name>/` and write the same two files (identical copies — same stripped agent.json, same main.ts).
-
-4. In the Lite repo, commit and push:
-   ```bash
-   cd <lite-repo> && git add agent-local/<name>/ && git commit -m "feat(agent): add <name> agent" && git push
-   ```
-
-5. Confirm to the user: "Agent `<name>` added to `agent-local/` and pushed to the Lite repo."
+2. Confirm to the user: "Agent `<name>` added to `agent-local/`."
 
 ---
 
