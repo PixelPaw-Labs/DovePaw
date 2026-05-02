@@ -25,11 +25,14 @@ hooks:
 
 ### Phase 1 — Requirements Gathering
 
-**Round 1** — parse `$ARGUMENTS` first, then ask 3 questions in a single `AskUserQuestion` call:
+**Round 1** — parse `$ARGUMENTS` first, then ask 4 questions in a single `AskUserQuestion` call:
 
 1. **Purpose** — "What should this agent do?" — free text via Other
 2. **Plugin repo** — "Which plugin repo will this agent eventually live in?" — run `ls ~/.dovepaw/plugins/` and offer each dir basename as an option, plus "None / decide later"
-3. **Agent type** — "Which pattern fits this agent?" — present 4 options with code previews:
+3. **Add to agent-local?** — "Also add this agent to `agent-local/` in the current codebase?" — options:
+   - Yes — copy to `agent-local/` after files are generated (for agents that run locally without a plugin repo)
+   - No
+4. **Agent type** — "Which pattern fits this agent?" — present 4 options with code previews:
    - **Simple** — single agent spawn with a short inline prompt. Use when the task is trivial (< 15 prompt lines) and needs no separate skill file. Set `model: "gpt-5.5"` to use Codex instead of Claude. **If the agent needs repository access or worktree isolation, use Claude (default) — Codex does not support worktrees.**
    - **Static Skill** (Recommended for multi-step agents) — `main.ts` is a thin launcher; all task logic lives in a `SKILL.md` in the `skills/` folder. `main.ts` invokes it via `Skill("/skill-name ${INSTRUCTION}")`. Use this when the prompt is substantial (> 15 lines), multi-phase, or the skill should be independently invocable as `/skill-name`.
    - **Dynamic Skill** — `main.ts` pre-fetches runtime data (PR branches, CI failures, API status), injects it into a temporary skill built in memory, runs Claude, then deletes the skill dir. **Only use when the pre-fetched data must be structurally embedded in the skill body** — not merely for passing the user's instruction through (Static Skill handles that cleanly).
@@ -324,6 +327,13 @@ Skills and agents are listed independently — a skill can exist without a same-
 
 Fix any failures before continuing.
 
+**If the user chose Yes to agent-local in Phase 1**, copy files now (all source files are finalised at this point):
+
+1. Create `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` and write:
+   - `main.ts` — copy from `~/.dovepaw/tmp/<name>/main.ts`
+   - `agent.json` — copy from `~/.dovepaw/tmp/<name>/agent.json`, strip `pluginPath`, clear all `envVars[*].value` to `""` (no secrets in source)
+2. Confirm: "Agent `<name>` added to `agent-local/`."
+
 ---
 
 ### Phase 5 — Integration Check
@@ -332,10 +342,10 @@ Read `references/integration-checklist.md` now for lint/fmt commands and path re
 
 Read each created file back and verify against this checklist. Fix any issue found, then re-check until every item passes:
 
-- **main.ts** — all `{{PLACEHOLDER}}` values substituted; spawning pattern matches the chosen Option A/B/C; `INSTRUCTION` is passed through to Claude; no dead branches; `publishStatusToUI` called at meaningful steps (awaited); subprocess env is correct (no `CLAUDECODE`, clean PATH)
+- **main.ts** — all `{{PLACEHOLDER}}` values substituted; spawning pattern matches the chosen Option A/B/C; `INSTRUCTION` is passed through to Claude; no dead branches; `publishStatusToUI` called at meaningful steps (awaited); subprocess env is correct (no `CLAUDECODE`, clean PATH); every `runner.run()` call supplies BOTH `claudeOpts` AND `codexOpts`
 - **agent.json** (`~/.dovepaw/tmp/<name>/agent.json`) — all required fields present; `pluginPath` is NOT set; every entry in `envVars` has an `id` UUID (missing `id` causes Zod to silently drop the agent from the Kiln group)
 - **SKILL.md** (if created) — frontmatter is valid for Claude Code; argument pattern is documented; output contract is defined
-- **agent-local check** — if `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` exists, verify: `agent.json` has no `pluginPath`; all `envVars[*].value` are `""` (no secrets in source); `main.ts` is present and not empty
+- **agent-local** (if `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` now exists) — `agent.json` has no `pluginPath`; every `envVars` entry has an `id` UUID; all `envVars[*].value` are `""` (no secrets in source); `main.ts` is present and non-empty
 
 End with a confidence score JSON on its own line:
 
@@ -357,29 +367,18 @@ If the user selects **Yes**, remind them to run `npm run chatbot:servers` in the
 
 ---
 
-### Phase 6 — Publish to Plugin Repo or agent-local
+### Phase 6 — Publish to Plugin Repo
 
-Ask 3 questions in a single `AskUserQuestion` call:
+Ask 2 questions in a single `AskUserQuestion` call:
 
 1. "Move agent from Kiln to plugin repo and push?" — options:
    - Yes, move and push now (Recommended)
    - Move locally only, push later
    - Keep in Kiln for now
 
-2. **Add to agent-local?** — "Also add this agent to `agent-local/` in the current codebase?" — options:
-   - Yes — copy to `agent-local/` (for agents that run without a plugin repo)
-   - No
-
-3. "Install and restart DovePaw servers?" — options:
+2. "Install and restart DovePaw servers?" — options:
    - Yes — run `npm run install` + restart servers (Recommended)
    - No, I'll handle it later
-
-**If adding to agent-local (question 2 = Yes):**
-
-1. Create `{CLAUDE_PROJECT_DIR}/agent-local/<name>/` and write:
-   - `main.ts` — copy from `~/.dovepaw/tmp/<name>/main.ts`
-   - `agent.json` — copy from `~/.dovepaw/tmp/<name>/agent.json`, strip `pluginPath`, clear all `envVars[*].value` to `""` (no secrets in source)
-2. Confirm: "Agent `<name>` added to `agent-local/`."
 
 **If publishing:**
 

@@ -32,14 +32,14 @@ process.stdout.write(
   JSON.stringify({
     decision: "block",
     reason:
-      "Sub-agent-builder quality gate: Before stopping, evaluate ALL files you created or edited against the sub-agent-builder SKILL.md specification. " +
-      "Check: (1) main.ts — all {{PLACEHOLDER}} values substituted, spawning pattern correct, INSTRUCTION passed through, agent script flow steps and logic are correct without flaw (no dead branches, correct error handling, publishStatusToUI called appropriately (awaited), subprocess env correct etc); " +
-      "(2) agent.json — all required fields present, no pluginPath set, every envVars entry has an `id` UUID (missing id causes Zod to silently drop the agent from the Kiln group); " +
-      '(3) SKILL.md if created — frontmatter valid for Claude Code, argument pattern documented, output contract defined; and main.ts invokes it via Skill("/skill-name ${INSTRUCTION}") with no duplicate task prompt elsewhere; ' +
-      "(4) if the agent writes to repos and uses Claude (not Codex), claudeOpts.worktree must be set in runner.run() opts (Pattern B); " +
-      "(5) if agent-local/<name>/ exists in the project root, verify: agent.json has no pluginPath field, all envVars[*].value are empty strings (no secrets in source), and main.ts is present and non-empty. " +
-      "Fix all listed issues first, then — after all fixes are complete — " +
-      'end your final message with a JSON object on its own line: ```json\n{"confidence": <0-100>, "issues": ["<remaining issue>", ...]}\n```. ' +
+      "Sub-agent-builder quality gate: Re-read every file you created or edited and verify each check. " +
+      "(1) main.ts — all {{PLACEHOLDER}} values substituted; INSTRUCTION read from process.argv[2] and passed through as plain text (never parsed, split, or regex-matched); publishStatusToUI called at meaningful steps and always awaited; no dead branches or unused imports; subprocess env correct (CLAUDECODE unset, clean PATH); every runner.run() call supplies BOTH claudeOpts AND codexOpts (omitting either silently breaks runner switching via AGENT_SCRIPT_MODEL). " +
+      "(2) Runner / worktree — if the agent writes to repos using Claude: claudeOpts.worktree is set (Pattern B); NO git worktree add or git worktree remove commands appear anywhere in main.ts, run.ts, or any skill body (Claude Code manages the worktree lifecycle automatically). " +
+      "(3) agent.json — all required fields present (name, alias, displayName, description, personality, schedulingEnabled, repos, envVars, iconName, iconBg, iconColor, doveCard, suggestions); pluginPath NOT set; every envVars entry has an id UUID (missing id causes Zod to silently drop the agent from the Kiln group). " +
+      '(4) SKILL.md (if created) — frontmatter has name, description, argument-hint; $ARGUMENTS parsing documented at the top; output contract defined (structured JSON last line if agent calls skill in a loop, plain text otherwise); main.ts invokes via Skill("/skill-name ${INSTRUCTION}") with task logic not duplicated elsewhere. ' +
+      '(5) agent-local (if agent-local/<name>/ exists in the project root) — agent.json has no pluginPath; every envVars entry has an id UUID; all envVars[*].value are "" in source (secrets must not be committed — filled via Settings UI at runtime); main.ts is present and non-empty. ' +
+      "Fix all issues first, then end your final message with a JSON object on its own line: " +
+      '```json\n{"confidence": <0-100>, "issues": ["<remaining issue>", ...]}\n```. ' +
       "The JSON must come AFTER all fixes so it reflects the post-fix state.",
   }) + "\n",
 );
