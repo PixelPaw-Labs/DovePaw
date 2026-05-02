@@ -5,7 +5,8 @@
  * in the executor chain (QueryAgentExecutor → @anthropic-ai/claude-agent-sdk).
  */
 
-import { writeFileSync, readFileSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { z } from "zod";
 import { PORTS_FILE } from "@/lib/paths";
 
@@ -18,6 +19,7 @@ export interface PortsManifest {
 
 export function writePortsManifest(ports: Record<string, number>): void {
   const manifest: PortsManifest = { ...ports, updatedAt: new Date().toISOString() };
+  mkdirSync(dirname(PORTS_FILE), { recursive: true });
   writeFileSync(PORTS_FILE, JSON.stringify(manifest, null, 2));
 }
 
