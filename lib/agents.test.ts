@@ -102,6 +102,37 @@ describe("buildAgentDef — derived fields", () => {
   });
 });
 
+describe("buildAgentDef — entryPath", () => {
+  it("defaults to main.ts for local agents", () => {
+    const def = buildAgentDef(BASE_ENTRY);
+    expect(def.entryPath).toBe("agent-local/my-agent/main.ts");
+  });
+
+  it("uses scriptFile when specified for local agents", () => {
+    const def = buildAgentDef({ ...BASE_ENTRY, scriptFile: "main.py" });
+    expect(def.entryPath).toBe("agent-local/my-agent/main.py");
+  });
+
+  it("defaults to main.ts for plugin agents", () => {
+    const def = buildAgentDef({ ...BASE_ENTRY, pluginPath: "/plugins/my-plugin" });
+    expect(def.entryPath).toBe("agents/my-agent/main.ts");
+  });
+
+  it("uses scriptFile for plugin agents", () => {
+    const def = buildAgentDef({
+      ...BASE_ENTRY,
+      pluginPath: "/plugins/my-plugin",
+      scriptFile: "main.rb",
+    });
+    expect(def.entryPath).toBe("agents/my-agent/main.rb");
+  });
+
+  it("uses scriptFile with shell scripts", () => {
+    const def = buildAgentDef({ ...BASE_ENTRY, scriptFile: "main.sh" });
+    expect(def.entryPath).toBe("agent-local/my-agent/main.sh");
+  });
+});
+
 describe("buildAgentDef — pluginPath", () => {
   it("propagates pluginPath when set", () => {
     const def = buildAgentDef({

@@ -50,6 +50,7 @@ import {
   awaitScript,
   hasPendingScripts,
   getPendingRunIds,
+  resolveRuntime,
 } from "../spawn.js";
 
 const BASE_CONFIG = {
@@ -260,6 +261,109 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
     // Verify structural shape: status and runId always present, latestOutput optional
     expect(result).toMatchObject({ status: "still_running", runId });
     expect("latestOutput" in result).toBe(true);
+  });
+});
+
+describe("resolveRuntime", () => {
+  beforeEach(() => {
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("uses TSX_BIN for .ts scripts when it exists", () => {
+    const { cmd, args } = resolveRuntime("/agents/test/main.ts");
+    expect(cmd).toBe("/usr/bin/tsx");
+    expect(args).toEqual(["/agents/test/main.ts"]);
+  });
+
+  it("falls back to 'tsx' for .ts scripts when TSX_BIN does not exist", () => {
+    vi.mocked(existsSync).mockReturnValue(false);
+    const { cmd } = resolveRuntime("/agents/test/main.ts");
+    expect(cmd).toBe("tsx");
+  });
+
+  it("uses bash for .sh scripts", () => {
+    const { cmd, args } = resolveRuntime("/agents/test/main.sh");
+    expect(cmd).toBe("bash");
+    expect(args).toEqual(["/agents/test/main.sh"]);
+  });
+
+  it("uses python3 for .py scripts", () => {
+    const { cmd, args } = resolveRuntime("/agents/test/main.py");
+    expect(cmd).toBe("python3");
+    expect(args).toEqual(["/agents/test/main.py"]);
+  });
+
+  it("uses ruby for .rb scripts", () => {
+    const { cmd, args } = resolveRuntime("/agents/test/main.rb");
+    expect(cmd).toBe("ruby");
+    expect(args).toEqual(["/agents/test/main.rb"]);
+  });
+});
+
+describe("spawnAndCollect — runtime selection", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("spawns tsx for .ts scripts", async () => {
+    const proc = makeProc();
+    const { promise } = spawnAndCollect(
+      { ...BASE_CONFIG, scriptPath: "/agents/test/main.ts" },
+      "run",
+    );
+    proc.emit("close", 0);
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "/usr/bin/tsx",
+      ["/agents/test/main.ts", "run"],
+      expect.anything(),
+    );
+  });
+
+  it("spawns bash for .sh scripts", async () => {
+    const proc = makeProc();
+    const { promise } = spawnAndCollect(
+      { ...BASE_CONFIG, scriptPath: "/agents/test/main.sh" },
+      "run",
+    );
+    proc.emit("close", 0);
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "bash",
+      ["/agents/test/main.sh", "run"],
+      expect.anything(),
+    );
+  });
+
+  it("spawns python3 for .py scripts", async () => {
+    const proc = makeProc();
+    const { promise } = spawnAndCollect(
+      { ...BASE_CONFIG, scriptPath: "/agents/test/main.py" },
+      "go",
+    );
+    proc.emit("close", 0);
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "python3",
+      ["/agents/test/main.py", "go"],
+      expect.anything(),
+    );
+  });
+
+  it("spawns ruby for .rb scripts", async () => {
+    const proc = makeProc();
+    const { promise } = spawnAndCollect(
+      { ...BASE_CONFIG, scriptPath: "/agents/test/main.rb" },
+      "go",
+    );
+    proc.emit("close", 0);
+    await promise;
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "ruby",
+      ["/agents/test/main.rb", "go"],
+      expect.anything(),
+    );
   });
 });
 

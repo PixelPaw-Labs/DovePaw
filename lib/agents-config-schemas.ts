@@ -131,6 +131,8 @@ export const agentConfigEntrySchema = z.object({
   suggestions: z.array(agentSuggestionConfigSchema),
   /** Absolute path to the plugin repo root. Absent = agent lives in DovePaw/agents/. */
   pluginPath: z.string().optional(),
+  /** Entry file name within the agent directory. Defaults to "main.ts". Supports .ts, .sh, .py, .rb. */
+  scriptFile: z.string().optional(),
   /** Personality paragraph injected at the top of the sub-agent system prompt.
    *  Replaces the generic "You are one of Dove's mice…" line. Keep it 1–3 sentences. */
   personality: z.string().optional(),

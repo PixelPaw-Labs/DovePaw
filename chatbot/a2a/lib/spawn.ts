@@ -6,6 +6,7 @@
  */
 
 import { existsSync } from "node:fs";
+import { extname } from "node:path";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
@@ -24,6 +25,16 @@ import type { ScriptCompletedContent, AwaitScriptContent } from "@/lib/script-ty
 /** Build the argv array for spawning the agent script. */
 export function buildScriptArgs(scriptPath: string, instruction: string): string[] {
   return instruction ? [scriptPath, instruction] : [scriptPath];
+}
+
+/** Resolve the runtime command and base args for a given script path based on its extension. */
+export function resolveRuntime(scriptPath: string): { cmd: string; args: string[] } {
+  const ext = extname(scriptPath);
+  if (ext === ".sh") return { cmd: "bash", args: [scriptPath] };
+  if (ext === ".py") return { cmd: "python3", args: [scriptPath] };
+  if (ext === ".rb") return { cmd: "ruby", args: [scriptPath] };
+  const tsxBin = existsSync(TSX_BIN) ? TSX_BIN : "tsx";
+  return { cmd: tsxBin, args: [scriptPath] };
 }
 
 // ─── Script process registry ──────────────────────────────────────────────────
@@ -79,9 +90,9 @@ export function spawnAndCollect(
     return { promise: Promise.resolve(`Script not found: ${config.scriptPath}`), lines };
   }
 
-  const tsxBin = existsSync(TSX_BIN) ? TSX_BIN : "tsx";
-  const scriptArgs = buildScriptArgs(config.scriptPath, instruction);
-  const proc = spawn(tsxBin, scriptArgs, {
+  const { cmd, args: baseArgs } = resolveRuntime(config.scriptPath);
+  const scriptArgs = instruction ? [...baseArgs, instruction] : baseArgs;
+  const proc = spawn(cmd, scriptArgs, {
     env: { ...process.env, ...config.extraEnv },
     cwd: config.workspacePath,
     stdio: ["ignore", "pipe", "pipe"],
