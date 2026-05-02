@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsup --metafile",
+    "build": "tsup --metafile && tsx scripts/deploy-sdk.ts",
     "install": "tsx build.ts",
     "uninstall": "tsx build.ts --uninstall",
     "lint": "oxlint --disable-nested-config --ignore-pattern agents/",
