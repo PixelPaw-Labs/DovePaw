@@ -10,7 +10,7 @@ export default defineConfig({
       agentEntries.map((a) => {
         const entryFile = a.pluginPath
           ? join(a.pluginPath, "agents", a.name, "main.ts")
-          : `agents/${a.name}/main.ts`;
+          : `agent-local/${a.name}/main.ts`;
         return [`agents/${a.name}`, entryFile];
       }),
     ),
