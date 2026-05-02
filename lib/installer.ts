@@ -141,6 +141,15 @@ export async function linkAgentSdkToPlugin(pluginDir: string): Promise<void> {
   await symlink(AGENT_SDK_DIR, link);
 }
 
+/** Symlink AGENT_SDK_DIR into agent-local/node_modules/@dovepaw/agent-sdk. */
+export async function linkAgentSdkToAgentLocal(): Promise<void> {
+  const nmScope = join(AGENT_LOCAL_DIR, "node_modules", "@dovepaw");
+  await mkdir(nmScope, { recursive: true });
+  const link = join(nmScope, "agent-sdk");
+  await rm(link, { recursive: true, force: true });
+  await symlink(AGENT_SDK_DIR, link);
+}
+
 /** Ensure DovePaw/agents -> ~/.dovepaw/plugins symlink exists. */
 export async function linkAgents(): Promise<void> {
   await mkdir(PLUGINS_DIR, { recursive: true });

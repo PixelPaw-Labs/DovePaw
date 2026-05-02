@@ -15,6 +15,7 @@ import {
   copyNativePackages,
   deployAgentSdk,
   linkAgents,
+  linkAgentSdkToAgentLocal,
   linkAgentSdkToPlugin,
   linkLocalAgentSkills,
   linkPluginSkills,
@@ -52,6 +53,7 @@ execSync("npx tsup", { stdio: "inherit", cwd: import.meta.dirname });
 console.log("\nStep 2: Linking agents, skills, and deploying SDK...\n");
 await linkAgents();
 await deployAgentSdk();
+await linkAgentSdkToAgentLocal();
 const plugins = await listPlugins();
 await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
 await Promise.all([
