@@ -12,6 +12,7 @@ import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
 import { PLUGINS_DIR, PLUGINS_REGISTRY_FILE, agentConfigDir, agentDefinitionFile } from "./paths";
 import { makeEnvVar } from "./settings";
+import { pushConfig } from "./s3-config-sync";
 import { linkAgentSdkToPlugin, linkPluginSkills, unlinkPluginSkills } from "./installer";
 import {
   pluginManifestSchema,
@@ -54,7 +55,9 @@ async function readRegistry(): Promise<PluginsRegistry> {
 
 async function writeRegistry(registry: PluginsRegistry): Promise<void> {
   await mkdir(PLUGINS_DIR, { recursive: true });
-  await writeFile(PLUGINS_REGISTRY_FILE, JSON.stringify(registry, null, 2) + "\n", "utf-8");
+  const data = JSON.stringify(registry, null, 2) + "\n";
+  await writeFile(PLUGINS_REGISTRY_FILE, data, "utf-8");
+  await pushConfig("plugins.json", data);
 }
 
 async function readManifest(pluginDir: string): Promise<PluginManifest> {

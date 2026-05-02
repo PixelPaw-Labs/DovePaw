@@ -29,6 +29,7 @@ import {
   AGENT_LOCAL_DIR,
   AGENT_SDK_DIR,
   AGENT_SDK_SRC,
+  AGENT_SETTINGS_DIR,
   AGENTS_DIST,
   AGENTS_ROOT,
   CODEX_SKILLS_ROOT,
@@ -203,6 +204,35 @@ export async function unlinkPluginSkills(skillNames: string[]): Promise<void> {
     [SKILLS_ROOT, CODEX_SKILLS_ROOT].flatMap((root) =>
       skillNames.map((skill) => rm(join(root, skill), { recursive: true, force: true })),
     ),
+  );
+}
+
+/**
+ * Copy agent.json from agent-local/<name>/agent.json into
+ * ~/.dovepaw/settings.agents/<name>/agent.json so DovePaw registers
+ * them and the S3 sync can pick them up.
+ */
+export async function syncAgentLocalToSettings(): Promise<void> {
+  let entries;
+  try {
+    entries = await readdir(AGENT_LOCAL_DIR, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  await Promise.all(
+    entries
+      .filter((d) => d.isDirectory())
+      .map(async (d) => {
+        const src = join(AGENT_LOCAL_DIR, d.name, "agent.json");
+        try {
+          await access(src);
+        } catch {
+          return;
+        }
+        const destDir = join(AGENT_SETTINGS_DIR, d.name);
+        await mkdir(destDir, { recursive: true });
+        await copyFile(src, join(destDir, "agent.json"));
+      }),
   );
 }
 

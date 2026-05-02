@@ -8,6 +8,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { AGENT_LINKS_FILE } from "./paths";
+import { pushConfig } from "./s3-config-sync";
 import {
   agentLinksFileSchema,
   type AgentLink,
@@ -34,7 +35,9 @@ export async function readAgentLinks(): Promise<AgentLink[]> {
 }
 
 export async function writeAgentLinksFile(file: AgentLinksFile): Promise<void> {
-  await writeFile(AGENT_LINKS_FILE, JSON.stringify(file, null, 2), "utf-8");
+  const data = JSON.stringify(file, null, 2);
+  await writeFile(AGENT_LINKS_FILE, data, "utf-8");
+  await pushConfig("agent-links.json", data);
 }
 
 /** Updates only the links array, preserving the existing groups list. */

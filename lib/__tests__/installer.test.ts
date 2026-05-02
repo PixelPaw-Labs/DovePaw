@@ -210,6 +210,64 @@ describe("linkLocalAgentSkills", () => {
   });
 });
 
+describe("syncAgentLocalToSettings", () => {
+  let syncAgentLocalToSettings: () => Promise<void>;
+  let readdirMock: ReturnType<typeof vi.fn>;
+  let accessMock: ReturnType<typeof vi.fn>;
+  let mkdirMock: ReturnType<typeof vi.fn>;
+  let copyFileMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    syncAgentLocalToSettings = mod.syncAgentLocalToSettings;
+    const fs = await import("node:fs/promises");
+    readdirMock = vi.mocked(fs.readdir);
+    accessMock = vi.mocked(fs.access);
+    mkdirMock = vi.mocked(fs.mkdir);
+    copyFileMock = vi.mocked(fs.copyFile);
+  });
+
+  it("no-ops silently when agent-local/ does not exist", async () => {
+    readdirMock.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
+    await syncAgentLocalToSettings();
+    expect(copyFileMock).not.toHaveBeenCalled();
+  });
+
+  it("skips agent dirs that have no agent.json", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockRejectedValue(new Error("ENOENT"));
+    await syncAgentLocalToSettings();
+    expect(copyFileMock).not.toHaveBeenCalled();
+  });
+
+  it("copies agent.json into settings.agents/<name>/agent.json", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await syncAgentLocalToSettings();
+    const [src, dest] = copyFileMock.mock.calls[0] as [string, string];
+    expect(src).toMatch(/agent-local[/\\]my-agent[/\\]agent\.json$/);
+    expect(dest).toMatch(/settings\.agents[/\\]my-agent[/\\]agent\.json$/);
+  });
+
+  it("creates the destination directory before copying", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await syncAgentLocalToSettings();
+    const mkdirPaths = mkdirMock.mock.calls.map((args) => String(args[0]));
+    expect(mkdirPaths.some((p) => p.includes("settings.agents") && p.endsWith("my-agent"))).toBe(
+      true,
+    );
+  });
+
+  it("skips non-directory entries", async () => {
+    readdirMock.mockResolvedValue([{ name: "README.md", isDirectory: () => false }]);
+    await syncAgentLocalToSettings();
+    expect(copyFileMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("deployTriggerScript", () => {
   let deployTriggerScript: () => Promise<void>;
 

@@ -19,6 +19,7 @@ import {
   linkAgentSdkToPlugin,
   linkLocalAgentSkills,
   linkPluginSkills,
+  syncAgentLocalToSettings,
   unlinkPluginSkills,
 } from "./lib/installer.js";
 import { scheduler } from "./lib/scheduler.js";
@@ -59,6 +60,7 @@ await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
 await Promise.all([
   ...plugins.map((p) => linkPluginSkills(p.path, p.skillNames)),
   linkLocalAgentSkills(),
+  syncAgentLocalToSettings(),
 ]);
 console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 

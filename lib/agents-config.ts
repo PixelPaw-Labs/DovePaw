@@ -174,7 +174,9 @@ export async function writeAgentFile(agentName: string, file: AgentFile): Promis
   const data = JSON.stringify(rest, null, 2) + "\n";
   await writeFile(dest, data, "utf-8");
   await copyFile(dest, `${dest}.bak`);
-  await pushConfig(`settings.agents/${agentName}/agent.json`, data);
+  if (!dest.startsWith(DOVEPAW_TMP_DIR)) {
+    await pushConfig(`settings.agents/${agentName}/agent.json`, data);
+  }
 }
 
 /** Create a new agent file with empty repos/envVars. */
