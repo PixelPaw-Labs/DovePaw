@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { buildSpawnEnv, PERSONA_RULES } from "./claude.js";
+import { join } from "node:path";
+import { CLAUDE_CLI, buildSpawnEnv, PERSONA_RULES } from "./claude.js";
 
 function spawnTestProcess(
   cmd: string,
@@ -39,6 +40,19 @@ function spawnTestProcess(
 
   return { result, kill: () => killFn() };
 }
+
+describe("CLAUDE_CLI", () => {
+  it("defaults to ~/.local/bin/claude when CLAUDE_CLI_PATH is not set", () => {
+    if (!process.env.CLAUDE_CLI_PATH) {
+      expect(CLAUDE_CLI).toBe(join(process.env.HOME!, ".local/bin/claude"));
+    }
+  });
+
+  it("resolves to CLAUDE_CLI_PATH when env var is set", () => {
+    const expected = process.env.CLAUDE_CLI_PATH ?? join(process.env.HOME!, ".local/bin/claude");
+    expect(CLAUDE_CLI).toBe(expected);
+  });
+});
 
 describe("PERSONA_RULES", () => {
   it("instructs first-person responses", () => {

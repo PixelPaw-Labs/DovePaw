@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 const HOME = process.env.HOME!;
-export const CLAUDE_CLI = join(HOME, ".local/bin/claude");
+export const CLAUDE_CLI = process.env.CLAUDE_CLI_PATH ?? join(HOME, ".local/bin/claude");
 
 export const AUTONOMY_PREFIX =
   "Autonomy mode: never use AskUserQuestion tool — explore answers yourself.";
