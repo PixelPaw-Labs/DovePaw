@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ClaudeRunner, ensureWorktree } from "./claude-runner.js";
@@ -68,5 +68,23 @@ describe("ensureWorktree", () => {
     const second = await ensureWorktree(repo, "fix/retry-branch");
     expect(second).toBe(first);
     expect(existsSync(join(second, "change.txt"))).toBe(true);
+  });
+
+  it("symlinks .claude/settings.local.json into worktree when it exists in repo root", async () => {
+    const repo = makeRepo("wt-settings-local");
+    const claudeDir = join(repo, ".claude");
+    mkdirSync(claudeDir, { recursive: true });
+    writeFileSync(join(claudeDir, "settings.local.json"), '{"permissions":{}}');
+    const wtPath = await ensureWorktree(repo, "fix/settings-test");
+    const wtSettingsLocal = join(wtPath, ".claude", "settings.local.json");
+    expect(existsSync(wtSettingsLocal)).toBe(true);
+    expect(lstatSync(wtSettingsLocal).isSymbolicLink()).toBe(true);
+  });
+
+  it("skips symlink when .claude/settings.local.json does not exist in repo", async () => {
+    const repo = makeRepo("wt-no-settings-local");
+    const wtPath = await ensureWorktree(repo, "fix/no-settings-test");
+    const wtSettingsLocal = join(wtPath, ".claude", "settings.local.json");
+    expect(existsSync(wtSettingsLocal)).toBe(false);
   });
 });

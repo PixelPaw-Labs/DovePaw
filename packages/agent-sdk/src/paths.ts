@@ -22,3 +22,7 @@ export const agentConfigDir = (agentName: string): string => {
 /** <repoPath>/.claude/worktrees/<wtName> — Claude Code worktree directory */
 export const claudeWorktreePath = (repoPath: string, wtName: string) =>
   join(repoPath, ".claude", "worktrees", wtName);
+
+/** <repoPath>/.claude/settings.local.json — Claude Code local settings file */
+export const claudeSettingsLocalPath = (repoPath: string) =>
+  join(repoPath, ".claude", "settings.local.json");

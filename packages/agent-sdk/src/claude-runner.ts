@@ -1,8 +1,9 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createWriteStream, writeFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { access, mkdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { exec } from "./exec.js";
+import { claudeSettingsLocalPath } from "./paths.js";
 
 export interface RunOpts {
   repos?: string[];
@@ -36,6 +37,19 @@ export async function ensureWorktree(repoPath: string, branch: string): Promise<
   if (!created.ok) {
     await exec("git", ["worktree", "add", wtPath, branch], { cwd: repoPath });
     // If both fail the worktree already exists at wtPath — still valid as cwd.
+  }
+  // Symlink .claude/settings.local.json from the repo root into the worktree so
+  // local permission overrides apply inside the isolated worktree environment.
+  const repoSettingsLocal = claudeSettingsLocalPath(repoPath);
+  try {
+    await access(repoSettingsLocal);
+    const wtClaudeDir = join(wtPath, ".claude");
+    await mkdir(wtClaudeDir, { recursive: true });
+    const wtSettingsLocal = join(wtClaudeDir, "settings.local.json");
+    await rm(wtSettingsLocal, { recursive: true, force: true });
+    await symlink(repoSettingsLocal, wtSettingsLocal);
+  } catch {
+    // settings.local.json absent — skip
   }
   return wtPath;
 }
