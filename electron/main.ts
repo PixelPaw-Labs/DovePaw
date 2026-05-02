@@ -5,13 +5,14 @@ import { createConnection } from "node:net";
 import { resolve } from "node:path";
 import { createServersProcess } from "../lib/server-manager";
 import { linkAgents } from "../lib/installer";
+import { DOVEPAW_LOGS_DIR, portsFile } from "../lib/paths";
 
 // electron/.dist/main.cjs → ../../ = DovePaw repo root
 const REPO_ROOT = resolve(__dirname, "../..");
 const NEXT_PORT = 7473;
-const PORTS_FILE = resolve(process.env.HOME!, `.dovepaw/.ports.${NEXT_PORT}.json`);
+const PORTS_FILE = portsFile(NEXT_PORT);
 const ASSETS_DIR = resolve(__dirname, "../assets");
-const LOGS_DIR = resolve(process.env.HOME!, ".dovepaw/logs");
+const LOGS_DIR = DOVEPAW_LOGS_DIR;
 const NPM_BIN = "npm";
 const CHATBOT_URL = `http://localhost:${NEXT_PORT}`;
 const SERVICE_NAME = "DovePaw";

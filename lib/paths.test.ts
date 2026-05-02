@@ -2,6 +2,7 @@ import { join } from "node:path";
 import {
   AGENTS_ROOT,
   DOVEPAW_DIR,
+  DOVEPAW_LOGS_DIR,
   DOVEPAW_AGENT_STATE,
   agentPersistentStateDir,
   DOVEPAW_AGENT_LOGS,
@@ -41,6 +42,10 @@ describe("paths", () => {
 
   it("agentPersistentLogDir uses dot-prefixed folder for agent name", () => {
     expect(agentPersistentLogDir("my-agent")).toMatch(/\/\.my-agent$/);
+  });
+
+  it("DOVEPAW_LOGS_DIR is under DOVEPAW_DIR/logs", () => {
+    expect(DOVEPAW_LOGS_DIR).toBe(join(DOVEPAW_DIR, "logs"));
   });
 
   it("SCHEDULER_ROOT is under ~/.dovepaw/cron", () => {
