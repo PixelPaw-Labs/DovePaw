@@ -5,12 +5,13 @@ import { CodexRunner, type CodexRunOpts } from "./codex-runner.js";
 import type { WebSearchMode, SandboxMode, CodexOptions } from "@openai/codex-sdk";
 
 interface ClaudeRunOpts {
-  permissionMode?: string;
+  permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
   worktree?: string;
   sessionId?: string;
   agent?: string;
-  effort?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   continueSession?: boolean;
+  settingSources?: Array<"user" | "project" | "local">;
 }
 
 interface CodexOpts {
@@ -98,6 +99,7 @@ export class AgentRunner {
       agent: opts.claudeOpts?.agent,
       effort: opts.claudeOpts?.effort,
       continueSession: opts.claudeOpts?.continueSession,
+      settingSources: opts.claudeOpts?.settingSources,
     } satisfies RunOpts);
   }
 

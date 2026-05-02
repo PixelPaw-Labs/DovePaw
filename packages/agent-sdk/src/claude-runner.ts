@@ -1,79 +1,8 @@
-import { spawn } from "node:child_process";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import { createWriteStream, writeFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-  CLAUDE_CLI,
-  buildSpawnEnv,
-  type SpawnClaudeHandle,
-  type SpawnClaudeOptions,
-  type SpawnClaudeResult,
-} from "./claude.js";
-import { registerChildPid, unregisterChildPid } from "./lock.js";
-import { claudeWorktreePath } from "./paths.js";
-import { WorktreeWatchdog } from "./worktree-watchdog.js";
-
-const noopKill: () => Promise<void> = async () => {};
-
-function spawnClaude(args: string[], opts: SpawnClaudeOptions): SpawnClaudeHandle {
-  const { cwd, taskName, timeoutMs = 30 * 60 * 1000, stderrToLog } = opts;
-
-  let killFn: () => Promise<void> = noopKill;
-
-  const result = new Promise<SpawnClaudeResult>((resolve) => {
-    const child = spawn(CLAUDE_CLI, args, {
-      cwd,
-      env: buildSpawnEnv(taskName, opts.suppressNotify, opts.apiKey),
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    if (child.pid) registerChildPid(child.pid);
-
-    let closed = false;
-    const closedPromise = new Promise<void>((r) => child.on("close", () => r()));
-
-    killFn = async () => {
-      if (closed) return;
-      child.kill("SIGTERM");
-      const waited = await Promise.race([
-        closedPromise.then(() => "exited" as const),
-        new Promise<"timeout">((r) => setTimeout(() => r("timeout"), 5_000)),
-      ]);
-      if (waited === "timeout") {
-        child.kill("SIGKILL");
-        await closedPromise;
-      }
-    };
-
-    const chunks: Buffer[] = [];
-    const stderrChunks: Buffer[] = [];
-    const logStream = stderrToLog ? createWriteStream(stderrToLog, { flags: "a" }) : null;
-
-    child.stdout.on("data", (data: Buffer) => chunks.push(data));
-    child.stderr.on("data", (data: Buffer) => {
-      if (logStream) logStream.write(data);
-      else stderrChunks.push(data);
-    });
-
-    const timer = setTimeout(() => {
-      void killFn();
-    }, timeoutMs);
-
-    child.on("close", (code) => {
-      closed = true;
-      clearTimeout(timer);
-      logStream?.end();
-      if (child.pid) unregisterChildPid(child.pid);
-      const stdout = Buffer.concat(chunks).toString();
-      const stderr = Buffer.concat(stderrChunks).toString();
-      resolve({
-        code: code ?? 1,
-        stdout: stderrToLog ? stdout : stdout + stderr,
-      });
-    });
-  });
-
-  return { result, kill: () => killFn() };
-}
+import { exec } from "./exec.js";
 
 export interface RunOpts {
   repos?: string[];
@@ -82,45 +11,37 @@ export interface RunOpts {
   cwd: string;
   agent?: string;
   model?: string;
-  effort?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   worktree?: string;
   continueSession?: boolean;
-  permissionMode?: string;
+  permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
+  settingSources?: Array<"user" | "project" | "local">;
   /** Assign a session ID for later resumption via resumeSession. */
   sessionId?: string;
-  /** Resume a prior session by its ID (--resume <id>). */
+  /** Resume a prior session by its ID. */
   resumeSession?: string;
   /** Override ANTHROPIC_API_KEY for this invocation. */
   apiKey?: string;
 }
 
-const WORKTREE_MAX_ATTEMPTS = 2;
-
-/** Build the Claude CLI args for a run. Exported for testing. */
-export function buildClaudeArgs(opts: RunOpts): string[] {
-  const args = [
-    ...(opts.sessionId ? ["--session-id", opts.sessionId] : []),
-    ...(opts.resumeSession ? ["--resume", opts.resumeSession] : []),
-    ...(opts.permissionMode ? ["--permission-mode", opts.permissionMode] : []),
-    ...(opts.agent ? ["--agent", opts.agent] : []),
-    "--model",
-    opts.model ?? "sonnet",
-    ...(opts.effort ? ["--effort", opts.effort] : []),
-    ...(opts.worktree ? ["-w", opts.worktree] : []),
-    ...(opts.continueSession ? ["-c"] : []),
-  ];
-  if (!opts.worktree && opts.repos?.length) args.push("--add-dir", ...opts.repos);
-  return args;
+/**
+ * Create (or reuse) the git worktree at the canonical path .claude/worktrees/<branch>.
+ * Matches claudeWorktreePath() so callers can locate the directory without the return value.
+ */
+export async function ensureWorktree(repoPath: string, branch: string): Promise<string> {
+  const wtPath = join(repoPath, ".claude", "worktrees", branch);
+  await mkdir(join(repoPath, ".claude", "worktrees"), { recursive: true });
+  // Try creating with a new branch; fall back to checking out an existing one.
+  const created = await exec("git", ["worktree", "add", wtPath, "-b", branch], { cwd: repoPath });
+  if (!created.ok) {
+    await exec("git", ["worktree", "add", wtPath, branch], { cwd: repoPath });
+    // If both fail the worktree already exists at wtPath — still valid as cwd.
+  }
+  return wtPath;
 }
 
-/**
- * Higher-level Claude runner with worktree watchdog support.
- * Wraps spawnClaude and retries once if the worktree directory never appears
- * (which indicates a hung Claude CLI process).
- */
 export class ClaudeRunner {
-  private readonly watchdog = new WorktreeWatchdog();
-  private currentHandle: SpawnClaudeHandle | null = null;
+  private abortController: AbortController | null = null;
 
   constructor(
     private readonly logDir: string,
@@ -129,7 +50,8 @@ export class ClaudeRunner {
 
   async run(prompt: string, opts: RunOpts): Promise<{ code: number; stdout: string }> {
     const shutdown = () => {
-      void this.currentHandle?.kill().then(() => process.exit(0));
+      this.abortController?.abort();
+      process.exit(0);
     };
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
@@ -141,52 +63,74 @@ export class ClaudeRunner {
     }
   }
 
-  private async runOnce(
-    prompt: string,
-    opts: RunOpts,
-    attempt = 1,
-  ): Promise<{ code: number; stdout: string }> {
-    const args = buildClaudeArgs(opts);
-    args.push("-p", prompt);
+  private async runOnce(prompt: string, opts: RunOpts): Promise<{ code: number; stdout: string }> {
+    // When a worktree name is given, pre-create it at the canonical path so that
+    // claudeWorktreePath(cwd, name) resolves correctly and retry loops reuse the
+    // same branch rather than creating a new auto-named one.
+    const cwd = opts.worktree ? await ensureWorktree(opts.cwd, opts.worktree) : opts.cwd;
 
-    // Suppress notifications on non-final attempts (will be killed and retried)
-    const canRetry = opts.worktree && attempt < WORKTREE_MAX_ATTEMPTS;
-    const handle = spawnClaude(args, {
-      cwd: opts.cwd,
-      taskName: opts.taskName,
-      timeoutMs: opts.timeoutMs ?? 24 * 60 * 60 * 1000,
-      stderrToLog: this.logFile,
-      suppressNotify: canRetry || false,
-      apiKey: opts.apiKey,
-    });
-    this.currentHandle = handle;
+    this.abortController = new AbortController();
+    const timeoutMs = opts.timeoutMs ?? 24 * 60 * 60 * 1000;
+    const timeoutId = setTimeout(() => this.abortController?.abort(), timeoutMs);
+    const logStream = this.logFile ? createWriteStream(this.logFile, { flags: "a" }) : null;
 
-    // When using a worktree, race against a watchdog that detects hung CLI processes.
-    // If the worktree directory never appears, the CLI is stuck — kill and retry once.
-    if (opts.worktree) {
-      const wtPath = claudeWorktreePath(opts.cwd, opts.worktree);
-      const wd = this.watchdog.watch(wtPath);
-      const result = await Promise.race([
-        handle.result.then((r) => ({ kind: "done" as const, ...r })),
-        wd.hung.then((kind) => ({ kind })),
-      ]);
+    try {
+      const stream = query({
+        prompt,
+        options: {
+          cwd,
+          model: opts.model ?? "claude-sonnet-4-6",
+          ...(opts.agent ? { agent: opts.agent } : {}),
+          ...(opts.effort ? { effort: opts.effort } : {}),
+          ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
+          ...(opts.settingSources ? { settingSources: opts.settingSources } : {}),
+          ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
+          ...(opts.resumeSession ? { resume: opts.resumeSession } : {}),
+          ...(opts.continueSession ? { continue: true } : {}),
+          ...(!opts.worktree && opts.repos?.length ? { additionalDirectories: opts.repos } : {}),
+          ...(opts.apiKey
+            ? {
+                env: {
+                  ...Object.fromEntries(
+                    Object.entries(process.env).filter(
+                      (e): e is [string, string] => e[1] !== undefined,
+                    ),
+                  ),
+                  ANTHROPIC_API_KEY: opts.apiKey,
+                },
+              }
+            : {}),
+          abortController: this.abortController,
+        },
+      });
 
-      wd.cancel();
+      let result = "";
+      let isError = false;
 
-      if (result.kind === "hung") {
-        await handle.kill();
-        if (attempt < WORKTREE_MAX_ATTEMPTS) {
-          return this.runOnce(prompt, opts, attempt + 1);
+      for await (const message of stream) {
+        if (logStream) logStream.write(JSON.stringify(message) + "\n");
+        if (message.type === "result") {
+          if (message.subtype === "success") {
+            result = message.result;
+          } else {
+            isError = true;
+            result = message.errors.join("\n");
+          }
         }
-        return {
-          code: 1,
-          stdout: `HUNG: worktree never created after ${WORKTREE_MAX_ATTEMPTS} attempts`,
-        };
       }
-      return { code: result.code, stdout: result.stdout };
-    }
 
-    return handle.result;
+      return { code: isError ? 1 : 0, stdout: result };
+    } catch (err) {
+      if (this.abortController?.signal.aborted) {
+        return { code: 1, stdout: "TIMEOUT: Claude execution timed out" };
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      return { code: 1, stdout: `Error: ${msg}` };
+    } finally {
+      clearTimeout(timeoutId);
+      this.abortController = null;
+      logStream?.end();
+    }
   }
 
   writeLog(prefix: string, id: string, content: string): string {

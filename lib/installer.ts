@@ -111,11 +111,16 @@ export async function deployAgentSdk(): Promise<void> {
   await cp(AGENT_SDK_SRC, AGENT_SDK_DIR, { recursive: true });
   // Symlink SDK peer deps into ~/.dovepaw/sdk/node_modules/ so Node.js resolves
   // them from the real file path (not the symlinked plugin path).
-  const sdkNmScope = join(AGENT_SDK_DIR, "node_modules", "@openai");
-  await mkdir(sdkNmScope, { recursive: true });
-  const codexSdkLink = join(sdkNmScope, "codex-sdk");
+  const openaiNmScope = join(AGENT_SDK_DIR, "node_modules", "@openai");
+  await mkdir(openaiNmScope, { recursive: true });
+  const codexSdkLink = join(openaiNmScope, "codex-sdk");
   await rm(codexSdkLink, { recursive: true, force: true });
   await symlink(agentNodeModule("@openai/codex-sdk"), codexSdkLink);
+  const anthropicNmScope = join(AGENT_SDK_DIR, "node_modules", "@anthropic-ai");
+  await mkdir(anthropicNmScope, { recursive: true });
+  const claudeSdkLink = join(anthropicNmScope, "claude-agent-sdk");
+  await rm(claudeSdkLink, { recursive: true, force: true });
+  await symlink(agentNodeModule("@anthropic-ai/claude-agent-sdk"), claudeSdkLink);
   // Ensure ~/.dovepaw/tmp/ is treated as ESM so tsx loads tmp agent scripts
   // in ESM mode. Without this, Node.js defaults to CJS and require()ing the
   // ESM-only @openai/codex-sdk (transitively via the SDK index) fails with

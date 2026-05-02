@@ -48,11 +48,12 @@ describe("deployAgentSdk", () => {
     symlinkMock = vi.mocked(fs.symlink);
   });
 
-  it("symlinks @openai/codex-sdk but not @ladybugdb/core", async () => {
+  it("symlinks @openai/codex-sdk and @anthropic-ai/claude-agent-sdk but not @ladybugdb/core", async () => {
     await deployAgentSdk();
 
     const targets = symlinkMock.mock.calls.map((args) => String(args[1]));
     expect(targets.some((t) => t.includes("codex-sdk"))).toBe(true);
+    expect(targets.some((t) => t.includes("claude-agent-sdk"))).toBe(true);
     expect(targets.some((t) => t.includes("ladybugdb"))).toBe(false);
   });
 });
