@@ -87,7 +87,9 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
   return {
     name: entry.name,
     alias: entry.alias,
-    entryPath: `agents/${entry.name}/main.ts`,
+    entryPath: entry.pluginPath
+      ? `agents/${entry.name}/main.ts`
+      : `agent-local/${entry.name}/main.ts`,
     displayName: entry.displayName,
     label: `Claude Code Agent - ${entry.displayName}`,
     manifestKey,

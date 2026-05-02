@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -90,6 +90,15 @@ export const DOVEPAW_TMP_DIR = join(DOVEPAW_DIR, "tmp");
 /** ~/.dovepaw/tmp/<agentName>/agent.json — session agent definition */
 export const tmpAgentDefinitionFile = (agentName: string) =>
   join(DOVEPAW_TMP_DIR, agentName, "agent.json");
+/**
+ * Resolve a non-plugin agent's main.ts entry point.
+ * Checks agent-local/ first (locally developed agents), then falls back to
+ * ~/.dovepaw/tmp/ (session agents created by Dove at runtime).
+ */
+export const resolveLocalAgentScript = (agentName: string): string => {
+  const localPath = join(AGENT_LOCAL_DIR, agentName, "main.ts");
+  return existsSync(localPath) ? localPath : join(DOVEPAW_TMP_DIR, agentName, "main.ts");
+};
 /** DovePaw/.claude/hooks/karpathy-guidelines.sh — UserPromptSubmit hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
 

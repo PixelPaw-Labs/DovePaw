@@ -7,7 +7,7 @@
 
 import { join } from "node:path";
 import type { AgentDef } from "@@/lib/agents";
-import { DOVEPAW_TMP_DIR } from "@@/lib/paths";
+import { resolveLocalAgentScript } from "@@/lib/paths";
 
 export interface AgentConfig {
   scriptPath: string;
@@ -37,7 +37,7 @@ export function buildAgentConfig(
 ): AgentConfig {
   const scriptPath = def.pluginPath
     ? join(def.pluginPath, def.entryPath)
-    : join(DOVEPAW_TMP_DIR, def.name, "main.ts");
+    : resolveLocalAgentScript(def.name);
   return {
     scriptPath,
     agentName: def.displayName,

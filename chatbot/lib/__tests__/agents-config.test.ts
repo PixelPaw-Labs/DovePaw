@@ -272,7 +272,7 @@ describe("deleteAgentDefinition", () => {
 describe("buildAgentDef", () => {
   it("derives entryPath from name", () => {
     const def = buildAgentDef(FIXTURE_AGENT);
-    expect(def.entryPath).toBe("agents/memory-dream/main.ts");
+    expect(def.entryPath).toBe("agent-local/memory-dream/main.ts");
   });
 
   it("derives manifestKey by replacing dashes with underscores", () => {
