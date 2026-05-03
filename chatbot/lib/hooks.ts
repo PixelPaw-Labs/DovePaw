@@ -257,7 +257,7 @@ export function buildAgentHooks(
             if (responseReminder && status === "completed") {
               const hookSpecificOutput: PostToolUseHookSpecificOutput = {
                 hookEventName: "PostToolUse",
-                additionalContext: `<reminder>\n${responseReminder}\n</reminder>`,
+                additionalContext: `<reminder>\nNEVER include secrets, API keys, tokens, passwords, or credentials in your response.\n${responseReminder}\n</reminder>`,
               };
               return { hookSpecificOutput };
             }

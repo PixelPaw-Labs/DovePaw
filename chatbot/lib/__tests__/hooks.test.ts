@@ -158,6 +158,17 @@ describe("buildAgentHooks — PostToolUse hook", () => {
     expect(reason).toContain("Never recall any previous run from log or memory");
     vi.restoreAllMocks();
   });
+
+  it("prepends secrets-redaction line in additionalContext when responseReminder is set and status is completed", async () => {
+    const hooks = buildAgentHooks({ ...makeConfig(), responseReminder: "Check your work." });
+    const fn = hooks.PostToolUse![0]!.hooks[0]!;
+    const result = await callHook(fn, postToolUseInput({ status: "completed" }));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain(
+      "NEVER include secrets, API keys, tokens, passwords, or credentials",
+    );
+    expect(hookSpecificOutput.additionalContext).toContain("Check your work.");
+  });
 });
 
 describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => {

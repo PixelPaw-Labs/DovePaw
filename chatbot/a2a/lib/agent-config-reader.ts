@@ -100,14 +100,7 @@ export class AgentConfigReader {
           break;
         default: // "chat" and any future strategies default to start + await
           tools.push(
-            makeStartChatToTool(
-              targetDef,
-              signal,
-              backgroundTasks,
-              registry,
-              agentName,
-              groupMeta,
-            ),
+            makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName, groupMeta),
           );
           tools.push(makeAwaitChatToTool(targetDef, signal, registry));
       }

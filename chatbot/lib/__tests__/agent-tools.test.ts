@@ -540,7 +540,6 @@ describe("makeStartChatToTool — groupMeta", () => {
       expect.objectContaining({ isSender: true }),
     );
   });
-
 });
 
 // ─── makeStartReviewTool ──────────────────────────────────────────────────────

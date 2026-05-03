@@ -63,9 +63,7 @@ export const doveSettingsSchema = z.object({
   /** Response reminder injected via PostToolUse when a Dove await_* task completes. Empty = none. */
   responseReminder: z.string().default(""),
   /** Response reminder injected via PostToolUse when a sub-agent await_* task completes. Empty = none. */
-  subAgentResponseReminder: z
-    .string()
-    .default("Open your response by addressing the sender."),
+  subAgentResponseReminder: z.string().default("Open your response by addressing the sender."),
 });
 
 export type DoveSettings = z.infer<typeof doveSettingsSchema>;
