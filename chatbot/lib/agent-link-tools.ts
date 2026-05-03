@@ -154,7 +154,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
     async ({ instruction, contextId }) => {
       emitGroupSenderBubble(callerAgentId, groupMeta, instruction);
       const replyHint = callerDisplayName
-        ? `<meta>Open your response by addressing the sender as @${callerDisplayName}.</meta>\n`
+        ? `\n<meta>Open your response by addressing the sender as @${callerDisplayName}.</meta>`
         : "";
       return await new TaskPoller(
         manifestKey,
@@ -164,7 +164,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
-      ).start(withStartReminder(`${replyHint}${instruction}`, manifestKey), {
+      ).start(withStartReminder(`${instruction}${replyHint}`, manifestKey), {
         contextId,
         backgroundTasks,
         senderAgentId: callerAgentId,

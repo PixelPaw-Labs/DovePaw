@@ -540,6 +540,25 @@ describe("makeStartChatToTool — groupMeta", () => {
       expect.objectContaining({ isSender: true }),
     );
   });
+
+  it("appends replyHint after instruction when callerDisplayName is set", async () => {
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartChatToTool(
+      AGENT,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "Caller",
+    ) as any;
+    await handler({ instruction: "Do the work." });
+    const passedInstruction = vi.mocked(startAgentStream).mock.calls[0][1] as string;
+    expect(passedInstruction).toMatch(/Do the work\.\n<meta>.*@Caller.*<\/meta>/);
+    expect(passedInstruction.indexOf("Do the work.")).toBeLessThan(
+      passedInstruction.indexOf("<meta>"),
+    );
+  });
 });
 
 // ─── makeStartReviewTool ──────────────────────────────────────────────────────
