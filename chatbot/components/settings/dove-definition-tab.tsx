@@ -21,6 +21,8 @@ import {
   DOVE_MODES,
   doveSettingsSchema,
 } from "@@/lib/settings-schemas";
+import { DOVE_LEAN_REMINDER } from "@@/lib/dove-lean-reminder";
+import { SUBAGENT_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
 import { z } from "zod";
 
 const DEFAULT_DISPLAY_NAME = "Dove";
@@ -51,6 +53,8 @@ interface FormState {
   defaultModel: string;
   doveMode: DoveMode;
   allowWebTools: boolean;
+  behaviorReminder: string;
+  subAgentBehaviorReminder: string;
 }
 
 function settingsToForm(s: DoveSettings): FormState {
@@ -67,6 +71,8 @@ function settingsToForm(s: DoveSettings): FormState {
     defaultModel: s.defaultModel,
     doveMode: s.doveMode,
     allowWebTools: s.allowWebTools,
+    behaviorReminder: s.behaviorReminder,
+    subAgentBehaviorReminder: s.subAgentBehaviorReminder,
   };
 }
 
@@ -276,6 +282,54 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             />
             <span className="text-sm">Enable WebFetch and WebSearch</span>
           </label>
+        </Row>
+      </Section>
+
+      {/* Behavior Reminder */}
+      <Section label="Behavior Reminder">
+        <Row
+          label="Dove Instructions"
+          hint="Injected into Dove's built-in reminder on every turn. Leave blank for no extra instructions."
+        >
+          <div className="flex flex-col gap-3">
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-on-surface-variant hover:text-on-surface select-none">
+                View built-in Dove reminder (for reference)
+              </summary>
+              <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-on-surface-variant border border-outline-variant/20">
+                {DOVE_LEAN_REMINDER}
+              </pre>
+            </details>
+            <Textarea
+              value={form.behaviorReminder}
+              onChange={(e) => set("behaviorReminder", e.target.value)}
+              rows={5}
+              placeholder="e.g. If you can find any answer from memory, read it first before invoking any MCP tools."
+              className="font-mono text-sm leading-relaxed resize-y"
+            />
+          </div>
+        </Row>
+        <Row
+          label="Sub-Agent Instructions"
+          hint="Injected into every sub-agent's built-in reminder on every turn. Leave blank for no extra instructions."
+        >
+          <div className="flex flex-col gap-3">
+            <details className="group">
+              <summary className="cursor-pointer text-xs text-on-surface-variant hover:text-on-surface select-none">
+                View built-in sub-agent reminder (for reference)
+              </summary>
+              <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-on-surface-variant border border-outline-variant/20">
+                {SUBAGENT_PROMPT_REMINDER}
+              </pre>
+            </details>
+            <Textarea
+              value={form.subAgentBehaviorReminder}
+              onChange={(e) => set("subAgentBehaviorReminder", e.target.value)}
+              rows={5}
+              placeholder="e.g. Never read from memory — you are responsible for starting a fresh session each time."
+              className="font-mono text-sm leading-relaxed resize-y"
+            />
+          </div>
         </Row>
       </Section>
 

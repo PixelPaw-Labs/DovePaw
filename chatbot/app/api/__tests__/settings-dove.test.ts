@@ -25,6 +25,8 @@ const CUSTOM_DOVE = {
   defaultModel: "",
   doveMode: "supervised" as const,
   allowWebTools: false,
+  behaviorReminder: "",
+  subAgentBehaviorReminder: "",
 };
 
 beforeEach(() => {

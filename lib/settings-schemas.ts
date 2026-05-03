@@ -56,6 +56,10 @@ export const doveSettingsSchema = z.object({
   doveMode: z.enum(DOVE_MODES).default("supervised"),
   /** Allow Dove to use WebFetch and WebSearch tools. */
   allowWebTools: z.boolean().default(false),
+  /** Extra behavior instructions injected into the built-in Dove reminder on every turn. Empty = none. */
+  behaviorReminder: z.string().default(""),
+  /** Extra behavior instructions injected into the built-in sub-agent reminder on every turn. Empty = none. */
+  subAgentBehaviorReminder: z.string().default(""),
 });
 
 export type DoveSettings = z.infer<typeof doveSettingsSchema>;

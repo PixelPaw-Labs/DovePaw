@@ -258,6 +258,7 @@ export async function POST(request: Request) {
                 hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
                   includeGroupReminder: eligibleGroups.length > 0,
                   disallowedTools,
+                  behaviorReminder: doveSettings.behaviorReminder || undefined,
                 }),
                 canUseTool: doveCanUseTool,
               },

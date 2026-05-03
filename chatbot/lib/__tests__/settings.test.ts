@@ -411,6 +411,8 @@ describe("effectiveDoveSettings", () => {
       defaultModel: "",
       doveMode: "supervised" as const,
       allowWebTools: false,
+      behaviorReminder: "",
+      subAgentBehaviorReminder: "",
     };
     await writeSettings(settings);
     const loaded = await readSettings();

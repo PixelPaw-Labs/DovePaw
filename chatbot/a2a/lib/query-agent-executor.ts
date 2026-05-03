@@ -273,6 +273,7 @@ export class QueryAgentExecutor {
                   agentSettings.notifications,
                   { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
                   !!groupOverrides,
+                  effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
                 ),
                 abortController: this.abortController ?? undefined,
                 permissionMode: "acceptEdits",

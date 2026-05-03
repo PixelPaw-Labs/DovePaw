@@ -20,17 +20,14 @@ import { buildAgentHooks } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
+import {
+  SUBAGENT_PROMPT_REMINDER,
+  GROUP_PROMPT_REMINDER,
+  buildSubAgentReminder,
+  buildGroupReminder,
+} from "@@/lib/subagent-reminder";
 
-// ─── Script reminder ──────────────────────────────────────────────────────────
-
-export const SUBAGENT_PROMPT_REMINDER = `<reminder>
-- When the user's intent is resolved by SOMETHING BEING DONE: ALWAYS START yourself first (returns runId immediately), tell the user what you've kicked off, then WAIT as a **background Task** concurrently.
-</reminder>`;
-
-export const GROUP_PROMPT_REMINDER = `<reminder>
-- When the user's intent is resolved by SOMETHING BEING DONE: ALWAYS START yourself first (returns runId immediately), then WAIT as a **background Task** concurrently.
-- Do NOT output and respond with any text such as narration, status updates, or confirmations.
-</reminder>`;
+export { SUBAGENT_PROMPT_REMINDER, GROUP_PROMPT_REMINDER };
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
@@ -45,6 +42,7 @@ export function buildSubAgentHooks(
   notifications?: AgentNotificationConfig,
   env?: Record<string, string | undefined>,
   isGroupMode?: boolean,
+  behaviorReminder?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -75,7 +73,9 @@ export function buildSubAgentHooks(
   const base = buildAgentHooks({
     postToolUseMatcher: "mcp__agents__await_.*",
     registry,
-    userPromptReminder: isGroupMode ? GROUP_PROMPT_REMINDER : SUBAGENT_PROMPT_REMINDER,
+    userPromptReminder: isGroupMode
+      ? buildGroupReminder(behaviorReminder)
+      : buildSubAgentReminder(behaviorReminder),
     allowedDirectories: [cwd, ...additionalDirectories],
   });
   return {

@@ -18,6 +18,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { bashHasWriteOperation } from "@@/lib/dove-mode-strategy";
+import { buildDoveLeanReminder, buildDovePromptReminder } from "@@/lib/dove-lean-reminder";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 //import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
@@ -254,32 +255,25 @@ export function buildAgentHooks(
 
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
 
-const DOVE_LEAN_REMINDER = `<reminder>
-- When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS call \`mcp__agents__ask_*\`. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
-- When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS call \`mcp__agents__start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT via \`mcp__agents__await_*\` as a **background Task** concurrently.
-NEVER invoke SKILLs unless the user explicitly asks you to. If you think a skill is relevant, AskUserQuestion about it and let them decide whether to use it but the priority is always to use the most specific agent tools available for the task.
-</reminder>`;
-
-const DOVE_PROMPT_REMINDER = `<reminder>
-- When the user's intent is resolved by RECEIVING INFORMATION about an agent listed in <agents>, ALWAYS call \`mcp__agents__ask_*\`. It returns \`{ taskId }\` immediately. Tell the user what you asked, then WAIT as a **background Task** to collect the response without blocking the conversation.
-- When the user's intent is resolved by SOMETHING BEING DONE — for one agent or multiple — ALWAYS call \`mcp__agents__start_*\` first (returns \`{ taskId, manifestKey }\` immediately), tell the user what you've kicked off, then WAIT via \`mcp__agents__await_*\` as a **background Task** concurrently.
-- When the user's intent maps to a GROUP'S BUSINESS DOMAIN, ALWAYS call \`mcp__agents__init_group_*\` → \`mcp__agents__start_group_*\` for up to 3 members whose roles best match the task, then MOVE ON — members continue the work in the Group Chat; DO NOT call \`mcp__agents__await_group_*\`.
-- When the user's intent is to **CREATE or SCAFFOLD a new DovePaw agent**, ALWAYS invoke the \`/sub-agent-builder\` skill first — never write agent files manually.
-NEVER invoke SKILLs unless the user explicitly asks you to. If you think a skill is relevant, AskUserQuestion about it and let them decide whether to use it but the priority is always to use the most specific agent tools available for the task.
-</reminder>`;
-
 /** Hooks for Dove's top-level query() in route.ts. */
 export function buildDoveHooks(
   agents: AgentDef[],
   registry: PendingRegistry,
   cwd: string,
   additionalDirectories: string[],
-  options: { includeGroupReminder?: boolean; disallowedTools?: string[] } = {},
+  options: {
+    includeGroupReminder?: boolean;
+    disallowedTools?: string[];
+    behaviorReminder?: string;
+  } = {},
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
+  const userPromptReminder = options.includeGroupReminder
+    ? buildDovePromptReminder(options.behaviorReminder)
+    : buildDoveLeanReminder(options.behaviorReminder);
   return buildAgentHooks({
     postToolUseMatcher: agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|"),
     registry,
-    userPromptReminder: options.includeGroupReminder ? DOVE_PROMPT_REMINDER : DOVE_LEAN_REMINDER,
+    userPromptReminder,
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: options.disallowedTools,
   });
