@@ -26,6 +26,7 @@ vi.mock("@/lib/paths", () => ({
   DOVEPAW_AGENT_LOGS: "/mock/logs",
   DOVEPAW_AGENT_STATE: "/mock/state",
   agentPersistentLogDir: (name: string) => `/mock/logs/.${name}`,
+  agentPersistentStateDir: (name: string) => `/mock/state/.${name}`,
 }));
 
 vi.mock("@@/lib/paths", () => ({
@@ -236,7 +237,9 @@ describe("makeAskTool", () => {
     await handler({ instruction });
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: expect.objectContaining({ parts: [{ kind: "text", text: instruction }] }),
+        message: expect.objectContaining({
+          parts: [{ kind: "text", text: expect.stringContaining(instruction) }],
+        }),
       }),
     );
   });

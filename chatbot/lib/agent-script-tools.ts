@@ -52,6 +52,19 @@ export const awaitRunScriptToolName = (manifestKey: string): string => `await_${
 /** Appends the standard reminder suffix that forces the agent to call the start tool. */
 export const withStartReminder = (instruction: string, manifestKey: string): string =>
   `${instruction}\n<reminder>Must call "${startRunScriptToolName(manifestKey)}" tool</reminder>`;
+/** Prepends a memory-check instruction: read memory first, reply directly if sufficient, otherwise tell the caller to use the start tool. */
+export const withMemoryReminder = (
+  instruction: string,
+  memoryDir: string,
+  manifestKey: string,
+): string =>
+  `<memory_check>
+If the request is about the agent itself (e.g. status, configuration, management), skip this step.
+Otherwise, read and search ${memoryDir}/memory/MEMORY.md.
+If the file does not exist, or memory is insufficient to answer the user, respond with: "Please call \`${startRunScriptToolName(manifestKey)}\` to fulfil this request."
+If memory is sufficient, reply directly.
+</memory_check>
+${instruction}`;
 
 // ─── Script run tools ─────────────────────────────────────────────────────────
 
