@@ -46,7 +46,9 @@ if (uninstall) {
 
 // ─── Build ───────────────────────────────────────────────────────────────────
 
-console.log("Step 1: Building TypeScript...\n");
+// Sync agent.json files from agent-local/ before building so tsup picks up new agents
+console.log("Step 1: Syncing agent definitions and building TypeScript...\n");
+await syncAgentLocalToSettings();
 execSync("npx tsup", { stdio: "inherit", cwd: import.meta.dirname });
 
 // ─── Install + load ──────────────────────────────────────────────────────────
@@ -60,7 +62,6 @@ await Promise.all(plugins.map((p) => linkAgentSdkToPlugin(p.path)));
 await Promise.all([
   ...plugins.map((p) => linkPluginSkills(p.path, p.skillNames)),
   linkLocalAgentSkills(),
-  syncAgentLocalToSettings(),
 ]);
 console.log(`  SDK deployed to ~/.dovepaw/sdk — linked to ${plugins.length} plugin(s)`);
 

@@ -215,7 +215,8 @@ describe("syncAgentLocalToSettings", () => {
   let readdirMock: ReturnType<typeof vi.fn>;
   let accessMock: ReturnType<typeof vi.fn>;
   let mkdirMock: ReturnType<typeof vi.fn>;
-  let copyFileMock: ReturnType<typeof vi.fn>;
+  let symlinkMock: ReturnType<typeof vi.fn>;
+  let rmMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -226,32 +227,46 @@ describe("syncAgentLocalToSettings", () => {
     readdirMock = vi.mocked(fs.readdir);
     accessMock = vi.mocked(fs.access);
     mkdirMock = vi.mocked(fs.mkdir);
-    copyFileMock = vi.mocked(fs.copyFile);
+    symlinkMock = vi.mocked(fs.symlink);
+    rmMock = vi.mocked(fs.rm);
   });
 
   it("no-ops silently when agent-local/ does not exist", async () => {
     readdirMock.mockRejectedValue(Object.assign(new Error("ENOENT"), { code: "ENOENT" }));
     await syncAgentLocalToSettings();
-    expect(copyFileMock).not.toHaveBeenCalled();
+    expect(symlinkMock).not.toHaveBeenCalled();
   });
 
   it("skips agent dirs that have no agent.json", async () => {
     readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
     accessMock.mockRejectedValue(new Error("ENOENT"));
     await syncAgentLocalToSettings();
-    expect(copyFileMock).not.toHaveBeenCalled();
+    expect(symlinkMock).not.toHaveBeenCalled();
   });
 
-  it("copies agent.json into settings.agents/<name>/agent.json", async () => {
+  it("symlinks agent.json into settings.agents/<name>/agent.json", async () => {
     readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
     accessMock.mockResolvedValue(undefined);
     await syncAgentLocalToSettings();
-    const [src, dest] = copyFileMock.mock.calls[0] as [string, string];
+    const [src, dest] = symlinkMock.mock.calls[0] as [string, string];
     expect(src).toMatch(/agent-local[/\\]my-agent[/\\]agent\.json$/);
     expect(dest).toMatch(/settings\.agents[/\\]my-agent[/\\]agent\.json$/);
   });
 
-  it("creates the destination directory before copying", async () => {
+  it("removes existing file before creating symlink", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await syncAgentLocalToSettings();
+    const rmCall = rmMock.mock.calls.find(([p]) => String(p).includes("my-agent"));
+    expect(rmCall).toBeDefined();
+    expect(String(rmCall![0])).toMatch(/settings\.agents[/\\]my-agent[/\\]agent\.json$/);
+    // rm must be called before symlink
+    expect(rmMock.mock.invocationCallOrder[0]).toBeLessThan(
+      symlinkMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("creates the destination directory before symlinking", async () => {
     readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
     accessMock.mockResolvedValue(undefined);
     await syncAgentLocalToSettings();
@@ -264,7 +279,7 @@ describe("syncAgentLocalToSettings", () => {
   it("skips non-directory entries", async () => {
     readdirMock.mockResolvedValue([{ name: "README.md", isDirectory: () => false }]);
     await syncAgentLocalToSettings();
-    expect(copyFileMock).not.toHaveBeenCalled();
+    expect(symlinkMock).not.toHaveBeenCalled();
   });
 });
 

@@ -232,7 +232,9 @@ export async function syncAgentLocalToSettings(): Promise<void> {
         }
         const destDir = join(AGENT_SETTINGS_DIR, d.name);
         await mkdir(destDir, { recursive: true });
-        await copyFile(src, join(destDir, "agent.json"));
+        const dest = join(destDir, "agent.json");
+        await rm(dest, { force: true });
+        await symlink(src, dest);
       }),
   );
 }
