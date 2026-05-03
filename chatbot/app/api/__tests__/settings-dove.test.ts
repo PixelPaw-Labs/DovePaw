@@ -27,6 +27,8 @@ const CUSTOM_DOVE = {
   allowWebTools: false,
   behaviorReminder: "",
   subAgentBehaviorReminder: "",
+  responseReminder: "",
+  subAgentResponseReminder: "Open your response by addressing the sender.",
 };
 
 beforeEach(() => {

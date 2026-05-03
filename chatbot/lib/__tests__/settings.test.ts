@@ -413,6 +413,8 @@ describe("effectiveDoveSettings", () => {
       allowWebTools: false,
       behaviorReminder: "",
       subAgentBehaviorReminder: "",
+      responseReminder: "",
+      subAgentResponseReminder: "Open your response by addressing the sender.",
     };
     await writeSettings(settings);
     const loaded = await readSettings();

@@ -107,7 +107,6 @@ export class AgentConfigReader {
               registry,
               agentName,
               groupMeta,
-              callerDisplayName,
             ),
           );
           tools.push(makeAwaitChatToTool(targetDef, signal, registry));

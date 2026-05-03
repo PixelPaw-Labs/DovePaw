@@ -128,7 +128,6 @@ export function makeStartChatToTool(
   registry?: PendingRegistry,
   callerAgentId?: string,
   groupMeta?: Record<string, unknown>,
-  callerDisplayName?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -153,9 +152,6 @@ ${HANDOFF_PATTERNS(displayName)}`,
     },
     async ({ instruction, contextId }) => {
       emitGroupSenderBubble(callerAgentId, groupMeta, instruction);
-      const replyHint = callerDisplayName
-        ? `\n<meta>Open your response by addressing the sender as @${callerDisplayName}.</meta>`
-        : "";
       return await new TaskPoller(
         manifestKey,
         displayName,
@@ -164,7 +160,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         awaitChatToToolName(manifestKey),
         undefined,
         targetDef.name,
-      ).start(withStartReminder(`${instruction}${replyHint}`, manifestKey), {
+      ).start(withStartReminder(instruction, manifestKey), {
         contextId,
         backgroundTasks,
         senderAgentId: callerAgentId,

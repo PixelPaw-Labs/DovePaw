@@ -43,6 +43,7 @@ export function buildSubAgentHooks(
   env?: Record<string, string | undefined>,
   isGroupMode?: boolean,
   behaviorReminder?: string,
+  responseReminder?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -77,6 +78,7 @@ export function buildSubAgentHooks(
       ? buildGroupReminder(behaviorReminder)
       : buildSubAgentReminder(behaviorReminder),
     allowedDirectories: [cwd, ...additionalDirectories],
+    responseReminder,
   });
   return {
     ...base,

@@ -55,6 +55,8 @@ interface FormState {
   allowWebTools: boolean;
   behaviorReminder: string;
   subAgentBehaviorReminder: string;
+  responseReminder: string;
+  subAgentResponseReminder: string;
 }
 
 function settingsToForm(s: DoveSettings): FormState {
@@ -73,6 +75,8 @@ function settingsToForm(s: DoveSettings): FormState {
     allowWebTools: s.allowWebTools,
     behaviorReminder: s.behaviorReminder,
     subAgentBehaviorReminder: s.subAgentBehaviorReminder,
+    responseReminder: s.responseReminder,
+    subAgentResponseReminder: s.subAgentResponseReminder,
   };
 }
 
@@ -330,6 +334,30 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
               className="font-mono text-sm leading-relaxed resize-y"
             />
           </div>
+        </Row>
+        <Row
+          label="Dove Response Reminder"
+          hint="Injected via PostToolUse when a Dove await_* task completes. Leave blank to disable."
+        >
+          <Textarea
+            value={form.responseReminder}
+            onChange={(e) => set("responseReminder", e.target.value)}
+            rows={3}
+            placeholder="e.g. Deliver your response to the user now. Address them with @username."
+            className="font-mono text-sm leading-relaxed resize-y"
+          />
+        </Row>
+        <Row
+          label="Sub-Agent Response Reminder"
+          hint="Injected via PostToolUse when a sub-agent await_* task completes. Leave blank to disable."
+        >
+          <Textarea
+            value={form.subAgentResponseReminder}
+            onChange={(e) => set("subAgentResponseReminder", e.target.value)}
+            rows={3}
+            placeholder="e.g. Deliver your response to the user now. Address them with @username."
+            className="font-mono text-sm leading-relaxed resize-y"
+          />
         </Row>
       </Section>
 

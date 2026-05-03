@@ -259,6 +259,7 @@ export async function POST(request: Request) {
                   includeGroupReminder: eligibleGroups.length > 0,
                   disallowedTools,
                   behaviorReminder: doveSettings.behaviorReminder || undefined,
+                  responseReminder: doveSettings.responseReminder || undefined,
                 }),
                 canUseTool: doveCanUseTool,
               },
