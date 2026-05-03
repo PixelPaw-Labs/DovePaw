@@ -32,6 +32,7 @@ import {
   AGENT_SETTINGS_DIR,
   AGENTS_DIST,
   AGENTS_ROOT,
+  CLAUDE_RULES_ROOT,
   CODEX_SKILLS_ROOT,
   DOVEPAW_TMP_DIR,
   PLUGINS_DIR,
@@ -232,6 +233,31 @@ export async function syncAgentLocalToSettings(): Promise<void> {
         const destDir = join(AGENT_SETTINGS_DIR, d.name);
         await mkdir(destDir, { recursive: true });
         await copyFile(src, join(destDir, "agent.json"));
+      }),
+  );
+}
+
+/** Copy .claude/rules/ files to ~/.claude/rules/, skipping any that already exist. */
+export async function syncClaudeRules(): Promise<void> {
+  const srcDir = join(AGENTS_ROOT, ".claude", "rules");
+  let entries;
+  try {
+    entries = await readdir(srcDir, { withFileTypes: true });
+  } catch {
+    return; // no .claude/rules/ in repo
+  }
+  await mkdir(CLAUDE_RULES_ROOT, { recursive: true });
+  await Promise.all(
+    entries
+      .filter((e) => e.isFile())
+      .map(async (e) => {
+        const dest = join(CLAUDE_RULES_ROOT, e.name);
+        try {
+          await access(dest);
+          return; // already exists — skip
+        } catch {
+          await copyFile(join(srcDir, e.name), dest);
+        }
       }),
   );
 }

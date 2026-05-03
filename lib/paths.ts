@@ -69,6 +69,8 @@ export const agentDefinitionFile = (agentName: string) =>
 /** ~/.dovepaw/settings.agents/<agentName>/<filename> — a specific agent config file */
 export const agentConfigFile = (agentName: string, filename: string) =>
   join(agentConfigDir(agentName), filename);
+/** ~/.claude/rules — user Claude rules directory */
+export const CLAUDE_RULES_ROOT = join(process.env.HOME!, ".claude/rules");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 /** ~/.codex/skills — Codex skills directory */

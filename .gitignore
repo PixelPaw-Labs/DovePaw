@@ -145,6 +145,7 @@ vite.config.ts.timestamp-*
 !.claude/settings.json
 !.claude/hooks/
 !.claude/skills/
+!.claude/rules/
 .claude/skills/*
 !.claude/skills/sub-agent-builder/
 

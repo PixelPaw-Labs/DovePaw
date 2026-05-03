@@ -268,6 +268,62 @@ describe("syncAgentLocalToSettings", () => {
   });
 });
 
+describe("syncClaudeRules", () => {
+  let syncClaudeRules: () => Promise<void>;
+  let readdirMock: ReturnType<typeof vi.fn>;
+  let accessMock: ReturnType<typeof vi.fn>;
+  let mkdirMock: ReturnType<typeof vi.fn>;
+  let copyFileMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    syncClaudeRules = mod.syncClaudeRules;
+    const fs = await import("node:fs/promises");
+    readdirMock = vi.mocked(fs.readdir);
+    accessMock = vi.mocked(fs.access);
+    mkdirMock = vi.mocked(fs.mkdir);
+    copyFileMock = vi.mocked(fs.copyFile);
+  });
+
+  it("no-ops silently when .claude/rules/ does not exist", async () => {
+    readdirMock.mockRejectedValue(new Error("ENOENT"));
+    await syncClaudeRules();
+    expect(copyFileMock).not.toHaveBeenCalled();
+  });
+
+  it("creates CLAUDE_RULES_ROOT before copying", async () => {
+    readdirMock.mockResolvedValue([{ name: "security.md", isFile: () => true }]);
+    accessMock.mockRejectedValue(new Error("ENOENT"));
+    await syncClaudeRules();
+    const mkdirPaths = mkdirMock.mock.calls.map((args) => String(args[0]));
+    expect(mkdirPaths.some((p) => p.endsWith(".claude/rules"))).toBe(true);
+  });
+
+  it("copies a rules file when it does not yet exist at the destination", async () => {
+    readdirMock.mockResolvedValue([{ name: "security.md", isFile: () => true }]);
+    accessMock.mockRejectedValue(new Error("ENOENT"));
+    await syncClaudeRules();
+    const [src, dest] = copyFileMock.mock.calls[0] as [string, string];
+    expect(src).toMatch(/\.claude[/\\]rules[/\\]security\.md$/);
+    expect(dest).toMatch(/\.claude[/\\]rules[/\\]security\.md$/);
+  });
+
+  it("skips a rules file that already exists at the destination", async () => {
+    readdirMock.mockResolvedValue([{ name: "security.md", isFile: () => true }]);
+    accessMock.mockResolvedValue(undefined); // file already present
+    await syncClaudeRules();
+    expect(copyFileMock).not.toHaveBeenCalled();
+  });
+
+  it("skips non-file entries", async () => {
+    readdirMock.mockResolvedValue([{ name: "subdir", isFile: () => false }]);
+    await syncClaudeRules();
+    expect(copyFileMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("deployTriggerScript", () => {
   let deployTriggerScript: () => Promise<void>;
 
