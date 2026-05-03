@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
-import { buildAgentHooks, buildDoveCanUseTool, buildDoveHooks } from "../hooks";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  buildAgentHooks,
+  buildDoveCanUseTool,
+  buildDoveHooks,
+  buildSubagentCanUseTool,
+} from "../hooks";
 import {
   buildSubAgentHooks,
   SUBAGENT_PROMPT_REMINDER,
@@ -1042,5 +1047,101 @@ describe("buildDoveCanUseTool — abortPermissions", () => {
     const result = await p;
     expect(result.behavior).toBe("allow");
     expect((result as { updatedInput: Record<string, unknown> }).updatedInput.answers).toEqual({});
+  });
+});
+
+// ─── buildSubagentCanUseTool ──────────────────────────────────────────────────
+
+function makeOkResponse(ok: boolean): Response {
+  return { ok } as unknown as Response;
+}
+
+describe("buildSubagentCanUseTool", () => {
+  const mockFetch = vi.fn<typeof fetch>();
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", mockFetch);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    mockFetch.mockReset();
+  });
+
+  it("returns allow when fetch responds ok", async () => {
+    mockFetch.mockResolvedValue(makeOkResponse(true));
+    const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
+    const result = await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    expect(result.behavior).toBe("allow");
+  });
+
+  it("returns deny when fetch responds not ok", async () => {
+    mockFetch.mockResolvedValue(makeOkResponse(false));
+    const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
+    const result = await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    expect(result.behavior).toBe("deny");
+  });
+
+  it("returns deny when fetch rejects", async () => {
+    mockFetch.mockRejectedValue(new Error("network error"));
+    const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
+    const result = await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    expect(result.behavior).toBe("deny");
+  });
+
+  it("returns deny immediately when per-tool signal aborts", async () => {
+    const ac = new AbortController();
+    // Fetch never resolves
+    mockFetch.mockReturnValue(new Promise(() => {}));
+    const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
+    const resultPromise = canUseTool(
+      "Bash",
+      { command: "ls" },
+      makeCanUseToolCtx({ signal: ac.signal }),
+    );
+    ac.abort();
+    const result = await resultPromise;
+    expect(result.behavior).toBe("deny");
+  });
+
+  it("POSTs to the correct endpoint with contextId, requestId, toolName, toolInput", async () => {
+    mockFetch.mockResolvedValue(makeOkResponse(true));
+    const canUseTool = buildSubagentCanUseTool("ctx-42", "9000");
+    await canUseTool("Write", { file_path: "/tmp/x" }, makeCanUseToolCtx());
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://127.0.0.1:9000/api/internal/subagent-permission");
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body.contextId).toBe("ctx-42");
+    expect(body.toolName).toBe("Write");
+    expect(body.toolInput).toEqual({ file_path: "/tmp/x" });
+    expect(typeof body.requestId).toBe("string");
+  });
+
+  it("uses displayName over toolName in the payload", async () => {
+    mockFetch.mockResolvedValue(makeOkResponse(true));
+    const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
+    await canUseTool("Write", {}, { ...makeCanUseToolCtx(), displayName: "Write file" });
+
+    const body = JSON.parse(
+      (mockFetch.mock.calls[0] as [string, RequestInit])[1].body as string,
+    ) as Record<string, unknown>;
+    expect(body.toolName).toBe("Write file");
+  });
+
+  it("merges blockedPath into toolInput as file_path", async () => {
+    mockFetch.mockResolvedValue(makeOkResponse(true));
+    const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
+    await canUseTool(
+      "Write",
+      { content: "hello" },
+      { ...makeCanUseToolCtx(), blockedPath: "/etc/hosts" },
+    );
+
+    const body = JSON.parse(
+      (mockFetch.mock.calls[0] as [string, RequestInit])[1].body as string,
+    ) as Record<string, unknown>;
+    expect(body.toolInput).toEqual({ content: "hello", file_path: "/etc/hosts" });
   });
 });

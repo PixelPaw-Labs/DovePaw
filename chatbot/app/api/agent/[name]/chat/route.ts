@@ -16,6 +16,7 @@ import { makeProgressSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
 import { startAgentStream, streamCollect, resolveAgentPort } from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
+import { subscribeSession } from "@/lib/session-events";
 import { deleteSession, setSessionStatus, getSessionWorkspacePath } from "@/lib/db";
 import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
 import { z } from "zod";
@@ -77,6 +78,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         message,
         subprocessController.signal,
         sessionId ?? undefined,
+        undefined,
+        { directUserChat: true },
       );
       if (!handle) {
         send({ type: "error", content: "Failed to start agent task" });
@@ -87,6 +90,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
 
       activeControllers.set(resolvedContextId, subprocessController);
       dispatcher.onSession(resolvedContextId);
+
+      // Forward permission events from the session bus to the live browser SSE connection.
+      // These arrive via POST /api/internal/subagent-permission from the A2A process.
+      subscribeSession(
+        resolvedContextId,
+        (event) => {
+          if (event.type === "permission") {
+            try {
+              send(event);
+            } catch {
+              /* stream already closed */
+            }
+          }
+        },
+        subprocessController.signal,
+      );
 
       dispatcher.enableIncrementalSave({
         sessionId: resolvedContextId,

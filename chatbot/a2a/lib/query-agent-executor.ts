@@ -24,6 +24,7 @@ import { AgentConfigReader } from "./agent-config-reader";
 import { extractInstruction } from "./message-parts";
 import { buildAgentConfig } from "./agent-config-builder";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
+import { buildSubagentCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { ExecutorPublisher } from "./executor-publisher";
 import { createAgentWorkspace, restoreAgentWorkspace } from "./workspace";
@@ -241,6 +242,16 @@ export class QueryAgentExecutor {
               ? { groupContextId: groupOverrides.groupContextId, agentName: this.def.name }
               : undefined,
           );
+
+          const canUseTool =
+            msgMetadata?.directUserChat === true
+              ? buildSubagentCanUseTool(
+                  contextId,
+                  process.env.DOVEPAW_PORT ?? "7473",
+                  this.abortController?.signal,
+                )
+              : undefined;
+
           const subagentSessionId = await consumeQueryEvents(
             query({
               prompt: instruction || startRunScriptToolName(this.def.manifestKey),
@@ -277,6 +288,7 @@ export class QueryAgentExecutor {
                   effectiveDoveSettings(globalSettings).subAgentResponseReminder || undefined,
                 ),
                 abortController: this.abortController ?? undefined,
+                ...(canUseTool ? { canUseTool } : {}),
                 permissionMode: "acceptEdits",
                 includePartialMessages: true,
                 settingSources: ["project", "user", "local"],

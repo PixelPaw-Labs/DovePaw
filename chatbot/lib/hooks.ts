@@ -379,3 +379,45 @@ export function buildDoveCanUseTool(send: (event: ChatSseEvent) => void): {
     },
   };
 }
+
+/**
+ * Builds the canUseTool callback for a subagent running in an A2A process.
+ *
+ * Since the A2A process is a separate OS process, it cannot call send() or
+ * addPendingPermission() directly. Instead, this callback POSTs to
+ * /api/internal/subagent-permission — a long-poll endpoint in Next.js that
+ * pushes the permission event to the browser and awaits the user's response
+ * before responding { allowed } back to the A2A caller.
+ */
+export function buildSubagentCanUseTool(
+  contextId: string,
+  dovePort: string,
+  abortSignal?: AbortSignal,
+): CanUseTool {
+  return async (toolName, input, { title, displayName, blockedPath, signal }) => {
+    const requestId = randomUUID();
+    const abortPromise = new Promise<false>((resolve) => {
+      signal.addEventListener("abort", () => resolve(false), { once: true });
+    });
+    const allowed = await Promise.race([
+      fetch(`http://127.0.0.1:${dovePort}/api/internal/subagent-permission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contextId,
+          requestId,
+          toolName: displayName ?? toolName,
+          toolInput: blockedPath ? { ...input, file_path: blockedPath } : input,
+          title: title ?? undefined,
+        }),
+        ...(abortSignal ? { signal: abortSignal } : {}),
+      })
+        .then((r) => r.ok)
+        .catch(() => false as const),
+      abortPromise,
+    ]);
+    return allowed
+      ? { behavior: "allow" as const, updatedInput: input }
+      : { behavior: "deny" as const, message: "User denied permission" };
+  };
+}
