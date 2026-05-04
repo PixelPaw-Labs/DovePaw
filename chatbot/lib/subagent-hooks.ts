@@ -47,6 +47,7 @@ export function buildSubAgentHooks(
   responseReminder?: string,
   memoryDir?: string,
   startToolName?: string,
+  isAskMode?: boolean,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -79,7 +80,7 @@ export function buildSubAgentHooks(
     registry,
     userPromptReminder: isGroupMode
       ? buildGroupReminder(behaviorReminder)
-      : buildSubAgentReminder(behaviorReminder, memoryDir, startToolName),
+      : buildSubAgentReminder(behaviorReminder, memoryDir, startToolName, isAskMode),
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: ALWAYS_DISALLOWED_TOOLS,
     responseReminder,

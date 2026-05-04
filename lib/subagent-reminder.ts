@@ -14,11 +14,17 @@ export function buildSubAgentReminder(
   extra?: string,
   memoryDir?: string,
   startToolName?: string,
+  isAskMode?: boolean,
 ): string {
-  const memoryBullet = memoryDir
-    ? `- When the user's intent is resolved by **ASKING A QUESTION** that this agent can answer, read \`${memoryDir}/memory/MEMORY.md\` first. If memory is sufficient, reply directly. If not${startToolName ? `, respond with: "Please call \`${startToolName}\` to fulfil this request."` : ", say memory is insufficient."}`
-    : undefined;
-  const parts = [extra?.trim(), memoryBullet].filter(Boolean).join("\n");
+  if (isAskMode) {
+    const memoryBullet = memoryDir
+      ? `- When the user's intent is resolved by **ASKING A QUESTION NOT ABOUT THIS AGENT** that this agent can answer, you MUST read \`${memoryDir}/memory/MEMORY.md\` first — NEVER skip this step. If memory is sufficient, reply directly. If memory is NOT sufficient → you MUST reply: "Please call \`${startToolName ?? "the start tool"}\` to fulfil this request." Do NOT attempt to answer from general knowledge.`
+      : undefined;
+    const parts = [extra?.trim(), memoryBullet].filter(Boolean).join("\n");
+    return parts ? `<reminder>\n${parts}\n</reminder>` : `<reminder>\n</reminder>`;
+  }
+
+  const parts = extra?.trim();
   if (!parts) return SUBAGENT_PROMPT_REMINDER;
   return SUBAGENT_PROMPT_REMINDER.replace("</reminder>", `\n${parts}\n</reminder>`);
 }
