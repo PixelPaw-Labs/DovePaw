@@ -24,8 +24,8 @@ export const envVarSchema = z.object({
   keychainAccount: z.string().optional(),
 });
 
-export const DOVE_MODES = ["read-only", "supervised", "autonomous"] as const;
-export type DoveMode = (typeof DOVE_MODES)[number];
+export const SECURITY_MODES = ["read-only", "supervised", "autonomous"] as const;
+export type SecurityMode = (typeof SECURITY_MODES)[number];
 
 export const doveSettingsSchema = z.object({
   /** Human-readable name shown in UI and system prompt. Defaults to "Dove". */
@@ -53,7 +53,7 @@ export const doveSettingsSchema = z.object({
    */
   defaultModel: z.string().default(""),
   /** Controls what Dove itself can do. Sub-agents always run autonomously. */
-  doveMode: z.enum(DOVE_MODES).default("supervised"),
+  securityMode: z.enum(SECURITY_MODES).default("supervised"),
   /** Allow Dove to use WebFetch and WebSearch tools. */
   allowWebTools: z.boolean().default(false),
   /** Extra behavior instructions injected into the built-in Dove reminder on every turn. Empty = none. */

@@ -22,7 +22,7 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
-import { getDoveModeStrategy } from "@@/lib/dove-mode-strategy";
+import { getSecurityModeStrategy, ALWAYS_DISALLOWED_TOOLS } from "@@/lib/security-policy";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
 import type { CollectedStream } from "@/lib/query-tools";
 import { createSseResponse } from "@/lib/sse-response";
@@ -208,11 +208,12 @@ export async function POST(request: Request) {
             DOVEPAW_TMP_DIR,
             DOVEPAW_DIR,
           ];
-          const doveStrategy = getDoveModeStrategy(doveSettings.doveMode);
+          const doveStrategy = getSecurityModeStrategy(doveSettings.securityMode);
           // Compose final disallowedTools: mode-based list + web tools (blocked when disabled).
           const disallowedTools = [
             ...doveStrategy.disallowedTools,
             ...(!doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
+            ...ALWAYS_DISALLOWED_TOOLS,
           ];
           const defaultModel = doveSettings.defaultModel.trim();
           resolvedSessionId = await consumeQueryEvents(

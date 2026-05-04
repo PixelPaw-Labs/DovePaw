@@ -18,7 +18,7 @@ import type {
   CanUseTool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
-import { bashHasWriteOperation } from "@@/lib/dove-mode-strategy";
+import { bashHasWriteOperation } from "@@/lib/security-policy";
 import { buildDoveLeanReminder, buildDovePromptReminder } from "@@/lib/dove-lean-reminder";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";

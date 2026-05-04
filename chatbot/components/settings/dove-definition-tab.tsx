@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/select";
 import {
   type DoveSettings,
-  type DoveMode,
-  DOVE_MODES,
+  type SecurityMode,
+  SECURITY_MODES,
   doveSettingsSchema,
 } from "@@/lib/settings-schemas";
 import { DOVE_LEAN_REMINDER } from "@@/lib/dove-lean-reminder";
@@ -34,7 +34,7 @@ const DEFAULT_LANDING_DESCRIPTION =
 
 const apiErrorSchema = z.object({ error: z.string().optional() });
 
-const DOVE_MODE_LABELS: Record<DoveMode, string> = {
+const SECURITY_MODE_LABELS: Record<SecurityMode, string> = {
   "read-only": "Read-only",
   supervised: "Supervised",
   autonomous: "Autonomous",
@@ -51,7 +51,7 @@ interface FormState {
   iconBg: string;
   iconColor: string;
   defaultModel: string;
-  doveMode: DoveMode;
+  securityMode: SecurityMode;
   allowWebTools: boolean;
   behaviorReminder: string;
   subAgentBehaviorReminder: string;
@@ -71,7 +71,7 @@ function settingsToForm(s: DoveSettings): FormState {
     iconBg: s.iconBg,
     iconColor: s.iconColor,
     defaultModel: s.defaultModel,
-    doveMode: s.doveMode,
+    securityMode: s.securityMode,
     allowWebTools: s.allowWebTools,
     behaviorReminder: s.behaviorReminder,
     subAgentBehaviorReminder: s.subAgentBehaviorReminder,
@@ -258,19 +258,19 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
           hint="read-only: no writes. supervised: prompts for edits. autonomous: no restrictions."
         >
           <Select
-            value={form.doveMode}
+            value={form.securityMode}
             onValueChange={(v) => {
-              const mode = DOVE_MODES.find((m) => m === v);
-              if (mode) set("doveMode", mode);
+              const mode = SECURITY_MODES.find((m) => m === v);
+              if (mode) set("securityMode", mode);
             }}
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {DOVE_MODES.map((m) => (
+              {SECURITY_MODES.map((m) => (
                 <SelectItem key={m} value={m}>
-                  {DOVE_MODE_LABELS[m]}
+                  {SECURITY_MODE_LABELS[m]}
                 </SelectItem>
               ))}
             </SelectContent>

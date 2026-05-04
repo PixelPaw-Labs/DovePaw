@@ -409,7 +409,7 @@ describe("effectiveDoveSettings", () => {
       iconBg: "bg-pink-100",
       iconColor: "text-pink-700",
       defaultModel: "",
-      doveMode: "supervised" as const,
+      securityMode: "supervised" as const,
       allowWebTools: false,
       behaviorReminder: "",
       subAgentBehaviorReminder: "",
