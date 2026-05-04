@@ -29,7 +29,7 @@ import { scheduler } from "./scheduler";
 
 const agentFileSchema = z.object({ scheduledJobs: z.array(scheduledJobSchema).optional() });
 
-const PORTS_FILE = portsFile(7473);
+const PORTS_FILE = portsFile(Number(process.env.DOVEPAW_PORT ?? "7473"));
 
 /**
  * Trigger an agent using sendMessageStream so the session is registered via the

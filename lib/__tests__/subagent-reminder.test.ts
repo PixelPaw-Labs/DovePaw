@@ -17,9 +17,14 @@ describe("buildSubAgentReminder", () => {
   });
 
   it("injects memory bullet when memoryDir is provided without startToolName", () => {
-    const result = buildSubAgentReminder(undefined, "/home/.dovepaw/agents/state/.my-agent");
+    const result = buildSubAgentReminder(
+      undefined,
+      "/home/.dovepaw/agents/state/.my-agent",
+      undefined,
+      true,
+    );
     expect(result).toContain("MEMORY.md");
-    expect(result).toContain("say memory is insufficient");
+    expect(result).toContain("the start tool");
     expect(result.indexOf("MEMORY.md")).toBeLessThan(result.indexOf("</reminder>"));
   });
 
@@ -28,6 +33,7 @@ describe("buildSubAgentReminder", () => {
       undefined,
       "/home/.dovepaw/agents/state/.my-agent",
       "start_run_my_agent",
+      true,
     );
     expect(result).toContain("MEMORY.md");
     expect(result).toContain("start_run_my_agent");
@@ -39,6 +45,7 @@ describe("buildSubAgentReminder", () => {
       "extra instruction",
       "/home/.dovepaw/agents/state/.my-agent",
       "start_run_my_agent",
+      true,
     );
     expect(result).toContain("extra instruction");
     expect(result).toContain("MEMORY.md");

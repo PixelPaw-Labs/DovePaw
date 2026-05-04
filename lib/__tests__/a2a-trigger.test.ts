@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 // sendMessageStream must return an AsyncGenerator
 function makeStream(events: object[]): AsyncGenerator<object, void, undefined> {
@@ -7,11 +7,13 @@ function makeStream(events: object[]): AsyncGenerator<object, void, undefined> {
   })();
 }
 
-const { mockSendMessageStream, mockReadFileSync, mockCleanupOnetimeJob } = vi.hoisted(() => ({
-  mockSendMessageStream: vi.fn(),
-  mockReadFileSync: vi.fn(),
-  mockCleanupOnetimeJob: vi.fn().mockResolvedValue(undefined),
-}));
+const { mockSendMessageStream, mockReadFileSync, mockCleanupOnetimeJob, mockPortsFile } =
+  vi.hoisted(() => ({
+    mockSendMessageStream: vi.fn(),
+    mockReadFileSync: vi.fn(),
+    mockCleanupOnetimeJob: vi.fn().mockResolvedValue(undefined),
+    mockPortsFile: vi.fn().mockReturnValue("/fake/ports.json"),
+  }));
 
 vi.mock("@a2a-js/sdk/client", () => ({
   ClientFactory: class {
@@ -34,7 +36,7 @@ vi.mock("../scheduler", () => ({
 
 vi.mock("../paths", () => ({
   agentDefinitionFile: (name: string) => `/fake/${name}/agent.json`,
-  portsFile: () => "/fake/ports.json",
+  portsFile: mockPortsFile,
 }));
 
 import { triggerAgent, resolvePort, readJobConfig, cleanupOnetimeJob } from "../a2a-trigger.js";
@@ -148,5 +150,27 @@ describe("cleanupOnetimeJob", () => {
   it("forwards the label to scheduler.cleanupOnetimeJob", async () => {
     await cleanupOnetimeJob("my-agent", "job-1", "Nightly Run");
     expect(mockCleanupOnetimeJob).toHaveBeenCalledWith("my-agent", "job-1", "Nightly Run");
+  });
+});
+
+// ─── PORTS_FILE port derivation ───────────────────────────────────────────────
+
+describe("PORTS_FILE port derivation", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => {
+    delete process.env.DOVEPAW_PORT;
+  });
+
+  it("passes DOVEPAW_PORT env var to portsFile", async () => {
+    mockPortsFile.mockClear();
+    process.env.DOVEPAW_PORT = "9999";
+    await import("../a2a-trigger.js");
+    expect(mockPortsFile).toHaveBeenCalledWith(9999);
+  });
+
+  it("defaults to 7473 when DOVEPAW_PORT is unset", async () => {
+    mockPortsFile.mockClear();
+    await import("../a2a-trigger.js");
+    expect(mockPortsFile).toHaveBeenCalledWith(7473);
   });
 });
