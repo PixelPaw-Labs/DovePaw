@@ -25,6 +25,7 @@ export default defineConfig({
       "lib/**/*.test.ts",
       "scripts/**/*.test.ts",
       "packages/agent-sdk/src/**/*.test.ts",
+      ".claude/skills/**/*.test.js",
       ...(agentsLive ? ["agents/**/__tests__/**/*.test.ts"] : []),
     ],
     environment: "node",
