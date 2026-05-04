@@ -64,18 +64,18 @@ describe("GET /api/settings/env-vars", () => {
     expect(body.envVars).toHaveLength(2);
   });
 
-  it("populates secret value from keychain", async () => {
+  it("does not expose secret values in response (value stays empty string)", async () => {
     const body = await (await GET()).json();
     const secret = body.envVars.find((v: { key: string }) => v.key === "GITHUB_TOKEN");
-    expect(secret.value).toBe("ghp_abc123");
-    expect(getSecret).toHaveBeenCalledWith("dovepaw", "GITHUB_TOKEN");
+    expect(secret.value).toBe("");
+    expect(getSecret).not.toHaveBeenCalled();
   });
 
   it("returns plain value directly for non-secret vars", async () => {
     const body = await (await GET()).json();
     const plain = body.envVars.find((v: { key: string }) => v.key === "SLACK_CHANNEL_ID");
     expect(plain.value).toBe("C01234567");
-    expect(getSecret).not.toHaveBeenCalledWith("SLACK_CHANNEL_ID");
+    expect(getSecret).not.toHaveBeenCalled();
   });
 });
 
@@ -224,6 +224,20 @@ describe("PATCH /api/settings/env-vars", () => {
     await PATCH(patchReq({ id: "e1", key: "GH_TOKEN", value: "tok", isSecret: true }));
     expect(deleteSecret).toHaveBeenCalledWith("dovepaw", "GITHUB_TOKEN");
     expect(setSecret).toHaveBeenCalledWith("dovepaw", "GH_TOKEN", "tok");
+  });
+
+  it("keeps existing keychain entry when value is blank on secret update (same key)", async () => {
+    await PATCH(patchReq({ id: "e1", key: "GITHUB_TOKEN", value: "", isSecret: true }));
+    expect(deleteSecret).not.toHaveBeenCalled();
+    expect(setSecret).not.toHaveBeenCalled();
+    expect(writeSettings).toHaveBeenCalledOnce();
+  });
+
+  it("moves keychain entry to new key when renamed with blank value", async () => {
+    await PATCH(patchReq({ id: "e1", key: "GH_TOKEN", value: "", isSecret: true }));
+    expect(getSecret).toHaveBeenCalledWith("dovepaw", "GITHUB_TOKEN");
+    expect(deleteSecret).toHaveBeenCalledWith("dovepaw", "GITHUB_TOKEN");
+    expect(setSecret).toHaveBeenCalledWith("dovepaw", "GH_TOKEN", "ghp_abc123");
   });
 });
 

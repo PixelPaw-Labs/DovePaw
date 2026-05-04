@@ -9,3 +9,8 @@
 - Never write code that logs request headers, env var dumps, or full config objects that may contain secrets.
 - Never construct secret values by string concatenation or interpolation in a way that logs the result.
 - Never write secrets into URLs (query params, basic auth) — use headers or request bodies instead.
+
+## Environment Variables
+
+- **Never run `echo`, `console.log`, `print`, or any command that dumps `process.env` or individual env var values** — doing so writes secrets into the JSONL session history in plaintext.
+- Assume env var values are correct and present. Do not verify by printing them. If a value is needed, reference the variable name only (e.g. `process.env.MY_KEY` in code, `$MY_KEY` in shell).

@@ -17,6 +17,7 @@ export interface SecretFieldsProps {
   onSecretModeChange: (v: SecretMode) => void;
   value: string;
   onValueChange: (v: string) => void;
+  valuePlaceholder?: string;
   keychainService: string;
   onKeychainServiceChange: (v: string) => void;
   keychainAccount: string;
@@ -30,6 +31,7 @@ export function SecretFields({
   onSecretModeChange,
   value,
   onValueChange,
+  valuePlaceholder = "Enter value",
   keychainService,
   onKeychainServiceChange,
   keychainAccount,
@@ -46,7 +48,7 @@ export function SecretFields({
           <Input
             id="secret-value"
             type={isSecret ? "password" : "text"}
-            placeholder="Enter value"
+            placeholder={valuePlaceholder}
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
             className="font-mono text-sm"

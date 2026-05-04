@@ -44,7 +44,7 @@ export function EditEnvVarDialog({ envVar, existingKeys, onSave, onClose }: Edit
   React.useEffect(() => {
     if (envVar) {
       setKey(envVar.key);
-      setValue(envVar.value);
+      setValue(envVar.isSecret ? "" : envVar.value);
       setIsSecret(envVar.isSecret);
       setSecretMode(envVar.keychainService ? "link" : "new");
       setKeychainService(envVar.keychainService ?? "");
@@ -118,6 +118,7 @@ export function EditEnvVarDialog({ envVar, existingKeys, onSave, onClose }: Edit
             onSecretModeChange={setSecretMode}
             value={value}
             onValueChange={setValue}
+            valuePlaceholder={isSecret ? "Leave blank to keep current value" : "Enter value"}
             keychainService={keychainService}
             onKeychainServiceChange={setKeychainService}
             keychainAccount={keychainAccount}

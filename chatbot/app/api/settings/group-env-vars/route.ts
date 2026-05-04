@@ -23,14 +23,6 @@ function resolveCoords(v: EnvVar, groupName: string) {
   };
 }
 
-function withSecretValues(envVars: EnvVar[], groupName: string) {
-  return envVars.map((v) => {
-    if (!v.isSecret) return v;
-    const { service, account } = resolveCoords(v, groupName);
-    return { ...v, value: getSecret(service, account) ?? "" };
-  });
-}
-
 const querySchema = z.object({ groupName: z.string() });
 
 export async function GET(request: Request) {
@@ -41,7 +33,7 @@ export async function GET(request: Request) {
   }
   const { groupName } = parsed.data;
   const config = readOrCreateGroupConfig(groupName);
-  return Response.json({ envVars: withSecretValues(config.envVars, groupName) });
+  return Response.json({ envVars: config.envVars });
 }
 
 const postBodySchema = z.object({ groupName: z.string(), ...envVarFields });
@@ -73,7 +65,7 @@ export async function POST(request: Request) {
   };
   patchGroupConfig(groupName, { envVars: updated.envVars });
 
-  return Response.json({ envVars: withSecretValues(updated.envVars, groupName) }, { status: 201 });
+  return Response.json({ envVars: updated.envVars }, { status: 201 });
 }
 
 const patchBodySchema = z.object({ groupName: z.string(), id: z.string(), ...envVarFields });
@@ -97,13 +89,22 @@ export async function PATCH(request: Request) {
     );
   }
 
-  if (isDovepawManaged(target)) {
-    const { service, account } = resolveCoords(target, groupName);
-    deleteSecret(service, account);
-  }
-
-  if (isSecret && !keychainService) {
-    setSecret(groupKeychainService(groupName), key, value);
+  // Blank value for an existing dovepaw-managed secret = keep current keychain entry (just move it if key was renamed)
+  if (isSecret && !keychainService && value === "" && isDovepawManaged(target)) {
+    if (key !== target.key) {
+      const { service, account } = resolveCoords(target, groupName);
+      const existing = getSecret(service, account) ?? "";
+      deleteSecret(service, account);
+      if (existing !== "") setSecret(groupKeychainService(groupName), key, existing);
+    }
+  } else {
+    if (isDovepawManaged(target)) {
+      const { service, account } = resolveCoords(target, groupName);
+      deleteSecret(service, account);
+    }
+    if (isSecret && !keychainService) {
+      setSecret(groupKeychainService(groupName), key, value);
+    }
   }
 
   const envVars = config.envVars.map((v) =>
@@ -113,7 +114,7 @@ export async function PATCH(request: Request) {
   );
   patchGroupConfig(groupName, { envVars });
 
-  return Response.json({ envVars: withSecretValues(envVars, groupName) });
+  return Response.json({ envVars });
 }
 
 const deleteBodySchema = z.object({ groupName: z.string(), id: z.string() });
@@ -138,5 +139,5 @@ export async function DELETE(request: Request) {
   const envVars = config.envVars.filter((v) => v.id !== id);
   patchGroupConfig(groupName, { envVars });
 
-  return Response.json({ envVars: withSecretValues(envVars, groupName) });
+  return Response.json({ envVars });
 }

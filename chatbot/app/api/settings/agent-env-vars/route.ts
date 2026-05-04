@@ -28,14 +28,6 @@ function resolveCoords(v: EnvVar, agentName: string) {
   };
 }
 
-function withSecretValues(envVars: EnvVar[], agentName: string) {
-  return envVars.map((v) => {
-    if (!v.isSecret) return v;
-    const { service, account } = resolveCoords(v, agentName);
-    return { ...v, value: getSecret(service, account) ?? "" };
-  });
-}
-
 const querySchema = z.object({
   agentName: z.string(),
 });
@@ -52,7 +44,7 @@ export async function GET(request: Request) {
   }
 
   const settings = await readAgentSettings(agentName);
-  return Response.json({ envVars: withSecretValues(settings.envVars, agentName) });
+  return Response.json({ envVars: settings.envVars });
 }
 
 const postBodySchema = z.object({
@@ -89,7 +81,7 @@ export async function POST(request: Request) {
   ];
   await writeAgentSettings(agentName, settings);
 
-  return Response.json({ envVars: withSecretValues(settings.envVars, agentName) }, { status: 201 });
+  return Response.json({ envVars: settings.envVars }, { status: 201 });
 }
 
 const patchBodySchema = z.object({
@@ -122,14 +114,23 @@ export async function PATCH(request: Request) {
     );
   }
 
-  // Remove old agent-managed keychain entry if we own it
-  if (isDovepawManaged(target)) {
-    const { service, account } = resolveCoords(target, agentName);
-    deleteSecret(service, account);
-  }
-
-  if (isSecret && !keychainService) {
-    setSecret(agentKeychainService(agentName), key, value);
+  // Blank value for an existing dovepaw-managed secret = keep current keychain entry (just move it if key was renamed)
+  if (isSecret && !keychainService && value === "" && isDovepawManaged(target)) {
+    if (key !== target.key) {
+      const { service, account } = resolveCoords(target, agentName);
+      const existing = getSecret(service, account) ?? "";
+      deleteSecret(service, account);
+      if (existing !== "") setSecret(agentKeychainService(agentName), key, existing);
+    }
+  } else {
+    // Remove old agent-managed keychain entry if we own it
+    if (isDovepawManaged(target)) {
+      const { service, account } = resolveCoords(target, agentName);
+      deleteSecret(service, account);
+    }
+    if (isSecret && !keychainService) {
+      setSecret(agentKeychainService(agentName), key, value);
+    }
   }
 
   settings.envVars = settings.envVars.map((v) =>
@@ -139,7 +140,7 @@ export async function PATCH(request: Request) {
   );
   await writeAgentSettings(agentName, settings);
 
-  return Response.json({ envVars: withSecretValues(settings.envVars, agentName) });
+  return Response.json({ envVars: settings.envVars });
 }
 
 const deleteBodySchema = z.object({
@@ -172,5 +173,5 @@ export async function DELETE(request: Request) {
   settings.envVars = settings.envVars.filter((v) => v.id !== id);
   await writeAgentSettings(agentName, settings);
 
-  return Response.json({ envVars: withSecretValues(settings.envVars, agentName) });
+  return Response.json({ envVars: settings.envVars });
 }

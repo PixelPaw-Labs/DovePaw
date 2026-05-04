@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Trash2, KeyRound, Lock, Eye, EyeOff, Pencil } from "lucide-react";
+import { Trash2, KeyRound, Lock, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { EnvVar } from "@@/lib/settings-schemas";
 import {
@@ -27,29 +27,16 @@ function MaskedValue({
   keychainService?: string;
   keychainAccount?: string;
 }) {
-  const [visible, setVisible] = React.useState(false);
-
-  // Non-secret values are shown as plain text — no masking needed
   if (!isSecret) {
     return <span className="text-xs font-mono text-on-surface-variant truncate">{value}</span>;
   }
 
   return (
     <div className="flex items-center gap-1.5 min-w-0">
-      <span className="text-xs font-mono text-on-surface-variant truncate">
-        {visible ? value : "•".repeat(Math.min(value.length || 8, 24))}
-      </span>
+      <span className="text-xs font-mono text-on-surface-variant truncate">{"•".repeat(8)}</span>
       <span className="shrink-0 text-[10px] font-medium text-primary/70 bg-primary/10 rounded px-1 py-0.5 leading-none">
         {keychainService ? `${keychainService} / ${keychainAccount ?? ""}` : "keychain"}
       </span>
-      <button
-        type="button"
-        onClick={() => setVisible((v) => !v)}
-        className="shrink-0 text-on-surface-variant/50 hover:text-on-surface-variant transition-colors"
-        title={visible ? "Hide value" : "Show value"}
-      >
-        {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-      </button>
     </div>
   );
 }

@@ -18,17 +18,9 @@ function resolveCoords(v: EnvVar) {
   };
 }
 
-function withSecretValues(envVars: EnvVar[]) {
-  return envVars.map((v) => {
-    if (!v.isSecret) return v;
-    const { service, account } = resolveCoords(v);
-    return { ...v, value: getSecret(service, account) ?? "" };
-  });
-}
-
 export async function GET() {
   const settings = await readSettings();
-  return Response.json({ envVars: withSecretValues(settings.envVars) });
+  return Response.json({ envVars: settings.envVars });
 }
 
 const postBodySchema = z.object({
@@ -60,7 +52,7 @@ export async function POST(request: Request) {
   ];
   await writeSettings(settings);
 
-  return Response.json({ envVars: withSecretValues(settings.envVars) }, { status: 201 });
+  return Response.json({ envVars: settings.envVars }, { status: 201 });
 }
 
 const patchBodySchema = z.object({
@@ -87,15 +79,24 @@ export async function PATCH(request: Request) {
     );
   }
 
-  // Remove the old dovepaw-managed entry if it was owned by us
-  if (isDovepawManaged(target)) {
-    const { service, account } = resolveCoords(target);
-    deleteSecret(service, account);
-  }
-
-  // Write a new dovepaw-managed entry only when no external service is specified
-  if (isSecret && !keychainService) {
-    setSecret(DOVEPAW_SERVICE, key, value);
+  // Blank value for an existing dovepaw-managed secret = keep current keychain entry (just move it if key was renamed)
+  if (isSecret && !keychainService && value === "" && isDovepawManaged(target)) {
+    if (key !== target.key) {
+      const { service, account } = resolveCoords(target);
+      const existing = getSecret(service, account) ?? "";
+      deleteSecret(service, account);
+      if (existing !== "") setSecret(DOVEPAW_SERVICE, key, existing);
+    }
+  } else {
+    // Remove the old dovepaw-managed entry if it was owned by us
+    if (isDovepawManaged(target)) {
+      const { service, account } = resolveCoords(target);
+      deleteSecret(service, account);
+    }
+    // Write a new dovepaw-managed entry only when no external service is specified
+    if (isSecret && !keychainService) {
+      setSecret(DOVEPAW_SERVICE, key, value);
+    }
   }
 
   settings.envVars = settings.envVars.map((v) =>
@@ -105,7 +106,7 @@ export async function PATCH(request: Request) {
   );
   await writeSettings(settings);
 
-  return Response.json({ envVars: withSecretValues(settings.envVars) });
+  return Response.json({ envVars: settings.envVars });
 }
 
 const deleteBodySchema = z.object({
@@ -132,5 +133,5 @@ export async function DELETE(request: Request) {
   settings.envVars = settings.envVars.filter((v) => v.id !== parsed.data.id);
   await writeSettings(settings);
 
-  return Response.json({ envVars: withSecretValues(settings.envVars) });
+  return Response.json({ envVars: settings.envVars });
 }
