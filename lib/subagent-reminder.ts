@@ -10,14 +10,16 @@ export const GROUP_PROMPT_REMINDER = `<reminder>
 </reminder>`;
 
 function buildMemoryBullet(memoryDir: string, startToolName?: string): string {
+  const escalate = startToolName ?? "the start tool";
   return (
     `<reminder>\n` +
-    `- It is the workflow you MUST follow:` +
-    ` When the user's intent is resolved by **ASKING A QUESTION NOT ABOUT THIS AGENT**` +
-    ` that this agent can answer, you MUST read \`${memoryDir}/memory/MEMORY.md\` first — NEVER skip this step.` +
-    ` If memory is sufficient, reply directly.` +
-    ` If memory is NOT sufficient → you MUST reply: "Please call \`${startToolName ?? "the start tool"}\` to fulfil this request."` +
-    ` Do NOT attempt to answer from general knowledge.\n` +
+    `- MEMORY WORKFLOW — MUST follow every time the user ASKS A QUESTION NOT ABOUT THIS AGENT:\n` +
+    `  1. READ \`${memoryDir}/memory/MEMORY.md\` index — NEVER skip this step.\n` +
+    `  2. SCAN the index for entries relevant to the user's question (topic, keyword, domain match).\n` +
+    `     If a relevant entry is found → READ that memory file for full detail.\n` +
+    `  3. EVALUATE sufficiency:\n` +
+    `     - SUFFICIENT: memory directly and fully answers the question → reply using it. Do NOT add or invent details beyond what memory says.\n` +
+    `     - NOT SUFFICIENT (including partial): reply ONLY: "Please call \`${escalate}\` to fulfil this request." Do NOT guess, clarify, or partially answer.\n` +
     `</reminder>`
   );
 }
