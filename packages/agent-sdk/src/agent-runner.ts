@@ -15,7 +15,6 @@ interface ClaudeRunOpts {
 }
 
 interface CodexOpts {
-  agentRoster?: string;
   config?: CodexOptions["config"];
   skipGitRepoCheck?: boolean;
   webSearchEnabled?: boolean;
@@ -36,6 +35,8 @@ export interface AgentRunOpts {
   apiKey?: string;
   /** Resume a prior session. Uses --resume for Claude, resumeThread() for Codex. */
   resumeSession?: string;
+  /** Additional instructions appended to the system prompt (claude_code preset append / Codex developer_instructions). */
+  appendSystemPrompt?: string;
   claudeOpts?: ClaudeRunOpts;
   codexOpts?: CodexOpts;
   /** Called when Codex is the active runner. Return value replaces the prompt sent to Codex. */
@@ -74,7 +75,7 @@ export class AgentRunner {
         apiKey: opts.apiKey,
         additionalDirectories: opts.additionalDirectories,
         resumeSession: opts.resumeSession,
-        agentRoster: opts.codexOpts?.agentRoster,
+        appendSystemPrompt: opts.appendSystemPrompt,
         config: opts.codexOpts?.config,
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
         webSearchEnabled: opts.codexOpts?.webSearchEnabled,
@@ -100,6 +101,7 @@ export class AgentRunner {
       effort: opts.claudeOpts?.effort,
       continueSession: opts.claudeOpts?.continueSession,
       settingSources: opts.claudeOpts?.settingSources,
+      appendSystemPrompt: opts.appendSystemPrompt,
     } satisfies RunOpts);
   }
 

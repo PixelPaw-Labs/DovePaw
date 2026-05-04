@@ -23,6 +23,8 @@ export interface RunOpts {
   resumeSession?: string;
   /** Override ANTHROPIC_API_KEY for this invocation. */
   apiKey?: string;
+  /** Additional instructions appended to the claude_code preset system prompt. */
+  appendSystemPrompt?: string;
 }
 
 /**
@@ -94,7 +96,11 @@ export class ClaudeRunner {
         options: {
           cwd,
           model: opts.model ?? "claude-sonnet-4-6",
-          systemPrompt: { type: "preset", preset: "claude_code" },
+          systemPrompt: {
+            type: "preset",
+            preset: "claude_code",
+            ...(opts.appendSystemPrompt ? { append: opts.appendSystemPrompt } : {}),
+          },
           ...(opts.agent ? { agent: opts.agent } : {}),
           ...(opts.effort ? { effort: opts.effort } : {}),
           ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),

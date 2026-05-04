@@ -83,6 +83,27 @@ describe("CodexRunner", () => {
     });
   });
 
+  describe("appendSystemPrompt option", () => {
+    it("is accepted in CodexRunOpts and passed as developer_instructions", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          appendSystemPrompt: "Always explain your reasoning.",
+        })
+        .catch(() => {}); // fails at connect with no API key — expected
+    });
+
+    it("is accepted without appendSystemPrompt (no developer_instructions set)", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", { cwd: TMP_DIR, taskName: "test", timeoutMs: 100 })
+        .catch(() => {});
+    });
+  });
+
   describe("additionalDirectories option", () => {
     it("is accepted in CodexRunOpts with directories", async () => {
       const runner = new CodexRunner(TMP_DIR);

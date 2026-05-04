@@ -12,8 +12,6 @@ export interface CodexRunOpts {
   apiKey?: string;
   /** Codex model to use (defaults to gpt-5.4) */
   model?: string;
-  /** Agent roster/developer instructions */
-  agentRoster?: string;
   /** Generic Codex CLI config overrides passed to `new Codex({ config })` */
   config?: CodexOptions["config"];
   /** Timeout in milliseconds */
@@ -24,6 +22,8 @@ export interface CodexRunOpts {
   additionalDirectories?: string[];
   /** Resume an existing Codex thread by its ID instead of starting a new one. */
   resumeSession?: string;
+  /** Additional instructions appended to developer_instructions in Codex config. */
+  appendSystemPrompt?: string;
   webSearchEnabled?: boolean;
   webSearchMode?: WebSearchMode;
   sandboxMode?: SandboxMode;
@@ -69,9 +69,10 @@ export class CodexRunner {
 
   private async connect(opts: CodexRunOpts): Promise<void> {
     const apiKey = opts.apiKey || process.env.OPENAI_API_KEY;
+    const developerInstructions = opts.appendSystemPrompt ?? "";
     const config = {
       ...opts.config,
-      ...(opts.agentRoster ? { developer_instructions: opts.agentRoster } : {}),
+      ...(developerInstructions ? { developer_instructions: developerInstructions } : {}),
     };
 
     this.codex = new Codex({
