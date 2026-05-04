@@ -64,6 +64,7 @@ function makeProps(overrides: Partial<ChatPaneProps> = {}): ChatPaneProps {
   return {
     agentId: "oncall-analyzer",
     agentConfigs: [],
+    doveDisplayName: "Dove",
     messages: [],
     isLoading: false,
     currentSessionId: "session-1",

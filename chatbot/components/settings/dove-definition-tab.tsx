@@ -240,7 +240,7 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
       <Section label="Model">
         <Row
           label="Default Model"
-          hint="Applied to Dove and every sub-agent SDK query. Accepts aliases (sonnet, opus, haiku) or full IDs (e.g. claude-sonnet-4-6). Leave blank to use the SDK default."
+          hint={`Applied to ${form.displayName} and every sub-agent SDK query. Accepts aliases (sonnet, opus, haiku) or full IDs (e.g. claude-sonnet-4-6). Leave blank to use the SDK default.`}
         >
           <Input
             value={form.defaultModel}
@@ -276,7 +276,7 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             </SelectContent>
           </Select>
         </Row>
-        <Row label="Web Tools" hint="Allow Dove to use WebFetch and WebSearch">
+        <Row label="Web Tools" hint={`Allow ${form.displayName} to use WebFetch and WebSearch`}>
           <label className="flex items-center gap-2 cursor-pointer pt-2">
             <input
               type="checkbox"
@@ -292,13 +292,13 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
       {/* Behavior Reminder */}
       <Section label="Behavior Reminder">
         <Row
-          label="Dove Instructions"
-          hint="Injected into Dove's built-in reminder on every turn. Leave blank for no extra instructions."
+          label={`${form.displayName} Instructions`}
+          hint={`Injected into ${form.displayName}'s built-in reminder on every turn. Leave blank for no extra instructions.`}
         >
           <div className="flex flex-col gap-3">
             <details className="group">
               <summary className="cursor-pointer text-xs text-on-surface-variant hover:text-on-surface select-none">
-                View built-in Dove reminder (for reference)
+                View built-in {form.displayName} reminder (for reference)
               </summary>
               <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-on-surface-variant border border-outline-variant/20">
                 {DOVE_LEAN_REMINDER}
@@ -336,8 +336,8 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
           </div>
         </Row>
         <Row
-          label="Dove Response Reminder"
-          hint="Injected via PostToolUse when a Dove await_* task completes. Leave blank to disable."
+          label={`${form.displayName} Response Reminder`}
+          hint={`Injected via PostToolUse when a ${form.displayName} await_* task completes. Leave blank to disable.`}
         >
           <Textarea
             value={form.responseReminder}

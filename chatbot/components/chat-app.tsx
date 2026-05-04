@@ -60,6 +60,7 @@ export function ChatApp({
           key={activeAgentId}
           agentId={activeAgentId}
           agentConfigs={[...agentConfigs, ...tmpAgentConfigs]}
+          doveDisplayName={initialDoveSettings?.displayName ?? "Dove"}
           groups={initialGroups}
           onIsLoadingChange={(loading) => {
             setIsLoading(loading);

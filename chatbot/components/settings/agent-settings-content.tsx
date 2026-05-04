@@ -39,6 +39,7 @@ interface AgentSettingsContentProps {
   initialEnabledRepoIds: string[];
   initialAgentEnvVars: EnvVar[];
   globalEnvVars: EnvVar[];
+  doveDisplayName: string;
   initialTab?: Tab;
   initialLocked?: boolean;
   initialNotifications?: AgentNotificationConfig | null;
@@ -87,6 +88,7 @@ export function AgentSettingsContent({
   initialEnabledRepoIds,
   initialAgentEnvVars,
   globalEnvVars,
+  doveDisplayName,
   initialTab = "definition",
   initialLocked = false,
   initialNotifications = null,
@@ -368,7 +370,11 @@ export function AgentSettingsContent({
           {/* Definition tab */}
           {tab === "definition" && (
             <>
-              <AgentDefinitionTab agentEntry={agentEntry} onSaved={setAgentEntry} />
+              <AgentDefinitionTab
+                agentEntry={agentEntry}
+                onSaved={setAgentEntry}
+                doveDisplayName={doveDisplayName}
+              />
 
               {/* Danger zone */}
               <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-5 flex flex-col gap-4">

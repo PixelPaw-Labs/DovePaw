@@ -35,11 +35,17 @@ export function resolveAvatar(
   return { type: "agent", icon, iconBg, iconColor };
 }
 
-function AssistantAvatar({ avatar }: { avatar: AvatarInfo }) {
+function AssistantAvatar({
+  avatar,
+  doveDisplayName,
+}: {
+  avatar: AvatarInfo;
+  doveDisplayName: string;
+}) {
   if (avatar.type === "dove") {
     return (
       <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
-        <img src={DOVE_AVATAR} alt="Dove" className="w-full h-full object-cover" />
+        <img src={DOVE_AVATAR} alt={doveDisplayName} className="w-full h-full object-cover" />
       </div>
     );
   }
@@ -56,13 +62,15 @@ function AssistantAvatar({ avatar }: { avatar: AvatarInfo }) {
 function SenderAvatar({
   agentId,
   agentConfigs,
+  doveDisplayName,
 }: {
   agentId: string | undefined;
   agentConfigs: AgentConfigEntry[] | undefined;
+  doveDisplayName: string;
 }) {
   if (agentId) {
     const avatar = resolveAvatar(agentId, agentConfigs);
-    return <AssistantAvatar avatar={avatar} />;
+    return <AssistantAvatar avatar={avatar} doveDisplayName={doveDisplayName} />;
   }
   return (
     <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 border-2 border-secondary shadow-sm mb-0.5">
@@ -74,11 +82,13 @@ function SenderAvatar({
 export function ChatMessageItem({
   msg,
   agentConfigs,
+  doveDisplayName = "Dove",
   hideReasoning = false,
   hideAvatars = false,
 }: {
   msg: ChatMessage;
   agentConfigs?: AgentConfigEntry[];
+  doveDisplayName?: string;
   hideReasoning?: boolean;
   hideAvatars?: boolean;
 }) {
@@ -159,7 +169,10 @@ export function ChatMessageItem({
       <div className="group/msg flex flex-col items-start gap-0.5 w-full">
         <div className="flex items-end gap-2 w-full">
           {!hideAvatars && hasContent && (
-            <AssistantAvatar avatar={resolveAvatar(msg.agentId, agentConfigs)} />
+            <AssistantAvatar
+              avatar={resolveAvatar(msg.agentId, agentConfigs)}
+              doveDisplayName={doveDisplayName}
+            />
           )}
           {messageContent}
         </div>
@@ -182,7 +195,11 @@ export function ChatMessageItem({
     <div className="group/msg flex flex-col items-end gap-0.5 w-full">
       <div className="flex items-end gap-2 w-full">
         <div className="flex-1 min-w-0">{messageContent}</div>
-        <SenderAvatar agentId={msg.agentId} agentConfigs={agentConfigs} />
+        <SenderAvatar
+          agentId={msg.agentId}
+          agentConfigs={agentConfigs}
+          doveDisplayName={doveDisplayName}
+        />
       </div>
     </div>
   );

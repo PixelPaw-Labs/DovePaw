@@ -3,6 +3,7 @@ import { SettingsPageLayout } from "@/components/settings/settings-page-layout";
 import { AgentSettingsContent } from "@/components/settings/agent-settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
 import { readAllAgentConfigEntries, readAgentFile } from "@@/lib/agents-config";
+import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 
 interface Props {
   params: Promise<{ agentName: string }>;
@@ -39,6 +40,7 @@ export default async function AgentSettingsPage({ params }: Props) {
         initialEnabledRepoIds={agentSettings.repos}
         initialAgentEnvVars={agentSettings.envVars}
         globalEnvVars={globalSettings.envVars}
+        doveDisplayName={effectiveDoveSettings(globalSettings).displayName}
         initialLocked={agentFile?.locked ?? false}
         initialNotifications={agentSettings.notifications ?? null}
       />

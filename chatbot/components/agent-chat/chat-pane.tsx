@@ -21,8 +21,12 @@ import { IntroCard } from "./intro-card";
 import type { ChatMessage } from "@/components/hooks/use-messages";
 import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 
-function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEntry[]) {
-  if (activeAgentId === "dove") return { name: "Dove", Icon: Bot };
+function useActiveAgentLabel(
+  activeAgentId: string,
+  agentConfigs: AgentConfigEntry[],
+  doveDisplayName: string,
+) {
+  if (activeAgentId === "dove") return { name: doveDisplayName, Icon: Bot };
   const entry = agentConfigs.find((a) => a.name === activeAgentId);
   if (!entry) return { name: activeAgentId, Icon: Bot };
   const def = buildAgentDef(entry);
@@ -32,6 +36,7 @@ function useActiveAgentLabel(activeAgentId: string, agentConfigs: AgentConfigEnt
 export interface ChatPaneProps {
   agentId: string;
   agentConfigs: AgentConfigEntry[];
+  doveDisplayName: string;
   // session state
   messages: ChatMessage[];
   isLoading: boolean;
@@ -53,6 +58,7 @@ export interface ChatPaneProps {
 export function ChatPane({
   agentId,
   agentConfigs,
+  doveDisplayName,
   messages,
   isLoading,
   currentSessionId,
@@ -68,7 +74,11 @@ export function ChatPane({
   historyPanel,
 }: ChatPaneProps) {
   const router = useRouter();
-  const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(agentId, agentConfigs);
+  const { name: agentName, Icon: AgentIcon } = useActiveAgentLabel(
+    agentId,
+    agentConfigs,
+    doveDisplayName,
+  );
 
   const [historyOpen, setHistoryOpen] = React.useState(true);
   const [activeQuestionIdx, setActiveQuestionIdx] = React.useState(0);
@@ -190,7 +200,12 @@ export function ChatPane({
               </ConversationEmptyState>
             ) : (
               messages.map((msg) => (
-                <ChatMessageItem key={msg.id} msg={msg} agentConfigs={agentConfigs} />
+                <ChatMessageItem
+                  key={msg.id}
+                  msg={msg}
+                  agentConfigs={agentConfigs}
+                  doveDisplayName={doveDisplayName}
+                />
               ))
             )}
             {isLoading && <ProcessingBar />}
@@ -269,7 +284,7 @@ export function ChatPane({
             onRemoveFromQueue={removeFromQueue}
           />
           <p className="text-center mt-3 text-[10px] text-muted-foreground/40 font-medium tracking-widest uppercase">
-            Secured by Dove&apos;s whiskers
+            Secured by {doveDisplayName}&apos;s whiskers
           </p>
         </footer>
 

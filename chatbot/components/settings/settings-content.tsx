@@ -43,6 +43,7 @@ export function SettingsContent({
   scheduledAgentConfigs,
   plugins = [],
 }: SettingsContentProps) {
+  const doveDisplayName = effectiveDoveSettings(initialSettings).displayName;
   const [tab, setTab] = React.useState<Tab>("dove");
   const [repositories, setRepositories] = React.useState(initialSettings.repositories);
   const [editingRepo, setEditingRepo] = React.useState<Repository | null>(null);
@@ -203,7 +204,7 @@ export function SettingsContent({
                 : "border-transparent text-on-surface-variant hover:text-on-surface"
             }`}
           >
-            Dove
+            {doveDisplayName}
           </button>
           <button
             type="button"

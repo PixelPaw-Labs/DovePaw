@@ -208,9 +208,14 @@ function emptyJob(): JobFormState {
 interface AgentDefinitionTabProps {
   agentEntry: AgentConfigEntry;
   onSaved: (updated: AgentConfigEntry) => void;
+  doveDisplayName: string;
 }
 
-export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabProps) {
+export function AgentDefinitionTab({
+  agentEntry,
+  onSaved,
+  doveDisplayName,
+}: AgentDefinitionTabProps) {
   const router = useRouter();
   const [form, setForm] = React.useState<FormState>(() => entryToForm(agentEntry));
   const [error, setError] = React.useState<string | null>(null);
@@ -355,7 +360,10 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
             rows={4}
           />
         </Row>
-        <Row label="Personality" hint="Replaces the generic 'You are one of Dove's mice…' line">
+        <Row
+          label="Personality"
+          hint={`Replaces the generic 'You are one of ${doveDisplayName}'s mice…' line`}
+        >
           <Textarea
             value={form.personality}
             onChange={(e) => set("personality", e.target.value)}
@@ -378,7 +386,7 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
       </Section>
 
       {/* Dove Visibility */}
-      <Section label="Dove">
+      <Section label={doveDisplayName}>
         <label className="flex items-center gap-2.5 cursor-pointer">
           <input
             type="checkbox"
@@ -387,9 +395,9 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
             className="w-4 h-4 shrink-0"
           />
           <div>
-            <span className="text-sm font-medium text-on-surface">Hide from Dove</span>
+            <span className="text-sm font-medium text-on-surface">Hide from {doveDisplayName}</span>
             <p className="text-[11px] text-muted-foreground">
-              When checked, Dove cannot invoke this agent
+              When checked, {doveDisplayName} cannot invoke this agent
             </p>
           </div>
         </label>

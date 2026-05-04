@@ -107,9 +107,10 @@ function buildEntry(f: FormState): AgentConfigEntry {
 interface AddAgentDialogProps {
   existingNames: string[];
   onAdd: (entry: AgentConfigEntry) => void;
+  doveDisplayName: string;
 }
 
-export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
+export function AddAgentDialog({ existingNames, onAdd, doveDisplayName }: AddAgentDialogProps) {
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState<FormState>(emptyForm);
   const [error, setError] = React.useState<string | null>(null);
@@ -224,7 +225,7 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
           </Section>
 
           {/* Dove Visibility */}
-          <Section label="Dove">
+          <Section label={doveDisplayName}>
             <label className="flex items-center gap-2.5 cursor-pointer">
               <input
                 type="checkbox"
@@ -233,9 +234,11 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
                 className="w-4 h-4 shrink-0"
               />
               <div>
-                <span className="text-sm font-medium text-on-surface">Hide from Dove</span>
+                <span className="text-sm font-medium text-on-surface">
+                  Hide from {doveDisplayName}
+                </span>
                 <p className="text-[11px] text-muted-foreground">
-                  When checked, Dove cannot invoke this agent
+                  When checked, {doveDisplayName} cannot invoke this agent
                 </p>
               </div>
             </label>

@@ -122,9 +122,10 @@ interface EditAgentDialogProps {
   agent: AgentConfigEntry | null;
   onSave: (entry: AgentConfigEntry) => void;
   onClose: () => void;
+  doveDisplayName: string;
 }
 
-export function EditAgentDialog({ agent, onSave, onClose }: EditAgentDialogProps) {
+export function EditAgentDialog({ agent, onSave, onClose, doveDisplayName }: EditAgentDialogProps) {
   const [form, setForm] = React.useState<FormState | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
@@ -223,7 +224,7 @@ export function EditAgentDialog({ agent, onSave, onClose }: EditAgentDialogProps
             </Section>
 
             {/* Dove Visibility */}
-            <Section label="Dove">
+            <Section label={doveDisplayName}>
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input
                   type="checkbox"
@@ -232,9 +233,11 @@ export function EditAgentDialog({ agent, onSave, onClose }: EditAgentDialogProps
                   className="w-4 h-4 shrink-0"
                 />
                 <div>
-                  <span className="text-sm font-medium text-on-surface">Hide from Dove</span>
+                  <span className="text-sm font-medium text-on-surface">
+                    Hide from {doveDisplayName}
+                  </span>
                   <p className="text-[11px] text-muted-foreground">
-                    When checked, Dove cannot invoke this agent
+                    When checked, {doveDisplayName} cannot invoke this agent
                   </p>
                 </div>
               </label>
