@@ -2,7 +2,10 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 
 const HOME = process.env.HOME!;
-const DOVEPAW_DIR = join(HOME, ".dovepaw");
+
+export const PROJECTS_DIR = join(HOME, ".claude/projects");
+export const DOVEPAW_DIR = join(HOME, ".dovepaw");
+export const AGENT_SETTINGS_DIR = join(DOVEPAW_DIR, "settings.agents");
 
 /** ~/.dovepaw/agents/logs/.<agentName> — persistent per-agent log directory */
 export const agentPersistentLogDir = (agentName: string) =>

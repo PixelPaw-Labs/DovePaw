@@ -119,6 +119,8 @@ export const agentConfigEntrySchema = z.object({
   repos: z.array(z.string()).optional(),
   /** When false, hidden from Scheduled Agents Management and A2A servers. Absent = true. */
   schedulingEnabled: z.boolean().optional(),
+  /** When false, Dove cannot invoke this agent — its ask/start/await MCP tools are not registered. Absent = true. */
+  doveVisible: z.boolean().optional(),
   /** Icon name from LUCIDE_ICON_REGISTRY (e.g. "Brain", "Zap"). Defaults to "Bot" if absent. */
   iconName: z.string().optional(),
   /** Tailwind classes for the icon background circle (e.g. "bg-yellow-100 group-hover:bg-primary"). */

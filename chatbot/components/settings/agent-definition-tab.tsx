@@ -37,6 +37,7 @@ interface FormState {
   iconBg: string;
   iconColor: string;
   schedulingEnabled: boolean;
+  doveVisible: boolean;
   scheduledJobs: JobFormState[];
   personality: string;
   doveCardTitle: string;
@@ -142,6 +143,7 @@ function entryToForm(entry: AgentConfigEntry): FormState {
     iconBg: entry.iconBg ?? DEFAULT_ICON_STYLE.iconBg,
     iconColor: entry.iconColor ?? DEFAULT_ICON_STYLE.iconColor,
     schedulingEnabled: entry.schedulingEnabled !== false,
+    doveVisible: entry.doveVisible !== false,
     scheduledJobs,
     personality: entry.personality ?? "",
     doveCardTitle: entry.doveCard.title,
@@ -164,6 +166,7 @@ function buildPatch(name: string, f: FormState): AgentConfigEntry {
     iconBg: f.iconBg,
     iconColor: f.iconColor,
     schedulingEnabled: f.schedulingEnabled,
+    doveVisible: f.doveVisible,
     scheduledJobs: f.scheduledJobs.map((j) => ({
       id: j.id,
       label: j.label.trim(),
@@ -372,6 +375,24 @@ export function AgentDefinitionTab({ agentEntry, onSaved }: AgentDefinitionTabPr
             }}
           />
         </Row>
+      </Section>
+
+      {/* Dove Visibility */}
+      <Section label="Dove">
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={!form.doveVisible}
+            onChange={(e) => set("doveVisible", !e.target.checked)}
+            className="w-4 h-4 shrink-0"
+          />
+          <div>
+            <span className="text-sm font-medium text-on-surface">Hide from Dove</span>
+            <p className="text-[11px] text-muted-foreground">
+              When checked, Dove cannot invoke this agent
+            </p>
+          </div>
+        </label>
       </Section>
 
       {/* Schedule */}

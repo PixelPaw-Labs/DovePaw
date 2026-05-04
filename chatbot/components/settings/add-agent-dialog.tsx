@@ -33,6 +33,7 @@ interface FormState {
   calendarWeekday: string;
   runAtLoad: boolean;
   schedulingEnabled: boolean;
+  doveVisible: boolean;
   doveCardTitle: string;
   doveCardDescription: string;
   doveCardPrompt: string;
@@ -55,6 +56,7 @@ function emptyForm(): FormState {
     calendarWeekday: "",
     runAtLoad: false,
     schedulingEnabled: true,
+    doveVisible: true,
     doveCardTitle: "",
     doveCardDescription: "",
     doveCardPrompt: "",
@@ -86,6 +88,7 @@ function buildEntry(f: FormState): AgentConfigEntry {
     ...(schedule ? { schedule } : {}),
     ...(f.runAtLoad ? { runAtLoad: true } : {}),
     schedulingEnabled: f.schedulingEnabled,
+    doveVisible: f.doveVisible,
     doveCard: {
       title: f.doveCardTitle.trim() || f.displayName.trim(),
       description: f.doveCardDescription.trim() || f.displayName.trim(),
@@ -218,6 +221,24 @@ export function AddAgentDialog({ existingNames, onAdd }: AddAgentDialogProps) {
                 }}
               />
             </Row>
+          </Section>
+
+          {/* Dove Visibility */}
+          <Section label="Dove">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={!form.doveVisible}
+                onChange={(e) => set("doveVisible", !e.target.checked)}
+                className="w-4 h-4 shrink-0"
+              />
+              <div>
+                <span className="text-sm font-medium text-on-surface">Hide from Dove</span>
+                <p className="text-[11px] text-muted-foreground">
+                  When checked, Dove cannot invoke this agent
+                </p>
+              </div>
+            </label>
           </Section>
 
           {/* Schedule */}

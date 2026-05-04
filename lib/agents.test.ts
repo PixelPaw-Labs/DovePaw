@@ -147,3 +147,20 @@ describe("buildAgentDef — pluginPath", () => {
     expect(def.pluginPath).toBeUndefined();
   });
 });
+
+describe("buildAgentDef — doveVisible", () => {
+  it("defaults to true when absent", () => {
+    const def = buildAgentDef(BASE_ENTRY);
+    expect(def.doveVisible).toBe(true);
+  });
+
+  it("propagates false when set", () => {
+    const def = buildAgentDef({ ...BASE_ENTRY, doveVisible: false });
+    expect(def.doveVisible).toBe(false);
+  });
+
+  it("propagates true when explicitly set", () => {
+    const def = buildAgentDef({ ...BASE_ENTRY, doveVisible: true });
+    expect(def.doveVisible).toBe(true);
+  });
+});

@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 
     const backgroundTasks: Promise<CollectedStream>[] = [];
     const doveRegistry = new PendingRegistry();
-    const agents = await readAgentsConfig();
+    const agents = (await readAgentsConfig()).filter((a) => a.doveVisible !== false);
 
     // On subsequent turns, load the persisted context map for this Dove session.
     // On the first turn (sessionId is null), start fresh — persist() will save it after.
