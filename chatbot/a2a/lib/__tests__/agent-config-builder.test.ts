@@ -12,10 +12,20 @@ const DEF = {
 const CWD = "/tmp/workspace/my-agent";
 
 describe("buildAgentConfig", () => {
-  it("falls back to tmp dir when pluginPath is absent", () => {
+  it("resolves scriptPath from relative entryPath when pluginPath is absent", () => {
     const def = { ...DEF, pluginPath: undefined } as unknown as AgentDef;
     const config = buildAgentConfig(def, CWD, {}, []);
-    expect(config.scriptPath).toMatch(/\/tmp\/my-agent\/main\.ts$/);
+    expect(config.scriptPath).toMatch(/agents\/my-agent\/main\.ts$/);
+  });
+
+  it("resolves scriptPath from absolute entryPath (tmp agents)", () => {
+    const def = {
+      ...DEF,
+      pluginPath: undefined,
+      entryPath: "/home/user/.dovepaw/tmp/my-agent/main.rb",
+    } as unknown as AgentDef;
+    const config = buildAgentConfig(def, CWD, {}, []);
+    expect(config.scriptPath).toBe("/home/user/.dovepaw/tmp/my-agent/main.rb");
   });
 
   it("builds scriptPath from pluginPath + entryPath", () => {

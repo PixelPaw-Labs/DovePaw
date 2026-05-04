@@ -140,7 +140,15 @@ export async function readAllAgentConfigEntries(): Promise<AgentConfigEntry[]> {
 
 /** Read agents config and hydrate each entry into a full AgentDef. Includes tmp/Kiln agents. */
 export async function readAgentsConfig(): Promise<AgentDef[]> {
-  return (await readAllAgentConfigEntries()).map(buildAgentDef);
+  const { entries, tmpEntries } = await readSplitAgentConfigEntries();
+  return [
+    ...entries.map(buildAgentDef),
+    ...tmpEntries.map((e) =>
+      Object.assign(buildAgentDef(e), {
+        entryPath: join(DOVEPAW_TMP_DIR, e.name, e.scriptFile ?? "main.ts"),
+      }),
+    ),
+  ];
 }
 
 /** Read only agents with schedulingEnabled !== false. */

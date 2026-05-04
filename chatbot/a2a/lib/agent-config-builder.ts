@@ -7,7 +7,7 @@
 
 import { join } from "node:path";
 import type { AgentDef } from "@@/lib/agents";
-import { resolveLocalAgentScript } from "@@/lib/paths";
+import { agentEntryPath } from "@@/lib/paths";
 
 export interface AgentConfig {
   scriptPath: string;
@@ -37,7 +37,7 @@ export function buildAgentConfig(
 ): AgentConfig {
   const scriptPath = def.pluginPath
     ? join(def.pluginPath, def.entryPath)
-    : resolveLocalAgentScript(def.name);
+    : agentEntryPath(def.entryPath);
   return {
     scriptPath,
     agentName: def.displayName,

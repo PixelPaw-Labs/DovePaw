@@ -351,6 +351,14 @@ describe("readAgentsConfig", () => {
     expect(names).toContain(FIXTURE_AGENT.name);
     expect(names).toContain(FIXTURE_AGENT_2.name);
   });
+
+  it("sets absolute entryPath for tmp agents pointing to tmp dir", async () => {
+    writeTmpAgentFile(FIXTURE_AGENT_2);
+    const defs = await readAgentsConfig();
+    const tmpDef = defs.find((d) => d.name === FIXTURE_AGENT_2.name)!;
+    expect(tmpDef.entryPath).toMatch(new RegExp(`__tmp__/${FIXTURE_AGENT_2.name}/main\\.ts$`));
+    expect(tmpDef.entryPath).toMatch(/^\//);
+  });
 });
 
 describe("agentConfigEntrySchema validation", () => {

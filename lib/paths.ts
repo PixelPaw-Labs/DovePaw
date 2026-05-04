@@ -1,5 +1,5 @@
-import { mkdirSync, existsSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync } from "node:fs";
+import { dirname, join, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export * from "./plugin-paths";
@@ -75,8 +75,9 @@ export const CLAUDE_RULES_ROOT = join(process.env.HOME!, ".claude/rules");
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 /** ~/.codex/skills — Codex skills directory */
 export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
-/** Resolve an agent's entry point to an absolute path under agents/ root */
-export const agentEntryPath = (entryPath: string) => join(AGENTS_ROOT, entryPath);
+/** Resolve an agent's entry point to an absolute path. Absolute paths (e.g. tmp agents) pass through unchanged. */
+export const agentEntryPath = (entryPath: string) =>
+  isAbsolute(entryPath) ? entryPath : join(AGENTS_ROOT, entryPath);
 /** DovePaw/agent-local/ — locally developed agents (auto-linked on install/electron:dev) */
 export const AGENT_LOCAL_DIR = join(AGENTS_ROOT, "agent-local");
 /** DovePaw/node_modules/<pkg> */
@@ -94,15 +95,6 @@ export const DOVEPAW_TMP_DIR = join(DOVEPAW_DIR, "tmp");
 /** ~/.dovepaw/tmp/<agentName>/agent.json — session agent definition */
 export const tmpAgentDefinitionFile = (agentName: string) =>
   join(DOVEPAW_TMP_DIR, agentName, "agent.json");
-/**
- * Resolve a non-plugin agent's main.ts entry point.
- * Checks agent-local/ first (locally developed agents), then falls back to
- * ~/.dovepaw/tmp/ (session agents created by Dove at runtime).
- */
-export const resolveLocalAgentScript = (agentName: string): string => {
-  const localPath = join(AGENT_LOCAL_DIR, agentName, "main.ts");
-  return existsSync(localPath) ? localPath : join(DOVEPAW_TMP_DIR, agentName, "main.ts");
-};
 /** DovePaw/.claude/hooks/karpathy-guidelines.sh — UserPromptSubmit hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
 
