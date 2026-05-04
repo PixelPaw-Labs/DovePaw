@@ -266,7 +266,11 @@ export class QueryAgentExecutor {
                 systemPrompt: {
                   type: "preset",
                   preset: "claude_code",
-                  append: buildSubAgentPrompt(this.def, !!groupOverrides),
+                  append: buildSubAgentPrompt(
+                    this.def,
+                    !!groupOverrides,
+                    effectiveDoveSettings(globalSettings).displayName,
+                  ),
                 },
                 additionalDirectories,
                 allowedTools: [
@@ -290,8 +294,8 @@ export class QueryAgentExecutor {
                   !!groupOverrides,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
                   effectiveDoveSettings(globalSettings).subAgentResponseReminder || undefined,
-                  agentPersistentStateDir(this.def.name),
-                  startRunScriptToolName(this.def.manifestKey),
+                  isAskMode ? agentPersistentStateDir(this.def.name) : undefined,
+                  isAskMode ? startRunScriptToolName(this.def.manifestKey) : undefined,
                 ),
                 abortController: this.abortController ?? undefined,
                 ...(canUseTool ? { canUseTool } : {}),

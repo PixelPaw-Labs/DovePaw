@@ -157,10 +157,9 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).toContain(AGENT.description);
   });
 
-  it("defaults to calling the start_run_script tool — does not tell agent to ask the user to clarify", () => {
+  it("does not tell the agent to ask the user to clarify", () => {
     const prompt = buildSubAgentPrompt(AGENT);
     expect(prompt).not.toMatch(/ask the user to clarify/i);
-    expect(prompt).toContain(startRunScriptToolName(AGENT.manifestKey));
   });
 
   it("does not include a <reminder> block (injected per-prompt via UserPromptSubmit hook instead)", () => {
@@ -173,14 +172,13 @@ describe("buildSubAgentPrompt", () => {
     expect(prompt).toContain(scheduler.agentLabel(AGENT));
   });
 
-  it("shows infer-intent guidance for a scheduled agent", () => {
+  it("mentions schedule for a scheduled agent and omits on-demand language", () => {
     const scheduled: AgentDef = {
       ...AGENT,
       schedule: { type: "calendar", hour: 0, minute: 0 },
       schedulingEnabled: true,
     };
     const prompt = buildSubAgentPrompt(scheduled);
-    expect(prompt).toMatch(/infer intent before acting/i);
     expect(prompt).toMatch(/runs on a schedule/i);
     expect(prompt).not.toMatch(/on-demand only/i);
   });

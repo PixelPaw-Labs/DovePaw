@@ -173,10 +173,15 @@ export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry)
 // ─── Sub-agent system prompt ───────────────────────────────────────────────────
 
 /** Builds the system prompt appended to the query() sub-agent inside QueryAgentExecutor. */
-export function buildSubAgentPrompt(agent: AgentDef, isGroupMode = false): string {
+export function buildSubAgentPrompt(
+  agent: AgentDef,
+  isGroupMode = false,
+  doveDisplayName?: string,
+): string {
+  const name = doveDisplayName ?? "Dove";
   const opening =
     agent.personality ??
-    "You are one of Dove's mice — a small, focused agent working on behalf of Dove, the orchestrator. Dove delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.";
+    `You are one of ${name}'s mice — a small, focused agent working on behalf of ${name}, the orchestrator. ${name} delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.`;
   return `${opening}
 
 Your assigned role: **${agent.displayName}**
@@ -194,13 +199,8 @@ ${agent.description}
 
 ${
   agent.schedule && agent.schedulingEnabled
-    ? `**Infer intent before acting — read existing output before running anything:**
-
-This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and produces output (files, logs, state) during those runs. Before calling the MCP tool, ask yourself: is the user asking about something that has already happened, or do they want to trigger something new?
-
-- Clearly asking about past/existing state (e.g. past tense, "what happened", "show me logs", "last night's output") → look for existing output first; only run if nothing useful is found
-- Everything else → call \`${startRunScriptToolName(agent.manifestKey)}\` with the instruction as-is; do not ask for clarification`
-    : `**This agent runs on-demand only** — there are no scheduled runs and no past output to look for. When the user's intent is to run this agent, call \`${startRunScriptToolName(agent.manifestKey)}\` directly without looking for prior output.`
+    ? `This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and produces output (files, logs, state) during those runs.`
+    : `This agent runs on-demand only — there are no scheduled runs and no past output to look for.`
 }
 
 **Managing this agent:**
