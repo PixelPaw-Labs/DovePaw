@@ -27,6 +27,12 @@ import { agentPersistentStateDir } from "@/lib/paths";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
+export const AgentCallMode = {
+  Ask: "ask",
+  Start: "start",
+} as const;
+export type AgentCallMode = (typeof AgentCallMode)[keyof typeof AgentCallMode];
+
 /** Returned by ask_* tools when a task is successfully submitted. */
 export type TaskStartedContent = {
   taskId: string;
@@ -108,7 +114,7 @@ export function makeAskTool(
               },
             ],
             ...(contextId ? { contextId } : {}),
-            metadata: { senderAgentId: "dove" },
+            metadata: { senderAgentId: "dove", mode: AgentCallMode.Ask },
           },
           configuration: { blocking: false },
         });
@@ -174,6 +180,7 @@ export function makeStartTool(
       ).start(withStartReminder(instruction, agent.manifestKey), {
         backgroundTasks,
         senderAgentId: "dove",
+        extraMetadata: { mode: AgentCallMode.Start },
       });
     },
   );

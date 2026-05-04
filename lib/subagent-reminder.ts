@@ -10,9 +10,17 @@ export const GROUP_PROMPT_REMINDER = `<reminder>
 </reminder>`;
 
 /** Returns the sub-agent reminder with optional extra instructions injected inside the <reminder> tag. */
-export function buildSubAgentReminder(extra?: string): string {
-  if (!extra?.trim()) return SUBAGENT_PROMPT_REMINDER;
-  return SUBAGENT_PROMPT_REMINDER.replace("</reminder>", `\n${extra.trim()}\n</reminder>`);
+export function buildSubAgentReminder(
+  extra?: string,
+  memoryDir?: string,
+  startToolName?: string,
+): string {
+  const memoryBullet = memoryDir
+    ? `- When the user's intent is resolved by **ASKING A QUESTION** that this agent can answer, read \`${memoryDir}/memory/MEMORY.md\` first. If memory is sufficient, reply directly. If not${startToolName ? `, respond with: "Please call \`${startToolName}\` to fulfil this request."` : ", say memory is insufficient."}`
+    : undefined;
+  const parts = [extra?.trim(), memoryBullet].filter(Boolean).join("\n");
+  if (!parts) return SUBAGENT_PROMPT_REMINDER;
+  return SUBAGENT_PROMPT_REMINDER.replace("</reminder>", `\n${parts}\n</reminder>`);
 }
 
 /** Returns the group reminder with optional extra instructions injected inside the <reminder> tag. */

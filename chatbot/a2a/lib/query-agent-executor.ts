@@ -24,6 +24,7 @@ import { AgentConfigReader } from "./agent-config-reader";
 import { extractInstruction } from "./message-parts";
 import { buildAgentConfig } from "./agent-config-builder";
 import { buildSubAgentHooks } from "@/lib/subagent-hooks";
+import { AgentCallMode } from "@/lib/query-tools";
 import { buildSubagentCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { ExecutorPublisher } from "./executor-publisher";
@@ -139,6 +140,7 @@ export class QueryAgentExecutor {
       typeof requestContext.userMessage.metadata?.senderAgentId === "string"
         ? requestContext.userMessage.metadata.senderAgentId
         : undefined;
+    const isAskMode = requestContext.userMessage.metadata?.mode === AgentCallMode.Ask;
     const backgroundTasks: Promise<CollectedStream>[] = [];
 
     // Track direct publishStatusToUI calls (workspace setup, clone progress, etc.)
@@ -268,7 +270,9 @@ export class QueryAgentExecutor {
                 },
                 additionalDirectories,
                 allowedTools: [
-                  `mcp__agents__${startRunScriptToolName(this.def.manifestKey)}`,
+                  ...(!isAskMode
+                    ? [`mcp__agents__${startRunScriptToolName(this.def.manifestKey)}`]
+                    : []),
                   `mcp__agents__${awaitRunScriptToolName(this.def.manifestKey)}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
                   ...chatToTools.map((t) => `mcp__agents__${t.name}`),
@@ -286,6 +290,8 @@ export class QueryAgentExecutor {
                   !!groupOverrides,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
                   effectiveDoveSettings(globalSettings).subAgentResponseReminder || undefined,
+                  agentPersistentStateDir(this.def.name),
+                  startRunScriptToolName(this.def.manifestKey),
                 ),
                 abortController: this.abortController ?? undefined,
                 ...(canUseTool ? { canUseTool } : {}),

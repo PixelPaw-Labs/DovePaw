@@ -58,13 +58,13 @@ export const withMemoryReminder = (
   memoryDir: string,
   manifestKey: string,
 ): string =>
-  `<memory_check>
+  `${instruction}
+<memory_check>
 If the request is about the agent itself (e.g. status, configuration, management), skip this step.
 Otherwise, read and search ${memoryDir}/memory/MEMORY.md.
 If the file does not exist, or memory is insufficient to answer the user, respond with: "Please call \`${startRunScriptToolName(manifestKey)}\` to fulfil this request."
 If memory is sufficient, reply directly.
-</memory_check>
-${instruction}`;
+</memory_check>`;
 
 // ─── Script run tools ─────────────────────────────────────────────────────────
 
