@@ -6,7 +6,8 @@ import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agen
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
-import { HANDOFF_COMPLETENESS, withStartReminder } from "./agent-script-tools";
+import { HANDOFF_COMPLETENESS } from "./agent-script-tools";
+import { withStartReminder } from "@@/lib/subagent-reminder";
 
 /** Emits a sender bubble to the group pool stream when the caller is in group mode. */
 function emitGroupSenderBubble(

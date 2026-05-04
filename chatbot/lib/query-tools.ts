@@ -22,7 +22,7 @@ import {
   isConnectionError,
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
-import { withStartReminder, withMemoryReminder } from "@/lib/agent-tools";
+import { withStartReminder, withMemoryReminder } from "@@/lib/subagent-reminder";
 import { agentPersistentStateDir } from "@/lib/paths";
 
 // ─── Structured content types ─────────────────────────────────────────────────
@@ -111,7 +111,7 @@ export function makeAskTool(
                 text: withMemoryReminder(
                   instruction,
                   agentPersistentStateDir(agent.name),
-                  agent.manifestKey,
+                  doveStartToolName(agent),
                 ),
               },
             ],

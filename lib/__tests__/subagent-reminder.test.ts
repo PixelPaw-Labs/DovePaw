@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { buildSubAgentReminder, SUBAGENT_PROMPT_REMINDER } from "../subagent-reminder.js";
+import {
+  buildSubAgentReminder,
+  withMemoryReminder,
+  SUBAGENT_PROMPT_REMINDER,
+} from "../subagent-reminder.js";
 
 describe("buildSubAgentReminder", () => {
   it("returns base reminder when called with no args", () => {
@@ -15,40 +19,32 @@ describe("buildSubAgentReminder", () => {
     expect(result).toContain("do something extra");
     expect(result.indexOf("do something extra")).toBeLessThan(result.indexOf("</reminder>"));
   });
+});
 
-  it("injects memory bullet when memoryDir is provided without startToolName", () => {
-    const result = buildSubAgentReminder(
-      undefined,
-      "/home/.dovepaw/agents/state/.my-agent",
-      undefined,
-      true,
-    );
+describe("withMemoryReminder", () => {
+  it("wraps memory bullet in <reminder> tags", () => {
+    const result = withMemoryReminder("task", "/home/.dovepaw/agents/state/.my-agent");
+    expect(result).toContain("<reminder>");
+    expect(result).toContain("</reminder>");
+  });
+
+  it("includes MEMORY.md path and falls back to 'the start tool'", () => {
+    const result = withMemoryReminder("task", "/home/.dovepaw/agents/state/.my-agent");
     expect(result).toContain("MEMORY.md");
     expect(result).toContain("the start tool");
-    expect(result.indexOf("MEMORY.md")).toBeLessThan(result.indexOf("</reminder>"));
   });
 
-  it("injects memory bullet with start tool reference when both memoryDir and startToolName are provided", () => {
-    const result = buildSubAgentReminder(
-      undefined,
+  it("includes startToolName when provided", () => {
+    const result = withMemoryReminder(
+      "task",
       "/home/.dovepaw/agents/state/.my-agent",
       "start_run_my_agent",
-      true,
     );
     expect(result).toContain("MEMORY.md");
     expect(result).toContain("start_run_my_agent");
-    expect(result).not.toContain("say memory is insufficient");
   });
 
-  it("injects both extra and memory bullet when all args are provided", () => {
-    const result = buildSubAgentReminder(
-      "extra instruction",
-      "/home/.dovepaw/agents/state/.my-agent",
-      "start_run_my_agent",
-      true,
-    );
-    expect(result).toContain("extra instruction");
-    expect(result).toContain("MEMORY.md");
-    expect(result).toContain("start_run_my_agent");
+  it("returns instruction unchanged when memoryDir is absent", () => {
+    expect(withMemoryReminder("do the thing")).toBe("do the thing");
   });
 });

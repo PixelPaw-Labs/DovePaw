@@ -11,7 +11,7 @@ import { z } from "zod";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
-import { withStartReminder } from "@/lib/agent-tools";
+import { withStartReminder } from "@@/lib/subagent-reminder";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";

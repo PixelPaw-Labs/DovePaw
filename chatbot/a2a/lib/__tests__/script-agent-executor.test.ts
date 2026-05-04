@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { extractInstruction } from "../message-parts";
 import { buildScriptArgs } from "../spawn";
 import { startRunScriptToolName } from "@/lib/agent-tools";
-import { buildSubAgentReminder } from "@@/lib/subagent-reminder";
+import { withMemoryReminder } from "@@/lib/subagent-reminder";
 
 const startScriptTool = startRunScriptToolName("test_agent");
 
@@ -85,41 +85,26 @@ describe("buildScriptArgs", () => {
   });
 });
 
-describe("buildSubAgentReminder memory check", () => {
-  it("injects memory bullet when memoryDir is provided and isAskMode is true", () => {
-    const result = buildSubAgentReminder(undefined, "/state/.my-agent", "start_my_agent", true);
+describe("withMemoryReminder", () => {
+  it("appends memory bullet to instruction", () => {
+    const result = withMemoryReminder("do the thing", "/state/.my-agent", "start_my_agent");
     expect(result).toContain("/state/.my-agent/memory/MEMORY.md");
     expect(result).toContain("MEMORY.md");
     expect(result).toContain("start_my_agent");
+    expect(result).toContain("do the thing");
   });
 
   it("memory bullet appears inside the reminder tag", () => {
-    const result = buildSubAgentReminder(undefined, "/state/.my-agent", "start_my_agent", true);
+    const result = withMemoryReminder("do the thing", "/state/.my-agent", "start_my_agent");
     const reminderIdx = result.indexOf("<reminder>");
     const bulletIdx = result.indexOf("MEMORY.md");
     expect(bulletIdx).toBeGreaterThan(reminderIdx);
   });
 
-  it("omits memory bullet when memoryDir is absent", () => {
-    const result = buildSubAgentReminder();
-    expect(result).not.toContain("MEMORY.md");
-  });
-
-  it("memory insufficient path uses MUST language as a hard gate", () => {
-    const result = buildSubAgentReminder(undefined, "/state/.my-agent", "start_my_agent", true);
+  it("uses MUST language as a hard gate", () => {
+    const result = withMemoryReminder("do the thing", "/state/.my-agent", "start_my_agent");
     expect(result).toContain("MUST");
     expect(result).toContain("NEVER skip");
     expect(result).toContain("start_my_agent");
-  });
-
-  it("ask mode omits SOMETHING BEING DONE start bullet", () => {
-    const result = buildSubAgentReminder(undefined, "/state/.my-agent", "start_my_agent", true);
-    expect(result).not.toContain("SOMETHING BEING DONE");
-  });
-
-  it("start mode includes SOMETHING BEING DONE bullet and no memory bullet", () => {
-    const result = buildSubAgentReminder(undefined, "/state/.my-agent", "start_my_agent", false);
-    expect(result).toContain("SOMETHING BEING DONE");
-    expect(result).not.toContain("MEMORY.md");
   });
 });

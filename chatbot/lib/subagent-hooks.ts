@@ -21,14 +21,9 @@ import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 import { ALWAYS_DISALLOWED_TOOLS } from "@@/lib/security-policy";
-import {
-  SUBAGENT_PROMPT_REMINDER,
-  GROUP_PROMPT_REMINDER,
-  buildSubAgentReminder,
-  buildGroupReminder,
-} from "@@/lib/subagent-reminder";
+import { GROUP_PROMPT_REMINDER, buildGroupReminder } from "@@/lib/subagent-reminder";
 
-export { SUBAGENT_PROMPT_REMINDER, GROUP_PROMPT_REMINDER };
+export { GROUP_PROMPT_REMINDER };
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
@@ -45,9 +40,6 @@ export function buildSubAgentHooks(
   isGroupMode?: boolean,
   behaviorReminder?: string,
   responseReminder?: string,
-  memoryDir?: string,
-  startToolName?: string,
-  isAskMode?: boolean,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -80,7 +72,9 @@ export function buildSubAgentHooks(
     registry,
     userPromptReminder: isGroupMode
       ? buildGroupReminder(behaviorReminder)
-      : buildSubAgentReminder(behaviorReminder, memoryDir, startToolName, isAskMode),
+      : behaviorReminder?.trim()
+        ? `<reminder>\n${behaviorReminder.trim()}\n</reminder>`
+        : undefined,
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: ALWAYS_DISALLOWED_TOOLS,
     responseReminder,

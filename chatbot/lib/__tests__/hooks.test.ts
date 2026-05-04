@@ -5,11 +5,8 @@ import {
   buildDoveHooks,
   buildSubagentCanUseTool,
 } from "../hooks";
-import {
-  buildSubAgentHooks,
-  SUBAGENT_PROMPT_REMINDER,
-  GROUP_PROMPT_REMINDER,
-} from "../subagent-hooks";
+import { buildSubAgentHooks, GROUP_PROMPT_REMINDER } from "../subagent-hooks";
+import { SUBAGENT_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
 import { resolvePendingQuestion } from "../pending-questions";
@@ -539,24 +536,28 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
 // ─── buildSubAgentHooks — UserPromptSubmit reminder ──────────────────────────
 
 describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
-  it("injects SUBAGENT_PROMPT_REMINDER as additionalContext", async () => {
+  it("does not inject UserPromptSubmit hook when no behaviorReminder", () => {
     const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
-    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
-    const result = await callHook(fn, {
-      hook_event_name: "UserPromptSubmit",
-      prompt: "do something",
-    });
-    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toBe(SUBAGENT_PROMPT_REMINDER);
+    expect(hooks.UserPromptSubmit).toBeUndefined();
   });
 
-  it("reminder contains SOMETHING BEING DONE pattern", () => {
-    expect(SUBAGENT_PROMPT_REMINDER).toContain("SOMETHING BEING DONE");
-    expect(SUBAGENT_PROMPT_REMINDER).not.toContain("RUN yourself");
-    expect(SUBAGENT_PROMPT_REMINDER).not.toContain("HANDOFF");
+  it("does not inject UserPromptSubmit hook when behaviorReminder is empty", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      "",
+    );
+    expect(hooks.UserPromptSubmit).toBeUndefined();
   });
 
-  it("injects behaviorReminder inside the <reminder> tag", async () => {
+  it("injects behaviorReminder wrapped in <reminder> tag", async () => {
     const hooks = buildSubAgentHooks(
       "/cwd",
       [],
@@ -575,33 +576,9 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       prompt: "do something",
     });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toContain("Check memory before MCP tools.");
-    expect(hookSpecificOutput.additionalContext).toContain("SOMETHING BEING DONE");
-    expect(hookSpecificOutput.additionalContext).toMatch(
-      /\nCheck memory before MCP tools\.\n<\/reminder>/,
+    expect(hookSpecificOutput.additionalContext).toBe(
+      "<reminder>\nCheck memory before MCP tools.\n</reminder>",
     );
-  });
-
-  it("returns base reminder unchanged when behaviorReminder is empty", async () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [],
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      false,
-      "",
-    );
-    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
-    const result = await callHook(fn, {
-      hook_event_name: "UserPromptSubmit",
-      prompt: "do something",
-    });
-    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toBe(SUBAGENT_PROMPT_REMINDER);
   });
 });
 

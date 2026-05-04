@@ -61,10 +61,10 @@ import {
   awaitReviewWithToolName,
   startEscalateToToolName,
   awaitEscalateToToolName,
-  withStartReminder,
   justificationField,
   MGMT_TOOL,
 } from "@/lib/agent-tools";
+import { withStartReminder } from "@@/lib/subagent-reminder";
 import type { CollectedStream } from "@/lib/a2a-client";
 import {
   resolveAgentPort,
