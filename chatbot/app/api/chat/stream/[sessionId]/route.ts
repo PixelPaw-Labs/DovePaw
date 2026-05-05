@@ -60,7 +60,7 @@ export async function GET(
               if (msg.role !== "assistant") return [];
               return msg.segments.flatMap((s): ChatSseEvent[] => {
                 if (s.type === "text" && s.content) {
-                  return [{ type: "result", content: s.content }];
+                  return [{ type: "text", content: s.content }];
                 }
                 return [];
               });
@@ -79,18 +79,16 @@ export async function GET(
     return new Response(null, { status: 404 });
   }
 
+  const textContent = detail.messages
+    .flatMap((msg) => (msg.role === "assistant" ? msg.segments : []))
+    .filter((s): s is { type: "text"; content: string } => s.type === "text" && Boolean(s.content))
+    .map((s) => s.content)
+    .join("");
   const events: ChatSseEvent[] = [
     { type: "session", sessionId: detail.id },
-    ...detail.messages.flatMap((msg) => {
-      if (msg.role !== "assistant") return [];
-      return msg.segments.flatMap((s): ChatSseEvent[] => {
-        if (s.type === "text" && s.content) {
-          return [{ type: "result", content: s.content }];
-        }
-        return [];
-      });
-    }),
-    { type: "done" },
+    ...(textContent
+      ? [{ type: "done" as const, content: textContent }]
+      : [{ type: "done" as const }]),
   ];
 
   const enc = new TextEncoder();

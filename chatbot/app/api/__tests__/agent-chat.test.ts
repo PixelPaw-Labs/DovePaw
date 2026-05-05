@@ -219,7 +219,7 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
     expect(toolInputEvent).toMatchObject({ type: "tool_input", content: '{"file":"/foo"}' });
   });
 
-  it("maps final-output artifact to result SSE event", async () => {
+  it("maps final-output artifact to done event with content", async () => {
     mockSendMessageStream.mockReturnValue(
       makeStream([{ name: "final-output", text: "task done" }]),
     );
@@ -229,8 +229,8 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
     const body = await drainStream(response);
     const events = parseSseEvents(body);
 
-    const resultEvent = events.find((e) => (e as { type: string }).type === "result");
-    expect(resultEvent).toMatchObject({ type: "result", content: "task done" });
+    const doneEvent = events.find((e) => (e as { type: string }).type === "done");
+    expect(doneEvent).toMatchObject({ type: "done", content: "task done" });
   });
 
   it("emits done event at end of stream", async () => {

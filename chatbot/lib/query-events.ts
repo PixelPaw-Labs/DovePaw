@@ -67,7 +67,7 @@ export async function consumeQueryEvents(
   let inToolBlock = false;
 
   for await (const event of events) {
-    if (isSystemInit(event)) {
+    if (isSystemInit(event) && event.session_id !== sessionId) {
       sessionId = event.session_id;
       dispatcher.onSession(event.session_id);
       onSessionStart?.(event.session_id);

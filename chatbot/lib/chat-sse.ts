@@ -22,14 +22,11 @@ export type ChatSseToolCall = { type: "tool_call"; name: string };
 /** Tool call input — full JSON args, emitted when input block completes */
 export type ChatSseToolInput = { type: "tool_input"; content: string };
 
-/** Full result from ResultMessage — fallback when no text_delta was emitted */
-export type ChatSseResult = { type: "result"; content: string };
-
 /** Error from the query() loop or network */
 export type ChatSseError = { type: "error"; content: string };
 
-/** Terminal event — stream is done */
-export type ChatSseDone = { type: "done" };
+/** Terminal event — stream is done. content is set when no text deltas were streamed (fallback). */
+export type ChatSseDone = { type: "done"; content?: string };
 
 /** User pressed Stop — task was cancelled */
 export type ChatSseCancelled = { type: "cancelled" };
@@ -93,7 +90,6 @@ export type ChatSseEvent =
   | ChatSseThinking
   | ChatSseToolCall
   | ChatSseToolInput
-  | ChatSseResult
   | ChatSseError
   | ChatSseProgress
   | ChatSseCancelled

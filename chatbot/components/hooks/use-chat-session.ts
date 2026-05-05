@@ -152,8 +152,11 @@ export function useChatSession(agentId: AgentId) {
               sessionIdRef.current = event.sessionId;
               setCurrentSessionId(event.sessionId);
             } else {
-              // Lazily create the assistant message on first text/result content.
-              if (!messageReady && (event.type === "text" || event.type === "result")) {
+              // Lazily create the assistant message on first text/result/done content.
+              if (
+                !messageReady &&
+                (event.type === "text" || (event.type === "done" && Boolean(event.content)))
+              ) {
                 messageReady = true;
                 setMessages((prev) => [
                   ...prev,
@@ -254,7 +257,6 @@ export function useChatSession(agentId: AgentId) {
             setCurrentSessionId(event.sessionId);
           } else {
             processActiveStreamEvent(event, assistantId, streamCtx, {
-              skipResultIfHasText: true,
               onDone: () => setIsLoading(false),
               onCancelled: () => setIsLoading(false),
             });

@@ -53,9 +53,7 @@ describe("useChatSession", () => {
       // mount active-session
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
       // sendMessage POST
-      .mockResolvedValueOnce(
-        makeSseResponse([{ type: "result", content: "pong" }, { type: "done" }]),
-      );
+      .mockResolvedValueOnce(makeSseResponse([{ type: "done", content: "pong" }]));
 
     const { result } = renderHook(() => useChatSession("dove"));
 

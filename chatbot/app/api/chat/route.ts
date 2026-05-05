@@ -58,7 +58,7 @@ import { z } from "zod";
 
 const chatRequestSchema = z.object({
   message: z.string(),
-  sessionId: z.string().nullable(),
+  sessionId: z.string().nullable().optional().default(null),
 });
 
 export const maxDuration = 86400; // 24 hours for long-running agents
@@ -303,7 +303,10 @@ export async function POST(request: Request) {
               });
             },
           );
-          dispatcher.publish({ type: "done" });
+          const finalContent = dispatcher.buildFinalContent();
+          dispatcher.publish(
+            finalContent ? { type: "done", content: finalContent } : { type: "done" },
+          );
         },
         (_err, isAbort) => {
           abortPermissions();

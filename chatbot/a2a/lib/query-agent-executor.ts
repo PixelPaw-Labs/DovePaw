@@ -380,7 +380,11 @@ export class QueryAgentExecutor {
 
           consola.success(`${this.def.displayName} sub-agent completed`);
 
-          relaySessionEvent(contextId, { type: "done" });
+          const finalContent = dispatcher.buildFinalContent();
+          relaySessionEvent(
+            contextId,
+            finalContent ? { type: "done", content: finalContent } : { type: "done" },
+          );
           publisher.publishStatusToUI("", undefined, "completed");
         },
         (err, isAbort) => {

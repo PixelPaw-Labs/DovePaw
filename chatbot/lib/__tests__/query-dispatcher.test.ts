@@ -201,10 +201,12 @@ describe("SseQueryDispatcher", () => {
     expect(send).toHaveBeenCalledWith({ type: "tool_input", content: '{"cmd":"ls"}' });
   });
 
-  it("onFinalOutput sends result event for non-empty string", () => {
+  it("onFinalOutput stores final content and does not send result event", () => {
     const send = makeSend();
-    new SseQueryDispatcher(send).onFinalOutput("done");
-    expect(send).toHaveBeenCalledWith({ type: "result", content: "done" });
+    const dispatcher = new SseQueryDispatcher(send);
+    dispatcher.onFinalOutput("done");
+    expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "result" }));
+    expect(dispatcher.buildFinalContent()).toBe("done");
   });
 
   it("onFinalOutput does not send for empty string", () => {
@@ -247,10 +249,12 @@ describe("SseQueryDispatcher", () => {
       expect(send).toHaveBeenCalledWith({ type: "tool_input", content: '{"x":1}' });
     });
 
-    it("maps final-output artifact to result event", () => {
+    it("maps final-output artifact to stored final content, not result event", () => {
       const send = makeSend();
-      new SseQueryDispatcher(send).onArtifact(ARTIFACT.FINAL_OUTPUT, "result text");
-      expect(send).toHaveBeenCalledWith({ type: "result", content: "result text" });
+      const dispatcher = new SseQueryDispatcher(send);
+      dispatcher.onArtifact(ARTIFACT.FINAL_OUTPUT, "result text");
+      expect(send).not.toHaveBeenCalledWith(expect.objectContaining({ type: "result" }));
+      expect(dispatcher.buildFinalContent()).toBe("result text");
     });
 
     it("ignores unknown artifact names", () => {

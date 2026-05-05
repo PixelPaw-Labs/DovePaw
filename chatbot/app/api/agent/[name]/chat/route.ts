@@ -126,7 +126,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ nam
         dispatcher.publish({ type: "cancelled" });
       } else {
         setSessionStatus(resolvedContextId, "done");
-        dispatcher.publish({ type: "done" });
+        const finalContent = dispatcher.buildFinalContent();
+        dispatcher.publish(
+          finalContent ? { type: "done", content: finalContent } : { type: "done" },
+        );
       }
     } catch (err) {
       if (subprocessController.signal.aborted) {

@@ -19,7 +19,7 @@ function buildMemoryBullet(memoryDir: string, startToolName?: string): string {
     `     If a relevant entry is found → READ that memory file for full detail.\n` +
     `  3. EVALUATE sufficiency:\n` +
     `     - SUFFICIENT: memory directly and fully answers the question → reply using it. Do NOT add or invent details beyond what memory says.\n` +
-    `     - NOT SUFFICIENT (including partial): reply ONLY: "Please MUST call \`${escalate}\` to fulfil this request. It is not a recommended action but necessary." Do NOT guess, clarify, or partially answer.\n` +
+    `     - NOT SUFFICIENT (including partial): reply ONLY: "Because the agent memory is insufficient to answer the question, you MUST call \`${escalate}\` to get the necessary information. It is NOT a recommended action but necessary." Do NOT guess, clarify, or partially answer.\n` +
     `</reminder>`
   );
 }
