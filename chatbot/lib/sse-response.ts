@@ -1,7 +1,5 @@
-import type { ChatSseEvent } from "@/lib/chat-sse";
-
 export type SseHandler = (
-  send: (event: ChatSseEvent) => void,
+  controller: ReadableStreamDefaultController<Uint8Array>,
   connectionController: AbortController, // fires on browser disconnect — NOT the subprocess controller
 ) => Promise<void>;
 
@@ -21,7 +19,6 @@ export function createSseResponse(
   subprocessController: AbortController, // caller-owned, NOT wired to request.signal
   handler: SseHandler,
 ): Response {
-  const encoder = new TextEncoder();
   const connectionController = new AbortController();
   request.signal.addEventListener("abort", () => connectionController.abort());
 
@@ -30,10 +27,7 @@ export function createSseResponse(
       connectionController.abort();
     },
     start(controller) {
-      const send = (payload: ChatSseEvent) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
-      };
-      return handler(send, connectionController).finally(() => {
+      return handler(controller, connectionController).finally(() => {
         connectionController.abort();
         try {
           controller.close();

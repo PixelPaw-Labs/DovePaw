@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createSseResponse } from "../sse-response";
+import { buildStreamSender } from "../chat-sse";
 
 async function collectSse(response: Response): Promise<string[]> {
   const text = await response.text();
@@ -15,15 +16,16 @@ function makeRequest(abortSignal?: AbortSignal): Request {
 
 describe("createSseResponse", () => {
   it("returns a text/event-stream response", () => {
-    const res = createSseResponse(makeRequest(), new AbortController(), async (send) => {
-      send({ type: "done" });
+    const res = createSseResponse(makeRequest(), new AbortController(), async (controller) => {
+      buildStreamSender("high", controller)({ type: "done" });
     });
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
     expect(res.headers.get("Cache-Control")).toBe("no-cache");
   });
 
   it("encodes events as SSE data lines", async () => {
-    const res = createSseResponse(makeRequest(), new AbortController(), async (send) => {
+    const res = createSseResponse(makeRequest(), new AbortController(), async (controller) => {
+      const send = buildStreamSender("high", controller);
       send({ type: "text", content: "hello" });
       send({ type: "done" });
     });
@@ -36,7 +38,7 @@ describe("createSseResponse", () => {
     const ac = new AbortController();
     const request = makeRequest(ac.signal);
     let capturedConnectionController: AbortController | undefined;
-    createSseResponse(request, new AbortController(), async (_send, connectionController) => {
+    createSseResponse(request, new AbortController(), async (_controller, connectionController) => {
       capturedConnectionController = connectionController;
       await new Promise(() => {}); // never resolves
     });
@@ -58,8 +60,8 @@ describe("createSseResponse", () => {
   });
 
   it("closes the stream after the handler resolves", async () => {
-    const res = createSseResponse(makeRequest(), new AbortController(), async (send) => {
-      send({ type: "done" });
+    const res = createSseResponse(makeRequest(), new AbortController(), async (controller) => {
+      buildStreamSender("high", controller)({ type: "done" });
     });
     // Reading the full body without hanging confirms the stream was closed
     await res.text();

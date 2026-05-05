@@ -99,6 +99,44 @@ export type ChatSseEvent =
   | ChatSseGroupMember;
 
 /**
+ * Low-effort sender: suppresses all streaming text/tool/thinking events.
+ * Emits done.content as a single text event once the result is confirmed clean.
+ * Structural events (session, error, cancelled, permission, question, group_member) pass through.
+ */
+function buildLowEffortSender(
+  send: (event: ChatSseEvent) => void,
+): (event: ChatSseEvent) => void {
+  return (event: ChatSseEvent) => {
+    if (
+      event.type === "text" ||
+      event.type === "thinking" ||
+      event.type === "tool_call" ||
+      event.type === "tool_input" ||
+      event.type === "progress"
+    ) {
+      return; // suppress all streaming content
+    }
+    if (event.type === "done") {
+      if (event.content) { send({ type: "done", content: event.content }); return; } // emit done as a single text event if content is present, otherwise just end the stream
+      send({ type: "done" });
+      return;
+    }
+    send(event); // session, error, cancelled, permission, question, group_member
+  };
+}
+
+/** Creates the SSE sender for the given effort level, wired to the stream controller. */
+export function buildStreamSender(
+  effort: "low" | "high",
+  controller: ReadableStreamDefaultController<Uint8Array>,
+): (event: ChatSseEvent) => void {
+  const encoder = new TextEncoder();
+  const raw = (payload: ChatSseEvent) =>
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+  return effort === "low" ? buildLowEffortSender(raw) : raw;
+}
+
+/**
  * Returns an onSnapshot callback that delta-tracks a StreamedResult and
  * forwards only new/updated progress entries via send({ type: "progress" }).
  */
