@@ -288,7 +288,7 @@ export class QueryAgentExecutor {
                     : []),
                   `mcp__agents__${awaitRunScriptToolName(this.def.manifestKey)}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
-                  ...chatToTools.map((t) => `mcp__agents__${t.name}`),
+                  ...(!isAskMode ? chatToTools.map((t) => `mcp__agents__${t.name}`) : []),
                 ],
                 disallowedTools: [
                   ...getSecurityModeStrategy(effectiveDoveSettings(globalSettings).securityMode)
@@ -306,6 +306,7 @@ export class QueryAgentExecutor {
                   agentSettings.notifications,
                   { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
                   !!groupOverrides,
+                  isAskMode,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
                   effectiveDoveSettings(globalSettings).subAgentResponseReminder || undefined,
                 ),

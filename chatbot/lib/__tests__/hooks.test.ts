@@ -552,6 +552,7 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       undefined,
       undefined,
       false,
+      undefined,
       "",
     );
     expect(hooks.UserPromptSubmit).toBeUndefined();
@@ -568,6 +569,7 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       undefined,
       undefined,
       false,
+      undefined,
       "Check memory before MCP tools.",
     );
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
@@ -749,6 +751,60 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     const fn = getHandoffStopHook();
     const result = await callHook(fn, stopInput());
     expect((result as { reason: string }).reason).toContain("respond with exactly:");
+  });
+});
+
+// ─── buildSubAgentHooks — ask mode (no linked agent tools) ───────────────────
+
+describe("buildSubAgentHooks — ask mode", () => {
+  const LINK_TOOLS = [{ name: "chat_to_fixer", description: "Send a message to Fixer." }];
+
+  it("has no Stop hook in ask mode even when link tools are provided", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      LINK_TOOLS,
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      true, // isAskMode
+    );
+    expect(hooks.Stop).toHaveLength(1); // only the base pending-work hook
+  });
+
+  it("has no reflection matchers in PreToolUse in ask mode", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      LINK_TOOLS,
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      true, // isAskMode
+    );
+    // In ask mode: only the base PreToolUse hooks (no reflection matchers for chat_to/etc.)
+    const hooksWithoutAskMode = buildSubAgentHooks(
+      "/cwd",
+      [],
+      LINK_TOOLS,
+      makeRegistry(),
+      "test_agent",
+    );
+    expect(hooks.PreToolUse!.length).toBeLessThan(hooksWithoutAskMode.PreToolUse!.length);
+  });
+
+  it("stop hook still fires in start mode (default) with link tools", async () => {
+    const hooks = buildSubAgentHooks("/cwd", [], LINK_TOOLS, makeRegistry(), "test_agent");
+    const matchers = hooks.Stop!;
+    const fn = matchers[matchers.length - 1]!.hooks[0]!;
+    const result = await callHook(fn, stopInput());
+    expect(result).toMatchObject({ decision: "block" });
   });
 });
 

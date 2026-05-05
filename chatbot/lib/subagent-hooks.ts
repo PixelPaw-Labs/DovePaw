@@ -38,6 +38,7 @@ export function buildSubAgentHooks(
   notifications?: AgentNotificationConfig,
   env?: Record<string, string | undefined>,
   isGroupMode?: boolean,
+  isAskMode?: boolean,
   behaviorReminder?: string,
   responseReminder?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
@@ -84,7 +85,7 @@ export function buildSubAgentHooks(
     PreToolUse: [
       ...(base.PreToolUse ?? []),
       ...(notifHooks.PreToolUse ?? []),
-      ...buildReflectionMatchers(isGroupMode),
+      ...(!isAskMode ? buildReflectionMatchers(isGroupMode) : []),
     ],
     PostToolUse: [
       ...(base.PostToolUse ?? []),
@@ -93,8 +94,9 @@ export function buildSubAgentHooks(
         ? [groupStartHandoffHook, groupAwaitHandoffHook, makeGroupScriptAwaitToneHook(manifestKey)]
         : []),
     ],
-    ...(hasAgentLinks && {
-      Stop: [...(base.Stop ?? []), handoffConsiderationStop],
-    }),
+    ...(hasAgentLinks &&
+      !isAskMode && {
+        Stop: [...(base.Stop ?? []), handoffConsiderationStop],
+      }),
   };
 }
