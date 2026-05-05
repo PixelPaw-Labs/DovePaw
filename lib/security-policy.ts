@@ -139,4 +139,5 @@ export const ALWAYS_DISALLOWED_TOOLS: string[] = [
   "mcp__claude_ai_Confluence_.*",
   "mcp__claude_ai_Slack_.*",
   "mcp__claude_ai_Slack_Workato_.*",
+  "mcp__claude_ai_Envato_Creative_Companion_.*",
 ];
