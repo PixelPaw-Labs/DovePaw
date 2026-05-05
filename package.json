@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "tsup --metafile && tsx scripts/setup.ts",
-    "install": "tsx build.ts",
-    "uninstall": "tsx build.ts --uninstall",
+    "install": "tsx scripts/setup.ts --install",
+    "uninstall": "tsx scripts/setup.ts --uninstall",
     "lint": "oxlint --disable-nested-config --ignore-pattern agents/",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
