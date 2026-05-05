@@ -3,7 +3,7 @@ import {
   buildSubAgentReminder,
   withMemoryReminder,
   SUBAGENT_PROMPT_REMINDER,
-} from "../subagent-reminder.js";
+} from "@@/lib/subagent-reminder";
 
 describe("buildSubAgentReminder", () => {
   it("returns base reminder when called with no args", () => {
@@ -46,5 +46,25 @@ describe("withMemoryReminder", () => {
 
   it("returns instruction unchanged when memoryDir is absent", () => {
     expect(withMemoryReminder("do the thing")).toBe("do the thing");
+  });
+
+  it("instructs agent to skip to NOT SUFFICIENT when MEMORY.md does not exist", () => {
+    const result = withMemoryReminder(
+      "task",
+      "/home/.dovepaw/agents/state/.my-agent",
+      "start_run_my_agent",
+    );
+    expect(result).toContain("does not exist");
+    expect(result).toContain("NOT SUFFICIENT");
+  });
+
+  it("requires entire response to be the exact escalation sentence", () => {
+    const result = withMemoryReminder(
+      "task",
+      "/home/.dovepaw/agents/state/.my-agent",
+      "start_run_my_agent",
+    );
+    expect(result).toContain("ENTIRE response MUST be this exact sentence");
+    expect(result).toContain("no preamble, no explanation, no extra words");
   });
 });

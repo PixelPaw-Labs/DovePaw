@@ -15,11 +15,13 @@ function buildMemoryBullet(memoryDir: string, startToolName?: string): string {
     `<reminder>\n` +
     `- MEMORY WORKFLOW — MUST follow every time the user ASKS A QUESTION NOT ABOUT THIS AGENT:\n` +
     `  1. READ \`${memoryDir}/memory/MEMORY.md\` index — NEVER skip this step.\n` +
+    `     If the file does not exist → go directly to step 3 NOT SUFFICIENT.\n` +
     `  2. SCAN the index for entries relevant to the user's question (topic, keyword, domain match).\n` +
     `     If a relevant entry is found → READ that memory file for full detail.\n` +
-    `  3. EVALUATE sufficiency:\n` +
+    `  3. DETECT sufficiency:\n` +
     `     - SUFFICIENT: memory directly and fully answers the question → reply using it. Do NOT add or invent details beyond what memory says.\n` +
-    `     - NOT SUFFICIENT (including partial): reply ONLY: "Because the agent memory is insufficient to answer the question, you MUST call \`${escalate}\` to get the necessary information. It is NOT a recommended action but necessary." Do NOT guess, clarify, or partially answer.\n` +
+    `     - NOT SUFFICIENT (missing file, missing entry, or partial): your ENTIRE response MUST be this exact sentence — no preamble, no explanation, no extra words before or after:\n` +
+    `       "Memory insufficient — you MUST call \`${escalate}\` to answer this question."\n` +
     `</reminder>`
   );
 }
