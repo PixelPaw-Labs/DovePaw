@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { ChatApp } from "@/components/chat-app";
 import { readSplitAgentConfigEntries } from "@@/lib/agents-config";
 import { listPlugins } from "@@/lib/plugin-manager";

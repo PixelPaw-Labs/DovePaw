@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { AgentSidebar } from "@/components/agent-chat/agent-sidebar";
 import { readSplitAgentConfigEntries } from "@@/lib/agents-config";
 import { listPlugins } from "@@/lib/plugin-manager";

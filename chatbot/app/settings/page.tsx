@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { SettingsPageLayout } from "@/components/settings/settings-page-layout";
 import { SettingsContent } from "@/components/settings/settings-content";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
