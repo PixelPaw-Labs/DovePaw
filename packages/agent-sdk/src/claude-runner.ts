@@ -16,6 +16,7 @@ export interface RunOpts {
   worktree?: string;
   continueSession?: boolean;
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
+  disallowedTools?: string[];
   settingSources?: Array<"user" | "project" | "local">;
   /** Assign a session ID for later resumption via resumeSession. */
   sessionId?: string;
@@ -104,6 +105,7 @@ export class ClaudeRunner {
           ...(opts.agent ? { agent: opts.agent } : {}),
           ...(opts.effort ? { effort: opts.effort } : {}),
           ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
+          ...(opts.disallowedTools?.length ? { disallowedTools: opts.disallowedTools } : {}),
           ...(opts.settingSources ? { settingSources: opts.settingSources } : {}),
           ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
           ...(opts.resumeSession ? { resume: opts.resumeSession } : {}),

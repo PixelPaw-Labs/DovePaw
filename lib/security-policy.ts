@@ -116,6 +116,14 @@ export function getSecurityModeStrategy(mode: SecurityMode): SecurityModeStrateg
   }
 }
 
+export function buildSecurityEnv(mode: SecurityMode): Record<string, string> {
+  const { disallowedTools } = getSecurityModeStrategy(mode);
+  return {
+    DOVEPAW_SECURITY_MODE: mode,
+    ...(disallowedTools.length > 0 ? { DOVEPAW_DISALLOWED_TOOLS: disallowedTools.join(",") } : {}),
+  };
+}
+
 // ─── Platform-wide blocked tools ──────────────────────────────────────────────
 
 /** Tools blocked unconditionally across every agent and every Dove mode. */

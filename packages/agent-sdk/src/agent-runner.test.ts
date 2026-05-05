@@ -1,9 +1,73 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { AgentRunner } from "./agent-runner.js";
+import { AgentRunner, resolveClaudeSecurityOpts, resolveCodexSandboxMode } from "./agent-runner.js";
 
 const TMP_DIR = join(tmpdir(), `agent-runner-test-${process.pid}`);
+
+describe("resolveClaudeSecurityOpts", () => {
+  it("returns undefined permissionMode and empty disallowedTools when no env or opts", () => {
+    const result = resolveClaudeSecurityOpts(undefined, {});
+    expect(result.permissionMode).toBeUndefined();
+    expect(result.disallowedTools).toEqual([]);
+  });
+
+  it("read-only env overrides permissionMode to 'default'", () => {
+    const result = resolveClaudeSecurityOpts(
+      { permissionMode: "acceptEdits" },
+      { DOVEPAW_SECURITY_MODE: "read-only" },
+    );
+    expect(result.permissionMode).toBe("default");
+  });
+
+  it("read-only env parses DOVEPAW_DISALLOWED_TOOLS into array", () => {
+    const result = resolveClaudeSecurityOpts(undefined, {
+      DOVEPAW_SECURITY_MODE: "read-only",
+      DOVEPAW_DISALLOWED_TOOLS: "Write,Edit,Bash(rm *)",
+    });
+    expect(result.disallowedTools).toEqual(["Write", "Edit", "Bash(rm *)"]);
+  });
+
+  it("supervised env keeps caller permissionMode", () => {
+    const result = resolveClaudeSecurityOpts(
+      { permissionMode: "acceptEdits" },
+      { DOVEPAW_SECURITY_MODE: "supervised" },
+    );
+    expect(result.permissionMode).toBe("acceptEdits");
+  });
+
+  it("merges env disallowedTools with claudeOpts disallowedTools", () => {
+    const result = resolveClaudeSecurityOpts(
+      { disallowedTools: ["ExtraToolA"] },
+      { DOVEPAW_DISALLOWED_TOOLS: "Write,Edit" },
+    );
+    expect(result.disallowedTools).toEqual(["Write", "Edit", "ExtraToolA"]);
+  });
+});
+
+describe("resolveCodexSandboxMode", () => {
+  it("returns undefined when no env or opts", () => {
+    expect(resolveCodexSandboxMode(undefined, {})).toBeUndefined();
+  });
+
+  it("read-only env forces sandboxMode to 'read-only'", () => {
+    expect(
+      resolveCodexSandboxMode(
+        { sandboxMode: "workspace-write" },
+        { DOVEPAW_SECURITY_MODE: "read-only" },
+      ),
+    ).toBe("read-only");
+  });
+
+  it("non-read-only env keeps caller sandboxMode", () => {
+    expect(
+      resolveCodexSandboxMode(
+        { sandboxMode: "workspace-write" },
+        { DOVEPAW_SECURITY_MODE: "supervised" },
+      ),
+    ).toBe("workspace-write");
+  });
+});
 
 describe("AgentRunner", () => {
   describe("writeLog", () => {

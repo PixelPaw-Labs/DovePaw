@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ALWAYS_DISALLOWED_TOOLS,
+  buildSecurityEnv,
   getSecurityModeStrategy,
   bashHasWriteOperation,
 } from "../security-policy.js";
@@ -32,6 +33,26 @@ describe("ALWAYS_DISALLOWED_TOOLS", () => {
   });
 });
 
+describe("buildSecurityEnv", () => {
+  it("read-only: sets DOVEPAW_SECURITY_MODE and DOVEPAW_DISALLOWED_TOOLS", () => {
+    const env = buildSecurityEnv("read-only");
+    expect(env.DOVEPAW_SECURITY_MODE).toBe("read-only");
+    expect(env.DOVEPAW_DISALLOWED_TOOLS).toContain("Write");
+  });
+
+  it("supervised: sets DOVEPAW_SECURITY_MODE, no DOVEPAW_DISALLOWED_TOOLS", () => {
+    const env = buildSecurityEnv("supervised");
+    expect(env.DOVEPAW_SECURITY_MODE).toBe("supervised");
+    expect(env.DOVEPAW_DISALLOWED_TOOLS).toBeUndefined();
+  });
+
+  it("autonomous: sets DOVEPAW_SECURITY_MODE, no DOVEPAW_DISALLOWED_TOOLS", () => {
+    const env = buildSecurityEnv("autonomous");
+    expect(env.DOVEPAW_SECURITY_MODE).toBe("autonomous");
+    expect(env.DOVEPAW_DISALLOWED_TOOLS).toBeUndefined();
+  });
+});
+
 describe("getSecurityModeStrategy", () => {
   it("read-only mode uses default permissionMode", () => {
     const s = getSecurityModeStrategy("read-only");
@@ -58,6 +79,13 @@ describe("getSecurityModeStrategy", () => {
   it("autonomous mode has empty disallowedTools list", () => {
     const s = getSecurityModeStrategy("autonomous");
     expect(s.disallowedTools).toEqual([]);
+  });
+
+  it("sub-agent read-only disallowedTools + ALWAYS_DISALLOWED_TOOLS covers write and service tools", () => {
+    const modeTools = getSecurityModeStrategy("read-only").disallowedTools;
+    const merged = [...modeTools, ...ALWAYS_DISALLOWED_TOOLS];
+    expect(merged).toContain("Write");
+    expect(merged.some((t) => t.includes("Gmail"))).toBe(true);
   });
 });
 

@@ -76,6 +76,7 @@ Strong success criteria let you loop independently. Weak criteria (\"make it wor
 
 **Always write the test before the implementation.**
 
+- If no test file exists, create one.
 - For every new function or behaviour, write a failing test first.
 - Only then write the code to make it pass.
 - Never write implementation code without a corresponding test already in place.'''
