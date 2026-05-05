@@ -410,6 +410,7 @@ describe("effectiveDoveSettings", () => {
       iconColor: "text-pink-700",
       defaultModel: "",
       securityMode: "supervised" as const,
+      streamEffort: "high" as const,
       allowWebTools: false,
       behaviorReminder: "",
       subAgentBehaviorReminder: "",

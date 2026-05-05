@@ -99,13 +99,11 @@ export type ChatSseEvent =
   | ChatSseGroupMember;
 
 /**
- * Low-effort sender: suppresses all streaming text/tool/thinking events.
- * Emits done.content as a single text event once the result is confirmed clean.
+ * "none" effort: suppresses all streaming text/tool/thinking events.
+ * Emits done.content as a single batch once the result is confirmed clean.
  * Structural events (session, error, cancelled, permission, question, group_member) pass through.
  */
-function buildLowEffortSender(
-  send: (event: ChatSseEvent) => void,
-): (event: ChatSseEvent) => void {
+function buildNoneEffortSender(send: (event: ChatSseEvent) => void): (event: ChatSseEvent) => void {
   return (event: ChatSseEvent) => {
     if (
       event.type === "text" ||
@@ -114,10 +112,13 @@ function buildLowEffortSender(
       event.type === "tool_input" ||
       event.type === "progress"
     ) {
-      return; // suppress all streaming content
+      return;
     }
     if (event.type === "done") {
-      if (event.content) { send({ type: "done", content: event.content }); return; } // emit done as a single text event if content is present, otherwise just end the stream
+      if (event.content) {
+        send({ type: "done", content: event.content });
+        return;
+      }
       send({ type: "done" });
       return;
     }
@@ -125,15 +126,42 @@ function buildLowEffortSender(
   };
 }
 
+/** "low" effort: streams text deltas and emits done. Suppresses thinking/tool/progress events.
+ * Structural events (session, error, cancelled, permission, question, group_member) pass through.
+ */
+function buildLowEffortSender(send: (event: ChatSseEvent) => void): (event: ChatSseEvent) => void {
+  return (event: ChatSseEvent) => {
+    if (
+      event.type === "thinking" ||
+      event.type === "tool_call" ||
+      event.type === "tool_input" ||
+      event.type === "progress"
+    ) {
+      return;
+    }
+    if (event.type === "done") {
+      if (event.content) {
+        send({ type: "done", content: event.content });
+        return;
+      }
+      send({ type: "done" });
+      return;
+    }
+    send(event); // text, session, error, cancelled, permission, question, group_member
+  };
+}
+
 /** Creates the SSE sender for the given effort level, wired to the stream controller. */
 export function buildStreamSender(
-  effort: "low" | "high",
+  effort: "none" | "low" | "high",
   controller: ReadableStreamDefaultController<Uint8Array>,
 ): (event: ChatSseEvent) => void {
   const encoder = new TextEncoder();
   const raw = (payload: ChatSseEvent) =>
     controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
-  return effort === "low" ? buildLowEffortSender(raw) : raw;
+  if (effort === "none") return buildNoneEffortSender(raw);
+  if (effort === "low") return buildLowEffortSender(raw);
+  return raw;
 }
 
 /**

@@ -18,7 +18,9 @@ import {
 import {
   type DoveSettings,
   type SecurityMode,
+  type StreamEffort,
   SECURITY_MODES,
+  STREAM_EFFORTS,
   doveSettingsSchema,
 } from "@@/lib/settings-schemas";
 import { DOVE_LEAN_REMINDER } from "@@/lib/dove-lean-reminder";
@@ -40,6 +42,12 @@ const SECURITY_MODE_LABELS: Record<SecurityMode, string> = {
   autonomous: "Autonomous",
 };
 
+const STREAM_EFFORT_LABELS: Record<StreamEffort, string> = {
+  none: "No Stream",
+  low: "Low Stream",
+  high: "High Stream",
+};
+
 interface FormState {
   displayName: string;
   tagline: string;
@@ -52,6 +60,7 @@ interface FormState {
   iconColor: string;
   defaultModel: string;
   securityMode: SecurityMode;
+  streamEffort: StreamEffort;
   allowWebTools: boolean;
   behaviorReminder: string;
   subAgentBehaviorReminder: string;
@@ -72,6 +81,7 @@ function settingsToForm(s: DoveSettings): FormState {
     iconColor: s.iconColor,
     defaultModel: s.defaultModel,
     securityMode: s.securityMode,
+    streamEffort: s.streamEffort,
     allowWebTools: s.allowWebTools,
     behaviorReminder: s.behaviorReminder,
     subAgentBehaviorReminder: s.subAgentBehaviorReminder,
@@ -286,6 +296,33 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
             />
             <span className="text-sm">Enable WebFetch and WebSearch</span>
           </label>
+        </Row>
+      </Section>
+
+      {/* Stream Effort */}
+      <Section label="Stream Effort">
+        <Row
+          label="Level"
+          hint="No Stream: final answer only. Low Stream: text streaming + done. High Stream: everything including tool calls and progress."
+        >
+          <Select
+            value={form.streamEffort}
+            onValueChange={(v) => {
+              const effort = STREAM_EFFORTS.find((e) => e === v);
+              if (effort) set("streamEffort", effort);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STREAM_EFFORTS.map((e) => (
+                <SelectItem key={e} value={e}>
+                  {STREAM_EFFORT_LABELS[e]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Row>
       </Section>
 

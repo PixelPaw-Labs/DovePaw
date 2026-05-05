@@ -27,6 +27,9 @@ export const envVarSchema = z.object({
 export const SECURITY_MODES = ["read-only", "supervised", "autonomous"] as const;
 export type SecurityMode = (typeof SECURITY_MODES)[number];
 
+export const STREAM_EFFORTS = ["none", "low", "high"] as const;
+export type StreamEffort = (typeof STREAM_EFFORTS)[number];
+
 export const doveSettingsSchema = z.object({
   /** Human-readable name shown in UI and system prompt. Defaults to "Dove". */
   displayName: z.string().default("Dove"),
@@ -64,6 +67,12 @@ export const doveSettingsSchema = z.object({
   responseReminder: z.string().default(""),
   /** Response reminder injected via PostToolUse when a sub-agent await_* task completes. Empty = none. */
   subAgentResponseReminder: z.string().default("Open your response by addressing the sender."),
+  /**
+   * Server-configured default stream effort level for the chat SSE endpoint.
+   * API callers can override this per-request. "high" streams everything, "low" streams text
+   * only (suppresses tool/progress events), "none" emits only the final done event.
+   */
+  streamEffort: z.enum(STREAM_EFFORTS).default("high"),
 });
 
 export type DoveSettings = z.infer<typeof doveSettingsSchema>;

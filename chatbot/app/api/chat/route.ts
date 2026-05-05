@@ -60,9 +60,10 @@ import { z } from "zod";
 const chatRequestSchema = z.object({
   message: z.string(),
   sessionId: z.string().nullable().optional().default(null),
+  /** When provided, overrides the server-configured streamEffort in Dove settings. */
   streamEffort: z.preprocess(
     (v) => (typeof v === "string" ? v.toLowerCase() : v),
-    z.enum(["low", "high"]).optional().default("high"),
+    z.enum(["none", "low", "high"]).optional(),
   ),
 });
 
@@ -121,256 +122,267 @@ export async function POST(request: Request) {
   const { message, sessionId, streamEffort } = chatRequestSchema.parse(await request.json());
 
   const subprocessController = new AbortController();
-  return createSseResponse(request, subprocessController, async (controller, _connectionController) => {
-    // subprocessController is intentionally NOT wired to _connectionController.
-    // Browser disconnect / session switch only closes the SSE stream (via connectionController)
-    // but leaves the Claude subprocess running as a background session.
-    // The subprocess is only killed by:
-    //   1. Explicit DELETE /api/chat  → sessionRunner.abort()
-    //   2. Process exit / SIGTERM    → sessionRunner.abortAll()
+  return createSseResponse(
+    request,
+    subprocessController,
+    async (controller, _connectionController) => {
+      // subprocessController is intentionally NOT wired to _connectionController.
+      // Browser disconnect / session switch only closes the SSE stream (via connectionController)
+      // but leaves the Claude subprocess running as a background session.
+      // The subprocess is only killed by:
+      //   1. Explicit DELETE /api/chat  → sessionRunner.abort()
+      //   2. Process exit / SIGTERM    → sessionRunner.abortAll()
 
-    const backgroundTasks: Promise<CollectedStream>[] = [];
-    const doveRegistry = new PendingRegistry();
-    const [allAgents, settings] = await Promise.all([readAgentsConfig(), readSettings()]);
-    const agents = allAgents.filter((a) => a.doveVisible !== false);
-    const doveSettings = effectiveDoveSettings(settings);
+      const backgroundTasks: Promise<CollectedStream>[] = [];
+      const doveRegistry = new PendingRegistry();
+      const [allAgents, settings] = await Promise.all([readAgentsConfig(), readSettings()]);
+      const agents = allAgents.filter((a) => a.doveVisible !== false);
+      const doveSettings = effectiveDoveSettings(settings);
 
-    // On subsequent turns, load the persisted context map for this Dove session.
-    // On the first turn (sessionId is null), start fresh — persist() will save it after.
-    const ctxMap: Map<string, string> = sessionId
-      ? agentContextRegistry.getOrLoad(sessionId)
-      : new Map<string, string>();
+      // On subsequent turns, load the persisted context map for this Dove session.
+      // On the first turn (sessionId is null), start fresh — persist() will save it after.
+      const ctxMap: Map<string, string> = sessionId
+        ? agentContextRegistry.getOrLoad(sessionId)
+        : new Map<string, string>();
 
-    // Dual-publish: forward every event to the browser SSE stream AND to the
-    // per-session event bus so background reconnect endpoints can replay them.
-    // On resume turns the session ID is known immediately; on first turns it is
-    // resolved when the "session" SSE event fires (dispatcher buffers and flushes).
-    const dispatcher = new SseQueryDispatcher(buildStreamSender(streamEffort, controller), sessionId ?? undefined);
-    const userMsgId = randomUUID();
-
-    const eligibleGroups = (await readAgentLinksFile()).groups.filter((g) => g.members.length >= 2);
-    const groupTools =
-      eligibleGroups.length > 0
-        ? [
-            ...eligibleGroups.map((group) =>
-              makeInitGroupTool(
-                group,
-                agents.filter((a) => group.members.includes(a.name)),
-              ),
-            ),
-            ...eligibleGroups.map((group) => {
-              const memberDefs = agents.filter((a) => group.members.includes(a.name));
-              return makeStartGroupTool(
-                group,
-                memberDefs,
-                subprocessController.signal,
-                backgroundTasks,
-                doveRegistry,
-              );
-            }),
-            ...eligibleGroups.map((group) => {
-              const memberDefs = agents.filter((a) => group.members.includes(a.name));
-              return makeAwaitGroupTool(
-                group,
-                memberDefs,
-                subprocessController.signal,
-                doveRegistry,
-              );
-            }),
-          ]
-        : [];
-
-    const tools = [
-      ...agents.flatMap((agent) => [
-        makeAskTool(agent, subprocessController.signal, ctxMap, doveSettings.displayName),
-        makeStartTool(
-          agent,
-          subprocessController.signal,
-          backgroundTasks,
-          doveRegistry,
-          doveSettings.displayName,
-        ),
-        makeAwaitTool(agent, subprocessController.signal, doveRegistry),
-      ]),
-      ...groupTools,
-    ];
-
-    const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
-      dispatcher.publish,
-    );
-    // Track the session ID the moment it's registered in sessionRunner (mid-stream).
-    // Separate from resolvedSessionId (set only on normal completion) so the finally
-    // block can clean up even if query() throws before consumeQueryEvents returns.
-    let registeredSessionId: string | null = null;
-
-    let resolvedSessionId: string | null = null;
-    try {
-      await withMcpQuery(
-        tools,
-        async (mcpServer) => {
-          const additionalDirectories = [
-            ...getLaunchdAdditionalDirs(),
-            DOVEPAW_TMP_DIR,
-            DOVEPAW_DIR,
-          ];
-          const doveStrategy = getSecurityModeStrategy(doveSettings.securityMode);
-          // Compose final disallowedTools: mode-based list + web tools (blocked when disabled).
-          const disallowedTools = [
-            ...doveStrategy.disallowedTools,
-            ...(!doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
-            ...ALWAYS_DISALLOWED_TOOLS,
-          ];
-          const defaultModel = doveSettings.defaultModel.trim();
-          resolvedSessionId = await consumeQueryEvents(
-            query({
-              prompt: message,
-              options: {
-                abortController: subprocessController,
-                env: {
-                  ...process.env, // Pass through all env vars so tools can read their configs
-                  ...resolveSettingsEnv(settings), // Global settings env vars override process.env
-                  DOVEPAW_SUBAGENT: "1",
-                },
-                ...(defaultModel ? { model: defaultModel } : {}),
-                promptSuggestions: true,
-                cwd: AGENTS_ROOT,
-                // Expose the scheduler config directory so Claude can inspect
-                // installed scheduler configs (written by `npm run install`)
-                additionalDirectories,
-                systemPrompt: {
-                  type: "preset",
-                  preset: "claude_code",
-                  append: await buildSystemPrompt(settings),
-                },
-                permissionMode: doveStrategy.permissionMode,
-                allowDangerouslySkipPermissions: doveStrategy.allowDangerouslySkipPermissions,
-                disallowedTools,
-                allowedTools: [
-                  ...agents.flatMap((a) => [
-                    `mcp__agents__${doveAskToolName(a)}`,
-                    `mcp__agents__${doveStartToolName(a)}`,
-                    `mcp__agents__${doveAwaitToolName(a)}`,
-                  ]),
-                  ...(eligibleGroups.length > 0
-                    ? eligibleGroups.flatMap((g) => [
-                        `mcp__agents__${doveInitGroupToolName(g.name)}`,
-                        `mcp__agents__${doveStartGroupToolName(g.name)}`,
-                        `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
-                      ])
-                    : []),
-                  ...(doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
-                ],
-                mcpServers: { agents: mcpServer },
-                // Resume the existing session so the full conversation history is preserved.
-                // On the first message sessionId is null and query() starts a fresh session.
-                ...(sessionId ? { resume: sessionId } : {}),
-                // Stream text tokens as they are generated
-                includePartialMessages: true,
-                settingSources: doveStrategy.settingSources,
-                hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
-                  includeGroupReminder: eligibleGroups.length > 0,
-                  disallowedTools,
-                  behaviorReminder: doveSettings.behaviorReminder || undefined,
-                  responseReminder: doveSettings.responseReminder || undefined,
-                }),
-                canUseTool: doveCanUseTool,
-              },
-            }),
-            dispatcher,
-            (id) => {
-              // system:init fires once per turn (including resume turns).
-              // Only run setup on the first time we see this session ID.
-              if (registeredSessionId === id) return;
-              registeredSessionId = id;
-              const label = message.slice(0, 60) || "Session";
-              // Only create DB row on first turn (sessionId was null = new session).
-              // Resume turns must not recreate a row the user may have deleted.
-              if (!sessionId) {
-                SessionManager.save(
-                  "dove",
-                  id,
-                  { output: "", progress: [] },
-                  {
-                    label,
-                    userText: message,
-                    userMsgId,
-                  },
-                );
-              }
-              setSessionStatus(id, "running");
-              sessionRunner.register(id, subprocessController, label);
-              dispatcher.enableIncrementalSave({
-                sessionId: id,
-                agentId: "dove",
-                label,
-                userMsgId,
-                userText: message,
-              });
-            },
-          );
-          const finalContent = dispatcher.buildFinalContent();
-          dispatcher.publish(
-            finalContent ? { type: "done", content: finalContent } : { type: "done" },
-          );
-        },
-        (_err, isAbort) => {
-          abortPermissions();
-          if (isAbort) {
-            try {
-              dispatcher.publish({ type: "cancelled" });
-            } catch {
-              // stream already closed
-            }
-          } else {
-            try {
-              const msg = _err instanceof Error ? _err.message : String(_err);
-              dispatcher.publish({ type: "error", content: msg });
-              dispatcher.publish({ type: "done" });
-            } catch {
-              // Stream already closed — client disconnected
-            }
-          }
-        },
+      // Dual-publish: forward every event to the browser SSE stream AND to the
+      // per-session event bus so background reconnect endpoints can replay them.
+      // On resume turns the session ID is known immediately; on first turns it is
+      // resolved when the "session" SSE event fires (dispatcher buffers and flushes).
+      // API-provided streamEffort takes precedence over the server-configured default.
+      const effectiveEffort = streamEffort ?? doveSettings.streamEffort;
+      const dispatcher = new SseQueryDispatcher(
+        buildStreamSender(effectiveEffort, controller),
+        sessionId ?? undefined,
       );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      consola.error(`Error in Dove query:`, err);
-      dispatcher.publish({ type: "error", content: msg });
-    } finally {
-      // Use registeredSessionId (set when sessionRunner.register was called mid-stream)
-      // as fallback when resolvedSessionId is null (query() threw before completing).
-      const cleanupId = resolvedSessionId ?? registeredSessionId;
-      if (cleanupId && !deletedSessionIds.has(cleanupId)) {
-        agentContextRegistry.persist(cleanupId, ctxMap);
-        SessionManager.save(
-          "dove",
-          cleanupId,
-          { output: "", progress: dispatcher.buildProgress() },
-          {
-            label: message.slice(0, 60) || "Session",
-            userText: message,
-            userMsgId,
-            assistantMsg: dispatcher.buildAssistantMessage(),
+      const userMsgId = randomUUID();
+
+      const eligibleGroups = (await readAgentLinksFile()).groups.filter(
+        (g) => g.members.length >= 2,
+      );
+      const groupTools =
+        eligibleGroups.length > 0
+          ? [
+              ...eligibleGroups.map((group) =>
+                makeInitGroupTool(
+                  group,
+                  agents.filter((a) => group.members.includes(a.name)),
+                ),
+              ),
+              ...eligibleGroups.map((group) => {
+                const memberDefs = agents.filter((a) => group.members.includes(a.name));
+                return makeStartGroupTool(
+                  group,
+                  memberDefs,
+                  subprocessController.signal,
+                  backgroundTasks,
+                  doveRegistry,
+                );
+              }),
+              ...eligibleGroups.map((group) => {
+                const memberDefs = agents.filter((a) => group.members.includes(a.name));
+                return makeAwaitGroupTool(
+                  group,
+                  memberDefs,
+                  subprocessController.signal,
+                  doveRegistry,
+                );
+              }),
+            ]
+          : [];
+
+      const tools = [
+        ...agents.flatMap((agent) => [
+          makeAskTool(agent, subprocessController.signal, ctxMap, doveSettings.displayName),
+          makeStartTool(
+            agent,
+            subprocessController.signal,
+            backgroundTasks,
+            doveRegistry,
+            doveSettings.displayName,
+          ),
+          makeAwaitTool(agent, subprocessController.signal, doveRegistry),
+        ]),
+        ...groupTools,
+      ];
+
+      const { canUseTool: doveCanUseTool, abortPermissions } = buildDoveCanUseTool(
+        dispatcher.publish,
+      );
+      // Track the session ID the moment it's registered in sessionRunner (mid-stream).
+      // Separate from resolvedSessionId (set only on normal completion) so the finally
+      // block can clean up even if query() throws before consumeQueryEvents returns.
+      let registeredSessionId: string | null = null;
+
+      let resolvedSessionId: string | null = null;
+      try {
+        await withMcpQuery(
+          tools,
+          async (mcpServer) => {
+            const additionalDirectories = [
+              ...getLaunchdAdditionalDirs(),
+              DOVEPAW_TMP_DIR,
+              DOVEPAW_DIR,
+            ];
+            const doveStrategy = getSecurityModeStrategy(doveSettings.securityMode);
+            // Compose final disallowedTools: mode-based list + web tools (blocked when disabled).
+            const disallowedTools = [
+              ...doveStrategy.disallowedTools,
+              ...(!doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
+              ...ALWAYS_DISALLOWED_TOOLS,
+            ];
+            const defaultModel = doveSettings.defaultModel.trim();
+            resolvedSessionId = await consumeQueryEvents(
+              query({
+                prompt: message,
+                options: {
+                  abortController: subprocessController,
+                  env: {
+                    ...process.env, // Pass through all env vars so tools can read their configs
+                    ...resolveSettingsEnv(settings), // Global settings env vars override process.env
+                    DOVEPAW_SUBAGENT: "1",
+                  },
+                  ...(defaultModel ? { model: defaultModel } : {}),
+                  promptSuggestions: true,
+                  cwd: AGENTS_ROOT,
+                  // Expose the scheduler config directory so Claude can inspect
+                  // installed scheduler configs (written by `npm run install`)
+                  additionalDirectories,
+                  systemPrompt: {
+                    type: "preset",
+                    preset: "claude_code",
+                    append: await buildSystemPrompt(settings),
+                  },
+                  permissionMode: doveStrategy.permissionMode,
+                  allowDangerouslySkipPermissions: doveStrategy.allowDangerouslySkipPermissions,
+                  disallowedTools,
+                  allowedTools: [
+                    ...agents.flatMap((a) => [
+                      `mcp__agents__${doveAskToolName(a)}`,
+                      `mcp__agents__${doveStartToolName(a)}`,
+                      `mcp__agents__${doveAwaitToolName(a)}`,
+                    ]),
+                    ...(eligibleGroups.length > 0
+                      ? eligibleGroups.flatMap((g) => [
+                          `mcp__agents__${doveInitGroupToolName(g.name)}`,
+                          `mcp__agents__${doveStartGroupToolName(g.name)}`,
+                          `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
+                        ])
+                      : []),
+                    ...(doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
+                  ],
+                  mcpServers: { agents: mcpServer },
+                  // Resume the existing session so the full conversation history is preserved.
+                  // On the first message sessionId is null and query() starts a fresh session.
+                  ...(sessionId ? { resume: sessionId } : {}),
+                  // Stream text tokens as they are generated
+                  includePartialMessages: true,
+                  settingSources: doveStrategy.settingSources,
+                  hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
+                    includeGroupReminder: eligibleGroups.length > 0,
+                    disallowedTools,
+                    behaviorReminder: doveSettings.behaviorReminder || undefined,
+                    responseReminder: doveSettings.responseReminder || undefined,
+                  }),
+                  canUseTool: doveCanUseTool,
+                },
+              }),
+              dispatcher,
+              (id) => {
+                // system:init fires once per turn (including resume turns).
+                // Only run setup on the first time we see this session ID.
+                if (registeredSessionId === id) return;
+                registeredSessionId = id;
+                const label = message.slice(0, 60) || "Session";
+                // Only create DB row on first turn (sessionId was null = new session).
+                // Resume turns must not recreate a row the user may have deleted.
+                if (!sessionId) {
+                  SessionManager.save(
+                    "dove",
+                    id,
+                    { output: "", progress: [] },
+                    {
+                      label,
+                      userText: message,
+                      userMsgId,
+                    },
+                  );
+                }
+                setSessionStatus(id, "running");
+                sessionRunner.register(id, subprocessController, label);
+                dispatcher.enableIncrementalSave({
+                  sessionId: id,
+                  agentId: "dove",
+                  label,
+                  userMsgId,
+                  userText: message,
+                });
+              },
+            );
+            const finalContent = dispatcher.buildFinalContent();
+            dispatcher.publish(
+              finalContent ? { type: "done", content: finalContent } : { type: "done" },
+            );
+          },
+          (_err, isAbort) => {
+            abortPermissions();
+            if (isAbort) {
+              try {
+                dispatcher.publish({ type: "cancelled" });
+              } catch {
+                // stream already closed
+              }
+            } else {
+              try {
+                const msg = _err instanceof Error ? _err.message : String(_err);
+                dispatcher.publish({ type: "error", content: msg });
+                dispatcher.publish({ type: "done" });
+              } catch {
+                // Stream already closed — client disconnected
+              }
+            }
           },
         );
-        if (sessionRunner.isRunning(cleanupId)) {
-          sessionRunner.complete(cleanupId);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        consola.error(`Error in Dove query:`, err);
+        dispatcher.publish({ type: "error", content: msg });
+      } finally {
+        // Use registeredSessionId (set when sessionRunner.register was called mid-stream)
+        // as fallback when resolvedSessionId is null (query() threw before completing).
+        const cleanupId = resolvedSessionId ?? registeredSessionId;
+        if (cleanupId && !deletedSessionIds.has(cleanupId)) {
+          agentContextRegistry.persist(cleanupId, ctxMap);
+          SessionManager.save(
+            "dove",
+            cleanupId,
+            { output: "", progress: dispatcher.buildProgress() },
+            {
+              label: message.slice(0, 60) || "Session",
+              userText: message,
+              userMsgId,
+              assistantMsg: dispatcher.buildAssistantMessage(),
+            },
+          );
+          if (sessionRunner.isRunning(cleanupId)) {
+            sessionRunner.complete(cleanupId);
+          }
+          // Don't clear the buffer here — the "done"/"cancelled" event already
+          // published by publish() starts a 60s TTL timer in session-events.ts.
+          // Clearing eagerly kills the reconnect window for users who switch
+          // away mid-session and come back within a minute.
+        } else if (cleanupId) {
+          // Explicitly deleted — just clear the event buffer
+          deletedSessionIds.delete(cleanupId);
+          clearSessionBuffer(cleanupId);
         }
-        // Don't clear the buffer here — the "done"/"cancelled" event already
-        // published by publish() starts a 60s TTL timer in session-events.ts.
-        // Clearing eagerly kills the reconnect window for users who switch
-        // away mid-session and come back within a minute.
-      } else if (cleanupId) {
-        // Explicitly deleted — just clear the event buffer
-        deletedSessionIds.delete(cleanupId);
-        clearSessionBuffer(cleanupId);
+        // Wait for all background start_* subscriptions to finish streaming
+        // before closing the SSE stream — otherwise their progress events
+        // arrive after the stream is closed and are silently dropped.
+        await Promise.allSettled(backgroundTasks);
       }
-      // Wait for all background start_* subscriptions to finish streaming
-      // before closing the SSE stream — otherwise their progress events
-      // arrive after the stream is closed and are silently dropped.
-      await Promise.allSettled(backgroundTasks);
-    }
-  });
+    },
+  );
 }
 
 /** Stop (abort subprocess, keep session row) */
