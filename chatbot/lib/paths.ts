@@ -28,3 +28,5 @@ export const CHATBOT_ROOT = join(__dirname, "..");
 export const TSX_BIN = join(CHATBOT_ROOT, "../node_modules/.bin/tsx");
 /** Runtime port manifest written by a2a/start-all.ts. Scoped per Next.js port to allow concurrent instances. */
 export const PORTS_FILE = portsFile(process.env.DOVEPAW_PORT ?? "0");
+/** Processing state written by a2a/lib/processing-registry.ts on every state change, read by /api/heartbeat SSE route. */
+export const PROCESSING_FILE = join(DOVEPAW_DIR, ".processing.json");

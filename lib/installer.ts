@@ -49,6 +49,9 @@ const execAsync = promisify(exec);
 /** Deduplicates concurrent deployTriggerScript calls; reset after each run so the next install re-deploys. */
 let _deployTriggerScriptOnce: Promise<void> | null = null;
 
+/** Deduplicates concurrent copyNativePackages calls per-package; reset after each run. */
+const _copyNativeOnce = new Map<string, Promise<void>>();
+
 /** Copy compiled .mjs to ~/.dovepaw/cron and make it executable.
  *  Triggers a full build first if the compiled output is missing. */
 export async function deployAgentScript(agentName: string): Promise<void> {
@@ -87,21 +90,32 @@ async function _doDeployTriggerScript(): Promise<void> {
 
 /**
  * Copy native addon packages from DovePaw/node_modules into ~/.dovepaw/cron/node_modules.
+ * Concurrent calls for the same package share one run; the promise is cleared after each run.
  */
 export async function copyNativePackages(packages: string[]): Promise<void> {
   await Promise.all(
-    packages.map(async (pkg) => {
-      const src = `${AGENTS_ROOT}/node_modules/${pkg}`;
-      try {
-        await access(src);
-      } catch {
-        return;
+    packages.map((pkg) => {
+      if (!_copyNativeOnce.has(pkg)) {
+        _copyNativeOnce.set(
+          pkg,
+          _doCopyNativePackage(pkg).finally(() => _copyNativeOnce.delete(pkg)),
+        );
       }
-      await mkdir(schedulerNodeModule(""), { recursive: true });
-      await rm(schedulerNodeModule(pkg), { recursive: true, force: true });
-      await cp(src, schedulerNodeModule(pkg), { recursive: true });
+      return _copyNativeOnce.get(pkg)!;
     }),
   );
+}
+
+async function _doCopyNativePackage(pkg: string): Promise<void> {
+  const src = `${AGENTS_ROOT}/node_modules/${pkg}`;
+  try {
+    await access(src);
+  } catch {
+    return;
+  }
+  await mkdir(schedulerNodeModule(""), { recursive: true });
+  await rm(schedulerNodeModule(pkg), { recursive: true, force: true });
+  await cp(src, schedulerNodeModule(pkg), { recursive: true });
 }
 
 /**

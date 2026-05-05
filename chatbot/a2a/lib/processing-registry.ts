@@ -1,10 +1,17 @@
 /**
  * In-memory registry of agents currently being processed by QueryAgentExecutor.
- * Shared within the A2A server process — read by the heartbeat server.
+ * Shared within the A2A server process.
+ *
+ * On every state change, writes PROCESSING_FILE so the /api/heartbeat SSE route
+ * can read current processing state without a cross-process event bus.
  *
  * Also stores each agent's AbortController so cancelTask() can abort
  * the running query and kill its Claude Code subprocess via the signal.
  */
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { PROCESSING_FILE } from "@/lib/paths";
 
 export type ProcessingTrigger = "scheduled" | "dove";
 
@@ -17,6 +24,20 @@ const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
   for (const fn of listeners) fn();
+  const state: Record<
+    string,
+    { processing: boolean; processingTrigger: ProcessingTrigger | null }
+  > = {};
+  for (const [manifestKey, taskIds] of byManifest) {
+    const firstTaskId = taskIds.values().next().value!;
+    state[manifestKey] = { processing: true, processingTrigger: active.get(firstTaskId) ?? null };
+  }
+  try {
+    mkdirSync(dirname(PROCESSING_FILE), { recursive: true });
+    writeFileSync(PROCESSING_FILE, JSON.stringify(state));
+  } catch {
+    // best-effort
+  }
 }
 
 /** Subscribe to any processing state change. Returns an unsubscribe function. */

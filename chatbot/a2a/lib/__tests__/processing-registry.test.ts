@@ -1,4 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:fs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:fs")>()),
+  mkdirSync: vi.fn(),
+  writeFileSync: vi.fn(),
+}));
 import {
   cancelProcessing,
   getProcessingTrigger,

@@ -17,7 +17,6 @@ import {
 } from "@/lib/agent-tools";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
-import { isAgentOnline, isHeartbeatReady } from "@/a2a/heartbeat-server";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { resolveAgentPort } from "@/lib/a2a-client";
 
@@ -66,9 +65,7 @@ export class AgentConfigReader {
       const targetDef = allAgents.find((a) => a.name === targetName);
       if (!targetDef) continue;
 
-      const online = isHeartbeatReady()
-        ? isAgentOnline(targetDef.manifestKey)
-        : resolveAgentPort(targetDef.manifestKey) !== null;
+      const online = resolveAgentPort(targetDef.manifestKey) !== null;
       if (!online) continue;
 
       switch (strategy) {

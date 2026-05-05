@@ -5,11 +5,11 @@
  * Writes a2a/.ports.json so the Next.js API route can discover the ports.
  */
 
-import { writeFileSync, rmSync } from "node:fs";
+import { writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import { consola } from "consola";
 import { getAvailablePort, writePortsManifest, createServerFromDef } from "./lib/base-server.js";
-import { startHeartbeatServer } from "./heartbeat-server.js";
-import { PORTS_FILE, A2A_SERVERS_PID_FILE } from "@/lib/paths";
+import { PORTS_FILE, A2A_SERVERS_PID_FILE, PROCESSING_FILE } from "@/lib/paths";
 import { readAgentsConfig } from "@@/lib/agents-config";
 
 const AGENTS = await readAgentsConfig();
@@ -23,8 +23,7 @@ for (let i = 0; i < AGENTS.length; i++) {
   createServerFromDef(AGENTS[i], agentPortList[i]);
 }
 
-const wsPort = await startHeartbeatServer(agentPorts);
-writePortsManifest({ ...agentPorts, ws_port: wsPort });
+writePortsManifest(agentPorts);
 
 consola.box(
   [
@@ -32,7 +31,6 @@ consola.box(
     ...AGENTS.map((a, i) => `  ${a.displayName.padEnd(22)}:${agentPortList[i]}`),
     "",
     `  📄  Port manifest → ${PORTS_FILE}`,
-    `  🔌  Heartbeat WS   → ws://127.0.0.1:${wsPort}`,
   ].join("\n"),
 );
 
@@ -46,14 +44,23 @@ const cleanupPid = () => {
   } catch {}
 };
 
+const cleanupProcessing = () => {
+  try {
+    mkdirSync(dirname(PROCESSING_FILE), { recursive: true });
+    writeFileSync(PROCESSING_FILE, "{}");
+  } catch {}
+};
+
 process.on("SIGINT", () => {
   consola.info("Shutting down A2A servers…");
   cleanupPid();
+  cleanupProcessing();
   process.exit(0);
 });
 
 process.on("SIGTERM", () => {
   cleanupPid();
+  cleanupProcessing();
   process.exit(0);
 });
 
