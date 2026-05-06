@@ -40,7 +40,6 @@ export function buildSubAgentHooks(
   isGroupMode?: boolean,
   isAskMode?: boolean,
   behaviorReminder?: string,
-  responseReminder?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -78,7 +77,6 @@ export function buildSubAgentHooks(
         : undefined,
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: ALWAYS_DISALLOWED_TOOLS,
-    responseReminder,
   });
   return {
     ...base,

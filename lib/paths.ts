@@ -73,6 +73,8 @@ export const agentConfigFile = (agentName: string, filename: string) =>
 export const CLAUDE_RULES_ROOT = join(process.env.HOME!, ".claude/rules");
 /** ~/.claude/skills — user skills directory */
 export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
+/** ~/.claude/output-styles — user output styles directory */
+export const CLAUDE_OUTPUT_STYLES_ROOT = join(process.env.HOME!, ".claude/output-styles");
 /** ~/.codex/skills — Codex skills directory */
 export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
 /** Resolve an agent's entry point to an absolute path. Absolute paths (e.g. tmp agents) pass through unchanged. */

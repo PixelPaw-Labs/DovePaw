@@ -7,6 +7,7 @@ import {
 } from "../hooks";
 import { buildSubAgentHooks, GROUP_PROMPT_REMINDER } from "../subagent-hooks";
 import { SUBAGENT_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
+import { DOVE_RESPONSE_REMINDER } from "@@/lib/dove-lean-reminder";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
 import { resolvePendingQuestion } from "../pending-questions";
@@ -370,6 +371,45 @@ describe("buildDoveHooks — PreToolUse allowed directories", () => {
     const result = await callHook(fn, preToolUseInput("Write", { file_path: "/etc/passwd" }));
     const { hookSpecificOutput } = result as { hookSpecificOutput: { permissionDecision: string } };
     expect(hookSpecificOutput.permissionDecision).toBe("deny");
+  });
+});
+
+// ─── buildDoveHooks — PostToolUse await_* response reminder ──────────────────
+
+describe("buildDoveHooks — PostToolUse await_* response reminder", () => {
+  const minimalAgents = [
+    {
+      name: "support-agent",
+      manifestKey: "support_agent",
+      toolName: "yolo_support_agent",
+    },
+  ] as Parameters<typeof buildDoveHooks>[0];
+
+  function awaitInput(status: string) {
+    return {
+      hook_event_name: "PostToolUse" as const,
+      tool_name: "mcp__agents__await_support_agent",
+      tool_input: {},
+      tool_response: JSON.stringify({ status }),
+    };
+  }
+
+  it("injects DOVE_RESPONSE_REMINDER as additionalContext when status is completed", async () => {
+    const hooks = buildDoveHooks(minimalAgents, makeRegistry(), "/cwd", []);
+    const fn = hooks.PostToolUse![1]!.hooks[0]!;
+    const result = await callHook(fn, awaitInput("completed"));
+    const { hookSpecificOutput } = result as {
+      hookSpecificOutput: { hookEventName: string; additionalContext: string };
+    };
+    expect(hookSpecificOutput.hookEventName).toBe("PostToolUse");
+    expect(hookSpecificOutput.additionalContext).toContain(DOVE_RESPONSE_REMINDER);
+  });
+
+  it("passes through when status is not completed", async () => {
+    const hooks = buildDoveHooks(minimalAgents, makeRegistry(), "/cwd", []);
+    const fn = hooks.PostToolUse![1]!.hooks[0]!;
+    const result = await callHook(fn, awaitInput("still_running"));
+    expect(result).toEqual({ continue: true });
   });
 });
 

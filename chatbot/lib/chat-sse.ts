@@ -130,13 +130,22 @@ function buildNoneEffortSender(send: (event: ChatSseEvent) => void): (event: Cha
  * Structural events (session, error, cancelled, permission, question, group_member) pass through.
  */
 function buildLowEffortSender(send: (event: ChatSseEvent) => void): (event: ChatSseEvent) => void {
+  let pendingSeparator = false;
   return (event: ChatSseEvent) => {
-    if (
-      event.type === "thinking" ||
-      event.type === "tool_call" ||
-      event.type === "tool_input" ||
-      event.type === "progress"
-    ) {
+    if (event.type === "tool_call") {
+      pendingSeparator = true;
+      return;
+    }
+    if (event.type === "thinking" || event.type === "tool_input" || event.type === "progress") {
+      return;
+    }
+    if (event.type === "text") {
+      if (pendingSeparator) {
+        pendingSeparator = false;
+        send({ type: "text", content: "\n\n" + event.content });
+        return;
+      }
+      send(event);
       return;
     }
     if (event.type === "done") {
@@ -147,7 +156,7 @@ function buildLowEffortSender(send: (event: ChatSseEvent) => void): (event: Chat
       send({ type: "done" });
       return;
     }
-    send(event); // text, session, error, cancelled, permission, question, group_member
+    send(event); // session, error, cancelled, permission, question, group_member
   };
 }
 

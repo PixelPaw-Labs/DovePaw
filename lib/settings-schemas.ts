@@ -63,10 +63,6 @@ export const doveSettingsSchema = z.object({
   behaviorReminder: z.string().default(""),
   /** Extra behavior instructions injected into the built-in sub-agent reminder on every turn. Empty = none. */
   subAgentBehaviorReminder: z.string().default(""),
-  /** Response reminder injected via PostToolUse when a Dove await_* task completes. Empty = none. */
-  responseReminder: z.string().default(""),
-  /** Response reminder injected via PostToolUse when a sub-agent await_* task completes. Empty = none. */
-  subAgentResponseReminder: z.string().default("Open your response by addressing the sender."),
   /**
    * Server-configured default stream effort level for the chat SSE endpoint.
    * API callers can override this per-request. "high" streams everything, "low" streams text

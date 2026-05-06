@@ -270,6 +270,7 @@ export class QueryAgentExecutor {
                 cwd,
                 env: { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
                 ...(defaultModel ? { model: defaultModel } : {}),
+                settings: { outputStyle: "Sub-agent" },
                 agent: this.def.displayName,
                 ...(existingState ? { resume: existingState.subagentSessionId } : {}),
                 systemPrompt: {
@@ -308,7 +309,6 @@ export class QueryAgentExecutor {
                   !!groupOverrides,
                   isAskMode,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
-                  effectiveDoveSettings(globalSettings).subAgentResponseReminder || undefined,
                 ),
                 abortController: this.abortController ?? undefined,
                 ...(canUseTool ? { canUseTool } : {}),

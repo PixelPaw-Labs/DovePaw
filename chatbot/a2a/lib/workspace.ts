@@ -51,6 +51,7 @@ function writeWorkspaceSettings(workspacePath: string): void {
   mkdirSync(claudeDir, { recursive: true });
   const flagFile = ".claude/.wakeup_pending";
   const settings = {
+    outputStyle: "Sub-agent",
     hooks: {
       PostToolUse: [
         {

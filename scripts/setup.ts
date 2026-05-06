@@ -20,6 +20,7 @@ import {
   linkPluginSkills,
   syncAgentLocalToSettings,
   syncClaudeRules,
+  syncOutputStyles,
   unlinkPluginSkills,
 } from "../lib/installer.js";
 import { scheduler } from "../lib/scheduler.js";
@@ -57,6 +58,7 @@ await Promise.all([
   linkLocalAgentSkills(),
   syncAgentLocalToSettings(),
   syncClaudeRules(),
+  syncOutputStyles(),
 ]);
 console.log(`  SDK deployed — linked to ${plugins.length} plugin(s)`);
 

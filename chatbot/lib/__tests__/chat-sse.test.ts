@@ -1,6 +1,62 @@
 import { describe, it, expect, vi } from "vitest";
-import { makeProgressSender } from "@/lib/chat-sse";
+import { buildStreamSender, makeProgressSender } from "@/lib/chat-sse";
 import { noAgentOutput, type StreamedResult } from "@/lib/a2a-client";
+
+// ─── buildStreamSender — low effort ──────────────────────────────────────────
+
+describe("buildStreamSender — low effort", () => {
+  function makeSender() {
+    const sent: string[] = [];
+    const controller = {
+      enqueue: (chunk: Uint8Array) => {
+        sent.push(new TextDecoder().decode(chunk));
+      },
+    } as unknown as ReadableStreamDefaultController<Uint8Array>;
+    const send = buildStreamSender("low", controller);
+    return { send, sent };
+  }
+
+  it("passes text events through", () => {
+    const { send, sent } = makeSender();
+    send({ type: "text", content: "hello" });
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toContain('"content":"hello"');
+  });
+
+  it("suppresses tool_call events", () => {
+    const { send, sent } = makeSender();
+    send({ type: "tool_call", name: "start_agent" });
+    expect(sent).toHaveLength(0);
+  });
+
+  it("prepends \\n\\n to first text after a suppressed tool_call", () => {
+    const { send, sent } = makeSender();
+    send({ type: "text", content: "Before." });
+    send({ type: "tool_call", name: "start_agent" });
+    send({ type: "text", content: "After." });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toContain('"content":"\\n\\nAfter."');
+  });
+
+  it("only prepends once — subsequent text after the same tool_call is unmodified", () => {
+    const { send, sent } = makeSender();
+    send({ type: "tool_call", name: "start_agent" });
+    send({ type: "text", content: "First." });
+    send({ type: "text", content: "Second." });
+    expect(sent[0]).toContain('"content":"\\n\\nFirst."');
+    expect(sent[1]).toContain('"content":"Second."');
+  });
+
+  it("prepends again after a second tool_call", () => {
+    const { send, sent } = makeSender();
+    send({ type: "tool_call", name: "tool_a" });
+    send({ type: "text", content: "Mid." });
+    send({ type: "tool_call", name: "tool_b" });
+    send({ type: "text", content: "End." });
+    expect(sent[0]).toContain('"content":"\\n\\nMid."');
+    expect(sent[1]).toContain('"content":"\\n\\nEnd."');
+  });
+});
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

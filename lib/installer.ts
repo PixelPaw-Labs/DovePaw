@@ -32,6 +32,7 @@ import {
   AGENT_SETTINGS_DIR,
   AGENTS_DIST,
   AGENTS_ROOT,
+  CLAUDE_OUTPUT_STYLES_ROOT,
   CLAUDE_RULES_ROOT,
   CODEX_SKILLS_ROOT,
   DOVEPAW_TMP_DIR,
@@ -274,6 +275,27 @@ export async function syncClaudeRules(): Promise<void> {
         } catch {
           await copyFile(join(srcDir, e.name), dest);
         }
+      }),
+  );
+}
+
+/** Symlink output styles from .claude/output-styles/ into ~/.claude/output-styles/. */
+export async function syncOutputStyles(): Promise<void> {
+  const srcDir = join(AGENTS_ROOT, ".claude", "output-styles");
+  let entries;
+  try {
+    entries = await readdir(srcDir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  await mkdir(CLAUDE_OUTPUT_STYLES_ROOT, { recursive: true });
+  await Promise.all(
+    entries
+      .filter((e) => e.isFile())
+      .map(async (e) => {
+        const dest = join(CLAUDE_OUTPUT_STYLES_ROOT, e.name);
+        await rm(dest, { force: true });
+        await symlink(join(srcDir, e.name), dest);
       }),
   );
 }
