@@ -1,19 +1,12 @@
-import { join } from "node:path";
 import { defineConfig } from "tsup";
 import { readAgentConfigEntries } from "./lib/agents-config.js";
+import { buildTsupEntries } from "./scripts/tsup-entries.js";
 
 const agentEntries = await readAgentConfigEntries();
 
 export default defineConfig({
   entry: {
-    ...Object.fromEntries(
-      agentEntries.map((a) => {
-        const entryFile = a.pluginPath
-          ? join(a.pluginPath, "agents", a.name, "main.ts")
-          : `agent-local/${a.name}/main.ts`;
-        return [`agents/${a.name}`, entryFile];
-      }),
-    ),
+    ...buildTsupEntries(agentEntries),
     "a2a-trigger": "lib/a2a-trigger.ts",
   },
   format: "esm",
