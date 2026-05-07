@@ -21,7 +21,11 @@ import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 import { ALWAYS_DISALLOWED_TOOLS } from "@@/lib/security-policy";
-import { GROUP_PROMPT_REMINDER, buildGroupReminder } from "@@/lib/subagent-reminder";
+import {
+  GROUP_PROMPT_REMINDER,
+  buildGroupReminder,
+  buildSubAgentReminder,
+} from "@@/lib/subagent-reminder";
 
 export { GROUP_PROMPT_REMINDER };
 
@@ -72,9 +76,7 @@ export function buildSubAgentHooks(
     registry,
     userPromptReminder: isGroupMode
       ? buildGroupReminder(behaviorReminder)
-      : behaviorReminder?.trim()
-        ? `<reminder>\n${behaviorReminder.trim()}\n</reminder>`
-        : undefined,
+      : buildSubAgentReminder(behaviorReminder),
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: ALWAYS_DISALLOWED_TOOLS,
   });

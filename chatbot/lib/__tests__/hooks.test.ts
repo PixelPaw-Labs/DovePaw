@@ -576,12 +576,16 @@ describe("buildSubAgentHooks — chat_to reflection gate", () => {
 // ─── buildSubAgentHooks — UserPromptSubmit reminder ──────────────────────────
 
 describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
-  it("does not inject UserPromptSubmit hook when no behaviorReminder", () => {
+  it("always injects SUBAGENT_PROMPT_REMINDER even without behaviorReminder", async () => {
     const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
-    expect(hooks.UserPromptSubmit).toBeUndefined();
+    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const result = await callHook(fn, { hook_event_name: "UserPromptSubmit", prompt: "do it" });
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain("SOMETHING BEING DONE");
+    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS START yourself first");
   });
 
-  it("does not inject UserPromptSubmit hook when behaviorReminder is empty", () => {
+  it("always injects SUBAGENT_PROMPT_REMINDER when behaviorReminder is empty", async () => {
     const hooks = buildSubAgentHooks(
       "/cwd",
       [],
@@ -595,10 +599,14 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       undefined,
       "",
     );
-    expect(hooks.UserPromptSubmit).toBeUndefined();
+    const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
+    const result = await callHook(fn, { hook_event_name: "UserPromptSubmit", prompt: "do it" });
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain("SOMETHING BEING DONE");
+    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS START yourself first");
   });
 
-  it("injects behaviorReminder wrapped in <reminder> tag", async () => {
+  it("injects SUBAGENT_PROMPT_REMINDER with behaviorReminder inside <reminder> tag", async () => {
     const hooks = buildSubAgentHooks(
       "/cwd",
       [],
@@ -613,14 +621,13 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       "Check memory before MCP tools.",
     );
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
-    const result = await callHook(fn, {
-      hook_event_name: "UserPromptSubmit",
-      prompt: "do something",
-    });
+    const result = await callHook(fn, { hook_event_name: "UserPromptSubmit", prompt: "do it" });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toBe(
-      "<reminder>\nCheck memory before MCP tools.\n</reminder>",
-    );
+    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS START yourself first");
+    expect(hookSpecificOutput.additionalContext).toContain("Check memory before MCP tools.");
+    expect(
+      hookSpecificOutput.additionalContext.indexOf("ALWAYS START yourself first"),
+    ).toBeLessThan(hookSpecificOutput.additionalContext.indexOf("Check memory before MCP tools."));
   });
 });
 
