@@ -5,6 +5,7 @@ import {
   copyFile,
   readdir,
   rm,
+  unlink,
   access,
   constants,
   lstat,
@@ -81,6 +82,13 @@ export async function readAgentFile(agentName: string): Promise<AgentFile | null
 
   const backup = await tryParseFile(bak);
   if (backup !== null) {
+    // Remove broken symlink before restoring from backup — copyFile follows the
+    // symlink target and fails with ENOENT when the target no longer exists.
+    try {
+      await unlink(file);
+    } catch {
+      // File absent or already removed — nothing to do
+    }
     await copyFile(bak, file);
     return pluginPath ? { ...backup, pluginPath } : backup;
   }

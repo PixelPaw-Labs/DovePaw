@@ -7,7 +7,6 @@ import {
 } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
 import { GROUP_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
-import { SUBAGENT_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
 import { DOVE_RESPONSE_REMINDER } from "@@/lib/dove-lean-reminder";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
@@ -700,8 +699,12 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder (group mode)", () => 
       prompt: "do something",
     });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toContain("narration, status updates, or confirmations");
-    expect(hookSpecificOutput.additionalContext).not.toContain("tell the user what you've kicked off");
+    expect(hookSpecificOutput.additionalContext).toContain(
+      "narration, status updates, or confirmations",
+    );
+    expect(hookSpecificOutput.additionalContext).not.toContain(
+      "tell the user what you've kicked off",
+    );
     expect(hookSpecificOutput.additionalContext).not.toContain("{{extra}}");
   });
 

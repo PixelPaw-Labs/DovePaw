@@ -104,7 +104,7 @@ describe("withMemoryReminder", () => {
   it("uses MUST language as a hard gate", () => {
     const result = withMemoryReminder("do the thing", "/state/.my-agent", "start_my_agent");
     expect(result).toContain("MUST");
-    expect(result).toContain("NEVER skip");
+    expect(result).toContain("ALWAYS read");
     expect(result).toContain("start_my_agent");
   });
 });
