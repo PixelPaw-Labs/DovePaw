@@ -54,7 +54,8 @@ let _deployTriggerScriptOnce: Promise<void> | null = null;
 const _copyNativeOnce = new Map<string, Promise<void>>();
 
 /** Copy compiled .mjs to ~/.dovepaw/cron and make it executable.
- *  Triggers a full build first if the compiled output is missing. */
+ *  Triggers a full build first if the compiled output is missing.
+ *  No-op for non-TS agents (e.g. .sh) that produce no compiled output. */
 export async function deployAgentScript(agentName: string): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   const src = agentDistScript(agentName);
@@ -62,6 +63,12 @@ export async function deployAgentScript(agentName: string): Promise<void> {
     await access(src);
   } catch {
     await execAsync("npm run build", { cwd: AGENTS_ROOT });
+    // Non-TS agents produce no .mjs after build — skip deployment for them.
+    try {
+      await access(src);
+    } catch {
+      return;
+    }
   }
   await copyFile(src, schedulerScript(agentName));
   await chmod(schedulerScript(agentName), 0o755);

@@ -47,9 +47,10 @@ describe("agent script existence", () => {
   it("every agent has a script in its source directory", () => {
     for (const agent of cases) {
       // Plugin agents live in their plugin repo, not in AGENTS_ROOT/agents/
+      const scriptFile = agent.scriptFile ?? "main.ts";
       const scriptPath = agent.pluginPath
-        ? resolve(agent.pluginPath, `agents/${agent.name}/main.ts`)
-        : resolve(AGENTS_ROOT, `agents/${agent.name}/main.ts`);
+        ? resolve(agent.pluginPath, `agents/${agent.name}/${scriptFile}`)
+        : resolve(AGENTS_ROOT, `agents/${agent.name}/${scriptFile}`);
       expect(existsSync(scriptPath), `${agent.name}: script not found at ${scriptPath}`).toBe(true);
     }
   });
