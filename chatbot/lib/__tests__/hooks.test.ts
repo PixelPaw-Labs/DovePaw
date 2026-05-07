@@ -206,6 +206,34 @@ describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => 
   });
 });
 
+describe("buildAgentHooks — PreToolUse Bash write guard", () => {
+  it("no Bash hook when readOnly is not set", () => {
+    const hooks = buildAgentHooks(makeConfig());
+    const matchers = hooks.PreToolUse?.map((h) => h.matcher) ?? [];
+    expect(matchers).not.toContain("Bash");
+  });
+
+  it("adds a Bash hook when readOnly is true", () => {
+    const hooks = buildAgentHooks({ ...makeConfig(), readOnly: true });
+    const matchers = hooks.PreToolUse?.map((h) => h.matcher) ?? [];
+    expect(matchers).toContain("Bash");
+  });
+
+  it("hook denies Bash write redirect", async () => {
+    const hooks = buildAgentHooks({ ...makeConfig(), readOnly: true });
+    const fn = hooks.PreToolUse!.find((h) => h.matcher === "Bash")!.hooks[0]!;
+    const result = await callHook(fn, preToolUseInput("Bash", { command: "cat /etc/passwd > /tmp/out.txt" }));
+    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+  });
+
+  it("hook allows Bash read-only command", async () => {
+    const hooks = buildAgentHooks({ ...makeConfig(), readOnly: true });
+    const fn = hooks.PreToolUse!.find((h) => h.matcher === "Bash")!.hooks[0]!;
+    const result = await callHook(fn, preToolUseInput("Bash", { command: "cat /etc/passwd" }));
+    expect(result).toEqual({ continue: true });
+  });
+});
+
 describe("buildAgentHooks — PreToolUse Edit|Write guard (index 1)", () => {
   it("is absent when allowedDirectories is not set", () => {
     const hooks = buildAgentHooks(makeConfig());

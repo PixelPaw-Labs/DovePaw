@@ -1,15 +1,16 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { AgentRunner, resolveClaudeSecurityOpts, resolveCodexSandboxMode } from "./agent-runner.js";
+import { AgentRunner, resolveClaudeSecurityOpts, resolveCodexSandboxMode, resolveCodexApprovalPolicy, resolveCodexWebSearchEnabled } from "./agent-runner.js";
+import { getSecurityModeStrategy } from "@@/lib/security-policy";
 
 const TMP_DIR = join(tmpdir(), `agent-runner-test-${process.pid}`);
 
 describe("resolveClaudeSecurityOpts", () => {
-  it("returns undefined permissionMode and empty disallowedTools when no env or opts", () => {
+  it("returns undefined permissionMode and blocks web tools when no env or opts", () => {
     const result = resolveClaudeSecurityOpts(undefined, {});
     expect(result.permissionMode).toBeUndefined();
-    expect(result.disallowedTools).toEqual([]);
+    expect(result.disallowedTools).toEqual(["WebFetch", "WebSearch"]);
   });
 
   it("read-only env overrides permissionMode to 'default'", () => {
@@ -20,28 +21,95 @@ describe("resolveClaudeSecurityOpts", () => {
     expect(result.permissionMode).toBe("default");
   });
 
-  it("read-only env parses DOVEPAW_DISALLOWED_TOOLS into array", () => {
-    const result = resolveClaudeSecurityOpts(undefined, {
-      DOVEPAW_SECURITY_MODE: "read-only",
-      DOVEPAW_DISALLOWED_TOOLS: "Write,Edit,Bash(rm *)",
-    });
-    expect(result.disallowedTools).toEqual(["Write", "Edit", "Bash(rm *)"]);
+  it("read-only env returns strategy disallowedTools plus web tools", () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "read-only" });
+    expect(result.disallowedTools).toEqual([
+      ...getSecurityModeStrategy("read-only").disallowedTools,
+      "WebFetch",
+      "WebSearch",
+    ]);
   });
 
-  it("supervised env keeps caller permissionMode", () => {
+  it("supervised env sets permissionMode to 'acceptEdits'", () => {
     const result = resolveClaudeSecurityOpts(
-      { permissionMode: "acceptEdits" },
+      { permissionMode: "bypassPermissions" },
       { DOVEPAW_SECURITY_MODE: "supervised" },
     );
     expect(result.permissionMode).toBe("acceptEdits");
   });
 
-  it("merges env disallowedTools with claudeOpts disallowedTools", () => {
+  it("autonomous env sets permissionMode to 'bypassPermissions'", () => {
+    const result = resolveClaudeSecurityOpts(
+      { permissionMode: "default" },
+      { DOVEPAW_SECURITY_MODE: "autonomous" },
+    );
+    expect(result.permissionMode).toBe("bypassPermissions");
+  });
+
+  it("merges mode disallowedTools with claudeOpts disallowedTools", () => {
     const result = resolveClaudeSecurityOpts(
       { disallowedTools: ["ExtraToolA"] },
-      { DOVEPAW_DISALLOWED_TOOLS: "Write,Edit" },
+      { DOVEPAW_SECURITY_MODE: "read-only" },
     );
-    expect(result.disallowedTools).toEqual(["Write", "Edit", "ExtraToolA"]);
+    expect(result.disallowedTools).toEqual([
+      ...getSecurityModeStrategy("read-only").disallowedTools,
+      "WebFetch",
+      "WebSearch",
+      "ExtraToolA",
+    ]);
+  });
+
+  it("returns empty hooks in non-read-only mode", () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "supervised" });
+    expect(result.hooks).toEqual({});
+  });
+
+  it("returns a PreToolUse Bash hook in read-only mode", () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "read-only" });
+    expect(result.hooks.PreToolUse).toHaveLength(1);
+    expect(result.hooks.PreToolUse?.[0].matcher).toBe("Bash");
+  });
+
+  it("hook denies Bash write redirect", async () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "read-only" });
+    const cb = result.hooks.PreToolUse?.[0].hooks[0];
+    const outcome = await cb?.({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "cat /etc/passwd > /tmp/out.txt" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub
+    } as any);
+    expect((outcome as any)?.hookSpecificOutput?.permissionDecision).toBe("deny");
+  });
+
+  it("disallows WebFetch and WebSearch when DOVEPAW_ALLOW_WEB_TOOLS is absent", () => {
+    const result = resolveClaudeSecurityOpts(undefined, {});
+    expect(result.disallowedTools).toContain("WebFetch");
+    expect(result.disallowedTools).toContain("WebSearch");
+  });
+
+  it("disallows WebFetch and WebSearch when DOVEPAW_ALLOW_WEB_TOOLS is '0'", () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_ALLOW_WEB_TOOLS: "0" });
+    expect(result.disallowedTools).toContain("WebFetch");
+    expect(result.disallowedTools).toContain("WebSearch");
+  });
+
+  it("allows WebFetch and WebSearch when DOVEPAW_ALLOW_WEB_TOOLS is '1'", () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_ALLOW_WEB_TOOLS: "1" });
+    expect(result.disallowedTools).not.toContain("WebFetch");
+    expect(result.disallowedTools).not.toContain("WebSearch");
+  });
+
+  it("hook allows Bash read-only command", async () => {
+    const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "read-only" });
+    const cb = result.hooks.PreToolUse?.[0].hooks[0];
+    const outcome = await cb?.({
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "cat /etc/passwd" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub
+    } as any);
+    expect((outcome as any)?.continue).toBe(true);
   });
 });
 
@@ -66,6 +134,38 @@ describe("resolveCodexSandboxMode", () => {
         { DOVEPAW_SECURITY_MODE: "supervised" },
       ),
     ).toBe("workspace-write");
+  });
+});
+
+describe("resolveCodexWebSearchEnabled", () => {
+  it("returns false when DOVEPAW_ALLOW_WEB_TOOLS is absent", () => {
+    expect(resolveCodexWebSearchEnabled({})).toBe(false);
+  });
+
+  it("returns false when DOVEPAW_ALLOW_WEB_TOOLS is '0'", () => {
+    expect(resolveCodexWebSearchEnabled({ DOVEPAW_ALLOW_WEB_TOOLS: "0" })).toBe(false);
+  });
+
+  it("returns true when DOVEPAW_ALLOW_WEB_TOOLS is '1'", () => {
+    expect(resolveCodexWebSearchEnabled({ DOVEPAW_ALLOW_WEB_TOOLS: "1" })).toBe(true);
+  });
+});
+
+describe("resolveCodexApprovalPolicy", () => {
+  it("returns 'never' when no env", () => {
+    expect(resolveCodexApprovalPolicy({})).toBe("never");
+  });
+
+  it("returns 'on-request' in read-only mode", () => {
+    expect(resolveCodexApprovalPolicy({ DOVEPAW_SECURITY_MODE: "read-only" })).toBe("on-request");
+  });
+
+  it("returns 'on-request' in supervised mode", () => {
+    expect(resolveCodexApprovalPolicy({ DOVEPAW_SECURITY_MODE: "supervised" })).toBe("on-request");
+  });
+
+  it("returns 'never' in autonomous mode", () => {
+    expect(resolveCodexApprovalPolicy({ DOVEPAW_SECURITY_MODE: "autonomous" })).toBe("never");
   });
 });
 

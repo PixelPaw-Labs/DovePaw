@@ -2,7 +2,13 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ClaudeRunner, type RunOpts } from "./claude-runner.js";
 import { CodexRunner, type CodexRunOpts } from "./codex-runner.js";
-import type { WebSearchMode, SandboxMode, CodexOptions } from "@openai/codex-sdk";
+import type { WebSearchMode, SandboxMode, CodexOptions, ApprovalMode } from "@openai/codex-sdk";
+import type {
+  HookEvent,
+  HookCallbackMatcher,
+  PreToolUseHookSpecificOutput,
+} from "@anthropic-ai/claude-agent-sdk";
+import { bashHasWriteOperation, getSecurityModeStrategy } from "@@/lib/security-policy";
 
 interface ClaudeRunOpts {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
@@ -23,17 +29,68 @@ export function resolveCodexSandboxMode(
   return codexOpts?.sandboxMode;
 }
 
+export function resolveCodexWebSearchEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return env.DOVEPAW_ALLOW_WEB_TOOLS === "1";
+}
+
+export function resolveCodexApprovalPolicy(
+  env: Record<string, string | undefined> = process.env,
+): ApprovalMode {
+  // read-only / supervised: "on-request" lets Codex operate within the sandbox freely
+  // and ask only when crossing the boundary (write ops). "never" would skip all prompts,
+  // defeating the security constraint. autonomous has no restrictions → "never".
+  const mode = env.DOVEPAW_SECURITY_MODE;
+  if (mode === "read-only" || mode === "supervised") return "on-request";
+  return "never";
+}
+
 export function resolveClaudeSecurityOpts(
   claudeOpts: ClaudeRunOpts | undefined,
   env: Record<string, string | undefined> = process.env,
-): { permissionMode: ClaudeRunOpts["permissionMode"]; disallowedTools: string[] } {
-  const isReadOnly = env.DOVEPAW_SECURITY_MODE === "read-only";
-  const permissionMode = isReadOnly ? "default" : claudeOpts?.permissionMode;
-  const envTools = env.DOVEPAW_DISALLOWED_TOOLS?.split(",").filter(Boolean) ?? [];
-  return {
-    permissionMode,
-    disallowedTools: [...envTools, ...(claudeOpts?.disallowedTools ?? [])],
-  };
+): {
+  permissionMode: ClaudeRunOpts["permissionMode"];
+  disallowedTools: string[];
+  hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+} {
+  const envMode = env.DOVEPAW_SECURITY_MODE;
+  const strategy =
+    envMode === "read-only" || envMode === "supervised" || envMode === "autonomous"
+      ? getSecurityModeStrategy(envMode)
+      : null;
+
+  const permissionMode = strategy?.permissionMode ?? claudeOpts?.permissionMode;
+  const modeTools = strategy?.disallowedTools ?? [];
+  const webTools = env.DOVEPAW_ALLOW_WEB_TOOLS === "1" ? [] : ["WebFetch", "WebSearch"];
+  const disallowedTools = [...modeTools, ...webTools, ...(claudeOpts?.disallowedTools ?? [])];
+
+  const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
+  if (strategy?.readOnly) {
+    hooks.PreToolUse = [
+      {
+        matcher: "Bash",
+        hooks: [
+          async (input) => {
+            if (input.hook_event_name !== "PreToolUse") return { continue: true };
+            if (typeof input.tool_input !== "object" || input.tool_input === null)
+              return { continue: true };
+            const rawCommand: unknown = Reflect.get(input.tool_input as object, "command");
+            const command = typeof rawCommand === "string" ? rawCommand : "";
+            if (!bashHasWriteOperation(command)) return { continue: true };
+            const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+              hookEventName: "PreToolUse",
+              permissionDecision: "deny",
+              permissionDecisionReason: "Read-only mode: Bash write operations are not allowed.",
+            };
+            return { hookSpecificOutput };
+          },
+        ],
+      },
+    ];
+  }
+
+  return { permissionMode, disallowedTools, hooks };
 }
 
 interface CodexOpts {
@@ -103,12 +160,14 @@ export class AgentRunner {
         webSearchEnabled: opts.codexOpts?.webSearchEnabled,
         webSearchMode: opts.codexOpts?.webSearchMode,
         sandboxMode: resolveCodexSandboxMode(opts.codexOpts),
+        approvalPolicy: resolveCodexApprovalPolicy(),
+        webSearchEnabled: resolveCodexWebSearchEnabled(),
       } satisfies CodexRunOpts);
     }
     if (!isClaudeModel(model)) {
       throw new Error(`Unknown model: "${model}". Expected a Claude or Codex model identifier.`);
     }
-    const { permissionMode, disallowedTools } = resolveClaudeSecurityOpts(opts.claudeOpts);
+    const { permissionMode, disallowedTools, hooks } = resolveClaudeSecurityOpts(opts.claudeOpts);
     return new ClaudeRunner(this.logDir, this.logFile ?? "").run(prompt, {
       cwd: opts.cwd,
       taskName: opts.taskName,
@@ -118,6 +177,7 @@ export class AgentRunner {
       apiKey: opts.apiKey,
       permissionMode,
       ...(disallowedTools.length > 0 ? { disallowedTools } : {}),
+      ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
       worktree: opts.claudeOpts?.worktree,
       sessionId: opts.claudeOpts?.sessionId,
       resumeSession: opts.resumeSession,

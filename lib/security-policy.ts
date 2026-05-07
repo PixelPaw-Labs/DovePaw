@@ -116,11 +116,15 @@ export function getSecurityModeStrategy(mode: SecurityMode): SecurityModeStrateg
   }
 }
 
-export function buildSecurityEnv(mode: SecurityMode): Record<string, string> {
+export function buildSecurityEnv(
+  mode: SecurityMode,
+  allowWebTools?: boolean,
+): Record<string, string> {
   const { disallowedTools } = getSecurityModeStrategy(mode);
   return {
     DOVEPAW_SECURITY_MODE: mode,
     ...(disallowedTools.length > 0 ? { DOVEPAW_DISALLOWED_TOOLS: disallowedTools.join(",") } : {}),
+    ...(allowWebTools ? { DOVEPAW_ALLOW_WEB_TOOLS: "1" } : {}),
   };
 }
 

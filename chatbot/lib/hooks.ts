@@ -78,6 +78,8 @@ export interface AgentHooksConfig {
    * Matcher is built dynamically from this list.
    */
   disallowedTools?: string[];
+  /** When true, blocks Bash write operations (redirects, sed -i) via PreToolUse. */
+  readOnly?: boolean;
 }
 
 function buildPendingBlockReason(entries: PendingEntry[]): string {
@@ -98,7 +100,7 @@ function buildPendingBlockReason(entries: PendingEntry[]): string {
 export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories, disallowedTools } =
+  const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories, disallowedTools, readOnly } =
     config;
   //const retryCounter = new StillRunningRetryCounter();
   const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
@@ -149,8 +151,8 @@ export function buildAgentHooks(
     });
   }
 
-  // Block Bash write operations (redirects, rm, mv, etc.) when in a write-restricted mode.
-  if (disallowedTools?.includes("Write")) {
+  // Block Bash write operations (redirects, rm, mv, etc.) when in read-only mode.
+  if (readOnly) {
     preToolUseHooks.push({
       matcher: "Bash",
       hooks: [
@@ -269,6 +271,7 @@ export function buildDoveHooks(
   options: {
     includeGroupReminder?: boolean;
     disallowedTools?: string[];
+    readOnly?: boolean;
     behaviorReminder?: string;
   } = {},
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
@@ -281,6 +284,7 @@ export function buildDoveHooks(
     userPromptReminder,
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: options.disallowedTools,
+    readOnly: options.readOnly,
   });
 
   const awaitMatcher = agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|");

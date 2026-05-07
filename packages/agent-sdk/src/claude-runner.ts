@@ -1,4 +1,4 @@
-import { query } from "@anthropic-ai/claude-agent-sdk";
+import { query, type HookEvent, type HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
 import { createWriteStream, writeFileSync } from "node:fs";
 import { access, mkdir, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
@@ -18,6 +18,7 @@ export interface RunOpts {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
   disallowedTools?: string[];
   settingSources?: Array<"user" | "project" | "local">;
+  hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
   /** Assign a session ID for later resumption via resumeSession. */
   sessionId?: string;
   /** Resume a prior session by its ID. */
@@ -107,6 +108,7 @@ export class ClaudeRunner {
           ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
           ...(opts.disallowedTools?.length ? { disallowedTools: opts.disallowedTools } : {}),
           ...(opts.settingSources ? { settingSources: opts.settingSources } : {}),
+          ...(opts.hooks ? { hooks: opts.hooks } : {}),
           ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
           ...(opts.resumeSession ? { resume: opts.resumeSession } : {}),
           ...(opts.continueSession ? { continue: true } : {}),

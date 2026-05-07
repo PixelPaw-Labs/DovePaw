@@ -205,7 +205,7 @@ export class QueryAgentExecutor {
         cwd,
         {
           ...extraEnv,
-          ...buildSecurityEnv(effectiveDoveSettings(globalSettings).securityMode),
+          ...buildSecurityEnv(effectiveDoveSettings(globalSettings).securityMode, effectiveDoveSettings(globalSettings).allowWebTools),
           ...(this.port ? { DOVEPAW_A2A_PORT: String(this.port) } : {}),
         },
         repoSlugs,

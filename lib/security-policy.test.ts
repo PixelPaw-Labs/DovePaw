@@ -64,6 +64,21 @@ describe("buildSecurityEnv", () => {
     expect(env.DOVEPAW_SECURITY_MODE).toBe("autonomous");
     expect(env.DOVEPAW_DISALLOWED_TOOLS).toBeUndefined();
   });
+
+  it("emits DOVEPAW_ALLOW_WEB_TOOLS=1 when allowWebTools is true", () => {
+    const env = buildSecurityEnv("supervised", true);
+    expect(env.DOVEPAW_ALLOW_WEB_TOOLS).toBe("1");
+  });
+
+  it("does not emit DOVEPAW_ALLOW_WEB_TOOLS when allowWebTools is false", () => {
+    const env = buildSecurityEnv("supervised", false);
+    expect(env.DOVEPAW_ALLOW_WEB_TOOLS).toBeUndefined();
+  });
+
+  it("does not emit DOVEPAW_ALLOW_WEB_TOOLS when allowWebTools is absent", () => {
+    const env = buildSecurityEnv("autonomous");
+    expect(env.DOVEPAW_ALLOW_WEB_TOOLS).toBeUndefined();
+  });
 });
 
 describe("ALWAYS_DISALLOWED_TOOLS", () => {
