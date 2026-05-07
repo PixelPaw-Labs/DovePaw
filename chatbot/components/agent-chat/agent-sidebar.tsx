@@ -58,7 +58,7 @@ export function AgentSidebar({
   const router = useRouter();
   const isSettings = pathname === "/settings";
   const isPlugins = pathname === "/settings/plugins";
-  const isAgentLinks = pathname === "/settings/agent-links";
+  const isAgentCanvas = pathname.startsWith("/settings/agent-links");
 
   const hasData = Object.keys(statuses).length > 0;
   const onlineCount = Object.values(statuses).filter((s) => s.online).length;
@@ -264,16 +264,16 @@ export function AgentSidebar({
           </button>
         )}
         <Link
-          href="/settings/agent-links"
+          href="/settings/agent-links/canvas"
           className={cn(
             "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
-            isAgentLinks
+            isAgentCanvas
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
-          <Network className={cn("w-4 h-4 shrink-0", isAgentLinks ? "text-primary" : "")} />
-          <span className={cn("text-sm font-medium", !isAgentLinks && "text-foreground/80")}>
+          <Network className={cn("w-4 h-4 shrink-0", isAgentCanvas ? "text-primary" : "")} />
+          <span className={cn("text-sm font-medium", !isAgentCanvas && "text-foreground/80")}>
             Agent Links
           </span>
         </Link>
