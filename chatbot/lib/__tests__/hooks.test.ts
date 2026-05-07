@@ -5,7 +5,8 @@ import {
   buildDoveHooks,
   buildSubagentCanUseTool,
 } from "../hooks";
-import { buildSubAgentHooks, GROUP_PROMPT_REMINDER } from "../subagent-hooks";
+import { buildSubAgentHooks } from "../subagent-hooks";
+import { GROUP_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
 import { SUBAGENT_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
 import { DOVE_RESPONSE_REMINDER } from "@@/lib/dove-lean-reminder";
 import { PendingRegistry } from "../pending-registry";
@@ -581,8 +582,8 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "UserPromptSubmit", prompt: "do it" });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toContain("SOMETHING BEING DONE");
-    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS START yourself first");
+    expect(hookSpecificOutput.additionalContext).toContain("Do the work inline");
+    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS call `start_*` first");
   });
 
   it("always injects SUBAGENT_PROMPT_REMINDER when behaviorReminder is empty", async () => {
@@ -602,8 +603,8 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "UserPromptSubmit", prompt: "do it" });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toContain("SOMETHING BEING DONE");
-    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS START yourself first");
+    expect(hookSpecificOutput.additionalContext).toContain("Do the work inline");
+    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS call `start_*` first");
   });
 
   it("injects SUBAGENT_PROMPT_REMINDER with behaviorReminder inside <reminder> tag", async () => {
@@ -623,10 +624,10 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
     const result = await callHook(fn, { hook_event_name: "UserPromptSubmit", prompt: "do it" });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS START yourself first");
+    expect(hookSpecificOutput.additionalContext).toContain("ALWAYS call `start_*` first");
     expect(hookSpecificOutput.additionalContext).toContain("Check memory before MCP tools.");
     expect(
-      hookSpecificOutput.additionalContext.indexOf("ALWAYS START yourself first"),
+      hookSpecificOutput.additionalContext.indexOf("ALWAYS call `start_*` first"),
     ).toBeLessThan(hookSpecificOutput.additionalContext.indexOf("Check memory before MCP tools."));
   });
 });
@@ -699,12 +700,13 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder (group mode)", () => 
       prompt: "do something",
     });
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toBe(GROUP_PROMPT_REMINDER);
-    expect(hookSpecificOutput.additionalContext).not.toBe(SUBAGENT_PROMPT_REMINDER);
+    expect(hookSpecificOutput.additionalContext).toContain("narration, status updates, or confirmations");
+    expect(hookSpecificOutput.additionalContext).not.toContain("tell the user what you've kicked off");
+    expect(hookSpecificOutput.additionalContext).not.toContain("{{extra}}");
   });
 
   it("GROUP_PROMPT_REMINDER suppresses narration", () => {
-    expect(GROUP_PROMPT_REMINDER).toMatch(/DO NOT output/i);
+    expect(GROUP_PROMPT_REMINDER).toMatch(/narration, status updates, or confirmations/i);
   });
 });
 
@@ -898,7 +900,6 @@ describe("buildSubAgentHooks — group handoff silence hooks", () => {
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
     expect(hookSpecificOutput.additionalContext).toBeTruthy();
     expect(hookSpecificOutput.additionalContext).toContain("await");
-    expect(hookSpecificOutput.additionalContext).toContain("Do NOT output");
     expect(hookSpecificOutput.additionalContext).toContain("narration");
   });
 

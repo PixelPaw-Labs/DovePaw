@@ -21,13 +21,7 @@ import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 import { ALWAYS_DISALLOWED_TOOLS } from "@@/lib/security-policy";
-import {
-  GROUP_PROMPT_REMINDER,
-  buildGroupReminder,
-  buildSubAgentReminder,
-} from "@@/lib/subagent-reminder";
-
-export { GROUP_PROMPT_REMINDER };
+import { buildGroupReminder, buildSubAgentReminder } from "@@/lib/subagent-reminder";
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 

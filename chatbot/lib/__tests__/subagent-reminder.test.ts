@@ -7,11 +7,15 @@ import {
 
 describe("buildSubAgentReminder", () => {
   it("returns base reminder when called with no args", () => {
-    expect(buildSubAgentReminder()).toBe(SUBAGENT_PROMPT_REMINDER);
+    const result = buildSubAgentReminder();
+    expect(result).toContain("ALWAYS call `start_*` first");
+    expect(result).not.toContain("{{extra}}");
   });
 
   it("returns base reminder when extra is empty string", () => {
-    expect(buildSubAgentReminder("")).toBe(SUBAGENT_PROMPT_REMINDER);
+    const result = buildSubAgentReminder("");
+    expect(result).toContain("ALWAYS call `start_*` first");
+    expect(result).not.toContain("{{extra}}");
   });
 
   it("injects extra inside </reminder> when only extra is provided", () => {
@@ -48,23 +52,13 @@ describe("withMemoryReminder", () => {
     expect(withMemoryReminder("do the thing")).toBe("do the thing");
   });
 
-  it("instructs agent to skip to NOT SUFFICIENT when MEMORY.md does not exist", () => {
+  it("escalates when memory is missing or incomplete", () => {
     const result = withMemoryReminder(
       "task",
       "/home/.dovepaw/agents/state/.my-agent",
       "start_run_my_agent",
     );
-    expect(result).toContain("does not exist");
-    expect(result).toContain("NOT SUFFICIENT");
-  });
-
-  it("requires entire response to be the exact escalation sentence", () => {
-    const result = withMemoryReminder(
-      "task",
-      "/home/.dovepaw/agents/state/.my-agent",
-      "start_run_my_agent",
-    );
+    expect(result).toContain("missing, incomplete");
     expect(result).toContain("ENTIRE response MUST be this exact sentence");
-    expect(result).toContain("no preamble, no explanation, no extra words");
   });
 });
