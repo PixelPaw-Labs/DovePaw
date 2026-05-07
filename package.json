@@ -62,7 +62,7 @@
     "diff": "^9.0.0",
     "elkjs": "^0.11.1",
     "express": "^5.2.1",
-    "lucide-react": "^1.8.0",
+    "lucide-react": "^1.14.0",
     "motion": "^12.38.0",
     "nanoid": "^5.1.7",
     "next": "^16.2.3",
