@@ -516,7 +516,7 @@ describe("updatePlugin", () => {
     );
   }
 
-  it("runs npm install after git pull", async () => {
+  it("runs fetch + reset --hard then npm install", async () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
     writeRegistry(pluginDir);
     execAsyncSpy.mockClear();
@@ -524,12 +524,17 @@ describe("updatePlugin", () => {
     await updatePlugin("test-plugin");
 
     const cmds = execAsyncSpy.mock.calls.map((args) => String(args[0]));
-    expect(cmds.some((c) => c.includes("git") && c.includes("pull"))).toBe(true);
+    expect(cmds.some((c) => c.includes("fetch origin") && c.includes(pluginDir))).toBe(true);
+    expect(cmds.some((c) => c.includes("reset --hard origin/main") && c.includes(pluginDir))).toBe(
+      true,
+    );
     expect(cmds.some((c) => c.includes("npm install") && c.includes(pluginDir))).toBe(true);
-    // npm install must come after git pull
-    const pullIdx = cmds.findIndex((c) => c.includes("pull"));
+    // fetch → reset → npm install order
+    const fetchIdx = cmds.findIndex((c) => c.includes("fetch origin"));
+    const resetIdx = cmds.findIndex((c) => c.includes("reset --hard"));
     const npmIdx = cmds.findIndex((c) => c.includes("npm install"));
-    expect(npmIdx).toBeGreaterThan(pullIdx);
+    expect(resetIdx).toBeGreaterThan(fetchIdx);
+    expect(npmIdx).toBeGreaterThan(resetIdx);
   });
 
   it("re-links existing skills on update", async () => {
