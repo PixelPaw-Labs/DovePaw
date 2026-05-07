@@ -17,6 +17,7 @@ import {
   applyNodeChanges,
   useInternalNode,
   useReactFlow,
+  useStore,
   type InternalNode,
   type Node,
   type Edge,
@@ -27,7 +28,7 @@ import {
 } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import Link from "next/link";
-import { Home, Info, LayoutGrid, List, Plus, Users2, X } from "lucide-react";
+import { Home, Info, LayoutGrid, List, Plus, Settings2, Users2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
@@ -37,6 +38,9 @@ import {
   connectionPointsFromRect,
   findOptimalConnection,
   pointInRect,
+  clampOutsideRects,
+  nudgeControlPointClear,
+  rectsOverlap,
   segmentPassesThroughRect,
   type ConnectionPoints,
   type Rect,
@@ -155,6 +159,14 @@ function buildEdgeId(source: string, target: string, strategy: AgentLinkStrategy
   return `${source}||${target}||${strategy}`;
 }
 
+function putGroupMembers(groupName: string, members: string[]): Promise<Response> {
+  return fetch("/api/settings/agent-links/groups/members", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: groupName, members }),
+  });
+}
+
 function buildFlowEdge(
   source: string,
   target: string,
@@ -175,28 +187,74 @@ function buildFlowEdge(
   };
 }
 
+// ─── Canvas constants ─────────────────────────────────────────────────────────
+
+const NODE_W = 200;
+const NODE_H = 110;
+// Bow amount per step for parallel edges between the same node pair.
+const CURVE_AMOUNT = 120;
+
 // ─── Group helpers ───────────────────────────────────────────────────────────
 
 const GROUP_COLS = 3;
-const GROUP_SLOT_W = 220;
-const GROUP_SLOT_H = 150;
 const GROUP_PAD_X = 16;
 const GROUP_PAD_TOP = 44; // space for the group label
 const GROUP_PAD_BOTTOM = 12;
 
-function groupNodeSize(memberCount: number): { width: number; height: number } {
+/**
+ * Returns the maximum number of parallel edges between any single node-pair
+ * whose both endpoints are members of the given group. Used to ensure the
+ * group box is tall/wide enough for the bezier curves to route without
+ * overlapping adjacent agent cards.
+ */
+function maxParallelEdgesInGroup(
+  members: string[],
+  links: { source: string; target: string }[],
+): number {
+  const memberSet = new Set(members);
+  const pairCounts = new Map<string, number>();
+  for (const link of links) {
+    if (!memberSet.has(link.source) || !memberSet.has(link.target)) continue;
+    const key = [link.source, link.target].toSorted().join("\0");
+    pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1);
+  }
+  return pairCounts.size > 0 ? Math.max(...pairCounts.values()) : 0;
+}
+
+/**
+ * Minimum group box size to comfortably fit `memberCount` agent cards, with
+ * enough inter-card spacing for up to `maxParallel` bezier curves between any
+ * adjacent pair. Slot sizes scale with `maxParallel` so that even multiple
+ * overlapping strategies have room to arc without clipping neighbouring cards.
+ */
+function groupNodeSize(memberCount: number, maxParallel = 0): { width: number; height: number } {
   const cols = Math.min(GROUP_COLS, memberCount);
   const rows = Math.ceil(memberCount / GROUP_COLS);
+  // Only grow beyond the default slot size when there are 2+ parallel edges on
+  // the same pair — that's when bezier curves start bowing wide enough to clip
+  // adjacent cards. Single-edge groups keep the old compact slot dimensions.
+  const curveGap = maxParallel > 1 ? (maxParallel - 1) * CURVE_AMOUNT : 0;
+  const slotW = Math.max(280, NODE_W + GROUP_PAD_X * 2 + curveGap);
+  const slotH = Math.max(200, NODE_H + GROUP_PAD_BOTTOM + curveGap);
   return {
-    width: cols * GROUP_SLOT_W + GROUP_PAD_X * 2,
-    height: rows * GROUP_SLOT_H + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
+    width: cols * slotW + GROUP_PAD_X * 2,
+    height: rows * slotH + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
   };
 }
 
-function memberPositionInGroup(index: number): { x: number; y: number } {
+function memberPositionInGroup(
+  index: number,
+  totalMembers: number,
+  groupWidth: number,
+  groupHeight: number,
+): { x: number; y: number } {
+  const cols = Math.min(GROUP_COLS, totalMembers);
+  const rows = Math.ceil(totalMembers / GROUP_COLS);
+  const slotW = (groupWidth - GROUP_PAD_X * 2) / cols;
+  const slotH = (groupHeight - GROUP_PAD_TOP - GROUP_PAD_BOTTOM) / rows;
   return {
-    x: (index % GROUP_COLS) * GROUP_SLOT_W + GROUP_PAD_X,
-    y: Math.floor(index / GROUP_COLS) * GROUP_SLOT_H + GROUP_PAD_TOP,
+    x: (index % cols) * slotW + GROUP_PAD_X + (slotW - NODE_W) / 2,
+    y: Math.floor(index / cols) * slotH + GROUP_PAD_TOP + (slotH - NODE_H) / 2,
   };
 }
 
@@ -277,11 +335,7 @@ function EditGroupMembersDialog({
     setSubmitting(true);
     try {
       const members = [...selected];
-      const res = await fetch("/api/settings/agent-links/groups/members", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: groupName, members }),
-      });
+      const res = await putGroupMembers(groupName, members);
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       const json = (await res.json()) as { error?: string };
       if (!res.ok) {
@@ -369,14 +423,15 @@ function GroupNode({ data, selected }: NodeProps<GroupFlowNode>) {
         )}
       >
         <div
-          className="px-3 pt-3 flex items-center gap-2 cursor-pointer nodrag"
+          className="px-3 pt-2 pb-1 flex items-center gap-2 cursor-pointer nodrag rounded-t-2xl hover:bg-primary/10 transition-colors group/header"
           onClick={() => onEditGroup(data.group.name)}
           title="Click to edit members"
         >
-          <Users2 className="w-6 h-6 text-muted-foreground/80 shrink-0" />
-          <span className="text-base font-bold uppercase tracking-widest text-muted-foreground/80 truncate">
+          <Users2 className="w-5 h-5 text-primary/70 shrink-0" />
+          <span className="flex-1 text-base font-bold uppercase tracking-widest text-foreground/80 truncate">
             {data.group.name}
           </span>
+          <Settings2 className="w-5 h-5 text-primary/60 shrink-0" />
         </div>
       </div>
     </>
@@ -475,9 +530,6 @@ function AgentNode({ data, selected }: NodeProps<AgentFlowNode>) {
 
 // ─── AgentEdge ───────────────────────────────────────────────────────────────
 
-// Bow amount per step for parallel edges between the same node pair.
-const CURVE_AMOUNT = 120;
-
 function AgentEdge({
   id,
   source,
@@ -492,6 +544,21 @@ function AgentEdge({
   const { getNode } = useReactFlow();
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
+
+  // Collect all agent node rects except source/target to use as routing obstacles.
+  const obstacleRects = useStore((s) => {
+    const rects: Rect[] = [];
+    s.nodeLookup.forEach((n, nodeId) => {
+      if (nodeId === source || nodeId === target || n.type === "groupNode") return;
+      rects.push({
+        x: n.internals.positionAbsolute.x,
+        y: n.internals.positionAbsolute.y,
+        w: n.measured?.width ?? NODE_W,
+        h: n.measured?.height ?? NODE_H,
+      });
+    });
+    return rects;
+  });
 
   if (!sourceNode || !targetNode) return null;
 
@@ -522,6 +589,7 @@ function AgentEdge({
   const { from: canonFrom, to: canonTo } = findOptimalConnection(
     getConnectionPoints(canonSrcNode),
     getConnectionPoints(canonTgtNode),
+    obstacleRects,
   );
   const cdx = canonTo.x - canonFrom.x;
   const cdy = canonTo.y - canonFrom.y;
@@ -534,16 +602,17 @@ function AgentEdge({
   const { from: sp, to: tp } = findOptimalConnection(
     getConnectionPoints(sourceNode),
     getConnectionPoints(targetNode),
+    obstacleRects,
   );
 
-  // If no valid straight-line pair existed (fallback), the chosen segment may still
-  // cross a card. In that case force a curve large enough to bow around the card.
+  // If the chosen segment still crosses a card (fallback case), force a curve.
   const sRect = nodeToRect(sourceNode);
   const tRect = nodeToRect(targetNode);
   const straightCrossesCard =
     curvature === 0 &&
     (segmentPassesThroughRect(sp, tp, sRect, true, false) ||
-      segmentPassesThroughRect(sp, tp, tRect, false, true));
+      segmentPassesThroughRect(sp, tp, tRect, false, true) ||
+      obstacleRects.some((obs) => segmentPassesThroughRect(sp, tp, obs, false, false)));
   let effectiveCurvature = straightCrossesCard ? CURVE_AMOUNT : curvature;
 
   let cpX = (sp.x + tp.x) / 2 + perpX * effectiveCurvature;
@@ -556,10 +625,41 @@ function AgentEdge({
     cpY = (sp.y + tp.y) / 2 + perpY * effectiveCurvature;
   }
 
+  // If the bezier arc still passes through an obstacle node, nudge the control
+  // point away (increasing curvature, then flipping direction) until clear.
+  ({
+    cpX,
+    cpY,
+    curvature: effectiveCurvature,
+  } = nudgeControlPointClear(
+    sp,
+    tp,
+    perpX,
+    perpY,
+    effectiveCurvature,
+    CURVE_AMOUNT,
+    obstacleRects,
+  ));
+
   const edgePath = `M ${sp.x} ${sp.y} Q ${cpX} ${cpY} ${tp.x} ${tp.y}`;
   // Midpoint of a quadratic bezier at t=0.5: 0.25·P0 + 0.5·P1 + 0.25·P2
-  const labelX = 0.25 * sp.x + 0.5 * cpX + 0.25 * tp.x;
-  const labelY = 0.25 * sp.y + 0.5 * cpY + 0.25 * tp.y;
+  let labelX = 0.25 * sp.x + 0.5 * cpX + 0.25 * tp.x;
+  let labelY = 0.25 * sp.y + 0.5 * cpY + 0.25 * tp.y;
+  // If the label badge overlaps any agent card, push it perpendicular until clear.
+  const LABEL_W = 80;
+  const LABEL_H = 28;
+  const allRects = [sRect, tRect, ...obstacleRects];
+  for (let step = 1; step <= 4; step++) {
+    const labRect: Rect = {
+      x: labelX - LABEL_W / 2,
+      y: labelY - LABEL_H / 2,
+      w: LABEL_W,
+      h: LABEL_H,
+    };
+    if (!allRects.some((r) => rectsOverlap(labRect, r))) break;
+    labelX += perpX * 30;
+    labelY += perpY * 30;
+  }
 
   const strategy = data?.strategy ?? "chat";
   const color = STRATEGY_COLORS[strategy];
@@ -1043,9 +1143,6 @@ const LAYOUT_DIRECTIONS: { value: LayoutDirection; label: string }[] = [
   { value: "LEFT", label: "← Left" },
 ];
 
-const NODE_W = 200;
-const NODE_H = 110;
-
 const elk = new ELK();
 
 async function applyElkLayout(
@@ -1053,48 +1150,65 @@ async function applyElkLayout(
   edges: AgentFlowEdge[],
   canvasLayout: CanvasLayout,
 ): Promise<AnyFlowNode[]> {
+  // Compute group sizes and member positions using the same grid logic as init,
+  // so auto-layout and default placement are always consistent.
+  const groupSizes: Record<string, { width: number; height: number }> = {};
+  const memberGridPositions: Record<string, { x: number; y: number }> = {};
+
+  for (const groupNode of nodes.filter(isGroupNode)) {
+    const members = groupNode.data.group.members;
+    const size = groupNodeSize(members.length, maxParallelEdgesInGroup(members, edges));
+    groupSizes[groupNode.id] = size;
+    members.forEach((memberId, idx) => {
+      memberGridPositions[memberId] = memberPositionInGroup(
+        idx,
+        members.length,
+        size.width,
+        size.height,
+      );
+    });
+  }
+
+  // Pass 2 (outer): layout top-level nodes using computed group sizes.
   const opts: Record<string, string> = {
     "elk.algorithm": canvasLayout.algorithm,
-    "elk.spacing.nodeNode": "80",
+    "elk.spacing.nodeNode": "160",
   };
   if (canvasLayout.algorithm === "layered") {
     opts["elk.direction"] = canvasLayout.direction;
-    opts["elk.layered.spacing.nodeNodeBetweenLayers"] = "100";
+    opts["elk.layered.spacing.nodeNodeBetweenLayers"] = "200";
     opts["elk.layered.nodePlacement.strategy"] = "NETWORK_SIMPLEX";
   } else if (canvasLayout.algorithm === "stress") {
-    opts["elk.stress.desiredEdgeLength"] = "220";
+    opts["elk.stress.desiredEdgeLength"] = "400";
   }
 
-  // Only layout top-level nodes (no parentId); group members keep their relative positions.
   const topLevel = nodes.filter((n) => !n.parentId);
+  const topLevelIds = new Set(topLevel.map((n) => n.id));
+  const topLevelEdges = edges.filter((e) => topLevelIds.has(e.source) && topLevelIds.has(e.target));
 
-  const graph = {
+  const outerResult = await elk.layout({
     id: "root",
     layoutOptions: opts,
     children: topLevel.map((n) => ({
       id: n.id,
-      width: styleNum(n.style, "width") ?? NODE_W,
-      height: styleNum(n.style, "height") ?? NODE_H,
+      width: groupSizes[n.id]?.width ?? styleNum(n.style, "width") ?? NODE_W,
+      height: groupSizes[n.id]?.height ?? styleNum(n.style, "height") ?? NODE_H,
     })),
-    edges: edges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
-  };
-
-  const result = await elk.layout(graph);
+    edges: topLevelEdges.map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
+  });
 
   return nodes.map((node) => {
     if (node.parentId) {
-      // Reset to default grid position within the group so members are always in-bounds after layout.
-      const parentGroup = nodes.find(
-        (n): n is GroupFlowNode => n.id === node.parentId && isGroupNode(n),
-      );
-      if (parentGroup) {
-        const idx = parentGroup.data.group.members.indexOf(node.id);
-        if (idx >= 0) return { ...node, position: memberPositionInGroup(idx) };
-      }
-      return node;
+      const pos = memberGridPositions[node.id];
+      return pos ? { ...node, position: pos } : node;
     }
-    const en = result.children?.find((c) => c.id === node.id);
-    return { ...node, position: { x: en?.x ?? node.position.x, y: en?.y ?? node.position.y } };
+    const en = outerResult.children?.find((c) => c.id === node.id);
+    const size = groupSizes[node.id];
+    return {
+      ...node,
+      position: { x: en?.x ?? node.position.x, y: en?.y ?? node.position.y },
+      ...(size ? { style: { ...node.style, width: size.width, height: size.height } } : {}),
+    };
   });
 }
 
@@ -1239,15 +1353,17 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
 
     validGroups.forEach((group, gi) => {
       const groupId = `group:${group.name}`;
-      const defaults = groupNodeSize(group.members.length);
+      const maxParallel = maxParallelEdgesInGroup(group.members, linksFile.links);
+      const defaults = groupNodeSize(group.members.length, maxParallel);
       const savedState = saved[groupId];
       groupNodes.push({
         id: groupId,
         type: "groupNode",
+        zIndex: 0,
         position: savedState ?? gridPosition(gi, validGroups.length),
         style: {
-          width: savedState?.w ?? defaults.width,
-          height: savedState?.h ?? defaults.height,
+          width: Math.max(savedState?.w ?? 0, defaults.width),
+          height: Math.max(savedState?.h ?? 0, defaults.height),
         },
         data: { group },
       });
@@ -1260,7 +1376,14 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
           type: "agentNode",
           parentId: groupId,
           extent: "parent" as const,
-          position: saved[memberName] ?? memberPositionInGroup(mi),
+          position:
+            saved[memberName] ??
+            memberPositionInGroup(
+              mi,
+              group.members.length,
+              Math.max(savedState?.w ?? 0, defaults.width),
+              Math.max(savedState?.h ?? 0, defaults.height),
+            ),
           data: { config },
         });
       });
@@ -1297,7 +1420,35 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
   // Apply node changes every frame; persist positions only on drag-end.
   const onNodesChange = useCallback((changes: NodeChange<AnyFlowNode>[]) => {
     setNodes((prev) => {
-      const next = applyNodeChanges(changes, prev);
+      const groupNodes = prev.filter(isGroupNode);
+
+      const clamped = changes.map((c) => {
+        if (c.type !== "position" || !c.position) return c;
+        const existing = prev.find((n) => n.id === c.id);
+
+        // Clamp group members above the title bar.
+        if (existing?.parentId) {
+          return c.position.y < GROUP_PAD_TOP
+            ? { ...c, position: { ...c.position, y: GROUP_PAD_TOP } }
+            : c;
+        }
+
+        // Block standalone nodes from entering any group box (every drag frame).
+        const groupRects = groupNodes.map((g) => ({
+          x: g.position.x,
+          y: g.position.y,
+          w: styleNum(g.style, "width") ?? 0,
+          h: styleNum(g.style, "height") ?? 0,
+        }));
+        const clampedPos = clampOutsideRects(
+          { x: c.position.x, y: c.position.y, w: NODE_W, h: NODE_H },
+          groupRects,
+        );
+        return clampedPos.x !== c.position.x || clampedPos.y !== c.position.y
+          ? { ...c, position: clampedPos }
+          : c;
+      });
+      const next = applyNodeChanges(clamped, prev);
       if (changes.some((c) => c.type === "position" && c.dragging === false)) {
         savePositions(next);
       }
@@ -1392,9 +1543,18 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
         const removedNames = prevMembers.filter((m) => !newMembers.includes(m));
         const removedSet = new Set(removedNames);
 
+        const minSize = groupNodeSize(
+          newMembers.length,
+          maxParallelEdgesInGroup(newMembers, edges),
+        );
         const updatedGroup: GroupFlowNode = {
           ...groupNode,
           data: { group: { ...groupNode.data.group, members: newMembers } },
+          style: {
+            ...groupNode.style,
+            width: Math.max(styleNum(groupNode.style, "width") ?? 0, minSize.width),
+            height: Math.max(styleNum(groupNode.style, "height") ?? 0, minSize.height),
+          },
         };
 
         // Removed members that still have links must stay on canvas as standalone nodes
@@ -1425,7 +1585,12 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
               type: "agentNode" as const,
               parentId: groupId,
               extent: "parent" as const,
-              position: memberPositionInGroup(newMembers.indexOf(name)),
+              position: memberPositionInGroup(
+                newMembers.indexOf(name),
+                newMembers.length,
+                styleNum(updatedGroup.style, "width") ?? minSize.width,
+                styleNum(updatedGroup.style, "height") ?? minSize.height,
+              ),
               data: { config },
             },
           ];
@@ -1475,11 +1640,7 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
       if (targetGroup) {
         const group = targetGroup.data.group;
         const newMembers = [...group.members, agentName];
-        void fetch("/api/settings/agent-links/groups/members", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: group.name, members: newMembers }),
-        }).then((res) => {
+        void putGroupMembers(group.name, newMembers).then((res) => {
           if (res.ok) handleMembersUpdated(group.name, newMembers);
         });
         return;
@@ -1507,6 +1668,17 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
 
   const handleRemoveNode = useCallback((nodeId: string) => {
     setNodes((prev) => {
+      const node = prev.find((n) => n.id === nodeId);
+      // If node is a group member, remove it from the group in the backend too.
+      if (node?.parentId) {
+        const groupNode = prev.find(
+          (n): n is GroupFlowNode => n.id === node.parentId && isGroupNode(n),
+        );
+        if (groupNode) {
+          const newMembers = groupNode.data.group.members.filter((m) => m !== nodeId);
+          void putGroupMembers(groupNode.data.group.name, newMembers);
+        }
+      }
       const next = prev.filter((n) => n.id !== nodeId);
       savePositions(next);
       return next;

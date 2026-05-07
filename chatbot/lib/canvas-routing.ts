@@ -63,12 +63,14 @@ export function segmentPassesThroughRect(
 
 /**
  * From all 16 border-center pairs (4 × 4), filter those whose straight
- * segment does not pass through either card, then return the shortest valid
- * one. Falls back to the globally shortest if all pairs intersect a card.
+ * segment does not pass through either card or any obstacle rect, then
+ * return the shortest valid one. Falls back to the globally shortest if
+ * all pairs intersect a card.
  */
 export function findOptimalConnection(
   from: ConnectionPoints,
   to: ConnectionPoints,
+  obstacles: Rect[] = [],
 ): { from: Point; to: Point } {
   const fromRect: Rect = {
     x: from.left.x,
@@ -90,7 +92,8 @@ export function findOptimalConnection(
   const valid = candidates.filter(
     (pair) =>
       !segmentPassesThroughRect(pair.from, pair.to, fromRect, true, false) &&
-      !segmentPassesThroughRect(pair.from, pair.to, toRect, false, true),
+      !segmentPassesThroughRect(pair.from, pair.to, toRect, false, true) &&
+      obstacles.every((obs) => !segmentPassesThroughRect(pair.from, pair.to, obs, false, false)),
   );
 
   const pool = valid.length > 0 ? valid : candidates;
@@ -104,4 +107,94 @@ export function findOptimalConnection(
 
 export function pointInRect(p: Point, r: Rect): boolean {
   return p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
+}
+
+export function rectsOverlap(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+/**
+ * Clamp a rect (given by its top-left corner in `node`) so it does not overlap
+ * any rect in `obstacles`. Each overlapping obstacle is resolved via the
+ * minimum-penetration axis so the rect slides along the nearest edge.
+ * Returns the (possibly adjusted) top-left position.
+ */
+export function clampOutsideRects(node: Rect, obstacles: Rect[]): { x: number; y: number } {
+  let { x, y } = node;
+  for (const obs of obstacles) {
+    if (!rectsOverlap({ x, y, w: node.w, h: node.h }, obs)) continue;
+    const ol = x + node.w - obs.x;
+    const or_ = obs.x + obs.w - x;
+    const ot = y + node.h - obs.y;
+    const ob = obs.y + obs.h - y;
+    const min = Math.min(ol, or_, ot, ob);
+    if (min === ol) x = obs.x - node.w;
+    else if (min === or_) x = obs.x + obs.w;
+    else if (min === ot) y = obs.y - node.h;
+    else y = obs.y + obs.h;
+  }
+  return { x, y };
+}
+
+/**
+ * Given a quadratic bezier from p0 to p2 with its control point positioned by
+ * `initialCurvature` along the perpendicular (perpX, perpY), nudge the
+ * curvature until the arc no longer passes through any obstacle rect.
+ * Tries increasing magnitude in the current direction first (mult 2…6×step),
+ * then flips to the opposite direction if still blocked.
+ * Returns the resolved control point and curvature (unchanged if already clear).
+ */
+export function nudgeControlPointClear(
+  p0: Point,
+  p2: Point,
+  perpX: number,
+  perpY: number,
+  initialCurvature: number,
+  step: number,
+  obstacles: Rect[],
+): { cpX: number; cpY: number; curvature: number } {
+  const midX = (p0.x + p2.x) / 2;
+  const midY = (p0.y + p2.y) / 2;
+  const cp = (c: number) => ({ cpX: midX + perpX * c, cpY: midY + perpY * c });
+  const clear = (cx: number, cy: number) =>
+    !obstacles.some((r) => quadBezierPassesThroughRect(p0, { x: cx, y: cy }, p2, r));
+
+  let { cpX, cpY } = cp(initialCurvature);
+  if (clear(cpX, cpY)) return { cpX, cpY, curvature: initialCurvature };
+
+  const baseSign = initialCurvature >= 0 ? 1 : -1;
+  for (let mult = 2; mult <= 6; mult++) {
+    const c = baseSign * step * mult;
+    ({ cpX, cpY } = cp(c));
+    if (clear(cpX, cpY)) return { cpX, cpY, curvature: c };
+  }
+  for (let mult = 1; mult <= 6; mult++) {
+    const c = -baseSign * step * mult;
+    ({ cpX, cpY } = cp(c));
+    if (clear(cpX, cpY)) return { cpX, cpY, curvature: c };
+  }
+  // Fallback: return the last tried position (opposite direction, max mult).
+  return { cpX, cpY, curvature: -baseSign * step * 6 };
+}
+
+/**
+ * Sample a quadratic bezier at `steps` interior points and return true if
+ * any sample lands inside the given rect. Used to check if a curved edge
+ * passes through a node card.
+ */
+export function quadBezierPassesThroughRect(
+  p0: Point,
+  cp: Point,
+  p2: Point,
+  rect: Rect,
+  steps = 12,
+): boolean {
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    const x = mt * mt * p0.x + 2 * mt * t * cp.x + t * t * p2.x;
+    const y = mt * mt * p0.y + 2 * mt * t * cp.y + t * t * p2.y;
+    if (pointInRect({ x, y }, rect)) return true;
+  }
+  return false;
 }
