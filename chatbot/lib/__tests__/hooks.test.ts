@@ -222,7 +222,10 @@ describe("buildAgentHooks — PreToolUse Bash write guard", () => {
   it("hook denies Bash write redirect", async () => {
     const hooks = buildAgentHooks({ ...makeConfig(), readOnly: true });
     const fn = hooks.PreToolUse!.find((h) => h.matcher === "Bash")!.hooks[0]!;
-    const result = await callHook(fn, preToolUseInput("Bash", { command: "cat /etc/passwd > /tmp/out.txt" }));
+    const result = await callHook(
+      fn,
+      preToolUseInput("Bash", { command: "cat /etc/passwd > /tmp/out.txt" }),
+    );
     expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
   });
 

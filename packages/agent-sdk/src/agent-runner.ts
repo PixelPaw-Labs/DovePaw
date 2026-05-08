@@ -8,7 +8,7 @@ import type {
   HookCallbackMatcher,
   PreToolUseHookSpecificOutput,
 } from "@anthropic-ai/claude-agent-sdk";
-import { bashHasWriteOperation, getSecurityModeStrategy } from "@@/lib/security-policy";
+import { bashHasWriteOperation, getSecurityModeStrategy } from "./security-policy.js";
 
 interface ClaudeRunOpts {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
@@ -30,9 +30,11 @@ export function resolveCodexSandboxMode(
 }
 
 export function resolveCodexWebSearchEnabled(
+  codexOpts: CodexOpts | undefined,
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  return env.DOVEPAW_ALLOW_WEB_TOOLS === "1";
+  if (env.DOVEPAW_ALLOW_WEB_TOOLS === "1") return true;
+  return codexOpts?.webSearchEnabled ?? false;
 }
 
 export function resolveCodexApprovalPolicy(
@@ -75,7 +77,7 @@ export function resolveClaudeSecurityOpts(
             if (input.hook_event_name !== "PreToolUse") return { continue: true };
             if (typeof input.tool_input !== "object" || input.tool_input === null)
               return { continue: true };
-            const rawCommand: unknown = Reflect.get(input.tool_input as object, "command");
+            const rawCommand: unknown = Reflect.get(input.tool_input, "command");
             const command = typeof rawCommand === "string" ? rawCommand : "";
             if (!bashHasWriteOperation(command)) return { continue: true };
             const hookSpecificOutput: PreToolUseHookSpecificOutput = {
@@ -157,11 +159,10 @@ export class AgentRunner {
         appendSystemPrompt: opts.appendSystemPrompt,
         config: opts.codexOpts?.config,
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
-        webSearchEnabled: opts.codexOpts?.webSearchEnabled,
         webSearchMode: opts.codexOpts?.webSearchMode,
         sandboxMode: resolveCodexSandboxMode(opts.codexOpts),
         approvalPolicy: resolveCodexApprovalPolicy(),
-        webSearchEnabled: resolveCodexWebSearchEnabled(),
+        webSearchEnabled: resolveCodexWebSearchEnabled(opts.codexOpts),
       } satisfies CodexRunOpts);
     }
     if (!isClaudeModel(model)) {

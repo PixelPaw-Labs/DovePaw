@@ -1,5 +1,11 @@
 import { Codex } from "@openai/codex-sdk";
-import type { Thread, WebSearchMode, SandboxMode, CodexOptions, ApprovalMode } from "@openai/codex-sdk";
+import type {
+  Thread,
+  WebSearchMode,
+  SandboxMode,
+  CodexOptions,
+  ApprovalMode,
+} from "@openai/codex-sdk";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -85,7 +91,7 @@ export class CodexRunner {
       model: opts.model || "gpt-5.4-mini",
       workingDirectory: opts.cwd || process.cwd(),
       skipGitRepoCheck: opts.skipGitRepoCheck ?? true,
-      approvalPolicy: (opts.approvalPolicy ?? "never") as ApprovalMode,
+      approvalPolicy: opts.approvalPolicy ?? "never",
       ...(opts.additionalDirectories?.length
         ? { additionalDirectories: opts.additionalDirectories }
         : {}),

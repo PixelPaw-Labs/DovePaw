@@ -1,8 +1,14 @@
 import { mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { AgentRunner, resolveClaudeSecurityOpts, resolveCodexSandboxMode, resolveCodexApprovalPolicy, resolveCodexWebSearchEnabled } from "./agent-runner.js";
-import { getSecurityModeStrategy } from "@@/lib/security-policy";
+import {
+  AgentRunner,
+  resolveClaudeSecurityOpts,
+  resolveCodexSandboxMode,
+  resolveCodexApprovalPolicy,
+  resolveCodexWebSearchEnabled,
+} from "./agent-runner.js";
+import { getSecurityModeStrategy } from "./security-policy.js";
 
 const TMP_DIR = join(tmpdir(), `agent-runner-test-${process.pid}`);
 
@@ -73,13 +79,19 @@ describe("resolveClaudeSecurityOpts", () => {
   it("hook denies Bash write redirect", async () => {
     const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "read-only" });
     const cb = result.hooks.PreToolUse?.[0].hooks[0];
-    const outcome = await cb?.({
-      hook_event_name: "PreToolUse",
-      tool_name: "Bash",
-      tool_input: { command: "cat /etc/passwd > /tmp/out.txt" },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub
-    } as any);
-    expect((outcome as any)?.hookSpecificOutput?.permissionDecision).toBe("deny");
+    const outcome = await cb?.(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "cat /etc/passwd > /tmp/out.txt" },
+      } as unknown as Parameters<NonNullable<typeof cb>>[0],
+      undefined,
+      { signal: new AbortController().signal },
+    );
+    expect(
+      (outcome as unknown as { hookSpecificOutput?: { permissionDecision?: string } })
+        .hookSpecificOutput?.permissionDecision,
+    ).toBe("deny");
   });
 
   it("disallows WebFetch and WebSearch when DOVEPAW_ALLOW_WEB_TOOLS is absent", () => {
@@ -103,13 +115,16 @@ describe("resolveClaudeSecurityOpts", () => {
   it("hook allows Bash read-only command", async () => {
     const result = resolveClaudeSecurityOpts(undefined, { DOVEPAW_SECURITY_MODE: "read-only" });
     const cb = result.hooks.PreToolUse?.[0].hooks[0];
-    const outcome = await cb?.({
-      hook_event_name: "PreToolUse",
-      tool_name: "Bash",
-      tool_input: { command: "cat /etc/passwd" },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- test stub
-    } as any);
-    expect((outcome as any)?.continue).toBe(true);
+    const outcome = await cb?.(
+      {
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "cat /etc/passwd" },
+      } as unknown as Parameters<NonNullable<typeof cb>>[0],
+      undefined,
+      { signal: new AbortController().signal },
+    );
+    expect((outcome as unknown as { continue?: boolean }).continue).toBe(true);
   });
 });
 
@@ -138,16 +153,26 @@ describe("resolveCodexSandboxMode", () => {
 });
 
 describe("resolveCodexWebSearchEnabled", () => {
-  it("returns false when DOVEPAW_ALLOW_WEB_TOOLS is absent", () => {
-    expect(resolveCodexWebSearchEnabled({})).toBe(false);
+  it("returns false when DOVEPAW_ALLOW_WEB_TOOLS is absent and no codexOpts", () => {
+    expect(resolveCodexWebSearchEnabled(undefined, {})).toBe(false);
   });
 
   it("returns false when DOVEPAW_ALLOW_WEB_TOOLS is '0'", () => {
-    expect(resolveCodexWebSearchEnabled({ DOVEPAW_ALLOW_WEB_TOOLS: "0" })).toBe(false);
+    expect(resolveCodexWebSearchEnabled(undefined, { DOVEPAW_ALLOW_WEB_TOOLS: "0" })).toBe(false);
   });
 
   it("returns true when DOVEPAW_ALLOW_WEB_TOOLS is '1'", () => {
-    expect(resolveCodexWebSearchEnabled({ DOVEPAW_ALLOW_WEB_TOOLS: "1" })).toBe(true);
+    expect(resolveCodexWebSearchEnabled(undefined, { DOVEPAW_ALLOW_WEB_TOOLS: "1" })).toBe(true);
+  });
+
+  it("returns true from codexOpts.webSearchEnabled when env var absent", () => {
+    expect(resolveCodexWebSearchEnabled({ webSearchEnabled: true }, {})).toBe(true);
+  });
+
+  it("env var takes precedence over codexOpts.webSearchEnabled false", () => {
+    expect(
+      resolveCodexWebSearchEnabled({ webSearchEnabled: false }, { DOVEPAW_ALLOW_WEB_TOOLS: "1" }),
+    ).toBe(true);
   });
 });
 

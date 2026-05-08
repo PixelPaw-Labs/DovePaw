@@ -100,8 +100,14 @@ function buildPendingBlockReason(entries: PendingEntry[]): string {
 export function buildAgentHooks(
   config: AgentHooksConfig,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const { postToolUseMatcher, registry, userPromptReminder, allowedDirectories, disallowedTools, readOnly } =
-    config;
+  const {
+    postToolUseMatcher,
+    registry,
+    userPromptReminder,
+    allowedDirectories,
+    disallowedTools,
+    readOnly,
+  } = config;
   //const retryCounter = new StillRunningRetryCounter();
   const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
 
