@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { realpath } from "node:fs/promises";
 import path from "path";
 import type {
   UserPromptSubmitHookSpecificOutput,
@@ -109,7 +110,11 @@ export function buildAgentHooks(
     readOnly,
   } = config;
   //const retryCounter = new StillRunningRetryCounter();
-  const resolvedAllowed = allowedDirectories?.map((d) => path.resolve(d));
+  // Resolve canonical paths once at setup (normalises symlinks + macOS case-insensitive FS).
+  const resolvedAllowed =
+    allowedDirectories && allowedDirectories.length > 0
+      ? Promise.all(allowedDirectories.map((d) => realpath(d).catch(() => path.resolve(d))))
+      : undefined;
 
   const preToolUseHooks: HookCallbackMatcher[] = [
     {
@@ -180,7 +185,7 @@ export function buildAgentHooks(
     });
   }
 
-  if (resolvedAllowed && resolvedAllowed.length > 0) {
+  if (resolvedAllowed) {
     preToolUseHooks.push({
       matcher: "Edit|Write",
       hooks: [
@@ -191,15 +196,18 @@ export function buildAgentHooks(
           const fp: unknown = Reflect.get(input.tool_input, "file_path");
           const filePath = typeof fp === "string" ? fp : undefined;
           if (!filePath) return { continue: true };
-          const resolved = path.resolve(filePath);
-          const allowed = resolvedAllowed.some(
+          // Resolve canonical path (normalises symlinks + macOS case-insensitive FS).
+          // File may not exist yet (new write) — fall back to path.resolve.
+          const resolved = await realpath(filePath).catch(() => path.resolve(filePath));
+          const dirs = await resolvedAllowed;
+          const allowed = dirs.some(
             (dir) => resolved === dir || resolved.startsWith(dir + path.sep),
           );
           const hookSpecificOutput: PreToolUseHookSpecificOutput = {
             hookEventName: "PreToolUse",
             permissionDecision: allowed ? "allow" : "deny",
             ...(!allowed && {
-              permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${resolvedAllowed.join(", ")}.
+              permissionDecisionReason: `"${resolved}" is outside the allowed directories: ${dirs.join(", ")}.
                     You should stop and reconsider if you really need to access this path.
                     But NEVER proceed without explicit permission or try to bypass it automatically, as allowing access to this path could be dangerous.
                     If you really need to access this path, ask the user for explicit permission.`,
