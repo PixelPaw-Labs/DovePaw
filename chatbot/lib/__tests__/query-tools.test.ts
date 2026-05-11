@@ -581,7 +581,9 @@ describe("makeAwaitTool", () => {
     // Stream resolves with a terminal status-update but no artifacts — empty completion
     const mockResubscribe = vi
       .fn()
-      .mockReturnValue(asyncEvents({ kind: "status-update", final: true, status: { state: "completed" } }));
+      .mockReturnValue(
+        asyncEvents({ kind: "status-update", final: true, status: { state: "completed" } }),
+      );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi
