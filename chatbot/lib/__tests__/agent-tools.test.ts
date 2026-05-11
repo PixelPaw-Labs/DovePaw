@@ -409,7 +409,7 @@ describe("tool name helpers", () => {
   });
 
   it("awaitRunScriptToolName", () => {
-    expect(awaitRunScriptToolName("fixer")).toBe("await_fixer");
+    expect(awaitRunScriptToolName("fixer")).toBe("await_script_fixer");
   });
 
   it("startChatToToolName", () => {
@@ -741,6 +741,7 @@ describe("makeAwaitEscalateTool", () => {
           progress: [] as any[],
           thinking: "",
           toolCalls: [] as string[],
+          finalState: "completed" as const,
         },
       };
     });
@@ -749,7 +750,7 @@ describe("makeAwaitEscalateTool", () => {
   it("returns guidance text when task completes", async () => {
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeAwaitEscalateTool(AGENT) as any;
-    const result = (await handler({ taskId: "task-123" })) as any;
+    const result = (await handler({ taskId: "task-123", timeoutMs: 30000 })) as any;
     expect(result.content[0].text).toBeTruthy();
     expect(result.structuredContent.status).toBe("completed");
   });

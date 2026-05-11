@@ -42,12 +42,12 @@ export function resolveRuntime(scriptPath: string): { cmd: string; args: string[
 /** How long to wait for script completion before returning still_running. */
 export const SCRIPT_POLL_TIMEOUT_MS = 30_000;
 
-/** Maximum lines kept in the live progress buffer — prevents unbounded growth. */
+/** Maximum lines kept in the output buffer — prevents unbounded growth. */
 const LATEST_LINES_CAP = 200;
 
 type ScriptState =
-  | { phase: "running"; promise: Promise<string>; latestLines: string[] }
-  | { phase: "done"; output: string };
+  | { phase: "running"; promise: Promise<string>; startTime: number }
+  | { phase: "done"; output: string; durationMs: number };
 
 /**
  * Tracks script runs until the caller collects the result via awaitScript.
@@ -154,13 +154,14 @@ export function startScript(
   signal?: AbortSignal,
   runId: string = randomUUID(),
 ): { runId: string } {
-  const { promise, lines: latestLines } = spawnAndCollect(config, instruction, signal);
+  const startTime = Date.now();
+  const { promise } = spawnAndCollect(config, instruction, signal);
 
-  runningScripts.set(runId, { phase: "running", promise, latestLines });
+  runningScripts.set(runId, { phase: "running", promise, startTime });
   // Cache the output when the process exits so awaitScript can collect it
   // even if the script finishes before the next poll (avoids "not_found").
   void promise.then((output) => {
-    runningScripts.set(runId, { phase: "done", output });
+    runningScripts.set(runId, { phase: "done", output, durationMs: Date.now() - startTime });
   });
   return { runId };
 }
@@ -173,30 +174,35 @@ export function startScript(
  * The entry is removed from the registry only after this function returns
  * the final output — keeping hasPendingScripts() accurate for the Stop hook.
  */
-export async function awaitScript(runId: string): Promise<AwaitScriptContent> {
+export async function awaitScript(runId: string, timeoutMs = 0): Promise<AwaitScriptContent> {
   const state = runningScripts.get(runId);
   if (!state) return { status: "not_found", runId };
 
   // Script already finished between polls — return cached output and clean up.
   if (state.phase === "done") {
     runningScripts.delete(runId);
-    return { status: "completed", runId, output: state.output };
+    return { status: "completed", runId, output: state.output, durationMs: state.durationMs };
   }
 
+  const { startTime } = state;
   const timeoutResult = Symbol("timeout");
   let timerId: ReturnType<typeof setTimeout>;
   const result = await Promise.race([
     state.promise.then(
-      (output): ScriptCompletedContent => ({ status: "completed", runId, output }),
+      (output): ScriptCompletedContent => ({
+        status: "completed",
+        runId,
+        output,
+        durationMs: Date.now() - startTime,
+      }),
     ),
     new Promise<typeof timeoutResult>((resolve) => {
-      timerId = setTimeout(() => resolve(timeoutResult), SCRIPT_POLL_TIMEOUT_MS);
+      timerId = setTimeout(() => resolve(timeoutResult), timeoutMs || SCRIPT_POLL_TIMEOUT_MS);
     }),
   ]).finally(() => clearTimeout(timerId));
 
   if (result === timeoutResult) {
-    const latestOutput = state.latestLines.slice(-10).join("\n") || undefined;
-    return { status: "still_running", runId, latestOutput };
+    return { status: "still_running", runId };
   }
 
   // Completed within the poll window — clean up now.

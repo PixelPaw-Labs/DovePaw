@@ -38,6 +38,8 @@ export type CollectedStream = {
   result: StreamedResult;
 };
 
+export type TaskFinalState = "completed" | "failed" | "canceled" | "rejected";
+
 export type StreamedResult = {
   /** Primary text output (from artifact-update events), joined for readability. */
   output: string;
@@ -48,7 +50,7 @@ export type StreamedResult = {
   /** Tool calls made by the agent, formatted as "toolName: args". */
   toolCalls?: string[];
   /** Terminal task state from the final status-update event. */
-  finalState?: string;
+  finalState?: TaskFinalState;
 };
 
 /**
@@ -92,7 +94,7 @@ export async function* streamCollect(
   agentName?: string,
 ): AsyncGenerator<StreamEvent, void, undefined> {
   let taskId: string | undefined;
-  let finalState: string | undefined;
+  let finalState: TaskFinalState | undefined;
   const progress: ProgressEntry[] = [];
   let pendingEntry: ProgressEntry | undefined;
   const thinkingChunks: string[] = [];
@@ -111,7 +113,14 @@ export async function* streamCollect(
     };
   };
 
-  const TERMINAL_STATES = new Set(["completed", "failed", "canceled", "rejected"]);
+  const TERMINAL_STATES: ReadonlyArray<TaskFinalState> = [
+    "completed",
+    "failed",
+    "canceled",
+    "rejected",
+  ];
+  const isTaskFinalState = (s: string): s is TaskFinalState =>
+    (TERMINAL_STATES as readonly string[]).includes(s);
 
   for await (const event of stream) {
     if (event.kind === "task") {
@@ -121,7 +130,7 @@ export async function* streamCollect(
       // status-update events follow (the EventQueue was destructively consumed by the
       // initial stream in start_*). Extract the output from the task's stored artifacts,
       // which ResultManager populated during execution.
-      if (event.status?.state && TERMINAL_STATES.has(event.status.state)) {
+      if (event.status?.state && isTaskFinalState(event.status.state)) {
         finalState = event.status.state;
         const stored = extractArtifactResult(event.artifacts, agentName);
         if (stored.thinking) thinkingChunks.push(stored.thinking);
@@ -162,7 +171,7 @@ export async function* streamCollect(
       }
     } else if (event.kind === "status-update") {
       if (event.final) {
-        finalState = event.status.state;
+        finalState = isTaskFinalState(event.status.state) ? event.status.state : "completed";
         if (event.status.message) {
           for (const p of event.status.message.parts) {
             if (p.kind === "text" && p.text) {

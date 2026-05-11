@@ -8,6 +8,7 @@ import type { PendingRegistry } from "@/lib/pending-registry";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 import { HANDOFF_COMPLETENESS } from "./agent-script-tools";
 import { withStartReminder } from "@@/lib/subagent-reminder";
+import { taskRuntime } from "@/lib/task-runtime";
 
 /** Emits a sender bubble to the group pool stream when the caller is in group mode. */
 function emitGroupSenderBubble(
@@ -159,7 +160,6 @@ ${HANDOFF_PATTERNS(displayName)}`,
         signal,
         registry,
         awaitChatToToolName(manifestKey),
-        undefined,
         targetDef.name,
       ).start(withStartReminder(instruction, manifestKey), {
         contextId,
@@ -189,17 +189,23 @@ export function makeAwaitChatToTool(
     awaitChatToToolName(manifestKey),
     `Collect the result of a previously started ${displayName} task.\n` +
       `Call this after ${startChatToToolName(manifestKey)} to retrieve the agent's output.`,
-    { taskId: z.string().describe("The taskId returned by " + startChatToToolName(manifestKey)) },
-    async ({ taskId }) => {
+    {
+      taskId: z.string().describe("The taskId returned by " + startChatToToolName(manifestKey)),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(10000)
+        .describe(taskRuntime.buildDescription(targetDef.name, awaitChatToToolName(manifestKey))),
+    },
+    async ({ taskId, timeoutMs }) => {
       return await new TaskPoller(
         manifestKey,
         displayName,
         signal,
         registry,
         awaitChatToToolName(manifestKey),
-        undefined,
         targetDef.name,
-      ).poll(taskId);
+      ).poll(taskId, timeoutMs);
     },
   );
 }
@@ -258,7 +264,6 @@ export function makeStartReviewTool(
         signal,
         registry,
         awaitReviewWithToolName(manifestKey),
-        undefined,
         targetDef.name,
       ).start(withStartReminder(instruction, manifestKey), {
         senderAgentId: callerAgentId,
@@ -284,17 +289,23 @@ export function makeAwaitReviewTool(
       `Call this after ${startReviewWithToolName(manifestKey)} to retrieve the approve/reject decision.`,
     {
       taskId: z.string().describe("The taskId returned by " + startReviewWithToolName(manifestKey)),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(10000)
+        .describe(
+          taskRuntime.buildDescription(targetDef.name, awaitReviewWithToolName(manifestKey)),
+        ),
     },
-    async ({ taskId }) => {
+    async ({ taskId, timeoutMs }) => {
       const pollResult = await new TaskPoller(
         manifestKey,
         displayName,
         signal,
         registry,
         awaitReviewWithToolName(manifestKey),
-        undefined,
         targetDef.name,
-      ).poll(taskId);
+      ).poll(taskId, timeoutMs);
 
       const sc = pollResult.structuredContent;
       if (!sc || !("result" in sc)) return pollResult;
@@ -389,7 +400,6 @@ export function makeStartEscalateTool(
         signal,
         registry,
         awaitEscalateToToolName(manifestKey),
-        undefined,
         targetDef.name,
       ).start(withStartReminder(instruction, manifestKey), {
         senderAgentId: callerAgentId,
@@ -415,17 +425,23 @@ export function makeAwaitEscalateTool(
       `Call this after ${startEscalateToToolName(manifestKey)} to retrieve the decision or guidance.`,
     {
       taskId: z.string().describe("The taskId returned by " + startEscalateToToolName(manifestKey)),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(10000)
+        .describe(
+          taskRuntime.buildDescription(targetDef.name, awaitEscalateToToolName(manifestKey)),
+        ),
     },
-    async ({ taskId }) => {
+    async ({ taskId, timeoutMs }) => {
       return new TaskPoller(
         manifestKey,
         displayName,
         signal,
         registry,
         awaitEscalateToToolName(manifestKey),
-        undefined,
         targetDef.name,
-      ).poll(taskId);
+      ).poll(taskId, timeoutMs);
     },
   );
 }

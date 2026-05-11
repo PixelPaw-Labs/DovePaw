@@ -33,6 +33,7 @@ vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch-agents",
   DOVEPAW_DIR: "/mock/dovepaw",
   GROUP_WORKSPACE_ROOT: require("node:os").tmpdir(),
+  agentPersistentMetaDir: (name: string) => `/mock/state/.${name}/meta`,
 }));
 
 vi.mock("@@/lib/settings", () => ({
@@ -551,6 +552,11 @@ describe("makeAwaitTool", () => {
           kind: "artifact-update",
           artifact: { name: "stream", parts: [{ kind: "text", text: "running tests..." }] },
         },
+        {
+          kind: "status-update",
+          final: true,
+          status: { state: "completed" },
+        },
       ),
     );
     vi.mocked(ClientFactory).mockImplementation(function () {
@@ -572,8 +578,10 @@ describe("makeAwaitTool", () => {
       kind: "task",
       status: { state: "working" },
     });
-    // Stream that resolves immediately with no artifacts — simulates timeout with empty progress
-    const mockResubscribe = vi.fn().mockReturnValue(asyncEvents());
+    // Stream resolves with a terminal status-update but no artifacts — empty completion
+    const mockResubscribe = vi
+      .fn()
+      .mockReturnValue(asyncEvents({ kind: "status-update", final: true, status: { state: "completed" } }));
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi

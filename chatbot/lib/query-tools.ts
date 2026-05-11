@@ -24,6 +24,7 @@ import {
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { withStartReminder, withMemoryReminder } from "@@/lib/subagent-reminder";
 import { agentPersistentStateDir } from "@/lib/paths";
+import { taskRuntime } from "@/lib/task-runtime";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -179,7 +180,6 @@ export function makeStartTool(
         signal,
         registry,
         doveAwaitToolName(agent),
-        undefined,
         agent.name,
       ).start(withStartReminder(instruction, agent.manifestKey), {
         backgroundTasks,
@@ -204,17 +204,21 @@ export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal, registry?: 
     `Await a previously started ${agent.displayName} task. Returns the final result when complete, or { status: "still_running", taskId } if still in progress.`,
     {
       taskId: z.string().describe("The taskId returned by the corresponding start_* or ask_* tool"),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(10000)
+        .describe(taskRuntime.buildDescription(agent.name, doveAwaitToolName(agent))),
     },
-    async ({ taskId }) => {
+    async ({ taskId, timeoutMs }) => {
       return await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
         signal,
         registry,
         doveAwaitToolName(agent),
-        undefined,
         agent.name,
-      ).poll(taskId);
+      ).poll(taskId, timeoutMs);
     },
   );
 }

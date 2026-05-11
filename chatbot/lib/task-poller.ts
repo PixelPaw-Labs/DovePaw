@@ -21,6 +21,7 @@ import {
 } from "@/lib/a2a-client";
 import type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import { taskRuntime } from "@/lib/task-runtime";
 
 // ─── Content types ────────────────────────────────────────────────────────────
 
@@ -87,11 +88,6 @@ export function isConnectionError(msg: string) {
   return msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
 }
 
-// ─── Timeout ──────────────────────────────────────────────────────────────────
-
-/** How long to wait for task completion before returning a still_running status. */
-const AWAIT_POLL_TIMEOUT_MS = 30_000;
-
 // ─── TaskPoller ───────────────────────────────────────────────────────────────
 
 export class TaskPoller {
@@ -101,7 +97,6 @@ export class TaskPoller {
     private readonly signal?: AbortSignal,
     private readonly registry?: PendingRegistry,
     private readonly awaitTool?: string,
-    private readonly timeoutMs = AWAIT_POLL_TIMEOUT_MS,
     private readonly agentName?: string,
   ) {}
 
@@ -146,6 +141,7 @@ export class TaskPoller {
         };
       }
       const { taskId, contextId: sessionContextId, stream } = handle;
+      taskRuntime.start(taskId);
       const { registry, awaitTool } = this;
       if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
 
@@ -196,7 +192,7 @@ export class TaskPoller {
    * When registry + awaitTool are provided, re-registers on still_running and
    * resolves on completion (or TaskNotFoundError).
    */
-  async poll(taskId: string): Promise<PollToolResult> {
+  async poll(taskId: string, timeoutMs: number): Promise<PollToolResult> {
     const { registry, awaitTool } = this;
     const port = resolveAgentPort(this.manifestKey);
     if (!port) {
@@ -210,7 +206,6 @@ export class TaskPoller {
       // live events; for an already-completed task the A2A SDK yields only the Task
       // snapshot — streamCollect extracts the output from task.artifacts, which
       // ResultManager populated during execution.
-      let latestSnapshot: StreamedResult | undefined;
       let out: CollectedStream = {
         result: { output: noAgentOutput(this.agentName), progress: [] },
       };
@@ -218,12 +213,11 @@ export class TaskPoller {
       const subscribeGen = subscribeTaskStream(client, taskId, this.signal, this.agentName);
       const timeoutAc = new AbortController();
       const timeoutResult = Symbol("timeout");
-      const timer = setTimeout(() => timeoutAc.abort(), this.timeoutMs);
+      const timer = setTimeout(() => timeoutAc.abort(), timeoutMs);
 
       const streamDone = (async () => {
         for await (const event of subscribeGen) {
           if (event.kind === "snapshot") {
-            latestSnapshot = event.result;
             out = { taskId: event.taskId, result: event.result };
           }
         }
@@ -241,16 +235,9 @@ export class TaskPoller {
         void subscribeGen.return(undefined); // stop generator and clean up
         // Re-affirm task is still in-flight — idempotent Map.set, semantically explicit.
         if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
-        const progressLines: string[] = [`${this.displayName} is still working...`];
-        const lastArtifacts = latestSnapshot?.progress.at(-1)?.artifacts ?? {};
-        const lastToolCall = lastArtifacts["tool-call"];
-        const streamBuffer = lastArtifacts["stream"] ?? "";
-        if (lastToolCall) progressLines.push(`  Running: ${lastToolCall}`);
-        if (streamBuffer)
-          progressLines.push(`  Latest output: …${streamBuffer.trim().slice(-200)}`);
         const stillRunning: TaskStillRunningContent = { status: "still_running", taskId };
         return {
-          content: [{ type: "text" as const, text: progressLines.join("\n") }],
+          content: [{ type: "text" as const, text: "still_running" }],
           structuredContent: stillRunning,
         };
       }
@@ -258,10 +245,13 @@ export class TaskPoller {
       const resolvedTaskId = result.taskId ?? taskId;
       registry?.resolve(taskId);
       const completed: TaskCompletedContent = {
-        status: "completed",
+        status: result.result.finalState ?? (this.signal?.aborted ? "canceled" : "failed"),
         taskId: resolvedTaskId,
         result: result.result,
       };
+      if (this.agentName && this.awaitTool && completed.status === "completed") {
+        taskRuntime.record(taskId, this.agentName, this.awaitTool);
+      }
       return {
         content: [
           {

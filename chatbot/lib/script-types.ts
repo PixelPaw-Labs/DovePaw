@@ -4,13 +4,12 @@ export type ScriptCompletedContent = {
   status: "completed";
   runId: string;
   output: string;
+  durationMs: number;
 };
 
 export type ScriptStillRunningContent = {
   status: "still_running";
   runId: string;
-  /** Last lines of script output captured so far, for progress reporting. */
-  latestOutput?: string;
 };
 
 export type ScriptNotFoundContent = {

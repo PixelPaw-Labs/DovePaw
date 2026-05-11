@@ -224,7 +224,7 @@ describe("spawnAndCollect — readline line collection", () => {
   });
 });
 
-describe("startScript / awaitScript — latestOutput in still_running", () => {
+describe("startScript / awaitScript — still_running", () => {
   beforeEach(() => {
     mockSpawn.mockReset();
     vi.mocked(existsSync).mockReturnValue(true);
@@ -235,7 +235,7 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
     vi.useRealTimers();
   });
 
-  it("still_running response has latestOutput as undefined when no lines emitted", async () => {
+  it("returns still_running when no lines emitted before timeout", async () => {
     makeProc();
     const { runId } = startScript(BASE_CONFIG, "run");
 
@@ -244,10 +244,6 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
 
     const result = await awaitPromise;
     expect(result.status).toBe("still_running");
-    if (result.status === "still_running") {
-      // No stdout was emitted so latestLines is empty → latestOutput is undefined
-      expect(result.latestOutput).toBeUndefined();
-    }
   });
 
   it("still_running structuredContent has the expected shape", async () => {
@@ -258,9 +254,7 @@ describe("startScript / awaitScript — latestOutput in still_running", () => {
     vi.advanceTimersByTime(35_000);
 
     const result = await awaitPromise;
-    // Verify structural shape: status and runId always present, latestOutput optional
     expect(result).toMatchObject({ status: "still_running", runId });
-    expect("latestOutput" in result).toBe(true);
   });
 });
 

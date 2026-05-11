@@ -27,7 +27,6 @@ import {
 } from "@@/lib/dove-lean-reminder";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
-//import { StillRunningRetryCounter } from "@/lib/still-running-retry-counter";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
 import { addPendingQuestion, abortPendingQuestions } from "@/lib/pending-questions";
@@ -83,6 +82,8 @@ export interface AgentHooksConfig {
   readOnly?: boolean;
 }
 
+const STILL_RUNNING_FULL_EVERY = 5;
+
 function buildPendingBlockReason(entries: PendingEntry[]): string {
   return [
     `⚠️ You have ${entries.length} pending operation(s) still running:`,
@@ -92,6 +93,10 @@ function buildPendingBlockReason(entries: PendingEntry[]): string {
     `Never give up or stop polling; you are responsible for retrieving the final result.`,
     `Never recall any previous run from log or memory — always use the await tool with the id from the most recent still_running response.`,
   ].join("\n");
+}
+
+function buildShortPendingBlockReason(entries: PendingEntry[]): string {
+  return `Keep polling: ${entries.map((e) => `\`${e.awaitTool}\` ${e.idKey}="${e.id}"`).join(", ")}`;
 }
 
 /**
@@ -109,7 +114,7 @@ export function buildAgentHooks(
     disallowedTools,
     readOnly,
   } = config;
-  //const retryCounter = new StillRunningRetryCounter();
+  let stillRunningCount = 0;
   // Resolve canonical paths once at setup (normalises symlinks + macOS case-insensitive FS).
   const resolvedAllowed =
     allowedDirectories && allowedDirectories.length > 0
@@ -261,10 +266,13 @@ export function buildAgentHooks(
                 ? (structured as { status: unknown }).status
                 : undefined;
             if (status === "still_running") {
-              //if (retryCounter.shouldRelease()) {
-              //return { continue: true };
-              //}
-              return { decision: "block", reason: buildPendingBlockReason(registry.getPending()) };
+              stillRunningCount++;
+              const isFullReminder = stillRunningCount % STILL_RUNNING_FULL_EVERY === 1;
+              const pending = registry.getPending();
+              const reason = isFullReminder
+                ? buildPendingBlockReason(pending)
+                : buildShortPendingBlockReason(pending);
+              return { decision: "block", reason };
             }
             return { continue: true };
           },

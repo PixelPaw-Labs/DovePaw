@@ -11,6 +11,8 @@ import { z } from "zod";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import { taskRuntime } from "@/lib/task-runtime";
+import { doveAwaitToolName } from "@/lib/query-tools";
 import { withStartReminder } from "@@/lib/subagent-reminder";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { publishSessionEvent } from "@/lib/session-events";
@@ -176,7 +178,6 @@ export function makeStartGroupTool(
             signal,
             registry,
             doveAwaitGroupToolName(group.name),
-            undefined,
             memberDef.name,
           ).start(withStartReminder(instruction, memberDef.manifestKey), {
             backgroundTasks: memberDrain,
@@ -240,8 +241,17 @@ export function makeAwaitGroupTool(
         .record(z.string(), z.string())
         .describe("memberTaskIds from start_group_* result"),
       groupContextId: z.string().describe("groupContextId from start_group_* result"),
+      timeoutMs: z
+        .number()
+        .int()
+        .min(10000)
+        .describe(
+          taskRuntime.buildGroupDescription(
+            memberDefs.map((d) => ({ agentName: d.name, toolName: doveAwaitToolName(d) })),
+          ),
+        ),
     },
-    async ({ memberTaskIds, groupContextId }) => {
+    async ({ memberTaskIds, groupContextId, timeoutMs }) => {
       const entries = Object.entries(memberTaskIds);
       const results = await Promise.all(
         entries.map(([manifestKey, taskId]) => {
@@ -252,9 +262,8 @@ export function makeAwaitGroupTool(
             signal,
             registry,
             doveAwaitGroupToolName(group.name),
-            undefined,
             memberDef?.name,
-          ).poll(taskId);
+          ).poll(taskId, timeoutMs);
         }),
       );
 

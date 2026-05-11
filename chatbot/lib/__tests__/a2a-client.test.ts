@@ -478,7 +478,7 @@ const BASE_RESULT = {
   progress: [],
   thinking: "",
   toolCalls: [],
-  finalState: "completed",
+  finalState: "completed" as const,
 };
 
 describe("formatAgentStreamContext", () => {
