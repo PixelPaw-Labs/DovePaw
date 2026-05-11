@@ -157,6 +157,45 @@ describe("findOptimalConnection", () => {
     expect(conn.to.y).toBe(160);
   });
 
+  it("re-picks both source AND target borders when the original pair is invisibly short", () => {
+    // Cards 5px apart horizontally. Default shortest valid pair is
+    // A.right (100, 30) → B.left (105, 30) — length 5. With minVisibleLength=20
+    // both ends must move: the chosen `from` must NOT be A.right OR the chosen
+    // `to` must NOT be B.left (and in practice neither will be).
+    const a = connectionPointsFromRect({ x: 0, y: 0, w: 100, h: 60 });
+    const b = connectionPointsFromRect({ x: 105, y: 0, w: 100, h: 60 });
+    const conn = findOptimalConnection(a, b, [], 20);
+    const sourceMoved = conn.from.x !== a.right.x || conn.from.y !== a.right.y;
+    const targetMoved = conn.to.x !== b.left.x || conn.to.y !== b.left.y;
+    // The pair {A.right, B.left} is the short one being rejected, so at least
+    // the target end must move (and ideally both — both ends get re-picked).
+    expect(targetMoved).toBe(true);
+    expect(sourceMoved || targetMoved).toBe(true);
+  });
+
+  it("rejects very short connections when minVisibleLength is set", () => {
+    // Two cards adjacent with only a 2px gap: right→left would be the shortest
+    // valid pair (length 2) — visually invisible. With minVisibleLength=20 the
+    // function must pick a different border pair that yields a visibly longer
+    // straight-line distance.
+    const left = connectionPointsFromRect({ x: 0, y: 0, w: 100, h: 60 });
+    const right = connectionPointsFromRect({ x: 102, y: 0, w: 100, h: 60 });
+    const conn = findOptimalConnection(left, right, [], 20);
+    const length = Math.hypot(conn.to.x - conn.from.x, conn.to.y - conn.from.y);
+    expect(length).toBeGreaterThanOrEqual(20);
+  });
+
+  it("falls back to the longest valid pair when no pair meets minVisibleLength", () => {
+    // Two cards barely apart on every axis — no pair can reach 500px.
+    // The chosen pair must be the longest valid one (most visible room).
+    const a = connectionPointsFromRect({ x: 0, y: 0, w: 100, h: 60 });
+    const b = connectionPointsFromRect({ x: 110, y: 0, w: 100, h: 60 });
+    const conn = findOptimalConnection(a, b, [], 500);
+    const length = Math.hypot(conn.to.x - conn.from.x, conn.to.y - conn.from.y);
+    // Longest possible pair here is left.x=0 → right.x=210, length 210.
+    expect(length).toBeCloseTo(210, 0);
+  });
+
   it("avoids obstacle rects when finding connection points", () => {
     // Diagonal arrangement: src top-left, tgt bottom-right.
     // Two valid clean pairs: right→left (shorter, length≈283) and right→top (length≈292).

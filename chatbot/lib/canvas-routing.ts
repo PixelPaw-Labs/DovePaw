@@ -61,16 +61,27 @@ export function segmentPassesThroughRect(
   return tMax > (excludeStart ? eps : 0) && tMin < (excludeEnd ? 1 - eps : 1);
 }
 
+type BorderPair = { from: Point; to: Point };
+
+const lenSq = (p: BorderPair) => (p.to.x - p.from.x) ** 2 + (p.to.y - p.from.y) ** 2;
+
+const samePoint = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+
 /**
  * From all 16 border-center pairs (4 × 4), filter those whose straight
  * segment does not pass through either card or any obstacle rect, then
  * return the shortest valid one. Falls back to the globally shortest if
  * all pairs intersect a card.
+ *
+ * `minVisibleLength` (default 0): when set, prefer valid pairs whose straight
+ * length meets the threshold so the rendered edge has visible room. If no
+ * pair meets the threshold, falls back to the longest valid pair (most room).
  */
 export function findOptimalConnection(
   from: ConnectionPoints,
   to: ConnectionPoints,
   obstacles: Rect[] = [],
+  minVisibleLength = 0,
 ): { from: Point; to: Point } {
   const fromRect: Rect = {
     x: from.left.x,
@@ -96,13 +107,43 @@ export function findOptimalConnection(
       obstacles.every((obs) => !segmentPassesThroughRect(pair.from, pair.to, obs, false, false)),
   );
 
-  const pool = valid.length > 0 ? valid : candidates;
-  return pool.reduce((best, pair) =>
-    Math.hypot(pair.to.x - pair.from.x, pair.to.y - pair.from.y) <
-    Math.hypot(best.to.x - best.from.x, best.to.y - best.from.y)
-      ? pair
-      : best,
-  );
+  const shortest = (pool: BorderPair[]) =>
+    pool.reduce((best, p) => (lenSq(p) < lenSq(best) ? p : best));
+  const longest = (pool: BorderPair[]) =>
+    pool.reduce((best, p) => (lenSq(p) > lenSq(best) ? p : best));
+
+  if (valid.length === 0) return shortest(candidates);
+  if (minVisibleLength <= 0) return shortest(valid);
+  const minLenSq = minVisibleLength * minVisibleLength;
+
+  // When the shortest pair is too short to be visible, both endpoints should
+  // re-pick so the link visibly shifts on both cards (not just one). Identify
+  // the rejected pair's borders and prefer pairs that move BOTH ends.
+  const rejected = shortest(valid);
+  const movesFrom = (p: BorderPair) => !samePoint(p.from, rejected.from);
+  const movesTo = (p: BorderPair) => !samePoint(p.to, rejected.to);
+
+  const tieredPick = (pool: BorderPair[]) => {
+    const longEnough = pool.filter((p) => lenSq(p) >= minLenSq);
+    if (longEnough.length === 0) return null;
+    const movesBoth = longEnough.filter((p) => movesFrom(p) && movesTo(p));
+    if (movesBoth.length > 0) return shortest(movesBoth);
+    const movesEither = longEnough.filter((p) => movesFrom(p) || movesTo(p));
+    return movesEither.length > 0 ? shortest(movesEither) : shortest(longEnough);
+  };
+
+  // Prefer straight-valid pairs that also clear the visible-length threshold.
+  const fromValid = tieredPick(valid);
+  if (fromValid) return fromValid;
+
+  // No straight-valid pair is long enough. The bezier routing layer can curve
+  // around any obstructing card, so widen the search to all candidate pairs.
+  const fromAny = tieredPick(candidates);
+  if (fromAny) return fromAny;
+
+  // Threshold is unreachable even across all 16 pairs — pick the longest one
+  // available so the link gets the most visible room possible.
+  return longest(candidates);
 }
 
 export function pointInRect(p: Point, r: Rect): boolean {

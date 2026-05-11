@@ -193,6 +193,10 @@ const NODE_W = 200;
 const NODE_H = 110;
 // Bow amount per step for parallel edges between the same node pair.
 const CURVE_AMOUNT = 120;
+// Minimum straight-line distance between chosen border points; if no border-pair
+// meets this threshold the link is invisible (e.g. cards touching). Picks a
+// longer border-pair so there's visible room for the bezier to curve.
+const MIN_VISIBLE_LINK_LENGTH = 30;
 
 // ─── Group helpers ───────────────────────────────────────────────────────────
 
@@ -541,15 +545,23 @@ function AgentEdge({
 }: EdgeProps<AgentFlowEdge>) {
   const onDelete = useContext(DeleteEdgeContext);
   const allEdges = useContext(EdgesContext);
-  const { getNode } = useReactFlow();
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
 
-  // Collect all agent node rects except source/target to use as routing obstacles.
+  // Collect agent node rects to use as routing obstacles. Edges only collide with
+  // agents in the same "scope":
+  //   - intra-group edge (both endpoints in group G) → obstacles = other members of G
+  //   - any edge with an ungrouped endpoint → obstacles = ungrouped agents only
+  // Cross-scope cards are visually separated by the group box; including them
+  // would re-route bezier paths every frame when a group is dragged past them.
   const obstacleRects = useStore((s) => {
+    const srcParent = s.nodeLookup.get(source)?.parentId;
+    const tgtParent = s.nodeLookup.get(target)?.parentId;
+    const sameGroupId = srcParent != null && srcParent === tgtParent ? srcParent : null;
     const rects: Rect[] = [];
     s.nodeLookup.forEach((n, nodeId) => {
       if (nodeId === source || nodeId === target || n.type === "groupNode") return;
+      if (sameGroupId != null ? n.parentId !== sameGroupId : n.parentId != null) return;
       rects.push({
         x: n.internals.positionAbsolute.x,
         y: n.internals.positionAbsolute.y,
@@ -562,10 +574,10 @@ function AgentEdge({
 
   if (!sourceNode || !targetNode) return null;
 
-  const srcParent = getNode(source)?.parentId;
-  const tgtParent = getNode(target)?.parentId;
-  // Only elevate the label above the group box when both endpoints live inside the same group.
-  const labelZIndex = srcParent != null && srcParent === tgtParent ? 9999 : undefined;
+  // Labels always render above their link (which sits above agent cards via
+  // defaultEdgeOptions zIndex 1000). 9999 also clears the group box for
+  // intra-group edges.
+  const labelZIndex = 9999;
 
   // All edges between the same node pair (both directions) share one sorted group.
   // Canonical lex order ensures bidirectional edges (A→B and B→A) use the same
@@ -590,6 +602,7 @@ function AgentEdge({
     getConnectionPoints(canonSrcNode),
     getConnectionPoints(canonTgtNode),
     obstacleRects,
+    MIN_VISIBLE_LINK_LENGTH,
   );
   const cdx = canonTo.x - canonFrom.x;
   const cdy = canonTo.y - canonFrom.y;
@@ -603,6 +616,7 @@ function AgentEdge({
     getConnectionPoints(sourceNode),
     getConnectionPoints(targetNode),
     obstacleRects,
+    MIN_VISIBLE_LINK_LENGTH,
   );
 
   // If the chosen segment still crosses a card (fallback case), force a curve.
@@ -1433,6 +1447,10 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
             : c;
         }
 
+        // Don't clamp the group box itself — it would collide with its own
+        // previous-position rect in `groupNodes` and snap back every frame.
+        if (existing && isGroupNode(existing)) return c;
+
         // Block standalone nodes from entering any group box (every drag frame).
         const groupRects = groupNodes.map((g) => ({
           x: g.position.x,
@@ -1722,6 +1740,7 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
                     edges={edges}
                     nodeTypes={nodeTypes}
                     edgeTypes={edgeTypes}
+                    defaultEdgeOptions={{ zIndex: 1000 }}
                     onNodesChange={onNodesChange}
                     onConnect={onConnect}
                     onNodeClick={(_, node) => setSelectedNodeId(node.id)}
