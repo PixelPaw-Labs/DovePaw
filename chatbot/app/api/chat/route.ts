@@ -241,6 +241,8 @@ export async function POST(request: Request) {
                     ...process.env, // Pass through all env vars so tools can read their configs
                     ...resolveSettingsEnv(settings), // Global settings env vars override process.env
                     DOVEPAW_SUBAGENT: "1",
+                    // Default 10 min is too short when MCP await_* tools block for many minutes.
+                    API_TIMEOUT_MS: "86400000",
                   },
                   ...(defaultModel ? { model: defaultModel } : {}),
                   settings: { outputStyle: "Assistant" },

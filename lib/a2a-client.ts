@@ -7,9 +7,19 @@
  */
 
 import { randomUUID } from "node:crypto";
+import { Agent, setGlobalDispatcher } from "undici";
 import { ClientFactory } from "@a2a-js/sdk/client";
 import type { Client } from "@a2a-js/sdk/client";
 import type { Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from "@a2a-js/sdk";
+
+/**
+ * undici's default headersTimeout/bodyTimeout is 5 min. Both A2A SSE streams
+ * and Anthropic API streaming responses can be silent for far longer while a
+ * blocking MCP tool runs (e.g. await_script_* with a multi-minute timeoutMs),
+ * which would otherwise trip `SocketError: terminated` mid-stream. Disable
+ * both timeouts process-wide so any long-idle fetch survives.
+ */
+setGlobalDispatcher(new Agent({ bodyTimeout: 0, headersTimeout: 0 }));
 
 export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
 
