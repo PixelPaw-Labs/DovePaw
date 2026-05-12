@@ -28,7 +28,7 @@ import {
 } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import Link from "next/link";
-import { Home, Info, LayoutGrid, List, Plus, Settings2, Users2, X } from "lucide-react";
+import { FolderPlus, Home, Info, LayoutGrid, List, Plus, Settings2, Users2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
@@ -232,8 +232,8 @@ function maxParallelEdgesInGroup(
  * overlapping strategies have room to arc without clipping neighbouring cards.
  */
 function groupNodeSize(memberCount: number, maxParallel = 0): { width: number; height: number } {
-  const cols = Math.min(GROUP_COLS, memberCount);
-  const rows = Math.ceil(memberCount / GROUP_COLS);
+  const cols = Math.min(GROUP_COLS, Math.max(1, memberCount));
+  const rows = Math.max(1, Math.ceil(memberCount / GROUP_COLS));
   // Only grow beyond the default slot size when there are 2+ parallel edges on
   // the same pair — that's when bezier curves start bowing wide enough to clip
   // adjacent cards. Single-edge groups keep the old compact slot dimensions.
@@ -1330,6 +1330,109 @@ function UnlinkedAgentsSidebar({ agents }: UnlinkedAgentsSidebarProps) {
   );
 }
 
+// ─── CreateGroupDialog ───────────────────────────────────────────────────────
+
+interface CreateGroupDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  existingGroupNames: string[];
+  onSuccess: (groupName: string) => void;
+}
+
+export function CreateGroupDialog({
+  open,
+  onOpenChange,
+  existingGroupNames,
+  onSuccess,
+}: CreateGroupDialogProps) {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setError("");
+    }
+  }, [open]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Group name is required.");
+      return;
+    }
+    if (existingGroupNames.includes(trimmed)) {
+      setError(`Group "${trimmed}" already exists.`);
+      return;
+    }
+    setError("");
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/settings/agent-links/groups", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed }),
+      });
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Failed to create group.");
+        return;
+      }
+      onSuccess(trimmed);
+      onOpenChange(false);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>New Group</DialogTitle>
+        </DialogHeader>
+        <form
+          onSubmit={(e) => {
+            void handleSubmit(e);
+          }}
+          className="space-y-4 pt-1"
+        >
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Group name</label>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Engineering"
+              disabled={submitting}
+              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <div className="flex gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" disabled={submitting}>
+              {submitting ? "Creating…" : "Create"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── AgentLinksCanvas ────────────────────────────────────────────────────────
 
 export interface AgentLinksCanvasProps {
@@ -1358,8 +1461,9 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
       linkedNames.add(link.target);
     }
 
-    // Build group nodes (≥2 members only) and their member agent nodes.
-    const validGroups = linksFile.groups.filter((g) => g.members.length >= 2);
+    // Render all groups (including empty ones the user just created) so they
+    // are visible on the canvas as drop targets for assigning members.
+    const validGroups = linksFile.groups;
     const groupMemberNames = new Set<string>(validGroups.flatMap((g) => g.members));
 
     const groupNodes: GroupFlowNode[] = [];
@@ -1430,6 +1534,7 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
   const [dialogInitialSource, setDialogInitialSource] = useState<string | undefined>();
   const [dialogInitialTarget, setDialogInitialTarget] = useState<string | undefined>();
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
   // Apply node changes every frame; persist positions only on drag-end.
   const onNodesChange = useCallback((changes: NodeChange<AnyFlowNode>[]) => {
@@ -1546,6 +1651,33 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
       });
     },
     [agentConfigs],
+  );
+
+  // Add a freshly-created (empty) group as a node on the canvas, positioned
+  // near the centre of the current viewport so the user sees it immediately.
+  const handleGroupCreated = useCallback(
+    (groupName: string) => {
+      const size = groupNodeSize(0, 0);
+      const center = screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const newGroup: GroupFlowNode = {
+        id: `group:${groupName}`,
+        type: "groupNode",
+        zIndex: 0,
+        position: { x: center.x - size.width / 2, y: center.y - size.height / 2 },
+        style: { width: size.width, height: size.height },
+        data: { group: { name: groupName, members: [], description: "" } },
+      };
+      setNodes((prev) => {
+        // React Flow requires parent nodes to precede their children.
+        const next: AnyFlowNode[] = [newGroup, ...prev];
+        savePositions(next);
+        return next;
+      });
+    },
+    [screenToFlowPosition],
   );
 
   // Update canvas nodes after group members change (add/remove child nodes).
@@ -1782,6 +1914,14 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
                           <Plus className="w-3.5 h-3.5" />
                           Add Link
                         </button>
+                        <span className="text-border">·</span>
+                        <button
+                          onClick={() => setCreateGroupOpen(true)}
+                          className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                        >
+                          <FolderPlus className="w-3.5 h-3.5" />
+                          New Group
+                        </button>
                       </div>
                     </Panel>
 
@@ -1873,6 +2013,12 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
                 allAgentConfigs={agentConfigs}
                 currentMembers={editingGroupMembers}
                 onSuccess={handleMembersUpdated}
+              />
+              <CreateGroupDialog
+                open={createGroupOpen}
+                onOpenChange={setCreateGroupOpen}
+                existingGroupNames={nodes.filter(isGroupNode).map((n) => n.data.group.name)}
+                onSuccess={handleGroupCreated}
               />
             </EditGroupContext.Provider>
           </DeleteEdgeContext.Provider>
