@@ -1,17 +1,18 @@
 "use client";
 
 import * as React from "react";
-import { Clock, PlusCircle, Trash2 } from "lucide-react";
+import { Clock, Loader2, PlusCircle, Trash2 } from "lucide-react";
 import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import { formatRelativeTime } from "@/lib/utils";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
+import { useAsyncAction } from "@/components/hooks/use-async-action";
 
 interface SessionHistoryItemProps {
   session: AgentSession;
   isActive: boolean;
   isRunning: boolean;
   onSelect: (id: string) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
 }
 
 function SessionHistoryItem({
@@ -24,6 +25,7 @@ function SessionHistoryItem({
   const shimmerRef = useButtonShimmer(isRunning);
   // Keep the selected theme while running so switching sessions doesn't drop to unselected style.
   const isSelected = isActive || isRunning;
+  const { pending: isDeleting, trigger: runDelete } = useAsyncAction(() => onDelete(session.id));
 
   return (
     <div
@@ -61,12 +63,16 @@ function SessionHistoryItem({
       <button
         onClick={(e) => {
           e.stopPropagation();
-          onDelete(session.id);
+          void runDelete();
         }}
-        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-all p-0.5 shrink-0"
-        title="Delete"
+        disabled={isDeleting}
+        className={`${
+          isDeleting ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        } text-muted-foreground hover:text-destructive transition-all p-0.5 shrink-0 disabled:cursor-not-allowed disabled:hover:text-muted-foreground`}
+        title={isDeleting ? "Deleting…" : "Delete"}
+        aria-label={isDeleting ? "Deleting session" : "Delete session"}
       >
-        <Trash2 size={10} />
+        {isDeleting ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
       </button>
     </div>
   );
@@ -78,7 +84,7 @@ interface SessionHistoryPanelProps {
   runningSessionIds?: Set<string>;
   onSelect: (contextId: string) => void;
   onNew: () => void;
-  onDelete: (contextId: string) => void;
+  onDelete: (contextId: string) => void | Promise<void>;
 }
 
 export function SessionHistoryPanel({

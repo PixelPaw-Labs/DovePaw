@@ -79,13 +79,13 @@ describe("CreateGroupDialog", () => {
     typeName("  Engineering  ");
     clickCreate();
 
-    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("Engineering"));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith("Engineering", ""));
     expect(onOpenChange).toHaveBeenCalledWith(false);
 
     const [url, init] = vi.mocked(fetch).mock.calls[0]!;
     expect(url).toBe(ENDPOINT);
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(init?.body as string)).toEqual({ name: "Engineering" });
+    expect(JSON.parse(init?.body as string)).toEqual({ name: "Engineering", description: "" });
   });
 
   it("renders server error message from JSON body on non-2xx response", async () => {

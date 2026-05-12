@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FolderGit2, KeyRound, Lock, LockOpen, Pencil, Trash2 } from "lucide-react";
+import { ChevronDown, FolderGit2, KeyRound, Lock, LockOpen, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
@@ -20,6 +20,8 @@ import {
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { buildAgentDef } from "@@/lib/agents";
 import { type AgentConfigEntry, formatScheduleDisplay } from "@@/lib/agents-config-schemas";
+import { groupReposByOwner } from "@/lib/group-repos-by-owner";
+import { useCollapsedSet } from "@/components/hooks/use-collapsed-set";
 import { z } from "zod";
 import {
   type Repository,
@@ -93,6 +95,7 @@ export function AgentSettingsContent({
     () => new Set(initialEnabledRepoIds),
   );
   const [repoSaving, setRepoSaving] = React.useState(false);
+  const { isCollapsed: isOwnerCollapsed, toggle: toggleOwner } = useCollapsedSet();
 
   const enabledCount = enabledIds.size;
   const totalCount = repositories.length;
@@ -476,35 +479,59 @@ export function AgentSettingsContent({
                 </div>
               ) : (
                 <div className="flex flex-col gap-3">
-                  {repositories.map((repo) => {
-                    const enabled = enabledIds.has(repo.id);
-                    return (
-                      <div
-                        key={repo.id}
-                        className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 transition-all group"
+                  {groupReposByOwner(repositories).flatMap((group) => {
+                    const collapsed = isOwnerCollapsed(group.owner);
+                    const ownerLabel = group.owner || "(no owner)";
+                    const header = (
+                      <button
+                        key={`owner-${ownerLabel}`}
+                        type="button"
+                        onClick={() => toggleOwner(group.owner)}
+                        aria-expanded={!collapsed}
+                        className="flex items-center gap-2 pt-2 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant hover:text-on-surface transition-colors"
                       >
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
-                            <FolderGit2 className="w-5 h-5" />
+                        <ChevronDown
+                          className={`w-3 h-3 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+                        />
+                        {ownerLabel}
+                        <span className="ml-1 opacity-50">({group.repos.length})</span>
+                      </button>
+                    );
+                    if (collapsed) return [header];
+                    return [header].concat(
+                      group.repos.map((repo) => {
+                        const enabled = enabledIds.has(repo.id);
+                        return (
+                          <div
+                            key={repo.id}
+                            className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 transition-all group"
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
+                                <FolderGit2 className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h4 className="font-semibold text-on-surface text-sm">
+                                  {repo.name}
+                                </h4>
+                                <p className="text-xs font-mono text-on-surface-variant mt-0.5">
+                                  {repo.githubRepo}
+                                </p>
+                              </div>
+                            </div>
+                            <label className="inline-flex items-center cursor-pointer shrink-0">
+                              <input
+                                type="checkbox"
+                                className="sr-only peer"
+                                checked={enabled}
+                                onChange={() => handleToggleRepo(repo.id)}
+                                aria-label={`${enabled ? "Disable" : "Enable"} ${repo.name} for ${agent.displayName}`}
+                              />
+                              <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                            </label>
                           </div>
-                          <div>
-                            <h4 className="font-semibold text-on-surface text-sm">{repo.name}</h4>
-                            <p className="text-xs font-mono text-on-surface-variant mt-0.5">
-                              {repo.githubRepo}
-                            </p>
-                          </div>
-                        </div>
-                        <label className="inline-flex items-center cursor-pointer shrink-0">
-                          <input
-                            type="checkbox"
-                            className="sr-only peer"
-                            checked={enabled}
-                            onChange={() => handleToggleRepo(repo.id)}
-                            aria-label={`${enabled ? "Disable" : "Enable"} ${repo.name} for ${agent.displayName}`}
-                          />
-                          <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
-                        </label>
-                      </div>
+                        );
+                      }),
                     );
                   })}
                 </div>
@@ -674,7 +701,7 @@ export function AgentSettingsContent({
           )}
         </div>
 
-        {/* Agent info sidebar — identical to AgentRepoSettings */}
+        {/* Agent info sidebar */}
         <div className="flex flex-col gap-4 sticky top-24">
           <div className="rounded-xl bg-primary-container p-6 text-on-primary-container relative overflow-hidden">
             <div className="absolute top-0 right-0 p-3 opacity-10">

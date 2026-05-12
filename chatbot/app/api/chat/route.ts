@@ -406,6 +406,6 @@ export async function DELETE(request: Request) {
   }
   deletedSessionIds.add(sessionId);
   agentContextRegistry.delete(sessionId);
-  deleteSession(sessionId);
+  await deleteSession(sessionId);
   return Response.json({ ok: true });
 }

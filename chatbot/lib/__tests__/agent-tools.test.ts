@@ -42,6 +42,17 @@ vi.mock("@/a2a/lib/workspace", () => ({
 
 vi.mock("@/lib/relay-to-chatbot", () => ({ relaySessionEvent: vi.fn() }));
 
+// Memory provider is mocked per-test via vi.mocked(getMemoryProvider) below.
+vi.mock("@/lib/memory", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/memory")>("@/lib/memory");
+  const { MarkdownMemoryProvider } =
+    await vi.importActual<typeof import("@/lib/memory/markdown")>("@/lib/memory/markdown");
+  return {
+    ...actual,
+    getMemoryProvider: vi.fn(async () => new MarkdownMemoryProvider()),
+  };
+});
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import {
@@ -289,8 +300,11 @@ describe("makeStartScriptTool", () => {
     );
   });
 
-  it("appends group-chat reminder with absolute paths when isGroupChat is true", async () => {
+  it("appends group-chat reminder using the active memory provider's text", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const { OpenVikingMemoryProvider } = await import("@/lib/memory/openviking");
+    vi.mocked(getMemoryProvider).mockResolvedValue(new OpenVikingMemoryProvider(51234));
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartScriptTool(
       AGENT,
@@ -300,7 +314,35 @@ describe("makeStartScriptTool", () => {
       undefined,
       undefined,
       undefined,
-      true,
+      { groupContextId: "grp-xyz-123" },
+    ) as any;
+
+    await handler({ instruction: "do work" });
+
+    const passedInstruction = vi.mocked(startScript).mock.calls[0][1];
+    expect(passedInstruction).toContain("/ws/ta-abc123/members/roster.md");
+    expect(passedInstruction).toContain("ov find");
+    expect(passedInstruction).toContain("ov add-memory");
+    expect(passedInstruction).toContain("--agent-id grp-xyz-123");
+    expect(passedInstruction).not.toContain("ov add-resource");
+    expect(passedInstruction).toContain("All substance stays. Only fluff dies.");
+  });
+
+  it("falls back to .md moments reminder when MarkdownMemoryProvider is active", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const { MarkdownMemoryProvider } = await import("@/lib/memory/markdown");
+    vi.mocked(getMemoryProvider).mockResolvedValue(new MarkdownMemoryProvider());
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartScriptTool(
+      AGENT,
+      BASE_CONFIG,
+      [],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { groupContextId: "grp-xyz-123" },
     ) as any;
 
     await handler({ instruction: "do work" });
@@ -308,6 +350,8 @@ describe("makeStartScriptTool", () => {
     const passedInstruction = vi.mocked(startScript).mock.calls[0][1];
     expect(passedInstruction).toContain("/ws/ta-abc123/members/roster.md");
     expect(passedInstruction).toContain("/ws/ta-abc123/moments/");
+    expect(passedInstruction).not.toContain("ov find");
+    expect(passedInstruction).not.toContain("ov add-resource");
     expect(passedInstruction).toContain("All substance stays. Only fluff dies.");
   });
 });

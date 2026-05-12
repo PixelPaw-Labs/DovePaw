@@ -1,0 +1,42 @@
+import { describe, expect, it, beforeEach } from "vitest";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { MarkdownMemoryProvider } from "@/lib/memory/markdown";
+
+describe("MarkdownMemoryProvider", () => {
+  let workspace: string;
+  const provider = new MarkdownMemoryProvider();
+
+  beforeEach(async () => {
+    workspace = await mkdtemp(join(tmpdir(), "dovepaw-md-mem-"));
+  });
+
+  it("initGroup creates a moments/ directory under the group workspace", async () => {
+    await provider.initGroup("grp-abc", workspace);
+    expect(existsSync(join(workspace, "moments"))).toBe(true);
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it("buildReminder includes the moments path, omits ov commands, keeps MOMENTS_PATTERN", () => {
+    const body = provider.buildReminder("/ws/x", "grp-abc");
+    expect(body).toContain("/ws/x/moments/");
+    expect(body).not.toContain("ov find");
+    expect(body).not.toContain("ov add-resource");
+    expect(body).toContain("All substance stays. Only fluff dies.");
+  });
+
+  it("deleteGroup removes the moments/ subtree", async () => {
+    await provider.initGroup("grp-abc", workspace);
+    expect(existsSync(join(workspace, "moments"))).toBe(true);
+    await provider.deleteGroup("grp-abc", workspace);
+    expect(existsSync(join(workspace, "moments"))).toBe(false);
+    await rm(workspace, { recursive: true, force: true });
+  });
+
+  it("deleteGroup is a no-op when moments/ does not exist", async () => {
+    await expect(provider.deleteGroup("grp-abc", workspace)).resolves.toBeUndefined();
+    await rm(workspace, { recursive: true, force: true });
+  });
+});

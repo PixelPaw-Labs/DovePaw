@@ -95,6 +95,20 @@ export const portsFile = (port: string | number): string =>
   join(DOVEPAW_DIR, `.ports.${port}.json`);
 /** ~/.dovepaw/.a2a-servers.pid — PID of the running A2A servers process */
 export const A2A_SERVERS_PID_FILE = join(DOVEPAW_DIR, ".a2a-servers.pid");
+/** ~/.dovepaw/openviking/ — DovePaw-scoped OpenViking config directory */
+export const OPENVIKING_CONFIG_DIR = join(DOVEPAW_DIR, "openviking");
+/** ~/.dovepaw/openviking/ov.conf — OpenViking server config (holds root_api_key) */
+export const OPENVIKING_SERVER_CONFIG = join(OPENVIKING_CONFIG_DIR, "ov.conf");
+/** ~/.dovepaw/openviking/ovcli.conf — OpenViking client config (url + default tenant for dev-mode sidecar) */
+export const OPENVIKING_CLI_CONFIG = join(OPENVIKING_CONFIG_DIR, "ovcli.conf");
+/** ~/.dovepaw/.openviking-port.json — port of the live OpenViking sidecar, written by Next.js, read by A2A */
+export const OPENVIKING_PORT_FILE = join(DOVEPAW_DIR, ".openviking-port.json");
+/** ~/.dovepaw/.openviking-sidecar.pid — PID of the live OpenViking sidecar; used to clean up orphans on next boot */
+export const OPENVIKING_SIDECAR_PID_FILE = join(DOVEPAW_DIR, ".openviking-sidecar.pid");
+/** ~/.dovepaw/.openviking-console.pid — PID of the live OpenViking console; used to clean up orphans on next boot */
+export const OPENVIKING_CONSOLE_PID_FILE = join(DOVEPAW_DIR, ".openviking-console.pid");
+/** ~/.dovepaw/openviking/data — OpenViking storage workspace (vector DB + queue). Used as the default `storage.workspace` when generating ov.conf, so the sidecar never writes to the repo cwd. */
+export const OPENVIKING_DATA_DIR = join(DOVEPAW_DIR, "openviking", "data");
 /** ~/.dovepaw/tmp/ — dynamically created session agent configs (written by Dove at runtime) */
 export const DOVEPAW_TMP_DIR = join(DOVEPAW_DIR, "tmp");
 /** ~/.dovepaw/tmp/<agentName>/agent.json — session agent definition */

@@ -48,6 +48,16 @@ vi.mock("@/a2a/lib/workspace", () => ({
   cloneReposIntoWorkspace: vi.fn().mockResolvedValue([]),
 }));
 
+vi.mock("@/lib/memory", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/memory")>("@/lib/memory");
+  const { MarkdownMemoryProvider } =
+    await vi.importActual<typeof import("@/lib/memory/markdown")>("@/lib/memory/markdown");
+  return {
+    ...actual,
+    getMemoryProvider: vi.fn(async () => new MarkdownMemoryProvider()),
+  };
+});
+
 vi.mock("@/lib/db", () => ({
   upsertSession: vi.fn(),
   setActiveSession: vi.fn(),
@@ -749,8 +759,12 @@ describe("makeInitGroupTool", () => {
     members: ["agent-a", "agent-b", "agent-c"],
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    vi.mocked(readPortsManifest).mockReturnValue({ openviking: 51234 } as any);
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const { MarkdownMemoryProvider } = await import("@/lib/memory/markdown");
+    vi.mocked(getMemoryProvider).mockResolvedValue(new MarkdownMemoryProvider());
   });
 
   it("registers a tool named init_group_<slug>", () => {
@@ -800,6 +814,39 @@ describe("makeInitGroupTool", () => {
       `group:${GROUP.name}`,
       sc.groupContextId,
     );
+  });
+
+  it("delegates per-group bootstrap to the active memory provider", async () => {
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const initGroup = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getMemoryProvider).mockResolvedValue({
+      initGroup,
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      buildReminder: () => "",
+    });
+    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
+    const handler = captured[doveInitGroupToolName(GROUP.name)];
+    const result = await handler({});
+    const sc = result.structuredContent as {
+      groupContextId: string;
+      groupWorkspacePath: string;
+    };
+    expect(initGroup).toHaveBeenCalledWith(sc.groupContextId, sc.groupWorkspacePath);
+  });
+
+  it("falls back to mkdir(moments) when the provider's initGroup rejects", async () => {
+    const { getMemoryProvider } = await import("@/lib/memory");
+    vi.mocked(getMemoryProvider).mockResolvedValue({
+      initGroup: vi.fn().mockRejectedValue(new Error("provider down")),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      buildReminder: () => "",
+    });
+    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
+    const handler = captured[doveInitGroupToolName(GROUP.name)];
+    const result = await handler({});
+    const { groupWorkspacePath } = result.structuredContent as { groupWorkspacePath: string };
+    const { existsSync } = await import("node:fs");
+    expect(existsSync(`${groupWorkspacePath}/moments`)).toBe(true);
   });
 
   it("writes members/roster.md listing each member's displayName and description", async () => {

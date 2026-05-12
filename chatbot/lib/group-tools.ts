@@ -2,6 +2,7 @@ import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { consola } from "consola";
 import type { AgentDef } from "@@/lib/agents";
 import type { AgentGroup } from "@@/lib/agent-links-schemas";
 import { GROUP_WORKSPACE_ROOT } from "@@/lib/paths";
@@ -15,6 +16,7 @@ import { taskRuntime } from "@/lib/task-runtime";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { withStartReminder } from "@@/lib/subagent-reminder";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
+import { getMemoryProvider } from "@/lib/memory";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";
 
@@ -64,7 +66,17 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
         GROUP_WORKSPACE_ROOT,
         `${slug}-${groupContextId.replace(/-/g, "").slice(0, 8)}`,
       );
-      await mkdir(join(groupWorkspacePath, "moments"), { recursive: true });
+
+      // Bootstrap per-group memory state via the active provider. On any
+      // failure fall back to the MarkdownMemoryProvider so the group still
+      // works on disk.
+      try {
+        const provider = await getMemoryProvider();
+        await provider.initGroup(groupContextId, groupWorkspacePath);
+      } catch (err) {
+        consola.warn("Memory provider initGroup failed; falling back to .md moments:", err);
+        await mkdir(join(groupWorkspacePath, "moments"), { recursive: true });
+      }
 
       // Write the member roster so every agent knows who is in this group
       const knownDefs = group.members

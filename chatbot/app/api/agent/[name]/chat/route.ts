@@ -190,7 +190,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
       }).catch(() => {});
     }
   }
-  deleteSession(sessionId);
+  await deleteSession(sessionId);
   if (workspacePath) restoreAgentWorkspace(workspacePath).cleanup();
 
   return Response.json({ ok: true });

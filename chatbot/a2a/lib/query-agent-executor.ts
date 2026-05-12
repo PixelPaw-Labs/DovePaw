@@ -235,7 +235,7 @@ export class QueryAgentExecutor {
             publishProgress,
             taskId,
             registry,
-            groupOverrides ? true : undefined,
+            groupOverrides ? { groupContextId: groupOverrides.groupContextId } : undefined,
           ),
           makeAwaitScriptTool(this.def, registry),
           ...this.mgmtTools,

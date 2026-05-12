@@ -18,6 +18,7 @@ import { PermissionBanner } from "./permission-banner";
 import { QuestionBanner } from "./question-banner";
 import { ChatMessageItem } from "./chat-message";
 import { IntroCard } from "./intro-card";
+import { OpenVikingStatusButton } from "@/components/openviking/status-button";
 import type { ChatMessage } from "@/components/hooks/use-messages";
 import type { ChatSsePermission, ChatSseQuestion } from "@/lib/chat-sse";
 
@@ -165,6 +166,7 @@ export function ChatPane({
             >
               <Info className="w-4 h-4" />
             </button>
+            <OpenVikingStatusButton />
             <button
               onClick={() => router.push("/settings")}
               className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"

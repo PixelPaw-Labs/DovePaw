@@ -7,6 +7,7 @@ import { sessionMessageSchema } from "@/lib/message-types";
 import type { SessionMessage } from "@/lib/message-types";
 import { mergeProgress } from "@/lib/progress";
 import type { ProgressEntry } from "@/lib/progress";
+import { getMemoryProvider } from "@/lib/memory";
 
 const sessionMessageArraySchema = z.array(sessionMessageSchema);
 const progressEntrySchema = z.object({
@@ -390,14 +391,27 @@ export function getAllSessionWorkspacePaths(): string[] {
   return rows.map((r) => r.workspace_path).filter((p): p is string => p !== null);
 }
 
-export function deleteSession(id: string): void {
+export async function deleteSession(id: string): Promise<void> {
   const db = getDb();
+  // Read agent_id + workspace_path before the row is gone so we can decide
+  // whether to fire memory-provider cleanup for a group session.
+  const row = db
+    .prepare<[string], { agent_id: string; workspace_path: string | null }>(
+      "SELECT agent_id, workspace_path FROM sessions WHERE id = ?",
+    )
+    .get(id);
+
   db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
   db.prepare("UPDATE active_sessions SET context_id = NULL WHERE context_id = ?").run(id);
   // Cascade to dove_agent_contexts: remove rows where this session was either the
   // orchestrator (Dove session deleted) or the subagent target (subagent session deleted).
   db.prepare("DELETE FROM dove_agent_contexts WHERE orchestrator_session_id = ?").run(id);
   db.prepare("DELETE FROM dove_agent_contexts WHERE subagent_a2a_context_id = ?").run(id);
+
+  if (row?.agent_id.startsWith("group:")) {
+    const provider = await getMemoryProvider();
+    await provider.deleteGroup(id, row.workspace_path ?? "");
+  }
 }
 
 export function deleteAllSessions(): void {

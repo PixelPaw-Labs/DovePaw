@@ -6,6 +6,13 @@ import { tmpdir } from "node:os";
 const TMP_DIR = join(tmpdir(), `dovepaw-db-test-${process.pid}`);
 
 vi.mock("@@/lib/paths", () => ({ DOVEPAW_DIR: TMP_DIR }));
+vi.mock("@/lib/memory", () => ({
+  getMemoryProvider: vi.fn().mockResolvedValue({
+    initGroup: vi.fn(),
+    deleteGroup: vi.fn().mockResolvedValue(undefined),
+    buildReminder: () => "",
+  }),
+}));
 
 const {
   upsertSession,
@@ -152,12 +159,32 @@ describe("db", () => {
     expect(listSessions("nobody")).toEqual([]);
   });
 
-  it("deleteSession removes row and clears active_sessions", () => {
+  it("deleteSession removes row and clears active_sessions", async () => {
     upsertSession(base);
     setActiveSession("test-agent", "ctx-1");
-    deleteSession("ctx-1");
+    await deleteSession("ctx-1");
     expect(getSessionDetail("ctx-1")).toBeNull();
     expect(getActiveSession("test-agent")).toBeNull();
+  });
+
+  it("deleteSession calls memory provider's deleteGroup for group sessions", async () => {
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const deleteGroup = vi.fn().mockResolvedValue(undefined);
+    const provider = { initGroup: vi.fn(), deleteGroup, buildReminder: () => "" };
+    vi.mocked(getMemoryProvider).mockResolvedValueOnce(provider);
+    upsertSession({ ...base, id: "grp-xyz", agentId: "group:Engineering" });
+    await deleteSession("grp-xyz");
+    expect(deleteGroup).toHaveBeenCalledWith("grp-xyz", "");
+  });
+
+  it("deleteSession does not call deleteGroup for non-group sessions", async () => {
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const deleteGroup = vi.fn().mockResolvedValue(undefined);
+    const provider = { initGroup: vi.fn(), deleteGroup, buildReminder: () => "" };
+    vi.mocked(getMemoryProvider).mockResolvedValueOnce(provider);
+    upsertSession({ ...base, id: "ctx-1", agentId: "test-agent" });
+    await deleteSession("ctx-1");
+    expect(deleteGroup).not.toHaveBeenCalled();
   });
 
   it("deleteAllSessions removes all sessions across all agents and clears active_sessions", () => {

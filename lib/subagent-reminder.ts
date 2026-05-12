@@ -15,7 +15,7 @@ function buildMemoryBullet(memoryDir: string, startToolName?: string): string {
   const escalate = startToolName ?? "the start tool";
   return (
     `<reminder>\n` +
-    `- **Bad:** Answer a question without reading memory first. **Correct:** ALWAYS read \`${memoryDir}/memory/MEMORY.md\` — if a relevant entry exists, read that file before answering.\n` +
+    `- **Bad:** Answer a question without reading memory first. **Correct:** NEVER skip the memory read — ALWAYS read \`${memoryDir}/memory/MEMORY.md\` and, if a relevant entry exists, read that file before answering.\n` +
     `- **Bad:** Answer when memory is missing, incomplete, or doesn't fully cover the question. **Correct:** Your ENTIRE response MUST be this exact sentence — no other words: "Memory insufficient — you MUST call \`${escalate}\` to answer this question."\n` +
     `- **Bad:** Add or infer details beyond what memory says. **Correct:** Reply using only what memory contains.\n` +
     `</reminder>`

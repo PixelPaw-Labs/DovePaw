@@ -41,7 +41,11 @@ vi.mock("node:fs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:fs")>()),
   existsSync: vi.fn().mockReturnValue(true),
 }));
-vi.mock("@/lib/paths", () => ({ TSX_BIN: "/usr/bin/tsx" }));
+vi.mock("@/lib/paths", () => ({
+  TSX_BIN: "/usr/bin/tsx",
+  OPENVIKING_CLI_CONFIG: "/mock/.dovepaw/openviking/ovcli.conf",
+  OPENVIKING_PORT_FILE: "/mock/.dovepaw/.openviking-port.json",
+}));
 
 import { existsSync } from "node:fs";
 import {
@@ -358,6 +362,35 @@ describe("spawnAndCollect — runtime selection", () => {
       ["/agents/test/main.rb", "go"],
       expect.anything(),
     );
+  });
+});
+
+describe("spawnAndCollect — OpenViking env injection", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+  });
+
+  it("injects OPENVIKING_CLI_CONFIG_FILE when the DovePaw sidecar port file exists", async () => {
+    vi.mocked(existsSync).mockReturnValue(true);
+    const proc = makeProc();
+    const { promise } = spawnAndCollect(BASE_CONFIG, "run");
+    proc.emit("close", 0);
+    await promise;
+    const env = mockSpawn.mock.calls[0]?.[2]?.env as Record<string, string> | undefined;
+    expect(env).toBeDefined();
+    expect(env?.OPENVIKING_CLI_CONFIG_FILE).toBe("/mock/.dovepaw/openviking/ovcli.conf");
+  });
+
+  it("does not inject OPENVIKING_CLI_CONFIG_FILE when the port file is absent", async () => {
+    vi.mocked(existsSync).mockImplementation(
+      (p: Parameters<typeof existsSync>[0]) => p !== "/mock/.dovepaw/.openviking-port.json",
+    );
+    const proc = makeProc();
+    const { promise } = spawnAndCollect(BASE_CONFIG, "run");
+    proc.emit("close", 0);
+    await promise;
+    const env = mockSpawn.mock.calls[0]?.[2]?.env as Record<string, string> | undefined;
+    expect(env?.OPENVIKING_CLI_CONFIG_FILE).toBeUndefined();
   });
 });
 

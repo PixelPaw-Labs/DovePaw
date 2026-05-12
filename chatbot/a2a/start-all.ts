@@ -3,6 +3,10 @@
  *
  * Uses getAvailablePort() (net.createServer port=0) — no external deps.
  * Writes a2a/.ports.json so the Next.js API route can discover the ports.
+ *
+ * The OpenViking sidecar is owned by the Next.js process (see
+ * `chatbot/instrumentation.ts`); A2A reads its port via the memory provider's
+ * disk-fallback lookup.
  */
 
 import { writeFileSync, rmSync, mkdirSync } from "node:fs";

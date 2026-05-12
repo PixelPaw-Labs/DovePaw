@@ -7,35 +7,10 @@ import { z } from "zod";
 import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
+import { getMemoryProvider } from "@/lib/memory";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { taskRuntime } from "@/lib/task-runtime";
 import { MGMT_TOOL } from "./agent-mgmt-tools";
-
-// ─── Moments writing pattern ──────────────────────────────────────────────────
-
-export const MOMENTS_PATTERN = `All substance stays. Only fluff dies.
-
-File rules:
-- One file per item.
-- Name clearly (e.g. "auth-decision.md", "api-schema.json").
-
-Core rules:
-- Drop articles: a, an, the.
-- Drop filler: just, really, basically, actually, simply.
-- Drop pleasantries, hedging, preamble.
-- Fragments OK.
-- Short synonyms: "big" not "extensive", "fix" not "implement a solution for".
-- Exact technical terms. Quote errors exactly.
-
-Preferred pattern: [thing] [action] [reason]. [next step].
-Example:
-  Bad: "I've decided that we should probably use Redis for caching because it might help with performance."
-  Good: "Cache layer: Redis. Reason: sub-ms reads, existing infra. Next: wire into auth middleware."
-
-Exception — write full sentences for:
-- Security warnings.
-- Irreversible action confirmations.
-- Multi-step sequences where fragments cause misread.`;
 
 // ─── Handoff completeness rule ────────────────────────────────────────────────
 
@@ -54,6 +29,12 @@ export const awaitRunScriptToolName = (manifestKey: string): string =>
 
 // ─── Script run tools ─────────────────────────────────────────────────────────
 
+/** Group-chat overrides passed to makeStartScriptTool when isGroupChat is true. */
+export interface GroupChatScriptOverrides {
+  /** Group context ID — used as the memory provider's per-group namespace. */
+  groupContextId: string;
+}
+
 /** Fires the agent script in the background and returns a runId immediately. */
 export function makeStartScriptTool(
   agent: AgentDef,
@@ -63,8 +44,8 @@ export function makeStartScriptTool(
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
   taskId?: string,
   registry?: PendingRegistry,
-  /** When true, appends the group-chat reminder (save to moments) to the instruction. */
-  isGroupChat?: boolean,
+  /** When set, appends the group-chat reminder using the supplied groupContextId. */
+  groupChat?: GroupChatScriptOverrides,
 ) {
   return tool(
     startRunScriptToolName(agent.manifestKey),
@@ -76,16 +57,10 @@ export function makeStartScriptTool(
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "" }) => {
-      const finalInstruction = isGroupChat
+      const finalInstruction = groupChat
         ? `${instruction}
 <reminder>
-You are participating in a group task. Before starting:
-- Read ${config.workspacePath}/members/roster.md to understand who is in this group. Only collaborate with, assign work to, or communicate with the agents listed there — no one else.
-- Save to ${config.workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing.
-  Writing style:
-${MOMENTS_PATTERN.split("\n")
-  .map((l) => `  ${l}`)
-  .join("\n")}
+${(await getMemoryProvider()).buildReminder(config.workspacePath, groupChat.groupContextId)}
 </reminder>`
         : instruction;
       const clonedPaths = await recloneReposIntoWorkspace(

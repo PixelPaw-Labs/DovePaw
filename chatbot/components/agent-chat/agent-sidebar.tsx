@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   Bot,
   ChevronDown,
+  Loader2,
   Network,
   Package,
   PawPrint,
@@ -24,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
 import { useConversationContext } from "@/components/hooks/use-conversation-context";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
+import { useAsyncAction } from "@/components/hooks/use-async-action";
 import { useDoveSettings } from "@/components/hooks/use-dove-settings";
 import type { DoveSettings } from "@@/lib/settings-schemas";
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/components/ui/collapsible";
@@ -39,7 +41,7 @@ interface AgentSidebarProps {
   activeAgentId?: string;
   initialDoveSettings?: DoveSettings;
   onSelectAgent?: (agentId: string) => void;
-  onClearAllHistory?: () => void;
+  onClearAllHistory?: () => void | Promise<void>;
 }
 
 export function AgentSidebar({
@@ -102,12 +104,15 @@ export function AgentSidebar({
     window.addEventListener("mouseup", onUp);
   }
   const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { pending: isClearing, trigger: runClearAll } = useAsyncAction(async () => {
+    await onClearAllHistory?.();
+  });
 
   const handleClearAllClick = () => {
     if (confirming) {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(false);
-      onClearAllHistory?.();
+      void runClearAll();
     } else {
       setConfirming(true);
       confirmTimerRef.current = setTimeout(() => setConfirming(false), 3000);
@@ -250,16 +255,26 @@ export function AgentSidebar({
         {onClearAllHistory && (
           <button
             onClick={handleClearAllClick}
+            disabled={isClearing}
             className={cn(
               "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
               confirming
                 ? "text-destructive bg-destructive/10"
                 : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+              isClearing && "cursor-not-allowed opacity-70",
             )}
           >
-            <Trash2 className="w-4 h-4 shrink-0" />
+            {isClearing ? (
+              <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4 shrink-0" />
+            )}
             <span className="text-sm font-medium text-foreground/80">
-              {confirming ? "Confirm clear all?" : "Clear all history"}
+              {isClearing
+                ? "Clearing history…"
+                : confirming
+                  ? "Confirm clear all?"
+                  : "Clear all history"}
             </span>
           </button>
         )}

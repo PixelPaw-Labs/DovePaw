@@ -10,7 +10,7 @@ import { extname } from "node:path";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
-import { TSX_BIN } from "@/lib/paths";
+import { TSX_BIN, OPENVIKING_CLI_CONFIG, OPENVIKING_PORT_FILE } from "@/lib/paths";
 import type { AgentConfig } from "./agent-config-builder";
 export type {
   ScriptCompletedContent,
@@ -92,8 +92,15 @@ export function spawnAndCollect(
 
   const { cmd, args: baseArgs } = resolveRuntime(config.scriptPath);
   const scriptArgs = instruction ? [...baseArgs, instruction] : baseArgs;
+  // When the DovePaw-scoped OpenViking sidecar is live, point the agent's
+  // `ov` invocations at the DovePaw-scoped CLI config so member memory
+  // queries hit the right tenant. Falls through to the user's global
+  // ~/.openviking/ovcli.conf when the sidecar isn't running.
+  const openvikingEnv = existsSync(OPENVIKING_PORT_FILE)
+    ? { OPENVIKING_CLI_CONFIG_FILE: OPENVIKING_CLI_CONFIG }
+    : {};
   const proc = spawn(cmd, scriptArgs, {
-    env: { ...process.env, ...config.extraEnv },
+    env: { ...process.env, ...openvikingEnv, ...config.extraEnv },
     cwd: config.workspacePath,
     stdio: ["ignore", "pipe", "pipe"],
     detached: true,

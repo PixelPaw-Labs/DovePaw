@@ -18,6 +18,11 @@ export {
   agentPersistentStateDir,
   portsFile,
   A2A_SERVERS_PID_FILE,
+  OPENVIKING_CONFIG_DIR,
+  OPENVIKING_SERVER_CONFIG,
+  OPENVIKING_CLI_CONFIG,
+  OPENVIKING_PORT_FILE,
+  OPENVIKING_DATA_DIR,
 } from "@@/lib/paths";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
