@@ -202,7 +202,7 @@ const MIN_VISIBLE_LINK_LENGTH = 30;
 
 const GROUP_COLS = 3;
 const GROUP_PAD_X = 16;
-const GROUP_PAD_TOP = 44; // space for the group label
+const GROUP_PAD_TOP = 76; // space for the group label + 2-line description
 const GROUP_PAD_BOTTOM = 12;
 
 /**
@@ -295,58 +295,107 @@ function getConnectionPoints(node: InternalNode): ConnectionPoints {
   return connectionPointsFromRect(nodeToRect(node));
 }
 
-// ─── EditGroupMembersDialog ───────────────────────────────────────────────────
+// ─── EditGroupDialog ──────────────────────────────────────────────────────────
 
-interface EditGroupMembersDialogProps {
-  groupName: string | null;
+interface EditGroupDialogProps {
+  group: AgentGroup | null;
   onOpenChange: (open: boolean) => void;
   allAgentConfigs: AgentConfigEntry[];
-  currentMembers: string[];
-  onSuccess: (groupName: string, newMembers: string[]) => void;
+  existingGroupNames: string[];
+  onSuccess: (originalName: string, updated: AgentGroup) => void;
 }
 
-function EditGroupMembersDialog({
-  groupName,
+function EditGroupDialog({
+  group,
   onOpenChange,
   allAgentConfigs,
-  currentMembers,
+  existingGroupNames,
   onSuccess,
-}: EditGroupMembersDialogProps) {
+}: EditGroupDialogProps) {
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (groupName) {
-      setSelected(new Set(currentMembers));
+    if (group) {
+      setName(group.name);
+      setDescription(group.description);
+      setSelected(new Set(group.members));
       setError("");
     }
-  }, [groupName, currentMembers]);
+  }, [group]);
 
-  function toggle(name: string) {
+  function toggle(memberName: string) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
+      if (next.has(memberName)) next.delete(memberName);
+      else next.add(memberName);
       return next;
     });
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!groupName) return;
+    if (!group) return;
+
+    const trimmedName = name.trim();
+    const trimmedDescription = description.trim();
+    if (!trimmedName) {
+      setError("Group name is required.");
+      return;
+    }
+    if (trimmedName !== group.name && existingGroupNames.includes(trimmedName)) {
+      setError(`Group "${trimmedName}" already exists.`);
+      return;
+    }
+
+    const newMembers = [...selected];
+    const membersChanged =
+      newMembers.length !== group.members.length ||
+      newMembers.some((m) => !group.members.includes(m));
+    const nameChanged = trimmedName !== group.name;
+    const descriptionChanged = trimmedDescription !== group.description;
+
     setError("");
     setSubmitting(true);
     try {
-      const members = [...selected];
-      const res = await putGroupMembers(groupName, members);
-      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-      const json = (await res.json()) as { error?: string };
-      if (!res.ok) {
-        setError(json.error ?? "Failed to update members.");
-        return;
+      // PUT members first (uses the current on-disk name).
+      if (membersChanged) {
+        const res = await putGroupMembers(group.name, newMembers);
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        const json = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setError(json.error ?? "Failed to update members.");
+          return;
+        }
       }
-      onSuccess(groupName, members);
+
+      // PATCH name and/or description.
+      if (nameChanged || descriptionChanged) {
+        const res = await fetch("/api/settings/agent-links/groups", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: group.name,
+            ...(nameChanged && { newName: trimmedName }),
+            ...(descriptionChanged && { description: trimmedDescription }),
+          }),
+        });
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        const json = (await res.json()) as { error?: string };
+        if (!res.ok) {
+          setError(json.error ?? "Failed to update group.");
+          return;
+        }
+      }
+
+      onSuccess(group.name, {
+        name: trimmedName,
+        description: trimmedDescription,
+        members: newMembers,
+      });
       onOpenChange(false);
     } catch {
       setError("Network error. Please try again.");
@@ -356,10 +405,10 @@ function EditGroupMembersDialog({
   }
 
   return (
-    <Dialog open={groupName !== null} onOpenChange={onOpenChange}>
+    <Dialog open={group !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Members — {groupName}</DialogTitle>
+          <DialogTitle>Edit Group</DialogTitle>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -367,25 +416,49 @@ function EditGroupMembersDialog({
           }}
           className="space-y-4 pt-1"
         >
-          <div className="space-y-0.5 max-h-64 overflow-y-auto">
-            {allAgentConfigs.map((config) => {
-              const def = buildAgentDef(config);
-              const checked = selected.has(config.name);
-              return (
-                <label
-                  key={config.name}
-                  className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted cursor-pointer select-none"
-                >
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggle(config.name)}
-                    className="rounded accent-primary"
-                  />
-                  <span className="text-sm text-foreground">{def.displayName}</span>
-                </label>
-              );
-            })}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Group name</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Engineering"
+              disabled={submitting}
+              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What this group is responsible for…"
+              disabled={submitting}
+              rows={3}
+              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Members</label>
+            <div className="space-y-0.5 max-h-56 overflow-y-auto border border-border/60 rounded-md p-1">
+              {allAgentConfigs.map((config) => {
+                const def = buildAgentDef(config);
+                const checked = selected.has(config.name);
+                return (
+                  <label
+                    key={config.name}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted cursor-pointer select-none"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(config.name)}
+                      className="rounded accent-primary"
+                    />
+                    <span className="text-sm text-foreground">{def.displayName}</span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
@@ -427,15 +500,22 @@ function GroupNode({ data, selected }: NodeProps<GroupFlowNode>) {
         )}
       >
         <div
-          className="px-3 pt-2 pb-1 flex items-center gap-2 cursor-pointer nodrag rounded-t-2xl hover:bg-primary/10 transition-colors group/header"
+          className="px-3 pt-2 pb-2 cursor-pointer nodrag rounded-t-2xl hover:bg-primary/10 transition-colors group/header"
           onClick={() => onEditGroup(data.group.name)}
-          title="Click to edit members"
+          title="Click to edit group"
         >
-          <Users2 className="w-5 h-5 text-primary/70 shrink-0" />
-          <span className="flex-1 text-base font-bold uppercase tracking-widest text-foreground/80 truncate">
-            {data.group.name}
-          </span>
-          <Settings2 className="w-5 h-5 text-primary/60 shrink-0" />
+          <div className="flex items-center gap-2">
+            <Users2 className="w-5 h-5 text-primary/70 shrink-0" />
+            <span className="flex-1 text-base font-bold uppercase tracking-widest text-foreground/80 truncate">
+              {data.group.name}
+            </span>
+            <Settings2 className="w-5 h-5 text-primary/60 shrink-0" />
+          </div>
+          {data.group.description && (
+            <p className="mt-1 text-[11px] leading-snug text-muted-foreground line-clamp-2">
+              {data.group.description}
+            </p>
+          )}
         </div>
       </div>
     </>
@@ -1336,7 +1416,7 @@ interface CreateGroupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingGroupNames: string[];
-  onSuccess: (groupName: string) => void;
+  onSuccess: (groupName: string, description: string) => void;
 }
 
 export function CreateGroupDialog({
@@ -1346,12 +1426,14 @@ export function CreateGroupDialog({
   onSuccess,
 }: CreateGroupDialogProps) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
       setName("");
+      setDescription("");
       setError("");
     }
   }, [open]);
@@ -1359,6 +1441,7 @@ export function CreateGroupDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
+    const trimmedDescription = description.trim();
     if (!trimmed) {
       setError("Group name is required.");
       return;
@@ -1373,7 +1456,7 @@ export function CreateGroupDialog({
       const res = await fetch("/api/settings/agent-links/groups", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmed }),
+        body: JSON.stringify({ name: trimmed, description: trimmedDescription }),
       });
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       const json = (await res.json()) as { error?: string };
@@ -1381,7 +1464,7 @@ export function CreateGroupDialog({
         setError(json.error ?? "Failed to create group.");
         return;
       }
-      onSuccess(trimmed);
+      onSuccess(trimmed, trimmedDescription);
       onOpenChange(false);
     } catch {
       setError("Network error. Please try again.");
@@ -1411,6 +1494,17 @@ export function CreateGroupDialog({
               placeholder="e.g. Engineering"
               disabled={submitting}
               className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Description</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What this group is responsible for…"
+              disabled={submitting}
+              rows={3}
+              className="w-full text-sm bg-background border border-border rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -1656,7 +1750,7 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
   // Add a freshly-created (empty) group as a node on the canvas, positioned
   // near the centre of the current viewport so the user sees it immediately.
   const handleGroupCreated = useCallback(
-    (groupName: string) => {
+    (groupName: string, description: string) => {
       const size = groupNodeSize(0, 0);
       const center = screenToFlowPosition({
         x: window.innerWidth / 2,
@@ -1668,7 +1762,7 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
         zIndex: 0,
         position: { x: center.x - size.width / 2, y: center.y - size.height / 2 },
         style: { width: size.width, height: size.height },
-        data: { group: { name: groupName, members: [], description: "" } },
+        data: { group: { name: groupName, members: [], description } },
       };
       setNodes((prev) => {
         // React Flow requires parent nodes to precede their children.
@@ -1764,6 +1858,36 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
     [agentConfigs, edges],
   );
 
+  // Apply name, description, and member updates from EditGroupDialog.
+  // Members are reconciled via handleMembersUpdated; then we rewrite the group
+  // node id, child parentIds, and group data in a second pass.
+  const handleGroupUpdated = useCallback(
+    (originalName: string, updated: AgentGroup) => {
+      handleMembersUpdated(originalName, updated.members);
+      setNodes((prev) => {
+        const oldId = `group:${originalName}`;
+        const newId = `group:${updated.name}`;
+        const renamed = originalName !== updated.name;
+        const next = prev.map<AnyFlowNode>((n) => {
+          if (n.id === oldId && isGroupNode(n)) {
+            return {
+              ...n,
+              id: newId,
+              data: { group: { ...n.data.group, ...updated } },
+            };
+          }
+          if (renamed && n.parentId === oldId) {
+            return { ...n, parentId: newId };
+          }
+          return n;
+        });
+        savePositions(next);
+        return next;
+      });
+    },
+    [handleMembersUpdated],
+  );
+
   // Drop an agent from the sidebar onto the canvas.
   // If dropped inside a group's bounding box, add it as a group member.
   const onDrop = useCallback(
@@ -1849,10 +1973,12 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
 
   const sidebarAgents = agentConfigs.filter((c) => !nodes.some((n) => n.id === c.name));
 
-  const editingGroupMembers = editingGroup
+  const editingGroupData: AgentGroup | null = editingGroup
     ? (nodes.find((n): n is GroupFlowNode => n.id === `group:${editingGroup}` && isGroupNode(n))
-        ?.data.group.members ?? [])
-    : [];
+        ?.data.group ?? null)
+    : null;
+
+  const existingGroupNames = nodes.filter(isGroupNode).map((n) => n.data.group.name);
 
   return (
     <HeartbeatContext.Provider value={statuses}>
@@ -2005,19 +2131,19 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
                 existingEdges={edges}
                 onSuccess={handleAddLinkSuccess}
               />
-              <EditGroupMembersDialog
-                groupName={editingGroup}
+              <EditGroupDialog
+                group={editingGroupData}
                 onOpenChange={(open) => {
                   if (!open) setEditingGroup(null);
                 }}
                 allAgentConfigs={agentConfigs}
-                currentMembers={editingGroupMembers}
-                onSuccess={handleMembersUpdated}
+                existingGroupNames={existingGroupNames}
+                onSuccess={handleGroupUpdated}
               />
               <CreateGroupDialog
                 open={createGroupOpen}
                 onOpenChange={setCreateGroupOpen}
-                existingGroupNames={nodes.filter(isGroupNode).map((n) => n.data.group.name)}
+                existingGroupNames={existingGroupNames}
                 onSuccess={handleGroupCreated}
               />
             </EditGroupContext.Provider>

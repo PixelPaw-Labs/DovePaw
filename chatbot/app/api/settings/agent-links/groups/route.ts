@@ -10,13 +10,14 @@ import { parseBody } from "@/lib/env-var-routes";
 
 const postBodySchema = z.object({
   name: z.string().min(1),
+  description: z.string().optional(),
 });
 
 export async function POST(request: Request) {
   const parsed = await parseBody(request, postBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { name } = parsed.data;
+  const { name, description } = parsed.data;
   const file = await readAgentLinksFile();
 
   if (file.groups.some((g) => g.name === name)) {
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
 
   await writeAgentLinksFile({
     ...file,
-    groups: [...file.groups, { name, members: [], description: "" }],
+    groups: [...file.groups, { name, members: [], description: description ?? "" }],
   });
   return Response.json({ ok: true }, { status: 201 });
 }
