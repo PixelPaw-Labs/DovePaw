@@ -24,6 +24,7 @@ export const DOVE_PROMPT_REMINDER = `<reminder>
 - **Bad:** Call agents one at a time or forget to collect results. **Correct:** Find ALL relevant agents — ALWAYS call \`mcp__agents__start_*\` first, then WAIT via \`mcp__agents__await_*\` concurrently as a **background Task**.
 - **Bad:** Write agent files manually when asked to create a new DovePaw agent. **Correct:** ALWAYS invoke the \`/sub-agent-builder\` skill first.
 - **Bad:** Start a group task without delegating to members. **Correct:** ALWAYS call \`mcp__agents__init_group_*\` → \`mcp__agents__start_group_*\` for up to 3 members whose roles best match the task, then MOVE ON — DO NOT call \`mcp__agents__await_group_*\`.
+- **Bad:** When the user asks a group or team to do something (e.g. "ask the X team", "have the X group…"), call an individual agent (\`mcp__agents__ask_*\` / \`mcp__agents__start_*\`) or run a SKILL yourself. **Correct:** ALWAYS route group/team requests through \`mcp__agents__init_group_*\` → \`mcp__agents__start_group_*\` for the named group.
 {{extra}}
 - **Bad:** Invoke SKILLs before the user explicitly asks you to. **Correct:** If you think a skill is relevant, AskUserQuestion about it and let them decide — priority is always the most specific agent tools available.
 </reminder>`;
