@@ -307,6 +307,21 @@ describe("AgentRunner", () => {
       }
     });
 
+    it("passes claudeOpts.skills (empty array disables all skills) to Claude runner without error", async () => {
+      const err = await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "claude-sonnet-4-6",
+          timeoutMs: 100,
+          claudeOpts: { skills: [] },
+        })
+        .catch((e: Error) => e);
+      if (err instanceof Error) {
+        expect(err.message).not.toContain("Unknown model");
+      }
+    });
+
     it("passes resumeSession to Codex runner without error", async () => {
       const err = await runner
         .run("prompt", {

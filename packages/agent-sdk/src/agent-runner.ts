@@ -19,6 +19,8 @@ interface ClaudeRunOpts {
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   continueSession?: boolean;
   settingSources?: Array<"user" | "project" | "local">;
+  /** Filter which Skills the SDK exposes. `[]` disables all skills; `"all"` enables every discovered one. Omit to use CLI defaults. */
+  skills?: string[] | "all";
 }
 
 export function resolveCodexSandboxMode(
@@ -186,6 +188,7 @@ export class AgentRunner {
       effort: opts.claudeOpts?.effort,
       continueSession: opts.claudeOpts?.continueSession,
       settingSources: opts.claudeOpts?.settingSources,
+      skills: opts.claudeOpts?.skills,
       appendSystemPrompt: opts.appendSystemPrompt,
     } satisfies RunOpts);
   }

@@ -18,6 +18,8 @@ export interface RunOpts {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
   disallowedTools?: string[];
   settingSources?: Array<"user" | "project" | "local">;
+  /** Filter which Skills the SDK exposes. `[]` disables all skills; `"all"` enables every discovered one. Omit to use CLI defaults. */
+  skills?: string[] | "all";
   hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
   /** Assign a session ID for later resumption via resumeSession. */
   sessionId?: string;
@@ -108,6 +110,7 @@ export class ClaudeRunner {
           ...(opts.permissionMode ? { permissionMode: opts.permissionMode } : {}),
           ...(opts.disallowedTools?.length ? { disallowedTools: opts.disallowedTools } : {}),
           ...(opts.settingSources ? { settingSources: opts.settingSources } : {}),
+          ...(opts.skills !== undefined ? { skills: opts.skills } : {}),
           ...(opts.hooks ? { hooks: opts.hooks } : {}),
           ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
           ...(opts.resumeSession ? { resume: opts.resumeSession } : {}),
