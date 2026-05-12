@@ -912,7 +912,7 @@ describe("makeStartGroupTool", () => {
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       instruction: "do something",
-      members: ["test-agent"],
+      members: [{ name: "test-agent", relevanceScore: 100 }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -932,7 +932,7 @@ describe("makeStartGroupTool", () => {
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
       instruction: "do something",
-      members: ["test-agent"],
+      members: [{ name: "test-agent", relevanceScore: 100 }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -950,7 +950,7 @@ describe("makeStartGroupTool", () => {
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       instruction: "do something",
-      members: ["test-agent"],
+      members: [{ name: "test-agent", relevanceScore: 100 }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -972,7 +972,7 @@ describe("makeStartGroupTool", () => {
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       instruction: "do something",
-      members: ["test-agent"],
+      members: [{ name: "test-agent", relevanceScore: 100 }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -983,6 +983,52 @@ describe("makeStartGroupTool", () => {
       "gc-1",
       expect.objectContaining({ type: "group_member", agentId: "test-agent", done: true }),
     );
+  });
+
+  it("dispatches only members with relevanceScore >= 90", async () => {
+    const a: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
+    const b: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
+    const c: AgentDef = { ...AGENT, name: "agent-c", manifestKey: "agent_c" };
+    vi.mocked(readPortsManifest).mockReturnValue({
+      agent_a: 9001,
+      agent_b: 9002,
+      agent_c: 9003,
+    } as any);
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b, c]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    const result = await handler({
+      instruction: "do something",
+      members: [
+        { name: "agent-a", relevanceScore: 95 },
+        { name: "agent-b", relevanceScore: 85 },
+        { name: "agent-c", relevanceScore: 92 },
+      ],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    const sc = result.structuredContent as { memberTaskIds: Record<string, string> };
+    expect(Object.keys(sc.memberTaskIds).toSorted()).toEqual(["agent_a", "agent_c"]);
+  });
+
+  it("falls back to the highest-scored member when none clear the threshold", async () => {
+    const a: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
+    const b: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
+    vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    const result = await handler({
+      instruction: "do something",
+      members: [
+        { name: "agent-a", relevanceScore: 50 },
+        { name: "agent-b", relevanceScore: 70 },
+      ],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    const sc = result.structuredContent as { memberTaskIds: Record<string, string> };
+    expect(Object.keys(sc.memberTaskIds)).toEqual(["agent_b"]);
   });
 });
 

@@ -131,6 +131,9 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
 
 // ─── makeStartGroupTool ───────────────────────────────────────────────────────
 
+/** Minimum relevance score (0-100) for a candidate member to be dispatched. */
+const GROUP_MEMBER_RELEVANCE_THRESHOLD = 90;
+
 /**
  * Fans out the instruction to all online members of the group.
  * Returns memberTaskIds (manifestKey → taskId) to pass to await_group_*.
@@ -144,7 +147,7 @@ export function makeStartGroupTool(
 ) {
   return tool(
     doveStartGroupToolName(group.name),
-    `Start all members of the "${group.name}" group on a task. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
+    `Start the most relevant members of the "${group.name}" group on a task. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
     {
       instruction: z
         .string()
@@ -152,17 +155,42 @@ export function makeStartGroupTool(
           "Instruction for the group. Must open with: 'I am Dove, your orchestrator. ' followed by the task.",
         ),
       members: z
-        .array(z.string())
+        .array(
+          z.object({
+            name: z.string().describe("Member agent name from the roster below."),
+            relevanceScore: z
+              .number()
+              .int()
+              .min(0)
+              .max(100)
+              .describe(
+                `Relevance to this task (0-100). Only candidates scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} are dispatched.`,
+              ),
+          }),
+        )
         .min(1)
         .max(3)
         .describe(
-          `1–3 member names to delegate to. Choose the most relevant.\n<members>\n${memberDefs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n")}\n</members>`,
+          `Propose up to 3 candidate members with a relevance score (0-100) each. Be selective: only those scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} will be dispatched, so the final dispatch count may be 1, 2, or 3 — do not pad. If exactly one member fits, return only that one.\n<members>\n${memberDefs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n")}\n</members>`,
         ),
       groupWorkspacePath: z.string().describe("groupWorkspacePath from init_group_* result"),
       groupContextId: z.string().describe("groupContextId from init_group_* result"),
       groupName: z.string().describe("groupName from init_group_* result"),
     },
-    async ({ instruction, members, groupWorkspacePath, groupContextId, groupName }) => {
+    async ({
+      instruction,
+      members: proposedMembers,
+      groupWorkspacePath,
+      groupContextId,
+      groupName,
+    }) => {
+      // Filter proposals by relevance score; fall back to the highest scorer
+      // when nothing clears the threshold, so dispatch always has ≥1 member.
+      const ranked = proposedMembers.toSorted((a, b) => b.relevanceScore - a.relevanceScore);
+      const qualified = ranked
+        .filter((m) => m.relevanceScore >= GROUP_MEMBER_RELEVANCE_THRESHOLD)
+        .slice(0, 3);
+      const members = (qualified.length > 0 ? qualified : ranked.slice(0, 1)).map((m) => m.name);
       const groupMeta = { isGroupChat: true, groupWorkspacePath, groupContextId, groupName };
       const memberTaskIds: Record<string, string> = {};
       const allMemberDrains: Promise<CollectedStream>[] = [];
