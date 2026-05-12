@@ -911,8 +911,7 @@ describe("makeStartGroupTool", () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
-      instruction: "do something",
-      members: [{ name: "test-agent", relevanceScore: 100 }],
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -931,8 +930,7 @@ describe("makeStartGroupTool", () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
-      instruction: "do something",
-      members: [{ name: "test-agent", relevanceScore: 100 }],
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -945,12 +943,27 @@ describe("makeStartGroupTool", () => {
     expect(sc.groupContextId).toBe("gc-1");
   });
 
-  it("publishes a single sender event for Dove's instruction before member events", async () => {
-    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+  it("publishes a sender event per member, prefixed with the member's displayName", async () => {
+    const a: AgentDef = {
+      ...AGENT,
+      name: "agent-a",
+      manifestKey: "agent_a",
+      displayName: "Alice",
+    };
+    const b: AgentDef = {
+      ...AGENT,
+      name: "agent-b",
+      manifestKey: "agent_b",
+      displayName: "Bob",
+    };
+    vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
-      instruction: "do something",
-      members: [{ name: "test-agent", relevanceScore: 100 }],
+      members: [
+        { name: "agent-a", relevanceScore: 95, instruction: "do A" },
+        { name: "agent-b", relevanceScore: 95, instruction: "do B" },
+      ],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -962,17 +975,57 @@ describe("makeStartGroupTool", () => {
         agentId: "dove",
         isSender: true,
         done: true,
-        text: "do something",
+        text: "@Alice\n\ndo A",
       }),
     );
+    expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
+      "gc-1",
+      expect.objectContaining({
+        type: "group_member",
+        agentId: "dove",
+        isSender: true,
+        done: true,
+        text: "@Bob\n\ndo B",
+      }),
+    );
+  });
+
+  it("dispatches each member with its own tailored instruction", async () => {
+    const a: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
+    const b: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
+    vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      members: [
+        { name: "agent-a", relevanceScore: 95, instruction: "investigate logs" },
+        { name: "agent-b", relevanceScore: 95, instruction: "check the dashboard" },
+      ],
+      groupWorkspacePath: "/ws/group",
+      groupContextId: "gc-1",
+      groupName: "PixelPaw Labs",
+    });
+    // Collect all sendMessageStream calls across both client instances and assert
+    // each tailored instruction made it into exactly one dispatched message.
+    const factoryCalls = vi.mocked(ClientFactory).mock.results;
+    const messageTexts: string[] = [];
+    for (const factoryCall of factoryCalls) {
+      const client = await factoryCall.value.createFromUrl.mock.results[0].value;
+      for (const call of client.sendMessageStream.mock.calls) {
+        const parts = call[0].message.parts as { kind: string; text?: string }[];
+        const text = parts.map((p) => p.text ?? "").join("");
+        messageTexts.push(text);
+      }
+    }
+    expect(messageTexts.some((t) => t.includes("investigate logs"))).toBe(true);
+    expect(messageTexts.some((t) => t.includes("check the dashboard"))).toBe(true);
   });
 
   it("does not publish a group_member done event from the drain — the A2A relay handles it", async () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
-      instruction: "do something",
-      members: [{ name: "test-agent", relevanceScore: 100 }],
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
       groupName: "PixelPaw Labs",
@@ -997,11 +1050,10 @@ describe("makeStartGroupTool", () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b, c]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
-      instruction: "do something",
       members: [
-        { name: "agent-a", relevanceScore: 95 },
-        { name: "agent-b", relevanceScore: 85 },
-        { name: "agent-c", relevanceScore: 92 },
+        { name: "agent-a", relevanceScore: 95, instruction: "task A" },
+        { name: "agent-b", relevanceScore: 85, instruction: "task B" },
+        { name: "agent-c", relevanceScore: 92, instruction: "task C" },
       ],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",
@@ -1018,10 +1070,9 @@ describe("makeStartGroupTool", () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
-      instruction: "do something",
       members: [
-        { name: "agent-a", relevanceScore: 50 },
-        { name: "agent-b", relevanceScore: 70 },
+        { name: "agent-a", relevanceScore: 50, instruction: "task A" },
+        { name: "agent-b", relevanceScore: 70, instruction: "task B" },
       ],
       groupWorkspacePath: "/ws/group",
       groupContextId: "gc-1",

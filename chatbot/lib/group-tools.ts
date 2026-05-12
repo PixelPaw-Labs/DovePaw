@@ -147,13 +147,8 @@ export function makeStartGroupTool(
 ) {
   return tool(
     doveStartGroupToolName(group.name),
-    `Start the most relevant members of the "${group.name}" group on a task. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
+    `Start the most relevant members of the "${group.name}" group, each with a tailored instruction. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
     {
-      instruction: z
-        .string()
-        .describe(
-          "Instruction for the group. Must open with: 'I am Dove, your orchestrator. ' followed by the task.",
-        ),
       members: z
         .array(
           z.object({
@@ -166,48 +161,48 @@ export function makeStartGroupTool(
               .describe(
                 `Relevance to this task (0-100). Only candidates scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} are dispatched.`,
               ),
+            instruction: z
+              .string()
+              .describe(
+                "Instruction scoped to THIS member's specialty — not the whole task. Must open with: 'I am Dove, your orchestrator. ' followed by the slice this member should own.",
+              ),
           }),
         )
         .min(1)
         .max(3)
         .describe(
-          `Propose up to 3 candidate members with a relevance score (0-100) each. Be selective: only those scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} will be dispatched, so the final dispatch count may be 1, 2, or 3 — do not pad. If exactly one member fits, return only that one.\n<members>\n${memberDefs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n")}\n</members>`,
+          `Propose up to 3 candidate members, each with a relevance score (0-100) AND a tailored instruction scoped to that member's specialty. Be selective: only candidates scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} are dispatched, so the final count may be 1, 2, or 3 — do not pad. Each instruction must describe only that member's slice of the work; if a piece crosses into another member's lane, that other member should be a separate entry with its own instruction.\n<members>\n${memberDefs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n")}\n</members>`,
         ),
       groupWorkspacePath: z.string().describe("groupWorkspacePath from init_group_* result"),
       groupContextId: z.string().describe("groupContextId from init_group_* result"),
       groupName: z.string().describe("groupName from init_group_* result"),
     },
-    async ({
-      instruction,
-      members: proposedMembers,
-      groupWorkspacePath,
-      groupContextId,
-      groupName,
-    }) => {
+    async ({ members: proposedMembers, groupWorkspacePath, groupContextId, groupName }) => {
       // Filter proposals by relevance score; fall back to the highest scorer
       // when nothing clears the threshold, so dispatch always has ≥1 member.
       const ranked = proposedMembers.toSorted((a, b) => b.relevanceScore - a.relevanceScore);
       const qualified = ranked
         .filter((m) => m.relevanceScore >= GROUP_MEMBER_RELEVANCE_THRESHOLD)
         .slice(0, 3);
-      const members = (qualified.length > 0 ? qualified : ranked.slice(0, 1)).map((m) => m.name);
+      const dispatched = qualified.length > 0 ? qualified : ranked.slice(0, 1);
       const groupMeta = { isGroupChat: true, groupWorkspacePath, groupContextId, groupName };
       const memberTaskIds: Record<string, string> = {};
       const allMemberDrains: Promise<CollectedStream>[] = [];
 
-      // One sender bubble for Dove's instruction — shown before any member responds.
-      publishSessionEvent(groupContextId, {
-        type: "group_member",
-        agentId: "dove",
-        text: instruction,
-        done: true,
-        isSender: true,
-      });
-
       await Promise.all(
-        members.map(async (memberName) => {
-          const memberDef = memberDefs.find((a) => a.name === memberName);
+        dispatched.map(async (member) => {
+          const memberDef = memberDefs.find((a) => a.name === member.name);
           if (!memberDef) return;
+
+          // One sender bubble per member — Dove's tailored instruction to this agent.
+          publishSessionEvent(groupContextId, {
+            type: "group_member",
+            agentId: "dove",
+            text: `@${memberDef.displayName}\n\n${member.instruction}`,
+            done: true,
+            isSender: true,
+          });
+
           // Per-member drain bucket — captures the stream promise so we can
           // publish the final group_member event from this (Next.js) process.
           // Streaming progress events are handled by the A2A dispatcher's groupRelay path.
@@ -219,7 +214,7 @@ export function makeStartGroupTool(
             registry,
             doveAwaitGroupToolName(group.name),
             memberDef.name,
-          ).start(withStartReminder(instruction, memberDef.manifestKey), {
+          ).start(withStartReminder(member.instruction, memberDef.manifestKey), {
             backgroundTasks: memberDrain,
             senderAgentId: "dove",
             extraMetadata: groupMeta,
