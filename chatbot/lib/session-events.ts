@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import type { ChatSseEvent } from "@/lib/chat-sse";
+import { insertSessionEvent } from "@/lib/db";
 
 const BUFFER_MAX = 500;
 const BUFFER_TTL_MS = 60_000;
@@ -33,6 +34,9 @@ export function publishSessionEvent(sessionId: string, event: ChatSseEvent): voi
 
   // Stamp seq number on event (mutable but non-enumerable to avoid polluting JSON)
   (event as Record<string, unknown>)._seq = ++b.seq;
+
+  // Durable log so reconnects after buffer eviction / process restart can replay.
+  insertSessionEvent(sessionId, b.seq, event);
 
   // Ring buffer
   if (b.buffer.length >= BUFFER_MAX) b.buffer.shift();

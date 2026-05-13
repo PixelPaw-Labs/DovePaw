@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+
+// Persistence is tested separately in db.test.ts; mock here so the publish
+// path doesn't touch the real ~/.dovepaw/dovepaw.db during unit tests.
+const insertSessionEventSpy = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/db", () => ({ insertSessionEvent: insertSessionEventSpy }));
+
 import {
   publishSessionEvent,
   subscribeSession,
@@ -298,5 +304,30 @@ describe("seq counter", () => {
     expect((e1 as Record<string, unknown>)._seq).toBe(1);
     expect((e2 as Record<string, unknown>)._seq).toBe(2);
     expect((e3 as Record<string, unknown>)._seq).toBe(3);
+  });
+});
+
+describe("publishSessionEvent — durable persistence", () => {
+  beforeEach(() => {
+    insertSessionEventSpy.mockClear();
+  });
+
+  it("forwards every publish to insertSessionEvent with sessionId, seq, and the event", () => {
+    const e1 = textEvent("a");
+    const e2 = textEvent("b");
+    publishSessionEvent(sessionId, e1);
+    publishSessionEvent(sessionId, e2);
+
+    expect(insertSessionEventSpy).toHaveBeenCalledTimes(2);
+    expect(insertSessionEventSpy).toHaveBeenNthCalledWith(1, sessionId, 1, e1);
+    expect(insertSessionEventSpy).toHaveBeenNthCalledWith(2, sessionId, 2, e2);
+  });
+
+  it("does not persist events for a session that has been terminated", () => {
+    publishSessionEvent(sessionId, textEvent("first")); // bucket exists
+    clearSessionBuffer(sessionId); // marks the session as terminated
+    insertSessionEventSpy.mockClear();
+    publishSessionEvent(sessionId, textEvent("late"));
+    expect(insertSessionEventSpy).not.toHaveBeenCalled();
   });
 });

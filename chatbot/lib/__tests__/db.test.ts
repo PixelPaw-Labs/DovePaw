@@ -23,6 +23,8 @@ const {
   deleteSession,
   deleteAllSessions,
   setSessionStatus,
+  insertSessionEvent,
+  readSessionEventsAfter,
   closeDb,
 } = await import("../db");
 
@@ -241,6 +243,53 @@ describe("db", () => {
       upsertSession({ ...base, resumeSeq: 7 });
       upsertSession({ ...base, messages: [], resumeSeq: 15 });
       expect(getSessionDetail("ctx-1")!.resumeSeq).toBe(15);
+    });
+  });
+
+  describe("session_events", () => {
+    it("insertSessionEvent persists a row and readSessionEventsAfter returns it", () => {
+      insertSessionEvent("ctx-1", 1, { type: "text", content: "hello" });
+      expect(readSessionEventsAfter("ctx-1", 0)).toEqual([
+        { seq: 1, event: { type: "text", content: "hello" } },
+      ]);
+    });
+
+    it("readSessionEventsAfter filters by seq cursor", () => {
+      insertSessionEvent("ctx-1", 1, { type: "text", content: "a" });
+      insertSessionEvent("ctx-1", 2, { type: "text", content: "b" });
+      insertSessionEvent("ctx-1", 3, { type: "text", content: "c" });
+      const after1 = readSessionEventsAfter("ctx-1", 1);
+      expect(after1.map((r) => r.seq)).toEqual([2, 3]);
+    });
+
+    it("readSessionEventsAfter isolates by session", () => {
+      insertSessionEvent("ctx-1", 1, { type: "text", content: "a" });
+      insertSessionEvent("ctx-2", 1, { type: "text", content: "z" });
+      expect(readSessionEventsAfter("ctx-1", 0)).toHaveLength(1);
+      expect(readSessionEventsAfter("ctx-2", 0)).toHaveLength(1);
+      expect(readSessionEventsAfter("ctx-1", 0)[0]?.event).toEqual({
+        type: "text",
+        content: "a",
+      });
+    });
+
+    it("returns rows ordered by seq ascending", () => {
+      insertSessionEvent("ctx-1", 3, { type: "text", content: "c" });
+      insertSessionEvent("ctx-1", 1, { type: "text", content: "a" });
+      insertSessionEvent("ctx-1", 2, { type: "text", content: "b" });
+      expect(readSessionEventsAfter("ctx-1", 0).map((r) => r.seq)).toEqual([1, 2, 3]);
+    });
+
+    it("ignores duplicate (sessionId, seq) inserts without throwing", () => {
+      insertSessionEvent("ctx-1", 1, { type: "text", content: "a" });
+      expect(() =>
+        insertSessionEvent("ctx-1", 1, { type: "text", content: "duplicate" }),
+      ).not.toThrow();
+      // First write wins — duplicates are ignored, not overwritten.
+      expect(readSessionEventsAfter("ctx-1", 0)[0]?.event).toEqual({
+        type: "text",
+        content: "a",
+      });
     });
   });
 });

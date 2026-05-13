@@ -108,6 +108,13 @@ function getDb(): Database.Database {
       subagent_a2a_context_id TEXT NOT NULL,
       PRIMARY KEY (orchestrator_session_id, manifest_key)
     );
+    CREATE TABLE IF NOT EXISTS session_events (
+      session_id  TEXT    NOT NULL,
+      seq         INTEGER NOT NULL,
+      payload     TEXT    NOT NULL,
+      created_at  TEXT    NOT NULL,
+      PRIMARY KEY (session_id, seq)
+    );
   `);
   const pragmaResult = _db.pragma("table_info(sessions)");
   const cols = Array.isArray(pragmaResult)
@@ -233,6 +240,32 @@ export function setSessionStatus(id: string, status: SessionStatus): void {
 
 export function closeStaleSessions(): void {
   getDb().prepare("UPDATE sessions SET status = 'done' WHERE status = 'running'").run();
+}
+
+/**
+ * Append an event to the per-session durable event log. The (session_id, seq)
+ * pair is the primary key — duplicate inserts (same seq from a retry or a
+ * concurrent writer) are silently ignored so callers can stay idempotent.
+ */
+export function insertSessionEvent(sessionId: string, seq: number, payload: unknown): void {
+  getDb()
+    .prepare(
+      "INSERT OR IGNORE INTO session_events (session_id, seq, payload, created_at) VALUES (?, ?, ?, ?)",
+    )
+    .run(sessionId, seq, JSON.stringify(payload), new Date().toISOString());
+}
+
+/** Reads events for a session with seq > afterSeq, ordered ascending. */
+export function readSessionEventsAfter(
+  sessionId: string,
+  afterSeq: number,
+): Array<{ seq: number; event: unknown }> {
+  return getDb()
+    .prepare<[string, number], { seq: number; payload: string }>(
+      "SELECT seq, payload FROM session_events WHERE session_id = ? AND seq > ? ORDER BY seq ASC",
+    )
+    .all(sessionId, afterSeq)
+    .map((r) => ({ seq: r.seq, event: JSON.parse(r.payload) as unknown }));
 }
 
 export function setGroupMessage(sessionId: string, text: string): void {

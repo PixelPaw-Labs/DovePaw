@@ -94,17 +94,9 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
       ];
       await writeFile(join(groupWorkspacePath, "members", "roster.md"), rosterLines.join("\n"));
 
-      const settings = await readSettings();
-      const groupConfig = readOrCreateGroupConfig(group.name);
-      const repoSlugs = groupConfig.repos
-        .map((id) => settings.repositories.find((r) => r.id === id))
-        .filter((r): r is NonNullable<typeof r> => r !== undefined)
-        .map((r) => r.githubRepo);
-
-      if (repoSlugs.length > 0) {
-        await cloneReposIntoWorkspace(groupWorkspacePath, repoSlugs);
-      }
-
+      // Persist the session row BEFORE any I/O that can fail (clone). If a
+      // clone errors the row still exists so the UI can render the failed
+      // group instead of silently dropping it. Same reasoning for activeSession.
       upsertSession({
         id: groupContextId,
         agentId: `group:${group.name}`,
@@ -115,6 +107,17 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
         status: "running",
       });
       setActiveSession(`group:${group.name}`, groupContextId);
+
+      const settings = await readSettings();
+      const groupConfig = readOrCreateGroupConfig(group.name);
+      const repoSlugs = groupConfig.repos
+        .map((id) => settings.repositories.find((r) => r.id === id))
+        .filter((r): r is NonNullable<typeof r> => r !== undefined)
+        .map((r) => r.githubRepo);
+
+      if (repoSlugs.length > 0) {
+        await cloneReposIntoWorkspace(groupWorkspacePath, repoSlugs);
+      }
 
       return {
         content: [

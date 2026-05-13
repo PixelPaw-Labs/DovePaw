@@ -1,8 +1,8 @@
 import { getSessionBuffer, subscribeSession } from "@/lib/session-events";
-import { getSessionDetail, getSessionStatus } from "@/lib/db";
+import { getSessionDetail, getSessionStatus, readSessionEventsAfter } from "@/lib/db";
 import { hasPendingPermission } from "@/lib/pending-permissions";
 import { sessionRunner } from "@/lib/session-runner";
-import type { ChatSseEvent } from "@/lib/chat-sse";
+import { isChatSseEvent, type ChatSseEvent } from "@/lib/chat-sse";
 
 export const maxDuration = 86400;
 
@@ -50,46 +50,47 @@ export async function GET(
   const status = getSessionStatus(sessionId);
   if (status === "running") {
     if (sessionRunner.isRunning(sessionId)) {
-      // Subscribe to a fresh bucket — if the subprocess is still alive it will
-      // publish events that land here.  Replay DB messages so the UI has context.
-      const detail = getSessionDetail(sessionId);
-      const prefixEvents: ChatSseEvent[] = detail
-        ? [
-            { type: "session", sessionId: detail.id },
-            ...detail.messages.flatMap((msg) => {
-              if (msg.role !== "assistant") return [];
-              return msg.segments.flatMap((s): ChatSseEvent[] => {
-                if (s.type === "text" && s.content) {
-                  return [{ type: "text", content: s.content }];
-                }
-                return [];
-              });
-            }),
-          ]
-        : [];
+      // Replay the durable event log (session_events) so the UI recovers full
+      // fidelity after a buffer eviction / HMR / process restart, then attach
+      // a fresh bucket for any further publishes from the live subprocess.
+      const prefixEvents: ChatSseEvent[] = readSessionEventsAfter(sessionId, after).flatMap((r) =>
+        isChatSseEvent(r.event) ? [r.event] : [],
+      );
       return makeLiveResponse(sessionId, after, request.signal, prefixEvents);
     }
     // Subprocess is not registered — it died without updating the DB.
     // Fall through to Mode 3 to synthesize from DB without touching status.
   }
 
-  // ── Mode 3: completed session — synthesize from DB ───────────────────────────
+  // ── Mode 3: completed session — replay from durable log or synthesize ────────
   const detail = getSessionDetail(sessionId);
   if (!detail) {
     return new Response(null, { status: 404 });
   }
 
-  const textContent = detail.messages
-    .flatMap((msg) => (msg.role === "assistant" ? msg.segments : []))
-    .filter((s): s is { type: "text"; content: string } => s.type === "text" && Boolean(s.content))
-    .map((s) => s.content)
-    .join("");
-  const events: ChatSseEvent[] = [
-    { type: "session", sessionId: detail.id },
-    ...(textContent
-      ? [{ type: "done" as const, content: textContent }]
-      : [{ type: "done" as const }]),
-  ];
+  const durable = readSessionEventsAfter(sessionId, after).flatMap((r) =>
+    isChatSseEvent(r.event) ? [r.event] : [],
+  );
+  let events: ChatSseEvent[];
+  if (durable.length > 0) {
+    events = durable;
+  } else {
+    // Legacy path for pre-durable-log sessions: synthesize a single done event
+    // from the saved messages so old completed runs still render.
+    const textContent = detail.messages
+      .flatMap((msg) => (msg.role === "assistant" ? msg.segments : []))
+      .filter(
+        (s): s is { type: "text"; content: string } => s.type === "text" && Boolean(s.content),
+      )
+      .map((s) => s.content)
+      .join("");
+    events = [
+      { type: "session", sessionId: detail.id },
+      ...(textContent
+        ? [{ type: "done" as const, content: textContent }]
+        : [{ type: "done" as const }]),
+    ];
+  }
 
   const enc = new TextEncoder();
   const body = events.map(encodeEvent).join("");

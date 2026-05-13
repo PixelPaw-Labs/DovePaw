@@ -21,6 +21,7 @@ vi.mock("@/lib/db", () => ({
   getSessionStatus: vi.fn(),
   getSessionDetail: vi.fn(),
   setSessionStatus: vi.fn(),
+  readSessionEventsAfter: vi.fn(() => []),
 }));
 
 vi.mock("@/lib/pending-permissions", () => ({
@@ -32,7 +33,12 @@ vi.mock("@/lib/session-runner", () => ({
 }));
 
 import { getSessionBuffer, subscribeSession } from "@/lib/session-events";
-import { getSessionStatus, getSessionDetail, setSessionStatus } from "@/lib/db";
+import {
+  getSessionStatus,
+  getSessionDetail,
+  setSessionStatus,
+  readSessionEventsAfter,
+} from "@/lib/db";
 import { sessionRunner } from "@/lib/session-runner";
 import { GET } from "../chat/stream/[sessionId]/route";
 
@@ -157,21 +163,14 @@ describe("Mode 2 — buffer gone, session running", () => {
     vi.mocked(getSessionBuffer).mockReturnValue(null);
     vi.mocked(getSessionStatus).mockReturnValue("running");
     vi.mocked(sessionRunner.isRunning).mockReturnValue(true);
+    vi.mocked(readSessionEventsAfter).mockReturnValue([]);
   });
 
-  it("sends session + text prefix events from DB before live stream", async () => {
-    vi.mocked(getSessionDetail).mockReturnValue({
-      id: "sess-2",
-      agentId: "dove",
-      startedAt: "2026-01-01T00:00:00Z",
-      label: "Test",
-      status: "running",
-      messages: [
-        { id: "u1", role: "user", segments: [{ type: "text", content: "hello" }] },
-        { id: "a1", role: "assistant", segments: [{ type: "text", content: "world" }] },
-      ],
-      progress: [],
-    });
+  it("replays the durable event log past ?after as prefix events", async () => {
+    vi.mocked(readSessionEventsAfter).mockReturnValue([
+      { seq: 1, event: { type: "session", sessionId: "sess-2" } },
+      { seq: 2, event: { type: "text", content: "saved" } },
+    ]);
     stubSubscribe([]);
 
     const ac = new AbortController();
@@ -181,64 +180,28 @@ describe("Mode 2 — buffer gone, session running", () => {
     const res = await GET(req, makeParams("sess-2"));
     const events = await collectLiveSseEvents(res, ac);
 
+    expect(readSessionEventsAfter).toHaveBeenCalledWith("sess-2", 0);
     expect(events).toContainEqual({ type: "session", sessionId: "sess-2" });
-    expect(events).toContainEqual({ type: "text", content: "world" });
+    expect(events).toContainEqual({ type: "text", content: "saved" });
     // No "done" — stream stays open for live subprocess events
     expect(events).not.toContainEqual(expect.objectContaining({ type: "done" }));
   });
 
-  it("skips user message segments — only assistant text becomes text prefix events", async () => {
-    vi.mocked(getSessionDetail).mockReturnValue({
-      id: "sess-2",
-      agentId: "dove",
-      startedAt: "2026-01-01T00:00:00Z",
-      label: "Test",
-      status: "running",
-      messages: [
-        { id: "u1", role: "user", segments: [{ type: "text", content: "user input" }] },
-        { id: "a1", role: "assistant", segments: [{ type: "text", content: "assistant reply" }] },
-      ],
-      progress: [],
-    });
+  it("uses ?after as the durable-log cursor so already-replayed events are skipped", async () => {
+    vi.mocked(readSessionEventsAfter).mockReturnValue([]);
     stubSubscribe([]);
 
     const ac = new AbortController();
-    const req = new Request("http://localhost/api/chat/stream/sess-2?after=0", {
+    const req = new Request("http://localhost/api/chat/stream/sess-2?after=42", {
       signal: ac.signal,
     });
-    const res = await GET(req, makeParams("sess-2"));
-    const events = await collectLiveSseEvents(res, ac);
+    await GET(req, makeParams("sess-2"));
 
-    const textEvents = events.filter((e) => e.type === "text");
-    expect(textEvents).toHaveLength(1);
-    expect(textEvents[0]).toEqual({ type: "text", content: "assistant reply" });
+    expect(readSessionEventsAfter).toHaveBeenCalledWith("sess-2", 42);
   });
 
-  it("sends only session event when DB has no assistant messages yet", async () => {
-    vi.mocked(getSessionDetail).mockReturnValue({
-      id: "sess-2",
-      agentId: "dove",
-      startedAt: "2026-01-01T00:00:00Z",
-      label: "Test",
-      status: "running",
-      messages: [{ id: "u1", role: "user", segments: [{ type: "text", content: "hello" }] }],
-      progress: [],
-    });
-    stubSubscribe([]);
-
-    const ac = new AbortController();
-    const req = new Request("http://localhost/api/chat/stream/sess-2?after=0", {
-      signal: ac.signal,
-    });
-    const res = await GET(req, makeParams("sess-2"));
-    const events = await collectLiveSseEvents(res, ac);
-
-    expect(events).toContainEqual({ type: "session", sessionId: "sess-2" });
-    expect(events.filter((e) => e.type === "text")).toHaveLength(0);
-  });
-
-  it("sends no prefix events when DB has no detail", async () => {
-    vi.mocked(getSessionDetail).mockReturnValue(null);
+  it("sends nothing when the durable log is empty and no live events arrive", async () => {
+    vi.mocked(readSessionEventsAfter).mockReturnValue([]);
     stubSubscribe([]);
 
     const ac = new AbortController();
@@ -251,17 +214,11 @@ describe("Mode 2 — buffer gone, session running", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("delivers live buffer snapshot events after prefix events", async () => {
-    vi.mocked(getSessionDetail).mockReturnValue({
-      id: "sess-2",
-      agentId: "dove",
-      startedAt: "2026-01-01T00:00:00Z",
-      label: "Test",
-      status: "running",
-      messages: [{ id: "a1", role: "assistant", segments: [{ type: "text", content: "saved" }] }],
-      progress: [],
-    });
-    stubSubscribe([seqEvent({ type: "text", content: "live" }, 1)]);
+  it("delivers live buffer snapshot events after durable prefix events", async () => {
+    vi.mocked(readSessionEventsAfter).mockReturnValue([
+      { seq: 1, event: { type: "text", content: "saved" } },
+    ]);
+    stubSubscribe([seqEvent({ type: "text", content: "live" }, 2)]);
 
     const ac = new AbortController();
     const req = new Request("http://localhost/api/chat/stream/sess-2?after=0", {

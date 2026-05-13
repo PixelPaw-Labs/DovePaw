@@ -99,6 +99,17 @@ export type ChatSseEvent =
   | ChatSseGroupMember;
 
 /**
+ * Shape check for events read back from the durable session_events log.
+ * The discriminated union is tagged by `type`, so a presence + type-of check
+ * is enough to narrow safely without per-variant validation.
+ */
+export function isChatSseEvent(v: unknown): v is ChatSseEvent {
+  if (typeof v !== "object" || v === null) return false;
+  if (!("type" in v)) return false;
+  return typeof v.type === "string";
+}
+
+/**
  * "none" effort: suppresses all streaming text/tool/thinking events.
  * Emits done.content as a single batch once the result is confirmed clean.
  * Structural events (session, error, cancelled, permission, question, group_member) pass through.
