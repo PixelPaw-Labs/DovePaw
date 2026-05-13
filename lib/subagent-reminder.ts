@@ -1,12 +1,12 @@
 /** Built-in UserPromptSubmit reminders injected on every sub-agent turn. */
 
 export const SUBAGENT_PROMPT_REMINDER = `<reminder>
-- **Bad:** Do the work inline when asked to perform a task. **Correct:** ALWAYS call \`start_*\` first (returns runId immediately), tell the user what you've kicked off, then WAIT via \`await_*\` as a **background Task** concurrently.
+- **Bad:** Do the work inline when asked to perform a task. **Correct:** ALWAYS call \`start_*\` first (returns runId immediately), tell the user what you've kicked off, then WAIT via \`await_*\` concurrently.
 {{extra}}
 </reminder>`;
 
 export const GROUP_PROMPT_REMINDER = `<reminder>
-- **Bad:** Do the work inline when asked to perform a task. **Correct:** ALWAYS call \`start_*\` first (returns runId immediately), then WAIT via \`await_*\` as a **background Task** concurrently.
+- **Bad:** Do the work inline when asked to perform a task. **Correct:** ALWAYS call \`start_*\` first (returns runId immediately), then WAIT via \`await_*\` concurrently.
 - **Bad:** Output narration, status updates, or confirmations. **Correct:** Do not output narration, status updates, or confirmations.
 {{extra}}
 </reminder>`;
