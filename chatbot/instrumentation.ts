@@ -47,11 +47,14 @@ export async function register(): Promise<void> {
     await mkdir(dirname(OPENVIKING_PORT_FILE), { recursive: true });
     await writeFile(OPENVIKING_PORT_FILE, JSON.stringify({ port }, null, 2));
     installShutdownHandlers();
-    consola.success(`OpenViking sidecar ready on :${port}`);
+    consola.success(`OpenViking sidecar ready at http://localhost:${port}`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // Wipe any stale port file from a previous successful boot — otherwise
+    // callers reading `~/.dovepaw/.openviking-port.json` see a dead port.
+    await rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
     consola.warn(
-      `OpenViking sidecar not available (${msg}). Group chat will fall back to .md moments.`,
+      `OpenViking sidecar boot failed on port ${port} (${msg}). Group chat will fall back to .md moments.`,
     );
   }
 }
