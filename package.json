@@ -54,7 +54,7 @@
     "@xyflow/react": "^12.10.2",
     "ai": "^6.0.158",
     "animejs": "^4.3.6",
-    "better-sqlite3": "^12.8.0",
+    "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
