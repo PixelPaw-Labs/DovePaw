@@ -14,6 +14,7 @@ import {
   buildHandoffConsiderationPrompt,
   groupStartHandoffHook,
   groupAwaitHandoffHook,
+  awaitHandoffNoActionHook,
   makeGroupScriptAwaitToneHook,
 } from "@/lib/agent-link-hooks";
 import { buildAgentHooks } from "@/lib/hooks";
@@ -84,6 +85,7 @@ export function buildSubAgentHooks(
     PostToolUse: [
       ...(base.PostToolUse ?? []),
       ...(notifHooks.PostToolUse ?? []),
+      ...(hasAgentLinks && !isAskMode ? [awaitHandoffNoActionHook] : []),
       ...(isGroupMode
         ? [groupStartHandoffHook, groupAwaitHandoffHook, makeGroupScriptAwaitToneHook(manifestKey)]
         : []),

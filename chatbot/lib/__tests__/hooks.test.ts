@@ -959,6 +959,75 @@ describe("buildSubAgentHooks — group handoff silence hooks", () => {
   });
 });
 
+// ─── buildSubAgentHooks — await handoff no-action reminder ───────────────────
+
+describe("buildSubAgentHooks — await handoff no-action reminder", () => {
+  it("is absent when there are no agent link tools", () => {
+    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
+    expect(hooks.PostToolUse).toHaveLength(1);
+  });
+
+  it("is absent in ask mode even with agent links", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      true,
+    );
+    expect(hooks.PostToolUse).toHaveLength(1);
+  });
+
+  it("injects no-action reminder after await_* handoff tools when links exist", async () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+      "test_agent",
+    );
+    expect(hooks.PostToolUse).toHaveLength(2);
+    const fn = hooks.PostToolUse![1]!.hooks[0]!;
+    const result = await callHook(fn, postToolUseByName("mcp__agents__await_chat_to_fixer"));
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain(
+      "Never try to action with skill or tools based on the target agent response",
+    );
+  });
+
+  it("fires for await_review_with_* and await_escalate_to_* as well", async () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
+      makeRegistry(),
+      "test_agent",
+    );
+    const fn = hooks.PostToolUse![1]!.hooks[0]!;
+    const reviewResult = await callHook(
+      fn,
+      postToolUseByName("mcp__agents__await_review_with_reviewer"),
+    );
+    const escalateResult = await callHook(
+      fn,
+      postToolUseByName("mcp__agents__await_escalate_to_supervisor"),
+    );
+    expect(
+      (reviewResult as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput
+        .additionalContext,
+    ).toContain("Never try to action");
+    expect(
+      (escalateResult as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput
+        .additionalContext,
+    ).toContain("Never try to action");
+  });
+});
+
 // ─── buildSubAgentHooks — group script await tone hook ───────────────────────
 
 describe("buildSubAgentHooks — group script await tone hook", () => {
