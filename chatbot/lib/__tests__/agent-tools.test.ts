@@ -75,7 +75,7 @@ import {
   justificationField,
   MGMT_TOOL,
 } from "@/lib/agent-tools";
-import { withStartReminder } from "@@/lib/subagent-reminder";
+import { withStartReminder, stripStartReminder } from "@@/lib/subagent-reminder";
 import type { CollectedStream } from "@/lib/a2a-client";
 import {
   resolveAgentPort,
@@ -484,6 +484,23 @@ describe("tool name helpers", () => {
     expect(withStartReminder("do the thing", "fixer")).toBe(
       'do the thing\n<reminder>Must call "start_fixer" tool</reminder>',
     );
+  });
+
+  it("stripStartReminder removes the reminder suffix added by withStartReminder", () => {
+    const wrapped = withStartReminder("do the thing", "fixer");
+    expect(stripStartReminder(wrapped)).toBe("do the thing");
+  });
+
+  it("stripStartReminder strips reminders for any manifest key and leaves surrounding content intact", () => {
+    const instruction =
+      '{"assignee": "dev@example.com", "outPath": "/tmp/discovery.json"}\n<reminder>Must call "start_my_agent" tool</reminder>';
+    expect(stripStartReminder(instruction)).toBe(
+      '{"assignee": "dev@example.com", "outPath": "/tmp/discovery.json"}',
+    );
+  });
+
+  it("stripStartReminder is a no-op when no start reminder is present", () => {
+    expect(stripStartReminder("plain instruction")).toBe("plain instruction");
   });
 
   it("justificationField is required (not optional)", () => {

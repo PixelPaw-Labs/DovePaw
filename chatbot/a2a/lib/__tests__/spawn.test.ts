@@ -150,6 +150,15 @@ describe("startScript / awaitScript", () => {
     const result = await awaitScript("no-such-id");
     expect(result.status).toBe("not_found");
   });
+
+  it("strips the <reminder>Must call start_* tool</reminder> tag before spawning the script", async () => {
+    makeProc();
+    const instruction =
+      '{"assignee":"dev@example.com"}\n<reminder>Must call "start_my_agent" tool</reminder>';
+    startScript(BASE_CONFIG, instruction);
+    const scriptArgs = mockSpawn.mock.calls[0]?.[1] as string[];
+    expect(scriptArgs).toEqual([BASE_CONFIG.scriptPath, '{"assignee":"dev@example.com"}']);
+  });
 });
 
 describe("spawnAndCollect", () => {

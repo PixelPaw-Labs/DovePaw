@@ -26,6 +26,17 @@ function buildMemoryBullet(memoryDir: string, startToolName?: string): string {
 export const withStartReminder = (instruction: string, manifestKey: string): string =>
   `${instruction}\n<reminder>Must call "start_${manifestKey}" tool</reminder>`;
 
+/**
+ * Removes any `<reminder>Must call "start_*" tool</reminder>` tags from the instruction.
+ *
+ * The start-tool reminder is aimed at the sub-agent LLM, not the underlying script.
+ * Sub-agents sometimes copy their incoming instruction (reminder included) into the
+ * `start_*` tool call, so we strip it defensively before handing the instruction to
+ * the spawned process.
+ */
+export const stripStartReminder = (instruction: string): string =>
+  instruction.replace(/\n*<reminder>Must call "start_[^"]*" tool<\/reminder>\n*/g, "");
+
 /** Appends the ask-mode memory workflow reminder to the instruction. No-op when memoryDir is absent. */
 export const withMemoryReminder = (
   instruction: string,

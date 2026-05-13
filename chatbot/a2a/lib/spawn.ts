@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN, OPENVIKING_CLI_CONFIG, OPENVIKING_PORT_FILE } from "@/lib/paths";
+import { stripStartReminder } from "@@/lib/subagent-reminder";
 import type { AgentConfig } from "./agent-config-builder";
 export type {
   ScriptCompletedContent,
@@ -162,7 +163,7 @@ export function startScript(
   runId: string = randomUUID(),
 ): { runId: string } {
   const startTime = Date.now();
-  const { promise } = spawnAndCollect(config, instruction, signal);
+  const { promise } = spawnAndCollect(config, stripStartReminder(instruction), signal);
 
   runningScripts.set(runId, { phase: "running", promise, startTime });
   // Cache the output when the process exits so awaitScript can collect it
