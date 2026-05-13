@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import {
   AgentRunner,
   appendMemoryReminder,
+  deriveApprovalsReviewer,
   resolveClaudeSecurityOpts,
   resolveCodexSandboxMode,
   resolveCodexApprovalPolicy,
@@ -440,5 +441,27 @@ describe("appendMemoryReminder", () => {
   it("treats an empty env value as unset", () => {
     process.env.DOVE_MEMORY_REMINDER = "   ";
     expect(appendMemoryReminder("be concise")).toBe("be concise");
+  });
+});
+
+describe("deriveApprovalsReviewer", () => {
+  it("returns undefined when approvalPolicy is undefined", () => {
+    expect(deriveApprovalsReviewer(undefined)).toBeUndefined();
+  });
+
+  it("returns undefined when approvalPolicy is 'never' (no approvals required)", () => {
+    expect(deriveApprovalsReviewer("never")).toBeUndefined();
+  });
+
+  it("returns 'user' for 'untrusted' (selective approvals warrant human review)", () => {
+    expect(deriveApprovalsReviewer("untrusted")).toBe("user");
+  });
+
+  it("returns 'auto_review' for 'on-request' (autonomous default, reduce friction)", () => {
+    expect(deriveApprovalsReviewer("on-request")).toBe("auto_review");
+  });
+
+  it("returns 'auto_review' for 'on-failure' (post-failure review automatable)", () => {
+    expect(deriveApprovalsReviewer("on-failure")).toBe("auto_review");
   });
 });

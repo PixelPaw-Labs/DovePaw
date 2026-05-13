@@ -50,6 +50,20 @@ export function resolveCodexApprovalPolicy(
   return "never";
 }
 
+/**
+ * Picks Codex's `approvals_reviewer` value based on the active approval policy.
+ * Returns undefined when approvals are disabled (`never`) — the field is irrelevant.
+ * `untrusted` defers to a human; everything else can route through auto_review to
+ * reduce friction in autonomous runs.
+ */
+export function deriveApprovalsReviewer(
+  policy: ApprovalMode | undefined,
+): "auto_review" | "user" | undefined {
+  if (!policy || policy === "never") return undefined;
+  if (policy === "untrusted") return "user";
+  return "auto_review";
+}
+
 export function resolveClaudeSecurityOpts(
   claudeOpts: ClaudeRunOpts | undefined,
   env: Record<string, string | undefined> = process.env,
@@ -164,6 +178,11 @@ export class AgentRunner {
     const appendSystemPrompt = appendMemoryReminder(opts.appendSystemPrompt);
     if (isCodexModel(model)) {
       const codexPrompt = opts.onCodexPrompt ? opts.onCodexPrompt(prompt) : prompt;
+      const approvalPolicy = resolveCodexApprovalPolicy();
+      const approvalsReviewer = deriveApprovalsReviewer(approvalPolicy);
+      const config = approvalsReviewer
+        ? { approvals_reviewer: approvalsReviewer, ...opts.codexOpts?.config }
+        : opts.codexOpts?.config;
       return new CodexRunner(this.logDir).run(codexPrompt, {
         cwd: opts.cwd,
         taskName: opts.taskName,
@@ -173,11 +192,11 @@ export class AgentRunner {
         additionalDirectories: opts.additionalDirectories,
         resumeSession: opts.resumeSession,
         appendSystemPrompt,
-        config: opts.codexOpts?.config,
+        config,
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
         webSearchMode: opts.codexOpts?.webSearchMode,
         sandboxMode: resolveCodexSandboxMode(opts.codexOpts),
-        approvalPolicy: resolveCodexApprovalPolicy(),
+        approvalPolicy,
         webSearchEnabled: resolveCodexWebSearchEnabled(opts.codexOpts),
       } satisfies CodexRunOpts);
     }
