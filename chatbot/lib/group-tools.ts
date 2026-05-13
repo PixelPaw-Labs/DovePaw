@@ -339,6 +339,11 @@ export function makeAwaitGroupTool(
         if (registry) {
           const record = await readGroupTaskRecord(groupContextId);
           record?.tasks.forEach((t) => registry.resolve(t.taskId));
+          // Also resolve the groupContextId itself — handles the case where a
+          // group member task timed out and was re-registered by TaskPoller with
+          // idKey:"taskId" pointing to the member's task ID (used as groupContextId
+          // here). Without this, those timeout-reregistered entries never clear.
+          registry.resolve(groupContextId);
         }
         return {
           content: [
