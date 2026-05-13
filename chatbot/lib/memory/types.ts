@@ -34,6 +34,14 @@ export interface MemoryProvider {
    * Must include the roster bullet, the read/write instructions, and the writing pattern.
    */
   buildReminder(workspacePath: string, groupContextId: string): string;
+
+  /**
+   * Optional graceful teardown. Implementations that own a child process
+   * (e.g. OpenVikingMemoryProvider) implement this to SIGTERM and await
+   * the child's exit so the data-directory file lock is released before any
+   * caller spawns a replacement.
+   */
+  shutdown?(): Promise<void>;
 }
 
 // ─── Shared writing pattern ───────────────────────────────────────────────────

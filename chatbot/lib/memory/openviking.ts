@@ -8,7 +8,7 @@
  * every `ov` call.
  *
  * Boot lifecycle (static `boot()`):
- *   ensureSidecarConfig → preflight → spawn openviking-server → waitForReady → writeCliConfig
+ *   ensureSidecarConfig → preflight → spawn openviking-server → waitForReady
  *
  * Per-group bootstrap (instance `initGroup()`):
  *   `ov mkdir viking://agent/<id>/moments`
@@ -19,18 +19,13 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { consola } from "consola";
 import { z } from "zod";
-import {
-  OPENVIKING_CONFIG_DIR,
-  OPENVIKING_SERVER_CONFIG,
-  OPENVIKING_CLI_CONFIG,
-  OPENVIKING_DATA_DIR,
-} from "@@/lib/paths";
+import { OPENVIKING_CONFIG_DIR, OPENVIKING_SERVER_CONFIG, OPENVIKING_DATA_DIR } from "@@/lib/paths";
 import type { MemoryProvider } from "./types";
 import { indentedMomentsPattern, rosterBullet } from "./types";
-import { terminateChild } from "@/lib/process-orphan-cleanup";
+import { KILL_ESCALATION_MS } from "@/lib/process-orphan-cleanup";
 import { httpHealthProbe } from "@/lib/http-health-probe";
 
 const HEALTH_TIMEOUT_MS = 30_000;
@@ -85,7 +80,6 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
     const proc = spawnSidecar(port);
     try {
       await waitForReady(port);
-      await writeCliConfig(port);
     } catch (err) {
       try {
         proc.kill("SIGTERM");
@@ -95,9 +89,35 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
     return new OpenVikingMemoryProvider(port, proc);
   }
 
-  shutdown(): void {
-    if (!this.proc) return;
-    terminateChild(this.proc);
+  /**
+   * Gracefully terminate the sidecar and wait for it to actually exit so the
+   * data-directory file lock at `OPENVIKING_DATA_DIR` is released before any
+   * caller tries to spawn a replacement. SIGTERM first, then SIGKILL as a
+   * backstop after `KILL_ESCALATION_MS`. The kernel always reaps the child on
+   * SIGKILL and releases its file locks as part of cleanup, so awaiting the
+   * `exit` event is the same as awaiting lock release.
+   */
+  async shutdown(): Promise<void> {
+    const proc = this.proc;
+    if (!proc) return;
+    if (proc.exitCode !== null || proc.signalCode !== null) return;
+
+    const exited = new Promise<void>((resolve) => {
+      proc.once("exit", () => resolve());
+    });
+    try {
+      proc.kill("SIGTERM");
+    } catch {}
+    const sigkillTimer = setTimeout(() => {
+      try {
+        proc.kill("SIGKILL");
+      } catch {}
+    }, KILL_ESCALATION_MS);
+    try {
+      await exited;
+    } finally {
+      clearTimeout(sigkillTimer);
+    }
   }
 
   async initGroup(groupContextId: string, _workspacePath: string): Promise<void> {
@@ -113,15 +133,31 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
     return `You are participating in a group task. Before starting:
 ${rosterBullet(workspacePath)}
 - Query past moments before acting via the OpenViking HTTP API:
-    curl -sX POST ${base}/api/v1/search/find \\
-      -H "X-OpenViking-Agent: ${groupContextId}" \\
-      -H "Content-Type: application/json" \\
-      -d '{"query": "<topic>", "node_limit": 10}'
+\`\`\`
+curl -sX POST ${base}/api/v1/search/find \\
+  -H "X-OpenViking-Agent: ${groupContextId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"query": "<topic>", "target_uri": "viking://agent/${groupContextId}/moments", "limit": 10}'
+\`\`\`
 - Save moments (decisions, artifacts, insights) via the sessions API
-  — send \`X-OpenViking-Agent: ${groupContextId}\` on all three calls:
-    1. POST ${base}/api/v1/sessions               → returns {result:{session_id:SID}}
-    2. POST ${base}/api/v1/sessions/SID/messages  body: {"role":"user","content":"<text>"}
-    3. POST ${base}/api/v1/sessions/SID/commit
+  — send \`X-OpenViking-Agent: ${groupContextId}\` on all three calls.
+  Step 1 returns \`{result:{session_id:SID}}\` — use that SID in steps 2 and 3:
+\`\`\`
+curl -sX POST ${base}/api/v1/sessions \\
+  -H "X-OpenViking-Agent: ${groupContextId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{}'
+
+curl -sX POST ${base}/api/v1/sessions/SID/messages \\
+  -H "X-OpenViking-Agent: ${groupContextId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{"role": "user", "content": "<moment>"}'
+
+curl -sX POST ${base}/api/v1/sessions/SID/commit \\
+  -H "X-OpenViking-Agent: ${groupContextId}" \\
+  -H "Content-Type: application/json" \\
+  -d '{}'
+\`\`\`
   Writing style:
 ${indentedMomentsPattern()}`;
   }
@@ -190,35 +226,28 @@ function waitForReady(port: number): Promise<void> {
   });
 }
 
-/**
- * Write a minimal `ovcli.conf` for dev-mode auth. No api_key — the sidecar
- * binds to localhost and accepts every request as default/default ROOT.
- * The `ov` CLI still needs the URL and tenant defaults so its requests
- * land in the right account/user namespace.
- */
-async function writeCliConfig(port: number): Promise<void> {
-  const config = {
-    url: `http://localhost:${port}`,
-    account: "default",
-    user: "default",
-  };
-  await writeFile(OPENVIKING_CLI_CONFIG, JSON.stringify(config, null, 2), { mode: 0o600 });
-  await chmod(OPENVIKING_CLI_CONFIG, 0o600);
-}
-
 async function ensureNamespace(port: number, groupContextId: string): Promise<void> {
-  const { exitCode, stderr } = await runOv(port, [
-    "mkdir",
-    "--parents",
-    "--agent-id",
-    groupContextId,
-    `viking://agent/${groupContextId}/moments`,
-  ]);
-  if (exitCode !== 0 && !/already exists/i.test(stderr)) {
-    throw new Error(
-      `ov mkdir viking://agent/${groupContextId}/moments failed (exit ${exitCode}): ${stderr}`,
-    );
-  }
+  const uri = `viking://agent/${groupContextId}/moments`;
+  const response = await fetch(`http://localhost:${port}/api/v1/fs/mkdir`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-OpenViking-Agent": groupContextId,
+    },
+    body: JSON.stringify({ uri }),
+  });
+  // OpenViking envelope: { status: "ok"|"error", result?, error?: { code, message } }.
+  // ALREADY_EXISTS is treated as success — same idempotency the CLI offered via --parents.
+  const bodySchema = z.object({
+    status: z.string().optional(),
+    error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
+  });
+  const raw: unknown = await response.json().catch(() => undefined);
+  const body = bodySchema.safeParse(raw).data;
+  if (response.ok && body?.status === "ok") return;
+  if (body?.error?.code === "ALREADY_EXISTS") return;
+  const message = body?.error?.message ?? `HTTP ${response.status}`;
+  throw new Error(`POST /api/v1/fs/mkdir ${uri} failed: ${message}`);
 }
 
 /**
@@ -237,24 +266,4 @@ async function removeNamespace(port: number, groupContextId: string): Promise<vo
   } catch {
     // sidecar unreachable — drop silently
   }
-}
-
-/** Shell out to the ov CLI with the dovepaw cli config, return exit + stderr. */
-function runOv(port: number, args: string[]): Promise<{ exitCode: number; stderr: string }> {
-  const child = spawn("ov", args, {
-    env: {
-      ...process.env,
-      OPENVIKING_CLI_CONFIG_FILE: OPENVIKING_CLI_CONFIG,
-      OV_SERVER_URL: `http://localhost:${port}`,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  let stderr = "";
-  child.stderr?.on("data", (chunk: Buffer) => {
-    stderr += chunk.toString();
-  });
-  return new Promise((resolve, reject) => {
-    child.on("close", (code) => resolve({ exitCode: code ?? 0, stderr }));
-    child.on("error", reject);
-  });
 }

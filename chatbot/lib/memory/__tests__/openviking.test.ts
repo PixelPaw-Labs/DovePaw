@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { EventEmitter } from "node:events";
 import { join } from "node:path";
+import type { ChildProcess } from "node:child_process";
 
 const { TMP_OV_ROOT } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -83,10 +85,142 @@ describe("OpenVikingMemoryProvider.buildReminder", () => {
     expect(body).not.toContain("ov add-resource");
   });
 
+  it("uses the find endpoint's real request shape (target_uri + limit, not node_limit)", () => {
+    const body = provider.buildReminder("/ws/x", "grp-xyz");
+    // Mirrors crates/ov_cli/src/client.rs::find — { query, target_uri, limit, ... }
+    expect(body).toContain('"target_uri": "viking://agent/grp-xyz/moments"');
+    expect(body).toContain('"limit": 10');
+    expect(body).not.toContain('"node_limit"');
+  });
+
+  it("wraps the find curl in a fenced code block", () => {
+    const body = provider.buildReminder("/ws/x", "grp-xyz");
+    // The find call sits between ``` fences so agents can paste it cleanly.
+    const fence = body.match(/```[\s\S]*?\/api\/v1\/search\/find[\s\S]*?```/);
+    expect(fence).not.toBeNull();
+  });
+
+  it("uses the save-moment endpoint's real request shape and wraps in a code fence", () => {
+    const body = provider.buildReminder("/ws/x", "grp-xyz");
+    // Mirrors crates/ov_cli/src/commands/session.rs::add_memory — three POSTs.
+    // Step 1: empty body on create. Step 2: role+content. Step 3: empty body on commit.
+    expect(body).toMatch(/POST [^\s]*\/api\/v1\/sessions(?:\s|\\\n)[\s\S]*?-d '\{\}'/);
+    expect(body).toContain('{"role": "user", "content": "<moment>"}');
+    expect(body).toMatch(/POST [^\s]*\/api\/v1\/sessions\/[^/\s]+\/commit[\s\S]*?-d '\{\}'/);
+    // All three save-moment calls sit between ``` fences.
+    const fence = body.match(/```[\s\S]*?\/api\/v1\/sessions[\s\S]*?\/commit[\s\S]*?```/);
+    expect(fence).not.toBeNull();
+  });
+
   it("includes the roster bullet and writing pattern", () => {
     const body = provider.buildReminder("/ws/x", "grp-xyz");
     expect(body).toContain("/ws/x/members/roster.md");
     expect(body).toContain("All substance stays. Only fluff dies.");
+  });
+});
+
+describe("OpenVikingMemoryProvider.shutdown", () => {
+  function makeFakeProc(): {
+    proc: ChildProcess;
+    killCalls: NodeJS.Signals[];
+    simulateExit: () => void;
+  } {
+    const killCalls: NodeJS.Signals[] = [];
+    const emitter = new EventEmitter() as EventEmitter & {
+      kill?: unknown;
+      pid?: number;
+      exitCode: number | null;
+      signalCode: NodeJS.Signals | null;
+    };
+    emitter.kill = (sig: NodeJS.Signals): boolean => {
+      killCalls.push(sig);
+      return true;
+    };
+    emitter.pid = 99999;
+    emitter.exitCode = null;
+    emitter.signalCode = null;
+    return {
+      proc: emitter as unknown as ChildProcess,
+      killCalls,
+      simulateExit: () => emitter.emit("exit", 0, null),
+    };
+  }
+
+  it("waits for the child's exit event before resolving", async () => {
+    const { proc, killCalls, simulateExit } = makeFakeProc();
+    const provider = new OpenVikingMemoryProvider(0, proc);
+
+    let resolved = false;
+    const promise = provider.shutdown().then(() => {
+      resolved = true;
+    });
+
+    // Yield twice so any synchronously-attached listeners run.
+    await new Promise((r) => setImmediate(r));
+    expect(killCalls).toEqual(["SIGTERM"]);
+    expect(resolved).toBe(false);
+
+    simulateExit();
+    await promise;
+    expect(resolved).toBe(true);
+  });
+
+  it("resolves immediately when there is no child process handle", async () => {
+    const provider = new OpenVikingMemoryProvider(0, null);
+    await expect(provider.shutdown()).resolves.toBeUndefined();
+  });
+});
+
+describe("OpenVikingMemoryProvider.initGroup", () => {
+  it("POSTs /api/v1/fs/mkdir with the agent's viking URI and agent header", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ status: "ok", result: { uri: "viking://agent/grp-xyz/moments" } }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    const provider = new OpenVikingMemoryProvider(51234);
+    await provider.initGroup("grp-xyz", "/tmp");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("http://localhost:51234/api/v1/fs/mkdir");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
+    expect((init.headers as Record<string, string>)["X-OpenViking-Agent"]).toBe("grp-xyz");
+    expect(JSON.parse(init.body as string)).toEqual({ uri: "viking://agent/grp-xyz/moments" });
+    fetchSpy.mockRestore();
+  });
+
+  it("treats ALREADY_EXISTS as success (matches CLI --parents idempotency)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "error",
+          error: { code: "ALREADY_EXISTS", message: "viking://agent/grp-xyz/moments exists" },
+        }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const provider = new OpenVikingMemoryProvider(51234);
+    await expect(provider.initGroup("grp-xyz", "/tmp")).resolves.toBeUndefined();
+    fetchSpy.mockRestore();
+  });
+
+  it("throws on any non-ALREADY_EXISTS error", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "error",
+          error: { code: "INTERNAL", message: "server explosion" },
+        }),
+        { status: 500, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const provider = new OpenVikingMemoryProvider(51234);
+    await expect(provider.initGroup("grp-xyz", "/tmp")).rejects.toThrow(/server explosion/);
+    fetchSpy.mockRestore();
   });
 });
 

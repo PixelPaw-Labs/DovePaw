@@ -54,6 +54,7 @@ vi.mock("@/lib/memory/openviking", async () => {
 
 import { OPENVIKING_SERVER_CONFIG } from "@@/lib/paths";
 import { USER_GLOBAL_OV_CONF } from "@/lib/openviking/prefill";
+import { OpenVikingMemoryProvider } from "@/lib/memory/openviking";
 import { GET, POST } from "../openviking/config/route";
 
 const SAMPLE_CONFIG = {
@@ -128,9 +129,11 @@ describe("GET /api/openviking/config", () => {
 describe("POST /api/openviking/config", () => {
   beforeEach(() => {
     if (existsSync(OPENVIKING_SERVER_CONFIG)) rmSync(OPENVIKING_SERVER_CONFIG);
+    if (existsSync(PORT_FILE_FOR_TEST)) rmSync(PORT_FILE_FOR_TEST);
   });
   afterEach(() => {
     if (existsSync(OPENVIKING_SERVER_CONFIG)) rmSync(OPENVIKING_SERVER_CONFIG);
+    if (existsSync(PORT_FILE_FOR_TEST)) rmSync(PORT_FILE_FOR_TEST);
   });
 
   it("validates the body and writes the dovepaw-scoped ov.conf", async () => {
@@ -155,6 +158,54 @@ describe("POST /api/openviking/config", () => {
     });
     const res = await POST(request);
     expect(res.status).toBe(400);
+  });
+
+  it("calls shutdown via duck-type check, surviving HMR-divergent class identity", async () => {
+    // Simulate the Next.js dev HMR case: the override returned by
+    // getMemoryProvider is an OpenViking-shaped object whose class identity
+    // does NOT match the OpenVikingMemoryProvider imported by route.ts. The
+    // POST handler must still call .shutdown() on it.
+    const shutdownSpy = vi.fn().mockResolvedValue(undefined);
+    const fakeOverride = {
+      port: 11111,
+      proc: null,
+      initGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      buildReminder: () => "",
+      shutdown: shutdownSpy,
+    };
+    const memoryModule = await import("@/lib/memory");
+    vi.spyOn(memoryModule, "getMemoryProvider").mockResolvedValueOnce(
+      fakeOverride as unknown as Awaited<ReturnType<typeof memoryModule.getMemoryProvider>>,
+    );
+
+    const request = new Request("http://localhost/api/openviking/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: SAMPLE_CONFIG }),
+    });
+    await POST(request);
+    expect(shutdownSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes the stale port file when boot fails so consumers don't see a dead sidecar", async () => {
+    // Simulate a previously-running sidecar — its port file is still on disk.
+    writeFileSync(PORT_FILE_FOR_TEST, JSON.stringify({ port: 57658 }));
+    vi.mocked(OpenVikingMemoryProvider.boot).mockRejectedValueOnce(
+      new Error("Health probe at http://localhost:49793/health did not respond within 30000ms"),
+    );
+
+    const request = new Request("http://localhost/api/openviking/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config: SAMPLE_CONFIG }),
+    });
+    const res = await POST(request);
+    const body = (await res.json()) as { status: string };
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe("config-saved-sidecar-down");
+    expect(existsSync(PORT_FILE_FOR_TEST)).toBe(false);
   });
 
   it("writes dev-mode server block and drops any root_api_key the body sends", async () => {

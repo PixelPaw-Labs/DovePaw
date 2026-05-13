@@ -16,7 +16,7 @@
  *                                registers the freshly-spawned one.
  */
 
-import { mkdir, readFile, writeFile, access } from "node:fs/promises";
+import { mkdir, readFile, writeFile, access, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { consola } from "consola";
@@ -28,7 +28,7 @@ import {
 import { USER_GLOBAL_OV_CONF } from "@/lib/openviking/prefill";
 import { getMemoryProvider, setMemoryProvider } from "@/lib/memory";
 import { DEV_MODE_SERVER_BLOCK, OpenVikingMemoryProvider } from "@/lib/memory/openviking";
-import { writePidFile } from "@/lib/process-orphan-cleanup";
+import { removePidFile, writePidFile } from "@/lib/process-orphan-cleanup";
 import { getAvailablePort } from "@/lib/get-available-port";
 
 const denseEmbeddingSchema = z.object({
@@ -109,13 +109,15 @@ export async function POST(request: Request): Promise<Response> {
   await mkdir(dirname(OPENVIKING_SERVER_CONFIG), { recursive: true });
   await writeFile(OPENVIKING_SERVER_CONFIG, JSON.stringify(merged, null, 2), { mode: 0o600 });
 
-  // Shut down the previous sidecar (provider.shutdown handles SIGTERM +
-  // SIGKILL backstop internally) so we don't orphan it on the host before
-  // booting the fresh one. Best-effort.
+  // Shut down the previous sidecar AND wait for it to actually exit so the
+  // data-directory file lock at OPENVIKING_DATA_DIR is released. If we don't
+  // await this, the fresh sidecar spawns while the old one still holds the
+  // lock — openviking-server then exits cleanly with DataDirectoryLocked,
+  // and our /health probe times out at 30s with no process listening.
   const previous = await getMemoryProvider();
-  if (previous instanceof OpenVikingMemoryProvider) {
+  if (previous.shutdown) {
     try {
-      previous.shutdown();
+      await previous.shutdown();
     } catch {}
     setMemoryProvider(null);
   }
@@ -130,6 +132,11 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ ok: true, status: "running", port });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    // Drop stale port/pid files from the previous sidecar — it was already
+    // SIGTERMed above, and the new boot failed, so any reader of these files
+    // would now see a dead sidecar. Mirrors the cleanup in instrumentation.ts.
+    await rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
+    removePidFile(OPENVIKING_SIDECAR_PID_FILE);
     consola.warn(`OpenViking reboot after config save failed: ${msg}`);
     return Response.json({ ok: true, status: "config-saved-sidecar-down", error: msg });
   }

@@ -60,13 +60,12 @@ export async function register(): Promise<void> {
 }
 
 function installShutdownHandlers(): void {
-  // Provider.shutdown() does SIGTERM + SIGKILL backstop internally — see
-  // OpenVikingMemoryProvider.shutdown() → terminateChild(). The cleanup here
+  // Provider.shutdown() does SIGTERM + SIGKILL backstop and awaits proc exit.
+  // At process-exit time we can't await — fire it for the signal side-effect
+  // and let the OS reap the child via signal propagation. The cleanup here
   // only owns DovePaw-side state (port file, PID file).
   onProcessExit(() => {
-    try {
-      activeProvider?.shutdown();
-    } catch {}
+    void activeProvider?.shutdown().catch(() => {});
     void rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
     removePidFile(OPENVIKING_SIDECAR_PID_FILE);
   });
