@@ -155,7 +155,7 @@ export function AgentSidebar({
           </div>
           <div>
             <h2 className="text-xs uppercase tracking-[0.2em] font-bold text-muted-foreground">
-              DOVEPAW AGENTS
+              DOVEPAW STUDIO
             </h2>
             <p className="text-[10px] text-muted-foreground/60 uppercase tracking-widest">
               AI Workforce
