@@ -20,6 +20,8 @@ import { getMemoryProvider } from "@/lib/memory";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";
 import { markGroupTaskDone, pendingGroupTasks, readGroupTaskRecord } from "@/lib/group-task-store";
+import { writeGroupGoal, buildGroupGoalIntent } from "@/lib/group-checkpoint";
+import { recoverGroupGaps } from "@/lib/group-recovery";
 
 // ─── Group tool name helpers ──────────────────────────────────────────────────
 
@@ -119,6 +121,12 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
       if (repoSlugs.length > 0) {
         await cloneReposIntoWorkspace(groupWorkspacePath, repoSlugs);
       }
+
+      await writeGroupGoal(
+        groupWorkspacePath,
+        groupContextId,
+        buildGroupGoalIntent(group.name, group.description),
+      ).catch((err) => consola.warn("writeGroupGoal failed (non-fatal):", err));
 
       return {
         content: [
@@ -345,6 +353,28 @@ export function makeAwaitGroupTool(
           // here). Without this, those timeout-reregistered entries never clear.
           registry.resolve(groupContextId);
         }
+
+        const recovered = await recoverGroupGaps({
+          groupContextId,
+          groupName: group.name,
+          groupDescription: group.description,
+          memberDefs,
+          awaitToolName: doveAwaitGroupToolName(group.name),
+          signal,
+          registry,
+        });
+        if (recovered > 0) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Recovered ${recovered} pipeline gap(s) in group "${group.name}". Re-polling.`,
+              },
+            ],
+            structuredContent: { status: "still_running", groupContextId },
+          };
+        }
+
         return {
           content: [
             {

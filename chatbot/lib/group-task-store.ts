@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { GROUP_TASKS_DIR, groupTasksFile } from "@@/lib/paths";
 
-const groupTaskSourceSchema = z.enum(["group", "chat_to", "review", "escalate"]);
+export const groupTaskSourceSchema = z.enum(["group", "chat", "review", "escalation"]);
 const groupTaskSchema = z.object({
   taskId: z.string(),
   source: groupTaskSourceSchema,
@@ -24,9 +24,13 @@ const groupTaskSchema = z.object({
   status: z.enum(["running", "done"]),
   startedAt: z.string(),
   completedAt: z.string().optional(),
+  /** A2A context ID for session resumption in recovery. */
+  contextId: z.string().optional(),
 });
 const groupTaskRecordSchema = z.object({
   groupContextId: z.string(),
+  /** Shared workspace path for this group run — used by checkpoint writer. */
+  groupWorkspacePath: z.string().optional(),
   tasks: z.array(groupTaskSchema),
 });
 
@@ -46,7 +50,8 @@ async function exists(path: string): Promise<boolean> {
 async function readRecord(groupContextId: string): Promise<GroupTaskRecord | undefined> {
   const file = groupTasksFile(groupContextId);
   if (!(await exists(file))) return undefined;
-  return groupTaskRecordSchema.parse(JSON.parse(await readFile(file, "utf8")));
+  const result = groupTaskRecordSchema.safeParse(JSON.parse(await readFile(file, "utf8")));
+  return result.success ? result.data : undefined;
 }
 
 async function writeRecord(record: GroupTaskRecord): Promise<void> {
@@ -62,9 +67,14 @@ async function writeRecord(record: GroupTaskRecord): Promise<void> {
 export async function recordGroupTask(
   groupContextId: string,
   task: Omit<GroupTask, "status" | "startedAt" | "completedAt">,
+  groupWorkspacePath?: string,
 ): Promise<void> {
   const existing = (await readRecord(groupContextId)) ?? { groupContextId, tasks: [] };
   if (existing.tasks.some((t) => t.taskId === task.taskId)) return;
+  // Persist the workspace path on the record on first write (or backfill if absent).
+  if (groupWorkspacePath && !existing.groupWorkspacePath) {
+    existing.groupWorkspacePath = groupWorkspacePath;
+  }
   existing.tasks.push({ ...task, status: "running", startedAt: new Date().toISOString() });
   await writeRecord(existing);
 }
@@ -95,6 +105,36 @@ export async function readGroupTaskRecord(
   groupContextId: string,
 ): Promise<GroupTaskRecord | undefined> {
   return readRecord(groupContextId);
+}
+
+/**
+ * Looks up the group workspace path and A2A context ID for a given task ID.
+ * Used by TaskPoller.poll() to write checkpoints without knowing the group context upfront.
+ * Returns undefined when the task was not group-scoped or has no contextId.
+ */
+export async function getGroupWorkspaceForTask(taskId: string): Promise<
+  | {
+      workspacePath: string;
+      contextId: string;
+      source: GroupTaskSource;
+    }
+  | undefined
+> {
+  if (!(await exists(GROUP_TASKS_DIR))) return undefined;
+  const entries = (await readdir(GROUP_TASKS_DIR)).filter((e) => e.endsWith(".json"));
+  const records = await Promise.all(entries.map((e) => readRecord(e.slice(0, -".json".length))));
+  for (const record of records) {
+    if (!record?.groupWorkspacePath) continue;
+    const task = record.tasks.find((t) => t.taskId === taskId);
+    if (task?.contextId) {
+      return {
+        workspacePath: record.groupWorkspacePath,
+        contextId: task.contextId,
+        source: task.source,
+      };
+    }
+  }
+  return undefined;
 }
 
 export async function deleteGroupTaskLedger(groupContextId: string): Promise<void> {

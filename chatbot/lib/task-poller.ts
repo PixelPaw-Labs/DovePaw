@@ -9,6 +9,7 @@
  * resolution internally so pending-state logic is never duplicated.
  */
 
+import { consola } from "consola";
 import { TaskNotFoundError } from "@a2a-js/sdk/client";
 import {
   resolveAgentPort,
@@ -22,7 +23,13 @@ import {
 import type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { taskRuntime } from "@/lib/task-runtime";
-import { recordGroupTask, markGroupTaskDone, type GroupTaskSource } from "@/lib/group-task-store";
+import {
+  recordGroupTask,
+  markGroupTaskDone,
+  getGroupWorkspaceForTask,
+  type GroupTaskSource,
+} from "@/lib/group-task-store";
+import { writeGroupCheckpoint } from "@/lib/group-checkpoint";
 
 // ─── Content types ────────────────────────────────────────────────────────────
 
@@ -157,13 +164,22 @@ export class TaskPoller {
       // group context. Strictly keyed by groupContextId — non-group tasks are
       // not persisted.
       const groupContextId = extraMetadata?.["groupContextId"];
+      const groupWorkspacePath =
+        typeof extraMetadata?.["groupWorkspacePath"] === "string"
+          ? extraMetadata["groupWorkspacePath"]
+          : undefined;
       if (groupSource && typeof groupContextId === "string") {
-        await recordGroupTask(groupContextId, {
-          taskId,
-          source: groupSource,
-          memberKey: this.manifestKey,
-          displayName: this.displayName,
-        });
+        await recordGroupTask(
+          groupContextId,
+          {
+            taskId,
+            contextId: sessionContextId,
+            source: groupSource,
+            memberKey: this.manifestKey,
+            displayName: this.displayName,
+          },
+          groupWorkspacePath,
+        );
       }
 
       // Always drain to avoid stalling the EventQueue.
@@ -277,6 +293,30 @@ export class TaskPoller {
       // No-op when the task was never group-scoped (the ledger is strictly per
       // groupContextId; non-group tasks are simply absent from any record).
       await markGroupTaskDone(resolvedTaskId);
+
+      // Write a recovery checkpoint for every successfully completed group task.
+      // Non-fatal: checkpoint failure must never break the main poll result.
+      if (completed.status === "completed") {
+        void (async () => {
+          try {
+            const meta = await getGroupWorkspaceForTask(resolvedTaskId);
+            if (meta) {
+              await writeGroupCheckpoint(meta.workspacePath, {
+                memberKey: this.manifestKey,
+                displayName: this.displayName,
+                taskId: resolvedTaskId,
+                contextId: meta.contextId,
+                completedAt: new Date().toISOString(),
+                outputSummary: (result.result.output ?? "").slice(0, 500),
+                source: meta.source,
+              });
+            }
+          } catch (err) {
+            consola.warn("[group-checkpoint] Checkpoint write failed:", err);
+          }
+        })();
+      }
+
       return {
         content: [
           {

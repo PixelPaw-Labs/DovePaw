@@ -61,13 +61,13 @@ describe("group-task-store", () => {
     await recordGroupTask("ctx-1", sampleTask());
     await recordGroupTask("ctx-1", {
       taskId: "t-2",
-      source: "chat_to",
+      source: "chat",
       memberKey: "agent_b",
       displayName: "Agent B",
     });
     const record = await readGroupTaskRecord("ctx-1");
     expect(record!.tasks.map((t) => t.taskId)).toEqual(["t-1", "t-2"]);
-    expect(record!.tasks[1].source).toBe("chat_to");
+    expect(record!.tasks[1].source).toBe("chat");
   });
 
   it("isolates tasks per groupContextId", async () => {
@@ -99,7 +99,7 @@ describe("group-task-store", () => {
     await recordGroupTask("ctx-1", sampleTask());
     await recordGroupTask("ctx-2", {
       taskId: "t-2",
-      source: "escalate",
+      source: "escalation",
       memberKey: "agent_b",
       displayName: "Agent B",
     });
