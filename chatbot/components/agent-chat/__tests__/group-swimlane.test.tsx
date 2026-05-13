@@ -124,6 +124,21 @@ describe("GroupChatView swimlane", () => {
     expect(dot?.getAttribute("data-status")).toBe("running");
   });
 
+  it("colors done dots green (overriding the agent's iconBg)", () => {
+    mockSession([
+      { id: "done-1", role: "assistant", segments: text("finished"), agentId: "alpha" },
+    ]);
+    render(
+      <GroupChatView groupName="Squad" memberAgentIds={["alpha"]} agentConfigs={agentConfigs} />,
+    );
+    const bubble = document.querySelector('[data-step-id="done-1"]');
+    expect(bubble?.getAttribute("data-status")).toBe("done");
+    // The first span child renders the dot itself
+    const dot = bubble?.querySelector("span");
+    expect(dot?.className).toContain("bg-green-500");
+    expect(dot?.className).not.toContain("bg-alpha");
+  });
+
   it("renders a single member lane cleanly (no extras)", () => {
     mockSession([{ id: "1", role: "assistant", segments: text("solo"), agentId: "alpha" }]);
     render(
