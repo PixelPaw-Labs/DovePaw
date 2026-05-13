@@ -19,6 +19,7 @@ import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { getMemoryProvider } from "@/lib/memory";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";
+import { markGroupTaskDone, pendingGroupTasks } from "@/lib/group-task-store";
 
 // ─── Group tool name helpers ──────────────────────────────────────────────────
 
@@ -256,6 +257,7 @@ export function makeStartGroupTool(
             backgroundTasks: memberDrain,
             senderAgentId: "dove",
             extraMetadata: groupMeta,
+            groupSource: "group",
           });
           const taskId = (result.structuredContent as { taskId?: string } | undefined)?.taskId;
           if (taskId) {
@@ -263,9 +265,15 @@ export function makeStartGroupTool(
             if (backgroundTasks) backgroundTasks.push(...memberDrain);
             allMemberDrains.push(...memberDrain);
             if (memberDrain.length > 0) {
-              void memberDrain[0].then((collected) => {
-                setGroupMessage(taskId, collected.result.output);
-              });
+              void (async () => {
+                try {
+                  const collected = await memberDrain[0];
+                  setGroupMessage(taskId, collected.result.output);
+                  await markGroupTaskDone(taskId);
+                } catch (err) {
+                  consola.warn("group member drain cleanup failed:", err);
+                }
+              })();
             }
           }
         }),
@@ -308,12 +316,11 @@ export function makeAwaitGroupTool(
 ) {
   return tool(
     doveAwaitGroupToolName(group.name),
-    `Await all members of the "${group.name}" group. Re-call with the same memberTaskIds if still_running.`,
+    `Await all still-running tasks for the "${group.name}" group. Reads the live task list from the per-group ledger (keyed by groupContextId) — no memberTaskIds needed. Re-call with the same groupContextId if still_running.`,
     {
-      memberTaskIds: z
-        .record(z.string(), z.string())
-        .describe("memberTaskIds from start_group_* result"),
-      groupContextId: z.string().describe("groupContextId from start_group_* result"),
+      groupContextId: z
+        .string()
+        .describe("groupContextId from init_group_* / start_group_* result"),
       timeoutMs: z
         .number()
         .int()
@@ -324,49 +331,53 @@ export function makeAwaitGroupTool(
           ),
         ),
     },
-    async ({ memberTaskIds, groupContextId, timeoutMs }) => {
-      const entries = Object.entries(memberTaskIds);
+    async ({ groupContextId, timeoutMs }) => {
+      const pending = await pendingGroupTasks(groupContextId);
+      if (pending.length === 0) {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `No pending tasks for group "${group.name}" — all done.`,
+            },
+          ],
+          structuredContent: { status: "no_pending", groupContextId },
+        };
+      }
+
       const results = await Promise.all(
-        entries.map(([manifestKey, taskId]) => {
-          const memberDef = memberDefs.find((a) => a.manifestKey === manifestKey);
+        pending.map((t) => {
+          const memberDef = memberDefs.find((a) => a.manifestKey === t.memberKey);
           return new TaskPoller(
-            manifestKey,
-            memberDef?.displayName ?? manifestKey,
+            t.memberKey,
+            memberDef?.displayName ?? t.displayName,
             signal,
             registry,
             doveAwaitGroupToolName(group.name),
             memberDef?.name,
-          ).poll(taskId, timeoutMs);
+          ).poll(t.taskId, timeoutMs);
         }),
       );
 
-      const updatedIds: Record<string, string> = {};
-      let anyStillRunning = false;
-      for (let i = 0; i < entries.length; i++) {
-        const [key] = entries[i];
-        const sc = results[i].structuredContent as { status?: string; taskId?: string } | undefined;
-        if (sc?.status === "still_running" && sc.taskId) {
-          updatedIds[key] = sc.taskId;
-          anyStillRunning = true;
-        } else {
-          updatedIds[key] = memberTaskIds[key];
-        }
-      }
+      const anyStillRunning = results.some((r) => {
+        const sc = r.structuredContent as { status?: string } | undefined;
+        return sc?.status === "still_running";
+      });
 
       if (anyStillRunning) {
         return {
           content: [{ type: "text" as const, text: "Group still running. Re-call to poll." }],
-          structuredContent: { status: "still_running", memberTaskIds: updatedIds, groupContextId },
+          structuredContent: { status: "still_running", groupContextId },
         };
       }
 
       const combinedText = results
-        .map((r, i) => `[${entries[i][0]}]: ${r.content?.[0]?.text ?? ""}`)
+        .map((r, i) => `[${pending[i].memberKey}]: ${r.content?.[0]?.text ?? ""}`)
         .join("\n\n");
       return {
         content: [{ type: "text" as const, text: combinedText }],
         structuredContent: {
-          memberResults: Object.fromEntries(entries.map(([k], i) => [k, results[i]])),
+          memberResults: Object.fromEntries(pending.map((t, i) => [t.memberKey, results[i]])),
           groupContextId,
         },
       };

@@ -22,6 +22,7 @@ import {
 import type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { taskRuntime } from "@/lib/task-runtime";
+import { recordGroupTask, markGroupTaskDone, type GroupTaskSource } from "@/lib/group-task-store";
 
 // ─── Content types ────────────────────────────────────────────────────────────
 
@@ -112,11 +113,18 @@ export class TaskPoller {
       backgroundTasks,
       senderAgentId,
       extraMetadata,
+      groupSource,
     }: {
       contextId?: string;
       backgroundTasks?: Promise<CollectedStream>[];
       senderAgentId?: string;
       extraMetadata?: Record<string, unknown>;
+      /**
+       * Which delegation flow spawned this task. When provided AND
+       * `extraMetadata.groupContextId` is a string, the task is persisted to
+       * the per-group ledger so completion can be tracked across handoffs.
+       */
+      groupSource?: GroupTaskSource;
     } = {},
   ): Promise<StartToolResult> {
     const port = resolveAgentPort(this.manifestKey);
@@ -144,6 +152,19 @@ export class TaskPoller {
       taskRuntime.start(taskId);
       const { registry, awaitTool } = this;
       if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
+
+      // Persist to the per-group ledger when this task was spawned inside a
+      // group context. Strictly keyed by groupContextId — non-group tasks are
+      // not persisted.
+      const groupContextId = extraMetadata?.["groupContextId"];
+      if (groupSource && typeof groupContextId === "string") {
+        await recordGroupTask(groupContextId, {
+          taskId,
+          source: groupSource,
+          memberKey: this.manifestKey,
+          displayName: this.displayName,
+        });
+      }
 
       // Always drain to avoid stalling the EventQueue.
       // Returns CollectedStream so callers that track backgroundTasks can read the final output.
@@ -252,6 +273,10 @@ export class TaskPoller {
       if (this.agentName && this.awaitTool && completed.status === "completed") {
         taskRuntime.record(taskId, this.agentName, this.awaitTool);
       }
+      // Mark done in the group-task ledger if this taskId was registered there.
+      // No-op when the task was never group-scoped (the ledger is strictly per
+      // groupContextId; non-group tasks are simply absent from any record).
+      await markGroupTaskDone(resolvedTaskId);
       return {
         content: [
           {

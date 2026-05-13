@@ -48,6 +48,7 @@ import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { deleteSession, setSessionStatus } from "@/lib/db";
+import { deleteGroupTaskLedger } from "@/lib/group-task-store";
 import { enablePersistence } from "@/lib/persistence";
 import { SessionManager } from "@/lib/session-manager";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
@@ -407,5 +408,6 @@ export async function DELETE(request: Request) {
   deletedSessionIds.add(sessionId);
   agentContextRegistry.delete(sessionId);
   await deleteSession(sessionId);
+  await deleteGroupTaskLedger(sessionId);
   return Response.json({ ok: true });
 }

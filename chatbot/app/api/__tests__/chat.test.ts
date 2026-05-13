@@ -67,6 +67,8 @@ vi.mock("@@/lib/paths", () => ({
   LAUNCH_AGENTS_DIR: "/mock/launch",
   DOVEPAW_DIR: "/mock/dovepaw",
   DOVEPAW_TMP_DIR: "/mock/dovepaw/tmp",
+  GROUP_TASKS_DIR: "/mock/dovepaw/group-tasks",
+  groupTasksFile: (id: string) => `/mock/dovepaw/group-tasks/${id}.json`,
 }));
 
 vi.mock("@/lib/paths", () => ({

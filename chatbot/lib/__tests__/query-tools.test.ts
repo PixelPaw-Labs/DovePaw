@@ -29,12 +29,21 @@ vi.mock("@/lib/paths", () => ({
   agentPersistentStateDir: (name: string) => `/mock/state/.${name}`,
 }));
 
-vi.mock("@@/lib/paths", () => ({
-  LAUNCH_AGENTS_DIR: "/mock/launch-agents",
-  DOVEPAW_DIR: "/mock/dovepaw",
-  GROUP_WORKSPACE_ROOT: require("node:os").tmpdir(),
-  agentPersistentMetaDir: (name: string) => `/mock/state/.${name}/meta`,
-}));
+vi.mock("@@/lib/paths", () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const os = require("node:os") as typeof import("node:os");
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require("node:path") as typeof import("node:path");
+  const groupTasksDir = path.join(os.tmpdir(), `query-tools-test-group-tasks-${Date.now()}`);
+  return {
+    LAUNCH_AGENTS_DIR: "/mock/launch-agents",
+    DOVEPAW_DIR: "/mock/dovepaw",
+    GROUP_WORKSPACE_ROOT: os.tmpdir(),
+    GROUP_TASKS_DIR: groupTasksDir,
+    groupTasksFile: (id: string) => path.join(groupTasksDir, `${id}.json`),
+    agentPersistentMetaDir: (name: string) => `/mock/state/.${name}/meta`,
+  };
+});
 
 vi.mock("@@/lib/settings", () => ({
   readSettings: vi.fn().mockResolvedValue({ repositories: [] }),
@@ -91,6 +100,7 @@ import {
   doveAwaitGroupToolName,
 } from "@/lib/group-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
+import { recordGroupTask } from "@/lib/group-task-store";
 import { MGMT_TOOL } from "@/lib/agent-tools";
 import { upsertSession, setActiveSession } from "@/lib/db";
 import { publishSessionEvent } from "@/lib/session-events";
@@ -1277,5 +1287,34 @@ describe("makeAwaitGroupTool", () => {
       expect.any(Object),
       expect.any(Function),
     );
+  });
+
+  it("derives memberTaskIds from the per-group ledger (no memberTaskIds input)", async () => {
+    const groupContextId = `gc-await-${Date.now()}-${Math.random()}`;
+    await recordGroupTask(groupContextId, {
+      taskId: "task-grp-1",
+      source: "group",
+      memberKey: AGENT.manifestKey,
+      displayName: AGENT.displayName,
+    });
+
+    const captured = captureTools(() => makeAwaitGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveAwaitGroupToolName(GROUP.name)];
+    const result = await handler({ groupContextId, timeoutMs: 10000 });
+
+    // resubscribeTask is mocked to emit a "completed" task event for task-grp-1.
+    const sc = result.structuredContent as { memberResults?: Record<string, unknown> };
+    expect(sc.memberResults).toBeDefined();
+    expect(sc.memberResults).toHaveProperty(AGENT.manifestKey);
+  });
+
+  it("returns no-pending message when the ledger has nothing running for the group", async () => {
+    const captured = captureTools(() => makeAwaitGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveAwaitGroupToolName(GROUP.name)];
+    const result = await handler({
+      groupContextId: `gc-empty-${Date.now()}-${Math.random()}`,
+      timeoutMs: 10000,
+    });
+    expect(result.content[0].text).toMatch(/no .*pending|nothing .*running|all .*done/i);
   });
 });

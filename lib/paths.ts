@@ -109,6 +109,11 @@ export const OPENVIKING_SIDECAR_PID_FILE = join(DOVEPAW_DIR, ".openviking-sideca
 export const OPENVIKING_CONSOLE_PID_FILE = join(DOVEPAW_DIR, ".openviking-console.pid");
 /** ~/.dovepaw/openviking/data — OpenViking storage workspace (vector DB + queue). Used as the default `storage.workspace` when generating ov.conf, so the sidecar never writes to the repo cwd. */
 export const OPENVIKING_DATA_DIR = join(DOVEPAW_DIR, "openviking", "data");
+/** ~/.dovepaw/group-tasks/ — per-group async task state (running/done) keyed strictly by groupContextId */
+export const GROUP_TASKS_DIR = join(DOVEPAW_DIR, "group-tasks");
+/** ~/.dovepaw/group-tasks/<groupContextId>.json — task ledger for a single group */
+export const groupTasksFile = (groupContextId: string): string =>
+  join(GROUP_TASKS_DIR, `${groupContextId}.json`);
 /** ~/.dovepaw/tmp/ — dynamically created session agent configs (written by Dove at runtime) */
 export const DOVEPAW_TMP_DIR = join(DOVEPAW_DIR, "tmp");
 /** ~/.dovepaw/tmp/<agentName>/agent.json — session agent definition */

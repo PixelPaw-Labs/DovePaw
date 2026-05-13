@@ -166,6 +166,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
         backgroundTasks,
         senderAgentId: callerAgentId,
         extraMetadata: groupMeta,
+        groupSource: "chat_to",
       });
     },
   );
@@ -268,6 +269,7 @@ export function makeStartReviewTool(
       ).start(withStartReminder(instruction, manifestKey), {
         senderAgentId: callerAgentId,
         extraMetadata: groupMeta,
+        groupSource: "review",
       });
     },
   );
@@ -404,6 +406,7 @@ export function makeStartEscalateTool(
       ).start(withStartReminder(instruction, manifestKey), {
         senderAgentId: callerAgentId,
         extraMetadata: groupMeta,
+        groupSource: "escalate",
       });
     },
   );
