@@ -14,6 +14,7 @@ import type {
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import {
   CONFIDENCE_THRESHOLD,
+  HANDOFF_SCORE_THRESHOLD,
   impactPlaceholder,
   startChatToToolName,
   startReviewWithToolName,
@@ -167,18 +168,23 @@ export function buildHandoffConsiderationPrompt(
         `  <tool>\n    <name>${t.name}</name>\n    <description>${t.description}</description>\n  </tool>`,
     )
     .join("\n");
-  const ifNo = isGroupMode
-    ? "If no: stop immediately and DO NOT explain your reasoning."
-    : `If no: respond with exactly:\n"${lastAssistantMessage ?? ""}"`;
+  const ifBelow = isGroupMode
+    ? `If no tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}: stop immediately and DO NOT explain your reasoning.`
+    : `If no tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}: respond with exactly:\n"${lastAssistantMessage ?? ""}"`;
   return `<reminder>
-Before you finish: have you considered whether to hand off your results to a linked agent?
+Before you finish: score your handoff likelihood (0–100) for each available linked agent.
 
 <handoff_tools>
 ${toolsXml}
 </handoff_tools>
 
-If yes: call the appropriate tool before stopping.
-${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}${ifNo}
+Scoring guide:
+  ${HANDOFF_SCORE_THRESHOLD}–100  Preconditions fully met, your task is complete, and the recipient is directly unblocked by your output → MUST hand off
+  1–${HANDOFF_SCORE_THRESHOLD - 1}    Partial match or uncertain → do not hand off
+  0       No relevant match → do not hand off
+
+RULE: If any tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}, you MUST call it now. Do not override this with reasoning about such as user preferences, review steps, staying in scope, or "the user is orchestrating" — a score ≥ ${HANDOFF_SCORE_THRESHOLD} IS your decision to hand off.
+${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}${ifBelow}
 </reminder>`;
 }
 
