@@ -4,7 +4,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { consola } from "consola";
 import type { AgentDef } from "@@/lib/agents";
-import type { AgentGroup } from "@@/lib/agent-links-schemas";
+import type { AgentGroup, AgentLink } from "@@/lib/agent-links-schemas";
 import { GROUP_WORKSPACE_ROOT } from "@@/lib/paths";
 import { readSettings } from "@@/lib/settings";
 import { readOrCreateGroupConfig } from "@@/lib/group-config";
@@ -137,6 +137,9 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
 /** Minimum relevance score (0-100) for a candidate member to be dispatched. */
 const GROUP_MEMBER_RELEVANCE_THRESHOLD = 90;
 
+const renderMemberXml = (defs: AgentDef[]) =>
+  defs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n");
+
 /**
  * Fans out the instruction to all online members of the group.
  * Returns memberTaskIds (manifestKey → taskId) to pass to await_group_*.
@@ -147,7 +150,39 @@ export function makeStartGroupTool(
   signal?: AbortSignal,
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
+  groupLinks: AgentLink[] = [],
 ) {
+  // Eligibility from the group's link subgraph: only links where the link's
+  // `group` matches this group count. A dual-direction edge contributes both
+  // out-degree and in-degree to each endpoint.
+  const outDeg = new Map<string, number>();
+  const inDeg = new Map<string, number>();
+  for (const l of groupLinks) {
+    if (l.group !== group.name) continue;
+    outDeg.set(l.source, (outDeg.get(l.source) ?? 0) + 1);
+    inDeg.set(l.target, (inDeg.get(l.target) ?? 0) + 1);
+    if (l.direction === "dual") {
+      outDeg.set(l.target, (outDeg.get(l.target) ?? 0) + 1);
+      inDeg.set(l.source, (inDeg.get(l.source) ?? 0) + 1);
+    }
+  }
+  const preferred = memberDefs.filter(
+    (d) => (outDeg.get(d.name) ?? 0) > 0 && (inDeg.get(d.name) ?? 0) === 0,
+  );
+  const fallback = memberDefs.filter(
+    (d) => (outDeg.get(d.name) ?? 0) === 0 && (inDeg.get(d.name) ?? 0) === 0,
+  );
+  const buckets = [
+    preferred.length > 0 && `<preferred>\n${renderMemberXml(preferred)}\n</preferred>`,
+    fallback.length > 0 && `<fallback>\n${renderMemberXml(fallback)}\n</fallback>`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const candidateRule =
+    preferred.length > 0 && fallback.length > 0
+      ? "Pick from <preferred> first. Only include <fallback> entries to fill remaining slots within the 1–3 cap when <preferred> alone is insufficient. Never propose any agent not listed below."
+      : "Pick only from the agents listed below. Never propose any agent not listed.";
+
   return tool(
     doveStartGroupToolName(group.name),
     `Start the most relevant members of the "${group.name}" group, each with a tailored instruction. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
@@ -174,7 +209,7 @@ export function makeStartGroupTool(
         .min(1)
         .max(3)
         .describe(
-          `Propose up to 3 candidate members, each with a relevance score (0-100) AND a tailored instruction scoped to that member's specialty. Be selective: only candidates scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} are dispatched, so the final count may be 1, 2, or 3 — do not pad. Each instruction must describe only that member's slice of the work; if a piece crosses into another member's lane, that other member should be a separate entry with its own instruction.\n<members>\n${memberDefs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n")}\n</members>`,
+          `Propose up to 3 candidate members, each with a relevance score (0-100) AND a tailored instruction scoped to that member's specialty. Be selective: only candidates scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} are dispatched, so the final count may be 1, 2, or 3 — do not pad. Each instruction must describe only that member's slice of the work; if a piece crosses into another member's lane, that other member should be a separate entry with its own instruction.\n${candidateRule}\n<members>\n${buckets}\n</members>`,
         ),
       groupWorkspacePath: z.string().describe("groupWorkspacePath from init_group_* result"),
       groupContextId: z.string().describe("groupContextId from init_group_* result"),

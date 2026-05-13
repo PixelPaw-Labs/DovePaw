@@ -157,9 +157,8 @@ export async function POST(request: Request) {
       );
       const userMsgId = randomUUID();
 
-      const eligibleGroups = (await readAgentLinksFile()).groups.filter(
-        (g) => g.members.length >= 2,
-      );
+      const linksFile = await readAgentLinksFile();
+      const eligibleGroups = linksFile.groups.filter((g) => g.members.length >= 2);
       const groupTools =
         eligibleGroups.length > 0
           ? [
@@ -177,6 +176,7 @@ export async function POST(request: Request) {
                   subprocessController.signal,
                   backgroundTasks,
                   doveRegistry,
+                  linksFile.links,
                 );
               }),
               ...eligibleGroups.map((group) => {

@@ -95,6 +95,7 @@ import { MGMT_TOOL } from "@/lib/agent-tools";
 import { upsertSession, setActiveSession } from "@/lib/db";
 import { publishSessionEvent } from "@/lib/session-events";
 import type { AgentDef } from "@@/lib/agents";
+import type { AgentLink } from "@@/lib/agent-links-schemas";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -1080,6 +1081,162 @@ describe("makeStartGroupTool", () => {
     });
     const sc = result.structuredContent as { memberTaskIds: Record<string, string> };
     expect(Object.keys(sc.memberTaskIds)).toEqual(["agent_b"]);
+  });
+
+  // ─── members description: graph-aware candidate filter ────────────────────
+  // The `members` Zod description shapes which agents Dove proposes. The rule
+  // (per project owner): only candidates with out-degree > 0 AND in-degree == 0
+  // within the group's link subgraph are preferred; agents isolated in the
+  // graph (out == 0 AND in == 0) are fallbacks; agents with any in-degree are
+  // excluded — they'll be reached transitively via the upstream's handoff.
+
+  function getMembersDescription(captured: typeof tool): string {
+    const call = vi
+      .mocked(captured)
+      .mock.calls.find((c) => c[0] === doveStartGroupToolName("PixelPaw Labs"));
+    const schema = call?.[2] as unknown as {
+      members: { description?: string; _def?: { description?: string } };
+    };
+    return schema.members.description ?? schema.members._def?.description ?? "";
+  }
+
+  const GROUP_3 = {
+    ...GROUP,
+    members: ["alpha", "beta", "gamma"],
+  };
+
+  it("lists only out-only agents under <preferred> when links exist", () => {
+    const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
+    const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
+    const c: AgentDef = { ...AGENT, name: "gamma", manifestKey: "gamma", description: "C-desc" };
+    const links: AgentLink[] = [
+      {
+        source: "alpha",
+        target: "beta",
+        direction: "single",
+        strategy: "chat",
+        group: "PixelPaw Labs",
+      },
+      {
+        source: "alpha",
+        target: "gamma",
+        direction: "single",
+        strategy: "chat",
+        group: "PixelPaw Labs",
+      },
+    ];
+    captureTools(() =>
+      makeStartGroupTool(GROUP_3, [a, b, c], undefined, undefined, undefined, links),
+    );
+    const desc = getMembersDescription(tool);
+    expect(desc).toContain("<preferred>");
+    expect(desc).toMatch(/<member name="alpha">/);
+    expect(desc).not.toMatch(/<member name="beta">/); // in-degree>0 → excluded
+    expect(desc).not.toMatch(/<member name="gamma">/); // in-degree>0 → excluded
+  });
+
+  it("lists isolated agents (no in or out edges) under <fallback>", () => {
+    const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
+    const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
+    const c: AgentDef = { ...AGENT, name: "gamma", manifestKey: "gamma", description: "C-desc" };
+    const links: AgentLink[] = [
+      // alpha → beta only; gamma is isolated in the group subgraph
+      {
+        source: "alpha",
+        target: "beta",
+        direction: "single",
+        strategy: "chat",
+        group: "PixelPaw Labs",
+      },
+    ];
+    captureTools(() =>
+      makeStartGroupTool(GROUP_3, [a, b, c], undefined, undefined, undefined, links),
+    );
+    const desc = getMembersDescription(tool);
+    // preferred: alpha (out>0, in=0)
+    expect(desc).toMatch(/<preferred>[\s\S]*<member name="alpha">[\s\S]*<\/preferred>/);
+    // fallback: gamma (out=0, in=0)
+    expect(desc).toMatch(/<fallback>[\s\S]*<member name="gamma">[\s\S]*<\/fallback>/);
+    // beta still excluded
+    expect(desc).not.toMatch(/<member name="beta">/);
+  });
+
+  it("excludes agents touched by a dual edge from <preferred> (dual counts as in-degree)", () => {
+    const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
+    const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
+    const links: AgentLink[] = [
+      {
+        source: "alpha",
+        target: "beta",
+        direction: "dual",
+        strategy: "chat",
+        group: "PixelPaw Labs",
+      },
+    ];
+    captureTools(() =>
+      makeStartGroupTool(
+        { ...GROUP, members: ["alpha", "beta"] },
+        [a, b],
+        undefined,
+        undefined,
+        undefined,
+        links,
+      ),
+    );
+    const desc = getMembersDescription(tool);
+    // Both have in-degree ≥ 1 via the dual edge → neither preferred, neither isolated
+    expect(desc).not.toMatch(/<member name="alpha">/);
+    expect(desc).not.toMatch(/<member name="beta">/);
+  });
+
+  it("ignores links belonging to a different group", () => {
+    const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
+    const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
+    const links: AgentLink[] = [
+      // Different group — must not affect PixelPaw Labs eligibility
+      {
+        source: "alpha",
+        target: "beta",
+        direction: "single",
+        strategy: "chat",
+        group: "Other Group",
+      },
+    ];
+    captureTools(() =>
+      makeStartGroupTool(
+        { ...GROUP, members: ["alpha", "beta"] },
+        [a, b],
+        undefined,
+        undefined,
+        undefined,
+        links,
+      ),
+    );
+    const desc = getMembersDescription(tool);
+    // No in-group edges, so both agents are isolated → both go under <fallback>
+    expect(desc).toMatch(/<fallback>[\s\S]*<member name="alpha">[\s\S]*<\/fallback>/);
+    expect(desc).toMatch(/<fallback>[\s\S]*<member name="beta">[\s\S]*<\/fallback>/);
+    expect(desc).not.toContain("<preferred>");
+  });
+
+  it("falls back to all members under <fallback> when no links exist", () => {
+    const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
+    const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
+    captureTools(() =>
+      makeStartGroupTool(
+        { ...GROUP, members: ["alpha", "beta"] },
+        [a, b],
+        undefined,
+        undefined,
+        undefined,
+        [],
+      ),
+    );
+    const desc = getMembersDescription(tool);
+    expect(desc).toMatch(
+      /<fallback>[\s\S]*<member name="alpha">[\s\S]*<member name="beta">[\s\S]*<\/fallback>/,
+    );
+    expect(desc).not.toContain("<preferred>");
   });
 });
 
