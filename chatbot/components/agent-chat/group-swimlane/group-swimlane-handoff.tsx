@@ -34,8 +34,10 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
     const cutoff = Math.max(0, handoffs.length - ANIMATE_RECENT);
     const measured: MeasuredPath[] = [];
     handoffs.forEach((h, i) => {
-      const from = container.querySelector<HTMLElement>(`[data-step-id="${h.fromStepId}"]`);
-      const to = container.querySelector<HTMLElement>(`[data-step-id="${h.toStepId}"]`);
+      const from = container.querySelector<HTMLElement>(
+        `[data-step-id="${CSS.escape(h.fromStepId)}"]`,
+      );
+      const to = container.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(h.toStepId)}"]`);
       if (!from || !to) return;
       const a = from.getBoundingClientRect();
       const b = to.getBoundingClientRect();
@@ -69,18 +71,37 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
   return (
     <svg
       data-handoff-overlay="true"
-      className="absolute inset-0 pointer-events-none z-0"
+      className="absolute inset-0 pointer-events-none z-0 text-primary/55"
       width={size.w}
       height={size.h}
       viewBox={`0 0 ${size.w} ${size.h}`}
       aria-hidden="true"
     >
+      <defs>
+        <marker
+          id="handoff-arrow"
+          viewBox="0 0 8 8"
+          refX="6"
+          refY="4"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto"
+        >
+          <path d="M0,0 L8,4 L0,8 z" fill="currentColor" />
+        </marker>
+      </defs>
       {paths.map((p) => {
         const mx = (p.x1 + p.x2) / 2;
         const dy = p.y2 - p.y1;
         const sag = Math.min(40, Math.max(16, Math.abs(dy) * 0.35));
         const cy = (p.y1 + p.y2) / 2 + (dy >= 0 ? -sag : sag);
-        const d = `M ${p.x1} ${p.y1} Q ${mx} ${cy} ${p.x2} ${p.y2}`;
+        const tx = p.x2 - mx;
+        const ty = p.y2 - cy;
+        const tlen = Math.hypot(tx, ty) || 1;
+        const pullback = Math.min(28, tlen * 0.4);
+        const ex = p.x2 - (tx / tlen) * pullback;
+        const ey = p.y2 - (ty / tlen) * pullback;
+        const d = `M ${p.x1} ${p.y1} Q ${mx} ${cy} ${ex} ${ey}`;
         const shouldAnimate = p.isLatest && !reduce && !animatedIdsRef.current.has(p.id);
         if (shouldAnimate) animatedIdsRef.current.add(p.id);
         return (
@@ -93,7 +114,7 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
             strokeWidth={1.4}
             strokeDasharray="4 4"
             strokeLinecap="round"
-            className="text-primary/55"
+            markerEnd="url(#handoff-arrow)"
             initial={shouldAnimate ? { pathLength: 0, opacity: 0 } : false}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={
