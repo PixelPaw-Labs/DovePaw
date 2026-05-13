@@ -57,12 +57,9 @@ export function makeStartScriptTool(
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "" }) => {
-      const finalInstruction = groupChat
-        ? `${instruction}
-<reminder>
-${(await getMemoryProvider()).buildReminder(config.workspacePath, groupChat.groupContextId)}
-</reminder>`
-        : instruction;
+      const reminder = groupChat
+        ? (await getMemoryProvider()).buildReminder(config.workspacePath, groupChat.groupContextId)
+        : undefined;
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,
         repoSlugs,
@@ -71,15 +68,18 @@ ${(await getMemoryProvider()).buildReminder(config.workspacePath, groupChat.grou
       );
       // Overwrite REPO_LIST with local paths so the agent script can do file I/O.
       // Inject DOVEPAW_TASK_ID so the script can POST progress to the A2A server.
+      // Pass the group-chat memory reminder via DOVE_MEMORY_REMINDER so the script's
+      // argv stays pure JSON and AgentRunner can append it to the system prompt.
       const finalConfig = {
         ...config,
         extraEnv: {
           ...config.extraEnv,
           ...(taskId ? { DOVEPAW_TASK_ID: taskId } : {}),
           ...(clonedPaths.length > 0 ? { REPO_LIST: clonedPaths.join(",") } : {}),
+          ...(reminder ? { DOVE_MEMORY_REMINDER: reminder } : {}),
         },
       };
-      const { runId } = startScript(finalConfig, finalInstruction, signal, taskId);
+      const { runId } = startScript(finalConfig, instruction, signal, taskId);
       registry?.register({
         awaitTool: awaitRunScriptToolName(agent.manifestKey),
         idKey: "runId",

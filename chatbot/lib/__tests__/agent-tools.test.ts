@@ -300,7 +300,7 @@ describe("makeStartScriptTool", () => {
     );
   });
 
-  it("appends group-chat reminder using the active memory provider's text", async () => {
+  it("routes group-chat reminder via extraEnv.DOVE_MEMORY_REMINDER and keeps instruction clean", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
     const { getMemoryProvider } = await import("@/lib/memory");
     const { OpenVikingMemoryProvider } = await import("@/lib/memory/openviking");
@@ -320,12 +320,17 @@ describe("makeStartScriptTool", () => {
     await handler({ instruction: "do work" });
 
     const passedInstruction = vi.mocked(startScript).mock.calls[0][1];
-    expect(passedInstruction).toContain("/ws/ta-abc123/members/roster.md");
-    expect(passedInstruction).toContain("ov find");
-    expect(passedInstruction).toContain("ov add-memory");
-    expect(passedInstruction).toContain("--agent-id grp-xyz-123");
-    expect(passedInstruction).not.toContain("ov add-resource");
-    expect(passedInstruction).toContain("All substance stays. Only fluff dies.");
+    const passedConfig = vi.mocked(startScript).mock.calls[0][0];
+    expect(passedInstruction).toBe("do work");
+    expect(passedInstruction).not.toContain("<reminder>");
+    const reminder = passedConfig.extraEnv?.DOVE_MEMORY_REMINDER;
+    expect(reminder).toBeDefined();
+    expect(reminder).toContain("/ws/ta-abc123/members/roster.md");
+    expect(reminder).toContain("ov find");
+    expect(reminder).toContain("ov add-memory");
+    expect(reminder).toContain("--agent-id grp-xyz-123");
+    expect(reminder).not.toContain("ov add-resource");
+    expect(reminder).toContain("All substance stays. Only fluff dies.");
   });
 
   it("falls back to .md moments reminder when MarkdownMemoryProvider is active", async () => {
@@ -348,11 +353,27 @@ describe("makeStartScriptTool", () => {
     await handler({ instruction: "do work" });
 
     const passedInstruction = vi.mocked(startScript).mock.calls[0][1];
-    expect(passedInstruction).toContain("/ws/ta-abc123/members/roster.md");
-    expect(passedInstruction).toContain("/ws/ta-abc123/moments/");
-    expect(passedInstruction).not.toContain("ov find");
-    expect(passedInstruction).not.toContain("ov add-resource");
-    expect(passedInstruction).toContain("All substance stays. Only fluff dies.");
+    const passedConfig = vi.mocked(startScript).mock.calls[0][0];
+    expect(passedInstruction).toBe("do work");
+    expect(passedInstruction).not.toContain("<reminder>");
+    const reminder = passedConfig.extraEnv?.DOVE_MEMORY_REMINDER;
+    expect(reminder).toBeDefined();
+    expect(reminder).toContain("/ws/ta-abc123/members/roster.md");
+    expect(reminder).toContain("/ws/ta-abc123/moments/");
+    expect(reminder).not.toContain("ov find");
+    expect(reminder).not.toContain("ov add-resource");
+    expect(reminder).toContain("All substance stays. Only fluff dies.");
+  });
+
+  it("does not set DOVE_MEMORY_REMINDER when groupChat is absent", async () => {
+    vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeStartScriptTool(AGENT, BASE_CONFIG, []) as any;
+
+    await handler({ instruction: "do work" });
+
+    const passedConfig = vi.mocked(startScript).mock.calls[0][0];
+    expect(passedConfig.extraEnv?.DOVE_MEMORY_REMINDER).toBeUndefined();
   });
 });
 

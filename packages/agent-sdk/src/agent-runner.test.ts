@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   AgentRunner,
+  appendMemoryReminder,
   resolveClaudeSecurityOpts,
   resolveCodexSandboxMode,
   resolveCodexApprovalPolicy,
@@ -392,5 +393,52 @@ describe("AgentRunner", () => {
         runner.run("prompt", { cwd: TMP_DIR, taskName: "t", model: "gemini-pro" }),
       ).rejects.toThrow('Unknown model: "gemini-pro"');
     });
+  });
+});
+
+describe("appendMemoryReminder", () => {
+  let prev: string | undefined;
+
+  beforeEach(() => {
+    prev = process.env.DOVE_MEMORY_REMINDER;
+  });
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.DOVE_MEMORY_REMINDER;
+    else process.env.DOVE_MEMORY_REMINDER = prev;
+  });
+
+  it("returns the original append when DOVE_MEMORY_REMINDER is unset", () => {
+    delete process.env.DOVE_MEMORY_REMINDER;
+    expect(appendMemoryReminder("be concise")).toBe("be concise");
+  });
+
+  it("returns undefined when neither env nor append is set", () => {
+    delete process.env.DOVE_MEMORY_REMINDER;
+    expect(appendMemoryReminder(undefined)).toBeUndefined();
+  });
+
+  it("returns only the wrapped reminder when append is undefined", () => {
+    process.env.DOVE_MEMORY_REMINDER = "use ov find";
+    expect(appendMemoryReminder(undefined)).toBe("<reminder>\nuse ov find\n</reminder>");
+  });
+
+  it("appends the wrapped reminder after the caller-supplied prompt", () => {
+    process.env.DOVE_MEMORY_REMINDER = "use ov find";
+    expect(appendMemoryReminder("be concise")).toBe(
+      "be concise\n\n<reminder>\nuse ov find\n</reminder>",
+    );
+  });
+
+  it("trims whitespace from both env value and append", () => {
+    process.env.DOVE_MEMORY_REMINDER = "  use ov find  ";
+    expect(appendMemoryReminder("  be concise  ")).toBe(
+      "be concise\n\n<reminder>\nuse ov find\n</reminder>",
+    );
+  });
+
+  it("treats an empty env value as unset", () => {
+    process.env.DOVE_MEMORY_REMINDER = "   ";
+    expect(appendMemoryReminder("be concise")).toBe("be concise");
   });
 });

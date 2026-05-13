@@ -126,6 +126,19 @@ export interface AgentRunOpts {
   onCodexPrompt?: (prompt: string) => string;
 }
 
+/**
+ * Appends DovePaw's group-chat memory reminder (from DOVE_MEMORY_REMINDER env)
+ * after the caller-supplied appendSystemPrompt, wrapped in <reminder> tags.
+ * Returns undefined when neither is set.
+ */
+export function appendMemoryReminder(append: string | undefined): string | undefined {
+  const reminder = process.env.DOVE_MEMORY_REMINDER?.trim();
+  if (!reminder) return append;
+  const wrapped = `<reminder>\n${reminder}\n</reminder>`;
+  const base = append?.trim();
+  return base ? `${base}\n\n${wrapped}` : wrapped;
+}
+
 function isCodexModel(model: string): boolean {
   const m = model.toLowerCase().trim();
   return m === "codex" || m.startsWith("gpt");
@@ -148,6 +161,7 @@ export class AgentRunner {
 
   async run(prompt: string, opts: AgentRunOpts): Promise<{ code: number; stdout: string }> {
     const model = opts.model ?? (process.env.AGENT_SCRIPT_MODEL ?? "").trim();
+    const appendSystemPrompt = appendMemoryReminder(opts.appendSystemPrompt);
     if (isCodexModel(model)) {
       const codexPrompt = opts.onCodexPrompt ? opts.onCodexPrompt(prompt) : prompt;
       return new CodexRunner(this.logDir).run(codexPrompt, {
@@ -158,7 +172,7 @@ export class AgentRunner {
         apiKey: opts.apiKey,
         additionalDirectories: opts.additionalDirectories,
         resumeSession: opts.resumeSession,
-        appendSystemPrompt: opts.appendSystemPrompt,
+        appendSystemPrompt,
         config: opts.codexOpts?.config,
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
         webSearchMode: opts.codexOpts?.webSearchMode,
@@ -189,7 +203,7 @@ export class AgentRunner {
       continueSession: opts.claudeOpts?.continueSession,
       settingSources: opts.claudeOpts?.settingSources,
       skills: opts.claudeOpts?.skills,
-      appendSystemPrompt: opts.appendSystemPrompt,
+      appendSystemPrompt,
     } satisfies RunOpts);
   }
 
