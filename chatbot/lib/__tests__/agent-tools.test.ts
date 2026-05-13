@@ -326,9 +326,11 @@ describe("makeStartScriptTool", () => {
     const reminder = passedConfig.extraEnv?.DOVE_MEMORY_REMINDER;
     expect(reminder).toBeDefined();
     expect(reminder).toContain("/ws/ta-abc123/members/roster.md");
-    expect(reminder).toContain("ov find");
-    expect(reminder).toContain("ov add-memory");
-    expect(reminder).toContain("--agent-id grp-xyz-123");
+    expect(reminder).toContain("/api/v1/search/find");
+    expect(reminder).toContain("/api/v1/sessions");
+    expect(reminder).toContain("X-OpenViking-Agent: grp-xyz-123");
+    expect(reminder).not.toContain("ov find");
+    expect(reminder).not.toContain("ov add-memory");
     expect(reminder).not.toContain("ov add-resource");
     expect(reminder).toContain("All substance stays. Only fluff dies.");
   });

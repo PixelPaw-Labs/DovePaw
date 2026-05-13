@@ -70,13 +70,16 @@ describe("OpenVikingMemoryProvider.boot — dev-mode config", () => {
 describe("OpenVikingMemoryProvider.buildReminder", () => {
   const provider = new OpenVikingMemoryProvider(51234);
 
-  it("emits ov CLI commands referencing the groupContextId namespace", () => {
+  it("emits HTTP API curl commands pointing at the live sidecar port", () => {
     const body = provider.buildReminder("/ws/x", "grp-xyz");
-    expect(body).toContain("ov find");
-    expect(body).toContain("ov add-memory");
-    expect(body).toContain("--agent-id grp-xyz");
-    // OpenViking rejects `ov add-resource --to viking://agent/...` (INVALID_URI),
-    // so the reminder must NOT instruct agents to use that path for writes.
+    expect(body).toContain("http://localhost:51234");
+    expect(body).toContain("/api/v1/search/find");
+    expect(body).toContain("/api/v1/sessions");
+    expect(body).toContain("X-OpenViking-Agent: grp-xyz");
+    // CLI commands should be gone — agents hit the HTTP API directly so they
+    // don't depend on OPENVIKING_CLI_CONFIG_FILE being set in their shell.
+    expect(body).not.toContain("ov find");
+    expect(body).not.toContain("ov add-memory");
     expect(body).not.toContain("ov add-resource");
   });
 

@@ -109,14 +109,19 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
   }
 
   buildReminder(workspacePath: string, groupContextId: string): string {
+    const base = `http://localhost:${this.port}`;
     return `You are participating in a group task. Before starting:
 ${rosterBullet(workspacePath)}
-- Query past moments before acting: run
-  \`ov find <topic> --agent-id ${groupContextId}\` to see what members
-  already decided or produced.
-- Save moments with
-  \`ov add-memory --agent-id ${groupContextId} "<content>"\`
-  when: decision reached, artifact complete, insight worth sharing.
+- Query past moments before acting via the OpenViking HTTP API:
+    curl -sX POST ${base}/api/v1/search/find \\
+      -H "X-OpenViking-Agent: ${groupContextId}" \\
+      -H "Content-Type: application/json" \\
+      -d '{"query": "<topic>", "node_limit": 10}'
+- Save moments (decisions, artifacts, insights) via the sessions API
+  — send \`X-OpenViking-Agent: ${groupContextId}\` on all three calls:
+    1. POST ${base}/api/v1/sessions               → returns {result:{session_id:SID}}
+    2. POST ${base}/api/v1/sessions/SID/messages  body: {"role":"user","content":"<text>"}
+    3. POST ${base}/api/v1/sessions/SID/commit
   Writing style:
 ${indentedMomentsPattern()}`;
   }
@@ -217,22 +222,20 @@ async function ensureNamespace(port: number, groupContextId: string): Promise<vo
 }
 
 /**
- * Best-effort cleanup of a group's agent namespace. Swallows all failures —
- * if the sidecar is down, the binary is missing, or the namespace was never
+ * Best-effort cleanup of a group's agent namespace via the OpenViking HTTP API.
+ * Swallows all failures — if the sidecar is down or the namespace was never
  * created, the function still resolves so the caller's session-delete path
  * is never blocked.
  */
 async function removeNamespace(port: number, groupContextId: string): Promise<void> {
   try {
-    await runOv(port, [
-      "rm",
-      "--recursive",
-      "--agent-id",
-      groupContextId,
-      `viking://agent/${groupContextId}`,
-    ]);
+    const uri = encodeURIComponent(`viking://agent/${groupContextId}`);
+    await fetch(`http://localhost:${port}/api/v1/fs?uri=${uri}&recursive=true`, {
+      method: "DELETE",
+      headers: { "X-OpenViking-Agent": groupContextId },
+    });
   } catch {
-    // sidecar unreachable or binary missing — drop silently
+    // sidecar unreachable — drop silently
   }
 }
 

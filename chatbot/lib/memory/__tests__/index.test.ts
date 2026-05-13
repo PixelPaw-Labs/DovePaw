@@ -60,12 +60,15 @@ describe("memory provider registry", () => {
     expect(reminder).not.toContain("viking://agent/");
   });
 
-  it("with port file present, the reminder is the ov variant", async () => {
+  it("with port file present, the reminder is the OpenViking HTTP API variant", async () => {
     writeFileSync(portFile, JSON.stringify({ port: 51234 }));
     const reminder = (await getMemoryProvider()).buildReminder("/ws/x", "grp-1");
-    expect(reminder).toContain("ov find");
-    expect(reminder).toContain("ov add-memory");
-    expect(reminder).toContain("--agent-id grp-1");
+    expect(reminder).toContain("http://localhost:51234");
+    expect(reminder).toContain("/api/v1/search/find");
+    expect(reminder).toContain("/api/v1/sessions");
+    expect(reminder).toContain("X-OpenViking-Agent: grp-1");
+    expect(reminder).not.toContain("ov find");
+    expect(reminder).not.toContain("ov add-memory");
     expect(reminder).not.toContain("/ws/x/moments/");
   });
 });
