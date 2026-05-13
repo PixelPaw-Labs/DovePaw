@@ -19,7 +19,7 @@ import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { getMemoryProvider } from "@/lib/memory";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";
-import { markGroupTaskDone, pendingGroupTasks } from "@/lib/group-task-store";
+import { markGroupTaskDone, pendingGroupTasks, readGroupTaskRecord } from "@/lib/group-task-store";
 
 // ─── Group tool name helpers ──────────────────────────────────────────────────
 
@@ -334,6 +334,12 @@ export function makeAwaitGroupTool(
     async ({ groupContextId, timeoutMs }) => {
       const pending = await pendingGroupTasks(groupContextId);
       if (pending.length === 0) {
+        // Resolve all tasks in this group from the registry. Completed tasks never
+        // went through TaskPoller.poll() so their registry entries were never cleared.
+        if (registry) {
+          const record = await readGroupTaskRecord(groupContextId);
+          record?.tasks.forEach((t) => registry.resolve(t.taskId));
+        }
         return {
           content: [
             {
