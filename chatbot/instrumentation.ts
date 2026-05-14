@@ -19,12 +19,7 @@ import { consola } from "consola";
 import { OPENVIKING_PORT_FILE, OPENVIKING_SIDECAR_PID_FILE } from "@@/lib/paths";
 import { setMemoryProvider } from "@/lib/memory";
 import { OpenVikingMemoryProvider } from "@/lib/memory/openviking";
-import {
-  killStaleProcess,
-  onProcessExit,
-  removePidFile,
-  writePidFile,
-} from "@/lib/process-orphan-cleanup";
+import { killStaleProcess, onProcessExit, writePidFile } from "@/lib/process-orphan-cleanup";
 import { getAvailablePort } from "@/lib/get-available-port";
 
 const SIDECAR_CMDLINE_RE = /openviking-server/;
@@ -67,6 +62,8 @@ function installShutdownHandlers(): void {
   onProcessExit(() => {
     void activeProvider?.shutdown().catch(() => {});
     void rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
-    removePidFile(OPENVIKING_SIDECAR_PID_FILE);
+    // Do NOT remove the PID file here — shutdown() is not awaited at exit time,
+    // so the sidecar may still be alive. killStaleProcess() on next boot reads
+    // the PID, kills the orphan, then removes the file.
   });
 }

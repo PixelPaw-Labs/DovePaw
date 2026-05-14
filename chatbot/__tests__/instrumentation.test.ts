@@ -67,4 +67,21 @@ describe("instrumentation register()", () => {
 
     expect(consola.success).toHaveBeenCalledWith(expect.stringContaining("http://localhost:12345"));
   });
+
+  it("does not remove the PID file in the exit handler", async () => {
+    const { OpenVikingMemoryProvider } = await import("@/lib/memory/openviking");
+    vi.mocked(OpenVikingMemoryProvider.boot as any).mockResolvedValue({
+      proc: { pid: 4242 },
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    });
+    const { onProcessExit, removePidFile } = await import("@/lib/process-orphan-cleanup");
+
+    const { register } = await import("../instrumentation");
+    await register();
+
+    const exitHandler = vi.mocked(onProcessExit).mock.calls[0][0] as () => void;
+    exitHandler();
+
+    expect(removePidFile).not.toHaveBeenCalled();
+  });
 });
