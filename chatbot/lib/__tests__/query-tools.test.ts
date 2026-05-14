@@ -1076,7 +1076,7 @@ describe("makeStartGroupTool", () => {
     expect(Object.keys(sc.memberTaskIds).toSorted()).toEqual(["agent_a", "agent_c"]);
   });
 
-  it("falls back to the highest-scored member when none clear the threshold", async () => {
+  it("stops immediately when no member clears the threshold", async () => {
     const a: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
     const b: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
     vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
@@ -1092,7 +1092,7 @@ describe("makeStartGroupTool", () => {
       groupName: "PixelPaw Labs",
     });
     const sc = result.structuredContent as { memberTaskIds: Record<string, string> };
-    expect(Object.keys(sc.memberTaskIds)).toEqual(["agent_b"]);
+    expect(Object.keys(sc.memberTaskIds)).toEqual([]);
   });
 
   // ─── members description: graph-aware candidate filter ────────────────────
@@ -1117,7 +1117,7 @@ describe("makeStartGroupTool", () => {
     members: ["alpha", "beta", "gamma"],
   };
 
-  it("lists only out-only agents under <preferred> when links exist", () => {
+  it("lists only out-only agents as bullet points when links exist", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     const c: AgentDef = { ...AGENT, name: "gamma", manifestKey: "gamma", description: "C-desc" };
@@ -1141,18 +1141,16 @@ describe("makeStartGroupTool", () => {
       makeStartGroupTool(GROUP_3, [a, b, c], undefined, undefined, undefined, links),
     );
     const desc = getMembersDescription(tool);
-    expect(desc).toContain("<preferred>");
-    expect(desc).toMatch(/<member name="alpha">/);
-    expect(desc).not.toMatch(/<member name="beta">/); // in-degree>0 → excluded
-    expect(desc).not.toMatch(/<member name="gamma">/); // in-degree>0 → excluded
+    expect(desc).toContain("- alpha: A-desc");
+    expect(desc).not.toContain("- beta:");
+    expect(desc).not.toContain("- gamma:");
   });
 
-  it("hides <fallback> when <preferred> is non-empty; isolated agents not shown", () => {
+  it("hides fallback agents when preferred is non-empty; isolated agents not shown", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     const c: AgentDef = { ...AGENT, name: "gamma", manifestKey: "gamma", description: "C-desc" };
     const links: AgentLink[] = [
-      // alpha → beta only; gamma is isolated in the group subgraph
       {
         source: "alpha",
         target: "beta",
@@ -1165,16 +1163,12 @@ describe("makeStartGroupTool", () => {
       makeStartGroupTool(GROUP_3, [a, b, c], undefined, undefined, undefined, links),
     );
     const desc = getMembersDescription(tool);
-    // preferred: alpha (out>0, in=0) — shown
-    expect(desc).toMatch(/<preferred>[\s\S]*<member name="alpha">[\s\S]*<\/preferred>/);
-    // fallback not shown when preferred is non-empty
-    expect(desc).not.toMatch(/<fallback>/);
-    // gamma (isolated) and beta (in-degree>0) both excluded
-    expect(desc).not.toMatch(/<member name="gamma">/);
-    expect(desc).not.toMatch(/<member name="beta">/);
+    expect(desc).toContain("- alpha: A-desc");
+    expect(desc).not.toContain("- gamma:");
+    expect(desc).not.toContain("- beta:");
   });
 
-  it("excludes agents touched by a dual edge from <preferred> (dual counts as in-degree)", () => {
+  it("excludes agents touched by a dual edge (dual counts as in-degree)", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     const links: AgentLink[] = [
@@ -1198,15 +1192,14 @@ describe("makeStartGroupTool", () => {
     );
     const desc = getMembersDescription(tool);
     // Both have in-degree ≥ 1 via the dual edge → neither preferred, neither isolated
-    expect(desc).not.toMatch(/<member name="alpha">/);
-    expect(desc).not.toMatch(/<member name="beta">/);
+    expect(desc).not.toContain("- alpha:");
+    expect(desc).not.toContain("- beta:");
   });
 
   it("ignores links belonging to a different group", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     const links: AgentLink[] = [
-      // Different group — must not affect PixelPaw Labs eligibility
       {
         source: "alpha",
         target: "beta",
@@ -1226,13 +1219,12 @@ describe("makeStartGroupTool", () => {
       ),
     );
     const desc = getMembersDescription(tool);
-    // No in-group edges, so both agents are isolated → both go under <fallback>
-    expect(desc).toMatch(/<fallback>[\s\S]*<member name="alpha">[\s\S]*<\/fallback>/);
-    expect(desc).toMatch(/<fallback>[\s\S]*<member name="beta">[\s\S]*<\/fallback>/);
-    expect(desc).not.toContain("<preferred>");
+    // No in-group edges → both isolated → shown as fallback bullet points
+    expect(desc).toContain("- alpha: A-desc");
+    expect(desc).toContain("- beta: B-desc");
   });
 
-  it("falls back to all members under <fallback> when no links exist", () => {
+  it("shows all members as bullet points when no links exist", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     captureTools(() =>
@@ -1246,10 +1238,8 @@ describe("makeStartGroupTool", () => {
       ),
     );
     const desc = getMembersDescription(tool);
-    expect(desc).toMatch(
-      /<fallback>[\s\S]*<member name="alpha">[\s\S]*<member name="beta">[\s\S]*<\/fallback>/,
-    );
-    expect(desc).not.toContain("<preferred>");
+    expect(desc).toContain("- alpha: A-desc");
+    expect(desc).toContain("- beta: B-desc");
   });
 });
 

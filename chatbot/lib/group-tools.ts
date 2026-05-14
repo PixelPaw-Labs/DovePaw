@@ -147,8 +147,8 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
 /** Minimum relevance score (0-100) for a candidate member to be dispatched. */
 const GROUP_MEMBER_RELEVANCE_THRESHOLD = 90;
 
-const renderMemberXml = (defs: AgentDef[]) =>
-  defs.map((d) => `  <member name="${d.name}">${d.description}</member>`).join("\n");
+const renderMembers = (defs: AgentDef[]) =>
+  defs.map((d) => `- ${d.name}: ${d.description}`).join("\n");
 
 /**
  * Fans out the instruction to all online members of the group.
@@ -184,14 +184,14 @@ export function makeStartGroupTool(
   );
   const buckets =
     preferred.length > 0
-      ? `<preferred>\n${renderMemberXml(preferred)}\n</preferred>`
+      ? renderMembers(preferred)
       : fallback.length > 0
-        ? `<fallback>\n${renderMemberXml(fallback)}\n</fallback>`
+        ? renderMembers(fallback)
         : "";
   const candidateRule =
     preferred.length > 0
-      ? "Pick only from <preferred>. Do not fall back to any other agents."
-      : "Pick only from the agents listed below. Never propose any agent not listed.";
+      ? "Pick only from the agents listed above. Do not use any other agents."
+      : "Pick only from the agents listed above. Never propose any agent not listed.";
 
   return tool(
     doveStartGroupToolName(group.name),
@@ -212,27 +212,32 @@ export function makeStartGroupTool(
             instruction: z
               .string()
               .describe(
-                "Instruction scoped to THIS member's specialty — not the whole task. Must open with: 'I am Dove, your orchestrator. ' followed by the slice this member should own.",
+                "Instruction scoped to THIS member's specialty — not the whole task. Must open with: 'Orchestrator:' followed by the slice this member should own.",
               ),
           }),
         )
         .min(1)
         .max(3)
         .describe(
-          `Propose up to 3 candidate members, each with a relevance score (0-100) AND a tailored instruction scoped to that member's specialty. Be selective: only candidates scoring ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD} are dispatched, so the final count may be 1, 2, or 3 — do not pad. Each instruction must describe only that member's slice of the work; if a piece crosses into another member's lane, that other member should be a separate entry with its own instruction.\n${candidateRule}\n<members>\n${buckets}\n</members>`,
+          `Pick 1–3 agents from the list below. Score each 0–100 for relevance. If no agent scores ≥ ${GROUP_MEMBER_RELEVANCE_THRESHOLD}, do NOT call this tool — stop immediately.\n${candidateRule}\n${buckets}`,
         ),
       groupWorkspacePath: z.string().describe("groupWorkspacePath from init_group_* result"),
       groupContextId: z.string().describe("groupContextId from init_group_* result"),
       groupName: z.string().describe("groupName from init_group_* result"),
     },
     async ({ members: proposedMembers, groupWorkspacePath, groupContextId, groupName }) => {
-      // Filter proposals by relevance score; fall back to the highest scorer
-      // when nothing clears the threshold, so dispatch always has ≥1 member.
       const ranked = proposedMembers.toSorted((a, b) => b.relevanceScore - a.relevanceScore);
-      const qualified = ranked
+      const dispatched = ranked
         .filter((m) => m.relevanceScore >= GROUP_MEMBER_RELEVANCE_THRESHOLD)
         .slice(0, 3);
-      const dispatched = qualified.length > 0 ? qualified : ranked.slice(0, 1);
+      if (dispatched.length === 0) {
+        return {
+          content: [
+            { type: "text" as const, text: "No members scored above threshold — stopping." },
+          ],
+          structuredContent: { memberTaskIds: {}, groupContextId },
+        };
+      }
       const groupMeta: GroupMeta = {
         isGroupChat: true,
         groupWorkspacePath,
