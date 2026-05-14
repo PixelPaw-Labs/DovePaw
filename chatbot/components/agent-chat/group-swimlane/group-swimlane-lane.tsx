@@ -89,6 +89,17 @@ export function SwimlaneLane({
         aria-label={`${def?.displayName ?? lane.agentId} activity timeline`}
       >
         <div className="relative h-full" style={{ minWidth: 12 + totalSlots * 28 }}>
+          {stepCount > 0 && (
+            <span
+              aria-hidden="true"
+              className="absolute top-1/2 -translate-y-1/2 left-0 right-0 h-px"
+              style={{
+                background:
+                  "linear-gradient(to right, transparent, var(--color-border) 12px, var(--color-border) calc(100% - 12px), transparent)",
+                opacity: 0.35,
+              }}
+            />
+          )}
           {stepCount === 0 ? (
             <span className="absolute inset-0 flex items-center px-3 text-[11px] text-muted-foreground/60 italic">
               No activity yet
