@@ -20,6 +20,7 @@ interface MeasuredPath {
 }
 
 const ANIMATE_RECENT = 5;
+const ARROW_PULLBACK = 9;
 
 export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) {
   const reduce = useReducedMotion();
@@ -28,30 +29,34 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
   const animatedIdsRef = useRef(new Set<string>());
 
   const measure = React.useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const rect = container.getBoundingClientRect();
-    const cutoff = Math.max(0, handoffs.length - ANIMATE_RECENT);
-    const measured: MeasuredPath[] = [];
-    handoffs.forEach((h, i) => {
-      const from = container.querySelector<HTMLElement>(
-        `[data-step-id="${CSS.escape(h.fromStepId)}"]`,
-      );
-      const to = container.querySelector<HTMLElement>(`[data-step-id="${CSS.escape(h.toStepId)}"]`);
-      if (!from || !to) return;
-      const a = from.getBoundingClientRect();
-      const b = to.getBoundingClientRect();
-      measured.push({
-        id: h.id,
-        x1: a.left + a.width / 2 - rect.left,
-        y1: a.top + a.height / 2 - rect.top,
-        x2: b.left + b.width / 2 - rect.left,
-        y2: b.top + b.height / 2 - rect.top,
-        isLatest: i >= cutoff,
+    requestAnimationFrame(() => {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const cutoff = Math.max(0, handoffs.length - ANIMATE_RECENT);
+      const measured: MeasuredPath[] = [];
+      handoffs.forEach((h, i) => {
+        const from = container.querySelector<HTMLElement>(
+          `[data-step-id="${CSS.escape(h.fromStepId)}"]`,
+        );
+        const to = container.querySelector<HTMLElement>(
+          `[data-step-id="${CSS.escape(h.toStepId)}"]`,
+        );
+        if (!from || !to) return;
+        const a = from.getBoundingClientRect();
+        const b = to.getBoundingClientRect();
+        measured.push({
+          id: h.id,
+          x1: a.left + a.width / 2 - rect.left,
+          y1: a.top + a.height / 2 - rect.top,
+          x2: b.left + b.width / 2 - rect.left,
+          y2: b.top + b.height / 2 - rect.top,
+          isLatest: i >= cutoff,
+        });
       });
+      setSize({ w: rect.width, h: rect.height });
+      setPaths(measured);
     });
-    setSize({ w: rect.width, h: rect.height });
-    setPaths(measured);
   }, [containerRef, handoffs]);
 
   useLayoutEffect(() => {
@@ -63,7 +68,12 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
     if (!container) return () => {};
     const obs = new ResizeObserver(() => measure());
     obs.observe(container);
-    return () => obs.disconnect();
+    const scrollEls = container.querySelectorAll<HTMLElement>('[role="list"]');
+    scrollEls.forEach((el) => el.addEventListener("scroll", measure, { passive: true }));
+    return () => {
+      obs.disconnect();
+      scrollEls.forEach((el) => el.removeEventListener("scroll", measure));
+    };
   }, [containerRef, measure]);
 
   if (paths.length === 0 || size.w === 0) return null;
@@ -71,7 +81,7 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
   return (
     <svg
       data-handoff-overlay="true"
-      className="absolute inset-0 pointer-events-none z-0 text-primary/55"
+      className="absolute inset-0 pointer-events-none z-[5]"
       width={size.w}
       height={size.h}
       viewBox={`0 0 ${size.w} ${size.h}`}
@@ -80,14 +90,14 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
       <defs>
         <marker
           id="handoff-arrow"
-          viewBox="0 0 8 8"
-          refX="6"
-          refY="4"
-          markerWidth="6"
-          markerHeight="6"
+          viewBox="0 0 6 6"
+          refX="5"
+          refY="3"
+          markerWidth="5"
+          markerHeight="5"
           orient="auto"
         >
-          <path d="M0,0 L8,4 L0,8 z" fill="currentColor" />
+          <path d="M0,0 L6,3 L0,6 Z" fill="currentColor" />
         </marker>
       </defs>
       {paths.map((p) => {
@@ -98,9 +108,8 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
         const tx = p.x2 - mx;
         const ty = p.y2 - cy;
         const tlen = Math.hypot(tx, ty) || 1;
-        const pullback = Math.min(28, tlen * 0.4);
-        const ex = p.x2 - (tx / tlen) * pullback;
-        const ey = p.y2 - (ty / tlen) * pullback;
+        const ex = p.x2 - (tx / tlen) * ARROW_PULLBACK;
+        const ey = p.y2 - (ty / tlen) * ARROW_PULLBACK;
         const d = `M ${p.x1} ${p.y1} Q ${mx} ${cy} ${ex} ${ey}`;
         const shouldAnimate = p.isLatest && !reduce && !animatedIdsRef.current.has(p.id);
         if (shouldAnimate) animatedIdsRef.current.add(p.id);
@@ -111,15 +120,18 @@ export function HandoffOverlay({ containerRef, handoffs }: HandoffOverlayProps) 
             d={d}
             fill="none"
             stroke="currentColor"
-            strokeWidth={1.4}
-            strokeDasharray="4 4"
+            strokeWidth={p.isLatest ? 1.5 : 1}
             strokeLinecap="round"
             markerEnd="url(#handoff-arrow)"
+            className={p.isLatest ? "text-primary/70" : "text-muted-foreground/25"}
             initial={shouldAnimate ? { pathLength: 0, opacity: 0 } : false}
             animate={{ pathLength: 1, opacity: 1 }}
             transition={
               shouldAnimate
-                ? { pathLength: { duration: 0.45, ease: "easeInOut" }, opacity: { duration: 0.2 } }
+                ? {
+                    pathLength: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
+                    opacity: { duration: 0.15 },
+                  }
                 : { duration: 0 }
             }
           />

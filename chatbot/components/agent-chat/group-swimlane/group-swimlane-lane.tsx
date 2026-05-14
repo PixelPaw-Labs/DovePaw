@@ -14,6 +14,8 @@ interface SwimlaneLaneProps {
   agentConfig?: AgentConfigEntry;
   selectedStepId: string | null;
   onSelectStep: (stepId: string) => void;
+  globalRankOf: Map<string, number>;
+  totalSlots: number;
 }
 
 export function SwimlaneLane({
@@ -21,6 +23,8 @@ export function SwimlaneLane({
   agentConfig,
   selectedStepId,
   onSelectStep,
+  globalRankOf,
+  totalSlots,
 }: SwimlaneLaneProps) {
   const reduce = useReducedMotion();
   const labelRef = useRef<HTMLDivElement>(null);
@@ -80,23 +84,35 @@ export function SwimlaneLane({
       </div>
 
       <div
-        className="relative flex items-center gap-3 px-3 py-2 min-h-14 overflow-x-auto overflow-y-hidden"
+        className="relative h-14 overflow-x-auto overflow-y-hidden"
         role="list"
         aria-label={`${def?.displayName ?? lane.agentId} activity timeline`}
       >
-        {stepCount === 0 ? (
-          <span className="text-[11px] text-muted-foreground/60 italic">No activity yet</span>
-        ) : (
-          lane.steps.map((step) => (
-            <SwimlaneBubble
-              key={step.id}
-              step={step}
-              agentConfig={agentConfig}
-              isSelected={selectedStepId === step.id}
-              onSelect={onSelectStep}
-            />
-          ))
-        )}
+        <div className="relative h-full" style={{ minWidth: 12 + totalSlots * 28 }}>
+          {stepCount === 0 ? (
+            <span className="absolute inset-0 flex items-center px-3 text-[11px] text-muted-foreground/60 italic">
+              No activity yet
+            </span>
+          ) : (
+            lane.steps.map((step) => {
+              const rank = globalRankOf.get(step.id) ?? 0;
+              return (
+                <span
+                  key={step.id}
+                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-6"
+                  style={{ left: 12 + rank * 28 }}
+                >
+                  <SwimlaneBubble
+                    step={step}
+                    agentConfig={agentConfig}
+                    isSelected={selectedStepId === step.id}
+                    onSelect={onSelectStep}
+                  />
+                </span>
+              );
+            })
+          )}
+        </div>
       </div>
     </motion.div>
   );

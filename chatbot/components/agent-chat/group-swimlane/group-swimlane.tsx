@@ -12,7 +12,6 @@ import { MESSAGE_RESPONSE_SPACING } from "@/components/agent-chat/chat-message";
 import { SwimlaneLane } from "./group-swimlane-lane";
 import { HandoffOverlay } from "./group-swimlane-handoff";
 import type { NarratorPill, SwimlaneModel } from "./use-swimlane-steps";
-import { isDove } from "./swimlane-buckets";
 
 interface GroupSwimlaneProps {
   model: SwimlaneModel;
@@ -24,13 +23,12 @@ interface GroupSwimlaneProps {
 
 export function GroupSwimlane({
   model,
-  memberAgentIds,
+  memberAgentIds: _memberAgentIds,
   agentConfigs,
   selectedStepId,
   onSelectStep,
 }: GroupSwimlaneProps) {
-  const reduce = useReducedMotion();
-  const trackRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
   const { lanes, handoffs, narratorPills } = model;
 
   const configByName = React.useMemo(
@@ -38,23 +36,24 @@ export function GroupSwimlane({
     [agentConfigs],
   );
 
-  const totalSteps = lanes.reduce((sum, lane) => sum + lane.steps.length, 0);
-  if (totalSteps === 0 && narratorPills.length === 0) {
-    return (
-      <EmptyState
-        reduceMotion={Boolean(reduce)}
-        hasMembers={memberAgentIds.filter((id) => !isDove(id)).length > 0}
-      />
-    );
-  }
+  const { globalRankOf, totalSlots } = React.useMemo(() => {
+    const allSteps = lanes.flatMap((l) => l.steps).toSorted((a, b) => a.index - b.index);
+    const map = new Map<string, number>();
+    allSteps.forEach((step, i) => map.set(step.id, i));
+    return { globalRankOf: map, totalSlots: allSteps.length };
+  }, [lanes]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {narratorPills.length > 0 && (
         <NarratorStrip pills={narratorPills} configByName={configByName} />
       )}
-      <div ref={trackRef} className="relative flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
-        <div className="relative grid gap-y-2 w-full" style={{ gridTemplateColumns: "180px 1fr" }}>
+      <div className="relative flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
+        <div
+          ref={gridRef}
+          className="relative grid gap-y-2 w-full"
+          style={{ gridTemplateColumns: "180px 1fr" }}
+        >
           {lanes.map((lane) => (
             <SwimlaneLane
               key={lane.agentId}
@@ -62,9 +61,11 @@ export function GroupSwimlane({
               agentConfig={configByName.get(lane.agentId)}
               selectedStepId={selectedStepId}
               onSelectStep={onSelectStep}
+              globalRankOf={globalRankOf}
+              totalSlots={totalSlots}
             />
           ))}
-          <HandoffOverlay containerRef={trackRef} handoffs={handoffs} />
+          <HandoffOverlay containerRef={gridRef} handoffs={handoffs} />
         </div>
       </div>
     </div>
@@ -159,47 +160,6 @@ function NarratorStrip({
           </div>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
-
-function EmptyState({ reduceMotion, hasMembers }: { reduceMotion: boolean; hasMembers: boolean }) {
-  return (
-    <div className="flex-1 flex items-center justify-center px-6">
-      <div className="text-center max-w-sm">
-        <div className="relative w-16 h-16 mx-auto mb-4">
-          {[0, 1, 2].map((i) => (
-            <motion.span
-              key={i}
-              aria-hidden="true"
-              className="absolute inset-0 m-auto w-3 h-3 rounded-full bg-primary/40"
-              initial={reduceMotion ? false : { opacity: 0.2 }}
-              animate={
-                reduceMotion
-                  ? undefined
-                  : {
-                      x: [0, 14 * Math.cos((i * 2 * Math.PI) / 3), 0],
-                      y: [0, 14 * Math.sin((i * 2 * Math.PI) / 3), 0],
-                      opacity: [0.2, 0.7, 0.2],
-                    }
-              }
-              transition={
-                reduceMotion
-                  ? { duration: 0 }
-                  : { duration: 3.2, repeat: Infinity, ease: "easeInOut", delay: i * 0.4 }
-              }
-            />
-          ))}
-        </div>
-        <h2 className="text-base font-semibold tracking-tight mb-1">
-          {hasMembers ? "Waiting for Dove to convene the group" : "No members yet"}
-        </h2>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {hasMembers
-            ? "When Dove dispatches a task, each member's activity will stream into its own lane below."
-            : "Add agents to this group to see their activity here."}
-        </p>
-      </div>
     </div>
   );
 }

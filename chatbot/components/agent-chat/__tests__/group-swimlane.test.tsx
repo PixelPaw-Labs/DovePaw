@@ -61,7 +61,7 @@ beforeEach(() => {
 });
 
 describe("GroupChatView swimlane", () => {
-  it("renders empty state when there are no messages", () => {
+  it("renders lanes with idle state when there are no messages", () => {
     mockSession([]);
     render(
       <GroupChatView
@@ -70,8 +70,8 @@ describe("GroupChatView swimlane", () => {
         agentConfigs={agentConfigs}
       />,
     );
-    expect(screen.getByText(/Waiting for Dove/i)).not.toBeNull();
-    expect(document.querySelector("[data-lane]")).toBeNull();
+    expect(document.querySelectorAll("[data-lane]").length).toBe(2);
+    expect(screen.getAllByText(/No activity yet/i).length).toBeGreaterThan(0);
   });
 
   it("renders one lane per non-Dove member, preserving order", () => {

@@ -64,19 +64,32 @@ async function writeRecord(record: GroupTaskRecord): Promise<void> {
   await rename(tmp, file);
 }
 
+// Per-groupContextId write queue — serialises concurrent read-modify-write operations
+// so that simultaneous recordGroupTask / markGroupTaskDone calls never clobber each other.
+const writeQueues = new Map<string, Promise<void>>();
+
+function enqueueWrite(groupContextId: string, fn: () => Promise<void>): Promise<void> {
+  const prev = writeQueues.get(groupContextId) ?? Promise.resolve();
+  const next = prev.then(fn).catch(() => {});
+  writeQueues.set(groupContextId, next);
+  return next;
+}
+
 export async function recordGroupTask(
   groupContextId: string,
   task: Omit<GroupTask, "status" | "startedAt" | "completedAt">,
   groupWorkspacePath?: string,
 ): Promise<void> {
-  const existing = (await readRecord(groupContextId)) ?? { groupContextId, tasks: [] };
-  if (existing.tasks.some((t) => t.taskId === task.taskId)) return;
-  // Persist the workspace path on the record on first write (or backfill if absent).
-  if (groupWorkspacePath && !existing.groupWorkspacePath) {
-    existing.groupWorkspacePath = groupWorkspacePath;
-  }
-  existing.tasks.push({ ...task, status: "running", startedAt: new Date().toISOString() });
-  await writeRecord(existing);
+  await enqueueWrite(groupContextId, async () => {
+    const existing = (await readRecord(groupContextId)) ?? { groupContextId, tasks: [] };
+    if (existing.tasks.some((t) => t.taskId === task.taskId)) return;
+    // Persist the workspace path on the record on first write (or backfill if absent).
+    if (groupWorkspacePath && !existing.groupWorkspacePath) {
+      existing.groupWorkspacePath = groupWorkspacePath;
+    }
+    existing.tasks.push({ ...task, status: "running", startedAt: new Date().toISOString() });
+    await writeRecord(existing);
+  });
 }
 
 export async function markGroupTaskDone(taskId: string): Promise<void> {
@@ -90,9 +103,17 @@ export async function markGroupTaskDone(taskId: string): Promise<void> {
     })
     .find((x): x is { record: GroupTaskRecord; task: GroupTask } => x !== undefined);
   if (!hit) return;
-  hit.task.status = "done";
-  hit.task.completedAt = new Date().toISOString();
-  await writeRecord(hit.record);
+  // Enqueue the write under the owning group's queue to avoid clobbering concurrent writes.
+  await enqueueWrite(hit.record.groupContextId, async () => {
+    // Re-read inside the queue to pick up any writes that landed between the scan above
+    // and this enqueued slot — keeps the record fresh.
+    const fresh = (await readRecord(hit.record.groupContextId)) ?? hit.record;
+    const task = fresh.tasks.find((t) => t.taskId === taskId);
+    if (!task || task.status === "done") return;
+    task.status = "done";
+    task.completedAt = new Date().toISOString();
+    await writeRecord(fresh);
+  });
 }
 
 export async function pendingGroupTasks(groupContextId: string): Promise<GroupTask[]> {
