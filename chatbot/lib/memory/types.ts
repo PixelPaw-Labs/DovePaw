@@ -31,9 +31,17 @@ export interface MemoryProvider {
 
   /**
    * Build the body of the <reminder> block injected before each member's turn.
-   * Must include the roster bullet, the read/write instructions, and the writing pattern.
+   * Includes the roster bullet and read/query instructions only — save instructions
+   * are delivered via the PostToolUse hook (see makeGroupMomentSaveHook).
    */
-  buildReminder(workspacePath: string, groupContextId: string): string;
+  buildReadReminder(workspacePath: string, groupContextId: string): string;
+
+  /**
+   * Build the save-moments prompt injected as additionalContext by the
+   * PostToolUse hook when an await_chat_to_* / await_review_with_* /
+   * await_escalate_to_* tool completes with status "completed".
+   */
+  buildSaveReminder(groupContextId: string, workspacePath: string): string;
 
   /**
    * Optional graceful teardown. Implementations that own a child process

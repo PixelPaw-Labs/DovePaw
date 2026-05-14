@@ -833,7 +833,8 @@ describe("makeInitGroupTool", () => {
     vi.mocked(getMemoryProvider).mockResolvedValue({
       initGroup,
       deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReminder: () => "",
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
     });
     const captured = captureTools(() => makeInitGroupTool(GROUP, []));
     const handler = captured[doveInitGroupToolName(GROUP.name)];
@@ -850,7 +851,8 @@ describe("makeInitGroupTool", () => {
     vi.mocked(getMemoryProvider).mockResolvedValue({
       initGroup: vi.fn().mockRejectedValue(new Error("provider down")),
       deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReminder: () => "",
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
     });
     const captured = captureTools(() => makeInitGroupTool(GROUP, []));
     const handler = captured[doveInitGroupToolName(GROUP.name)];

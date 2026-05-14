@@ -53,7 +53,7 @@ describe("memory provider registry", () => {
   });
 
   it("with no override and no port file, the reminder is the .md variant (no ov commands)", async () => {
-    const reminder = (await getMemoryProvider()).buildReminder("/ws/x", "grp-1");
+    const reminder = (await getMemoryProvider()).buildReadReminder("/ws/x", "grp-1");
     expect(reminder).toContain("/ws/x/moments/");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-resource");
@@ -62,13 +62,15 @@ describe("memory provider registry", () => {
 
   it("with port file present, the reminder is the OpenViking HTTP API variant", async () => {
     writeFileSync(portFile, JSON.stringify({ port: 51234 }));
-    const reminder = (await getMemoryProvider()).buildReminder("/ws/x", "grp-1");
+    const provider = await getMemoryProvider();
+    const reminder = provider.buildReadReminder("/ws/x", "grp-1");
     expect(reminder).toContain("http://localhost:51234");
     expect(reminder).toContain("/api/v1/search/find");
-    expect(reminder).toContain("/api/v1/sessions");
     expect(reminder).toContain("X-OpenViking-Agent: grp-1");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-memory");
     expect(reminder).not.toContain("/ws/x/moments/");
+    const saveReminder = provider.buildSaveReminder("grp-1", "/ws/x");
+    expect(saveReminder).toContain("/api/v1/sessions");
   });
 });

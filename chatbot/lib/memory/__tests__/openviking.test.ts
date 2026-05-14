@@ -69,52 +69,53 @@ describe("OpenVikingMemoryProvider.boot — dev-mode config", () => {
   });
 });
 
-describe("OpenVikingMemoryProvider.buildReminder", () => {
+describe("OpenVikingMemoryProvider.buildReadReminder", () => {
   const provider = new OpenVikingMemoryProvider(51234);
 
-  it("emits HTTP API curl commands pointing at the live sidecar port", () => {
-    const body = provider.buildReminder("/ws/x", "grp-xyz");
+  it("emits search curl pointing at the live sidecar port", () => {
+    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
     expect(body).toContain("http://localhost:51234");
     expect(body).toContain("/api/v1/search/find");
-    expect(body).toContain("/api/v1/sessions");
     expect(body).toContain("X-OpenViking-Agent: grp-xyz");
-    // CLI commands should be gone — agents hit the HTTP API directly so they
-    // don't depend on OPENVIKING_CLI_CONFIG_FILE being set in their shell.
     expect(body).not.toContain("ov find");
     expect(body).not.toContain("ov add-memory");
     expect(body).not.toContain("ov add-resource");
+    expect(body).not.toContain("/api/v1/sessions");
   });
 
   it("uses the find endpoint's real request shape (target_uri + limit, not node_limit)", () => {
-    const body = provider.buildReminder("/ws/x", "grp-xyz");
-    // Mirrors crates/ov_cli/src/client.rs::find — { query, target_uri, limit, ... }
+    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
     expect(body).toContain('"target_uri": "viking://agent/grp-xyz/moments"');
     expect(body).toContain('"limit": 10');
     expect(body).not.toContain('"node_limit"');
   });
 
   it("wraps the find curl in a fenced code block", () => {
-    const body = provider.buildReminder("/ws/x", "grp-xyz");
-    // The find call sits between ``` fences so agents can paste it cleanly.
+    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
     const fence = body.match(/```[\s\S]*?\/api\/v1\/search\/find[\s\S]*?```/);
     expect(fence).not.toBeNull();
   });
 
+  it("includes the roster bullet", () => {
+    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
+    expect(body).toContain("/ws/x/members/roster.md");
+  });
+});
+
+describe("OpenVikingMemoryProvider.buildSaveReminder", () => {
+  const provider = new OpenVikingMemoryProvider(51234);
+
   it("uses the save-moment endpoint's real request shape and wraps in a code fence", () => {
-    const body = provider.buildReminder("/ws/x", "grp-xyz");
-    // Mirrors crates/ov_cli/src/commands/session.rs::add_memory — three POSTs.
-    // Step 1: empty body on create. Step 2: role+content. Step 3: empty body on commit.
+    const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
     expect(body).toMatch(/POST [^\s]*\/api\/v1\/sessions(?:\s|\\\n)[\s\S]*?-d '\{\}'/);
     expect(body).toContain('{"role": "user", "content": "<moment>"}');
     expect(body).toMatch(/POST [^\s]*\/api\/v1\/sessions\/[^/\s]+\/commit[\s\S]*?-d '\{\}'/);
-    // All three save-moment calls sit between ``` fences.
     const fence = body.match(/```[\s\S]*?\/api\/v1\/sessions[\s\S]*?\/commit[\s\S]*?```/);
     expect(fence).not.toBeNull();
   });
 
-  it("includes the roster bullet and writing pattern", () => {
-    const body = provider.buildReminder("/ws/x", "grp-xyz");
-    expect(body).toContain("/ws/x/members/roster.md");
+  it("includes the writing pattern", () => {
+    const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
     expect(body).toContain("All substance stays. Only fluff dies.");
   });
 });

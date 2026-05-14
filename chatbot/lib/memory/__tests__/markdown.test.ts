@@ -19,11 +19,17 @@ describe("MarkdownMemoryProvider", () => {
     await rm(workspace, { recursive: true, force: true });
   });
 
-  it("buildReminder includes the moments path, omits ov commands, keeps MOMENTS_PATTERN", () => {
-    const body = provider.buildReminder("/ws/x", "grp-abc");
+  it("buildReadReminder includes the moments read path and omits ov commands", () => {
+    const body = provider.buildReadReminder("/ws/x", "grp-abc");
     expect(body).toContain("/ws/x/moments/");
     expect(body).not.toContain("ov find");
     expect(body).not.toContain("ov add-resource");
+    expect(body).not.toContain("All substance stays. Only fluff dies.");
+  });
+
+  it("buildSaveReminder includes write path and writing pattern", () => {
+    const body = provider.buildSaveReminder("grp-abc", "/ws/x");
+    expect(body).toContain("/ws/x/moments/");
     expect(body).toContain("All substance stays. Only fluff dies.");
   });
 

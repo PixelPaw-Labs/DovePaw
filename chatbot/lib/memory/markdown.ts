@@ -20,11 +20,14 @@ export class MarkdownMemoryProvider implements MemoryProvider {
     await rm(join(workspacePath, "moments"), { recursive: true, force: true });
   }
 
-  buildReminder(workspacePath: string, _groupContextId: string): string {
+  buildReadReminder(workspacePath: string, _groupContextId: string): string {
     return `You are participating in a group task. Before starting:
 ${rosterBullet(workspacePath)}
-- Read ${workspacePath}/moments/ to understand what other agents have already decided or produced.
-- Save to ${workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing.
+- Read ${workspacePath}/moments/ to understand what other agents have already decided or produced.`;
+  }
+
+  buildSaveReminder(_groupContextId: string, workspacePath: string): string {
+    return `Save moments (decisions, artifacts, insights) to ${workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing.
   Writing style:
 ${indentedMomentsPattern()}`;
   }

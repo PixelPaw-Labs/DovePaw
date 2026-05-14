@@ -60,7 +60,10 @@ export function makeStartScriptTool(
     },
     async ({ instruction = "" }) => {
       const reminder = groupChat
-        ? (await getMemoryProvider()).buildReminder(config.workspacePath, groupChat.groupContextId)
+        ? (await getMemoryProvider()).buildReadReminder(
+            config.workspacePath,
+            groupChat.groupContextId,
+          )
         : undefined;
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,

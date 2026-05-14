@@ -16,6 +16,7 @@ import {
   groupAwaitHandoffHook,
   awaitHandoffNoActionHook,
   makeGroupScriptAwaitToneHook,
+  makeGroupMomentSaveHook,
 } from "@/lib/agent-link-hooks";
 import { buildAgentHooks } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
@@ -39,6 +40,8 @@ export function buildSubAgentHooks(
   isGroupMode?: boolean,
   isAskMode?: boolean,
   behaviorReminder?: string,
+  groupContextId?: string,
+  groupWorkspacePath?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const hasAgentLinks = agentLinkTools.length > 0;
   const handoffConsiderationStop: HookCallbackMatcher = {
@@ -87,7 +90,14 @@ export function buildSubAgentHooks(
       ...(notifHooks.PostToolUse ?? []),
       ...(hasAgentLinks && !isAskMode ? [awaitHandoffNoActionHook] : []),
       ...(isGroupMode
-        ? [groupStartHandoffHook, groupAwaitHandoffHook, makeGroupScriptAwaitToneHook(manifestKey)]
+        ? [
+            groupStartHandoffHook,
+            groupAwaitHandoffHook,
+            makeGroupScriptAwaitToneHook(manifestKey),
+            ...(groupContextId && groupWorkspacePath
+              ? [makeGroupMomentSaveHook(groupContextId, groupWorkspacePath)]
+              : []),
+          ]
         : []),
     ],
     ...(hasAgentLinks &&

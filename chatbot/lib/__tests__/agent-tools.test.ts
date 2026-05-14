@@ -341,12 +341,12 @@ describe("makeStartScriptTool", () => {
     expect(reminder).toBeDefined();
     expect(reminder).toContain("/ws/ta-abc123/members/roster.md");
     expect(reminder).toContain("/api/v1/search/find");
-    expect(reminder).toContain("/api/v1/sessions");
+    expect(reminder).not.toContain("/api/v1/sessions");
     expect(reminder).toContain("X-OpenViking-Agent: grp-xyz-123");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-memory");
     expect(reminder).not.toContain("ov add-resource");
-    expect(reminder).toContain("All substance stays. Only fluff dies.");
+    expect(reminder).not.toContain("All substance stays. Only fluff dies.");
   });
 
   it("falls back to .md moments reminder when MarkdownMemoryProvider is active", async () => {
@@ -378,7 +378,7 @@ describe("makeStartScriptTool", () => {
     expect(reminder).toContain("/ws/ta-abc123/moments/");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-resource");
-    expect(reminder).toContain("All substance stays. Only fluff dies.");
+    expect(reminder).not.toContain("All substance stays. Only fluff dies.");
   });
 
   it("does not set DOVE_MEMORY_REMINDER when groupChat is absent", async () => {

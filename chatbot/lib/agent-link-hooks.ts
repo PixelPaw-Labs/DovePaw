@@ -25,6 +25,7 @@ import {
   awaitRunScriptToolName,
 } from "@/lib/agent-tools";
 import { getMcpStructured } from "@/lib/hooks";
+import { getMemoryProvider } from "@/lib/memory";
 
 // ─── Reflection gate ──────────────────────────────────────────────────────────
 
@@ -242,6 +243,33 @@ export const awaitHandoffNoActionHook = makeGroupSilenceHook(
   GROUP_AWAIT_MATCHER,
   AWAIT_HANDOFF_NO_ACTION_REMINDER,
 );
+
+export function makeGroupMomentSaveHook(
+  groupContextId: string,
+  workspacePath: string,
+): HookCallbackMatcher {
+  return {
+    matcher: GROUP_AWAIT_MATCHER,
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PostToolUse") return { continue: true };
+        const structured = getMcpStructured(input.tool_response);
+        const status =
+          typeof structured === "object" && structured !== null && "status" in structured
+            ? (structured as { status: unknown }).status
+            : undefined;
+        if (status !== "completed") return { continue: true };
+        const provider = await getMemoryProvider();
+        const savePrompt = provider.buildSaveReminder(groupContextId, workspacePath);
+        const hookSpecificOutput: PostToolUseHookSpecificOutput = {
+          hookEventName: "PostToolUse",
+          additionalContext: `<reminder>\n${savePrompt}\n</reminder>`,
+        };
+        return { hookSpecificOutput };
+      },
+    ],
+  };
+}
 
 export function makeGroupScriptAwaitToneHook(manifestKey: string): HookCallbackMatcher {
   return {

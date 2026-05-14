@@ -78,7 +78,7 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
     await removeNamespace(this.port, groupContextId);
   }
 
-  buildReminder(workspacePath: string, groupContextId: string): string {
+  buildReadReminder(workspacePath: string, groupContextId: string): string {
     const base = `http://localhost:${this.port}`;
     return `You are participating in a group task. Before starting:
 ${rosterBullet(workspacePath)}
@@ -88,8 +88,12 @@ curl -sX POST ${base}/api/v1/search/find \\
   -H "X-OpenViking-Agent: ${groupContextId}" \\
   -H "Content-Type: application/json" \\
   -d '{"query": "<topic>", "target_uri": "viking://agent/${groupContextId}/moments", "limit": 10}'
-\`\`\`
-- Save moments (decisions, artifacts, insights) via the sessions API
+\`\`\``;
+  }
+
+  buildSaveReminder(groupContextId: string, _workspacePath: string): string {
+    const base = `http://localhost:${this.port}`;
+    return `Save moments (decisions, artifacts, insights) via the sessions API
   — send \`X-OpenViking-Agent: ${groupContextId}\` on all three calls.
   Step 1 returns \`{result:{session_id:SID}}\` — use that SID in steps 2 and 3:
 \`\`\`

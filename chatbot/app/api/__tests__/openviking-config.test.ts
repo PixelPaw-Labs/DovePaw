@@ -171,7 +171,8 @@ describe("POST /api/openviking/config", () => {
       proc: null,
       initGroup: vi.fn().mockResolvedValue(undefined),
       deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReminder: () => "",
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
       shutdown: shutdownSpy,
     };
     const memoryModule = await import("@/lib/memory");

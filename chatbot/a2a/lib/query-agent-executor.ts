@@ -318,6 +318,8 @@ export class QueryAgentExecutor {
                   !!groupOverrides,
                   isAskMode,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
+                  groupOverrides?.groupContextId,
+                  groupOverrides?.groupWorkspacePath,
                 ),
                 abortController: this.abortController ?? undefined,
                 ...(canUseTool ? { canUseTool } : {}),

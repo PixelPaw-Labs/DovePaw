@@ -10,7 +10,8 @@ vi.mock("@/lib/memory", () => ({
   getMemoryProvider: vi.fn().mockResolvedValue({
     initGroup: vi.fn(),
     deleteGroup: vi.fn().mockResolvedValue(undefined),
-    buildReminder: () => "",
+    buildReadReminder: () => "",
+    buildSaveReminder: () => "",
   }),
 }));
 
@@ -172,7 +173,12 @@ describe("db", () => {
   it("deleteSession calls memory provider's deleteGroup for group sessions", async () => {
     const { getMemoryProvider } = await import("@/lib/memory");
     const deleteGroup = vi.fn().mockResolvedValue(undefined);
-    const provider = { initGroup: vi.fn(), deleteGroup, buildReminder: () => "" };
+    const provider = {
+      initGroup: vi.fn(),
+      deleteGroup,
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
+    };
     vi.mocked(getMemoryProvider).mockResolvedValueOnce(provider);
     upsertSession({ ...base, id: "grp-xyz", agentId: "group:Engineering" });
     await deleteSession("grp-xyz");
@@ -182,7 +188,12 @@ describe("db", () => {
   it("deleteSession does not call deleteGroup for non-group sessions", async () => {
     const { getMemoryProvider } = await import("@/lib/memory");
     const deleteGroup = vi.fn().mockResolvedValue(undefined);
-    const provider = { initGroup: vi.fn(), deleteGroup, buildReminder: () => "" };
+    const provider = {
+      initGroup: vi.fn(),
+      deleteGroup,
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
+    };
     vi.mocked(getMemoryProvider).mockResolvedValueOnce(provider);
     upsertSession({ ...base, id: "ctx-1", agentId: "test-agent" });
     await deleteSession("ctx-1");
