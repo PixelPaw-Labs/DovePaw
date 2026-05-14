@@ -6,6 +6,7 @@
  */
 
 import type { StreamedResult } from "./query-tools";
+import type { AgentTaskStatus } from "./agent-task-state";
 
 /** session_id emitted on the first turn so the hook can resume later */
 export type ChatSseSession = { type: "session"; sessionId: string };
@@ -84,6 +85,16 @@ export type ChatSseGroupMember = {
   isSender?: boolean;
 };
 
+/** Agent task lifecycle event emitted by AgentTaskStateMachine on every transition. */
+export type ChatSseAgentStatus = {
+  type: "agent_status";
+  /** agent.manifestKey — e.g. "blog_writer" */
+  agentKey: string;
+  /** taskId (A2A) or runId (script) */
+  id: string;
+  status: AgentTaskStatus;
+};
+
 export type ChatSseEvent =
   | ChatSseSession
   | ChatSseText
@@ -96,7 +107,8 @@ export type ChatSseEvent =
   | ChatSseDone
   | ChatSsePermission
   | ChatSseQuestion
-  | ChatSseGroupMember;
+  | ChatSseGroupMember
+  | ChatSseAgentStatus;
 
 /**
  * Shape check for events read back from the durable session_events log.

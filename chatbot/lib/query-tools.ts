@@ -25,6 +25,7 @@ import type { PendingRegistry } from "@/lib/pending-registry";
 import { withStartReminder, withMemoryReminder } from "@@/lib/subagent-reminder";
 import { agentPersistentStateDir } from "@/lib/paths";
 import { taskRuntime } from "@/lib/task-runtime";
+import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -161,6 +162,7 @@ export function makeStartTool(
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
   doveDisplayName?: string,
+  stateMachine?: AgentTaskStateMachine,
 ) {
   const orchestratorName = doveDisplayName ?? "Dove";
   return tool(
@@ -174,7 +176,7 @@ export function makeStartTool(
         ),
     },
     async ({ instruction }) => {
-      return await new TaskPoller(
+      const result = await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
         signal,
@@ -186,6 +188,10 @@ export function makeStartTool(
         senderAgentId: "dove",
         extraMetadata: { mode: AgentCallMode.Start },
       });
+      if (result.structuredContent) {
+        stateMachine?.transition(result.structuredContent.taskId, agent.manifestKey, "running");
+      }
+      return result;
     },
   );
 }
@@ -198,7 +204,12 @@ export function makeStartTool(
  * { status: "still_running", taskId } payload if it does not — so Dove
  * can call await_* again with the same taskId instead of starting a new task.
  */
-export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal, registry?: PendingRegistry) {
+export function makeAwaitTool(
+  agent: AgentDef,
+  signal?: AbortSignal,
+  registry?: PendingRegistry,
+  stateMachine?: AgentTaskStateMachine,
+) {
   return tool(
     doveAwaitToolName(agent),
     `Await a previously started ${agent.displayName} task. Returns the final result when complete, or { status: "still_running", taskId } if still in progress.`,
@@ -211,7 +222,7 @@ export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal, registry?: 
         .describe(taskRuntime.buildDescription(agent.name, doveAwaitToolName(agent))),
     },
     async ({ taskId, timeoutMs }) => {
-      return await new TaskPoller(
+      const result = await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
         signal,
@@ -219,6 +230,18 @@ export function makeAwaitTool(agent: AgentDef, signal?: AbortSignal, registry?: 
         doveAwaitToolName(agent),
         agent.name,
       ).poll(taskId, timeoutMs);
+      if (stateMachine) {
+        const sc = result.structuredContent;
+        if (!sc) {
+          stateMachine.transition(taskId, agent.manifestKey, "failed");
+        } else if (sc.status === "still_running") {
+          stateMachine.transition(taskId, agent.manifestKey, "running");
+        } else {
+          // "completed" | "canceled" | "failed" | "rejected" — use A2A status directly
+          stateMachine.transition(taskId, agent.manifestKey, sc.status);
+        }
+      }
+      return result;
     },
   );
 }

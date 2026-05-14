@@ -8,7 +8,7 @@
  */
 
 import { subscribeSession } from "@/lib/session-events";
-import type { ChatSseGroupMember } from "@/lib/chat-sse";
+import type { ChatSseGroupMember, ChatSseAgentStatus } from "@/lib/chat-sse";
 
 export const maxDuration = 86400;
 
@@ -17,6 +17,10 @@ const SSE_HEADERS = {
   "Cache-Control": "no-cache",
   Connection: "keep-alive",
 } as const;
+
+function encodeAgentStatus(event: ChatSseAgentStatus): string {
+  return `data: ${JSON.stringify({ type: "agent_status", agentKey: event.agentKey, id: event.id, status: event.status })}\n\n`;
+}
 
 function encodeGroupMember(event: ChatSseGroupMember): string {
   const rawSeq = (event as Record<string, unknown>)._seq;
@@ -36,20 +40,25 @@ export function GET(request: Request, { params }: { params: Promise<{ groupConte
       const { groupContextId } = await params;
       const encoder = new TextEncoder();
 
-      const onEvent = (event: ReturnType<typeof subscribeSession>[number]) => {
-        if (event.type !== "group_member") return;
+      const enqueueEvent = (event: ReturnType<typeof subscribeSession>[number]) => {
         try {
-          controller.enqueue(encoder.encode(encodeGroupMember(event)));
+          if (event.type === "group_member") {
+            controller.enqueue(encoder.encode(encodeGroupMember(event)));
+          } else if (event.type === "agent_status") {
+            controller.enqueue(encoder.encode(encodeAgentStatus(event)));
+          }
         } catch {
           // controller already closed
         }
       };
 
+      const onEvent = (event: ReturnType<typeof subscribeSession>[number]) => {
+        enqueueEvent(event);
+      };
+
       const buffer = subscribeSession(groupContextId, onEvent, request.signal);
       for (const event of buffer) {
-        if (event.type === "group_member") {
-          controller.enqueue(encoder.encode(encodeGroupMember(event)));
-        }
+        enqueueEvent(event);
       }
 
       request.signal.addEventListener(

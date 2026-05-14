@@ -50,6 +50,7 @@ function mockSession(messages: ChatMessage[]) {
   vi.mocked(useGroupChatSession).mockReturnValue({
     messages,
     isLoading: messages.some((m) => m.isLoading),
+    agentStatuses: new Map(),
     sendToAgent: vi.fn(),
     clearMessages: vi.fn(),
   });

@@ -16,6 +16,7 @@ import {
   makeAwaitEscalateTool,
 } from "@/lib/agent-tools";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import type { GroupMeta } from "@/lib/group-meta";
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { resolveAgentPort } from "@/lib/a2a-client";
@@ -53,7 +54,7 @@ export class AgentConfigReader {
     signal?: AbortSignal,
     backgroundTasks?: Promise<CollectedStream>[],
     registry?: PendingRegistry,
-    groupMeta?: Record<string, unknown>,
+    groupMeta?: GroupMeta,
   ) {
     const [links, allAgents] = await Promise.all([readAgentLinks(), readAgentsConfig()]);
 
@@ -80,7 +81,7 @@ export class AgentConfigReader {
               callerDisplayName,
             ),
           );
-          tools.push(makeAwaitReviewTool(targetDef, signal, registry));
+          tools.push(makeAwaitReviewTool(targetDef, signal, registry, groupMeta));
           break;
         case "escalation":
           tools.push(
@@ -93,13 +94,13 @@ export class AgentConfigReader {
               callerDisplayName,
             ),
           );
-          tools.push(makeAwaitEscalateTool(targetDef, signal, registry));
+          tools.push(makeAwaitEscalateTool(targetDef, signal, registry, groupMeta));
           break;
         default: // "chat" and any future strategies default to start + await
           tools.push(
             makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName, groupMeta),
           );
-          tools.push(makeAwaitChatToTool(targetDef, signal, registry));
+          tools.push(makeAwaitChatToTool(targetDef, signal, registry, groupMeta));
       }
     }
 

@@ -21,7 +21,10 @@ export function GroupChatView({
   onNewSession,
   onIsLoadingChange,
 }: GroupChatViewProps) {
-  const { messages, isLoading, clearMessages } = useGroupChatSession(memberAgentIds, groupName);
+  const { messages, isLoading, agentStatuses, clearMessages } = useGroupChatSession(
+    memberAgentIds,
+    groupName,
+  );
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
   React.useEffect(() => {
@@ -58,6 +61,7 @@ export function GroupChatView({
         agentConfigs={agentConfigs}
         activeAgentIds={model.activeAgentIds}
         totalSteps={model.stepById.size}
+        agentStatuses={agentStatuses}
       />
       <GroupSwimlane
         model={model}

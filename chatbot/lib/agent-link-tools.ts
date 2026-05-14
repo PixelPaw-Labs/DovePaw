@@ -6,6 +6,7 @@ import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agen
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
+import type { GroupMeta } from "@/lib/group-meta";
 import { HANDOFF_COMPLETENESS } from "./agent-script-tools";
 import { withStartReminder } from "@@/lib/subagent-reminder";
 import { taskRuntime } from "@/lib/task-runtime";
@@ -13,19 +14,39 @@ import { taskRuntime } from "@/lib/task-runtime";
 /** Emits a sender bubble to the group pool stream when the caller is in group mode. */
 function emitGroupSenderBubble(
   callerAgentId: string | undefined,
-  groupMeta: Record<string, unknown> | undefined,
+  groupMeta: GroupMeta | undefined,
   text: string,
 ): void {
   if (!callerAgentId || !groupMeta) return;
-  const { groupContextId } = groupMeta;
-  if (typeof groupContextId !== "string") return;
-  relaySessionEvent(groupContextId, {
+  relaySessionEvent(groupMeta.groupContextId, {
     type: "group_member",
     agentId: callerAgentId,
     text,
     done: true,
     isSender: true,
   });
+}
+
+type AgentTaskStatus = "running" | "completed" | "failed" | "canceled" | "rejected";
+
+/** Relays an agent_status event to the group pool stream when in group mode. */
+function emitGroupAgentStatus(
+  groupMeta: GroupMeta | undefined,
+  agentKey: string,
+  id: string,
+  status: AgentTaskStatus,
+): void {
+  if (!groupMeta) return;
+  relaySessionEvent(groupMeta.groupContextId, { type: "agent_status", agentKey, id, status });
+}
+
+function pollStatusToAgentStatus(sc: { status?: string } | undefined): AgentTaskStatus {
+  if (!sc) return "failed";
+  if (sc.status === "still_running") return "running";
+  if (sc.status === "completed") return "completed";
+  if (sc.status === "canceled") return "canceled";
+  if (sc.status === "rejected") return "rejected";
+  return "failed";
 }
 
 // ─── Delegation thresholds ────────────────────────────────────────────────────
@@ -132,7 +153,7 @@ export function makeStartChatToTool(
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
   callerAgentId?: string,
-  groupMeta?: Record<string, unknown>,
+  groupMeta?: GroupMeta,
 ) {
   const { displayName, manifestKey, description } = targetDef;
   return tool(
@@ -157,7 +178,7 @@ ${HANDOFF_PATTERNS(displayName)}`,
     },
     async ({ instruction, contextId }) => {
       emitGroupSenderBubble(callerAgentId, groupMeta, instruction);
-      return await new TaskPoller(
+      const result = await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -171,6 +192,10 @@ ${HANDOFF_PATTERNS(displayName)}`,
         extraMetadata: groupMeta,
         groupSource: "chat",
       });
+      if (result.structuredContent) {
+        emitGroupAgentStatus(groupMeta, manifestKey, result.structuredContent.taskId, "running");
+      }
+      return result;
     },
   );
 }
@@ -187,6 +212,7 @@ export function makeAwaitChatToTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
   registry?: PendingRegistry,
+  groupMeta?: GroupMeta,
 ) {
   const { displayName, manifestKey } = targetDef;
   return tool(
@@ -202,7 +228,7 @@ export function makeAwaitChatToTool(
         .describe(taskRuntime.buildDescription(targetDef.name, awaitChatToToolName(manifestKey))),
     },
     async ({ taskId, timeoutMs }) => {
-      return await new TaskPoller(
+      const result = await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -210,6 +236,13 @@ export function makeAwaitChatToTool(
         awaitChatToToolName(manifestKey),
         targetDef.name,
       ).poll(taskId, timeoutMs);
+      emitGroupAgentStatus(
+        groupMeta,
+        manifestKey,
+        taskId,
+        pollStatusToAgentStatus(result.structuredContent as { status?: string } | undefined),
+      );
+      return result;
     },
   );
 }
@@ -226,7 +259,7 @@ export function makeStartReviewTool(
   signal?: AbortSignal,
   registry?: PendingRegistry,
   callerAgentId?: string,
-  groupMeta?: Record<string, unknown>,
+  groupMeta?: GroupMeta,
   callerDisplayName?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
@@ -262,7 +295,7 @@ export function makeStartReviewTool(
         `${content}\n\n`,
         ...(context ? [`\nContext:\n${context}`] : []),
       ].join("\n");
-      return new TaskPoller(
+      const result = await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -274,6 +307,10 @@ export function makeStartReviewTool(
         extraMetadata: groupMeta,
         groupSource: "review",
       });
+      if (result.structuredContent) {
+        emitGroupAgentStatus(groupMeta, manifestKey, result.structuredContent.taskId, "running");
+      }
+      return result;
     },
   );
 }
@@ -286,6 +323,7 @@ export function makeAwaitReviewTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
   registry?: PendingRegistry,
+  groupMeta?: GroupMeta,
 ) {
   const { displayName, manifestKey } = targetDef;
   return tool(
@@ -311,6 +349,12 @@ export function makeAwaitReviewTool(
         awaitReviewWithToolName(manifestKey),
         targetDef.name,
       ).poll(taskId, timeoutMs);
+      emitGroupAgentStatus(
+        groupMeta,
+        manifestKey,
+        taskId,
+        pollStatusToAgentStatus(pollResult.structuredContent as { status?: string } | undefined),
+      );
 
       const sc = pollResult.structuredContent;
       if (!sc || !("result" in sc)) return pollResult;
@@ -362,7 +406,7 @@ export function makeStartEscalateTool(
   signal?: AbortSignal,
   registry?: PendingRegistry,
   callerAgentId?: string,
-  groupMeta?: Record<string, unknown>,
+  groupMeta?: GroupMeta,
   callerDisplayName?: string,
 ) {
   const { displayName, manifestKey, description } = targetDef;
@@ -399,7 +443,7 @@ export function makeStartEscalateTool(
         `\nContext:\n${context}`,
         `\nPlease provide guidance or make the decision so I can continue.`,
       ].join("\n");
-      return new TaskPoller(
+      const result = await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -411,6 +455,10 @@ export function makeStartEscalateTool(
         extraMetadata: groupMeta,
         groupSource: "escalation",
       });
+      if (result.structuredContent) {
+        emitGroupAgentStatus(groupMeta, manifestKey, result.structuredContent.taskId, "running");
+      }
+      return result;
     },
   );
 }
@@ -423,6 +471,7 @@ export function makeAwaitEscalateTool(
   targetDef: AgentDef,
   signal?: AbortSignal,
   registry?: PendingRegistry,
+  groupMeta?: GroupMeta,
 ) {
   const { displayName, manifestKey } = targetDef;
   return tool(
@@ -440,7 +489,7 @@ export function makeAwaitEscalateTool(
         ),
     },
     async ({ taskId, timeoutMs }) => {
-      return new TaskPoller(
+      const result = await new TaskPoller(
         manifestKey,
         displayName,
         signal,
@@ -448,6 +497,13 @@ export function makeAwaitEscalateTool(
         awaitEscalateToToolName(manifestKey),
         targetDef.name,
       ).poll(taskId, timeoutMs);
+      emitGroupAgentStatus(
+        groupMeta,
+        manifestKey,
+        taskId,
+        pollStatusToAgentStatus(result.structuredContent as { status?: string } | undefined),
+      );
+      return result;
     },
   );
 }

@@ -551,7 +551,12 @@ describe("makeStartChatToTool — groupMeta", () => {
   });
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
-    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    const groupMeta = {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws",
+      groupName: "test-group",
+    };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartChatToTool(
       AGENT,
@@ -587,7 +592,12 @@ describe("makeStartChatToTool — groupMeta", () => {
   });
 
   it("emits isSender bubble via relaySessionEvent when groupMeta present", async () => {
-    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    const groupMeta = {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws",
+      groupName: "test-group",
+    };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartChatToTool(
       AGENT,
@@ -668,7 +678,12 @@ describe("makeStartReviewTool", () => {
   });
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
-    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    const groupMeta = {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws",
+      groupName: "test-group",
+    };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartReviewTool(AGENT, undefined, undefined, undefined, groupMeta) as any;
     await handler({ content: "my work" });
@@ -768,7 +783,12 @@ describe("makeStartEscalateTool", () => {
   };
 
   it("forwards groupMeta as extraMetadata when provided", async () => {
-    const groupMeta = { isGroupChat: true, groupContextId: "gc-1", groupWorkspacePath: "/ws" };
+    const groupMeta = {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws",
+      groupName: "test-group",
+    };
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartEscalateTool(AGENT, undefined, undefined, undefined, groupMeta) as any;
     await handler({ blocker: "stuck", context: "tried X", justification: JUSTIFICATION });

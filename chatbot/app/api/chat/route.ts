@@ -47,6 +47,7 @@ import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
+import { AgentTaskStateMachine } from "@/lib/agent-task-state";
 import { deleteSession, setSessionStatus } from "@/lib/db";
 import { deleteGroupTaskLedger } from "@/lib/group-task-store";
 import { enablePersistence } from "@/lib/persistence";
@@ -156,6 +157,7 @@ export async function POST(request: Request) {
         buildStreamSender(effectiveEffort, controller),
         sessionId ?? undefined,
       );
+      const agentTaskSM = new AgentTaskStateMachine(dispatcher.publish);
       const userMsgId = randomUUID();
 
       const linksFile = await readAgentLinksFile();
@@ -201,8 +203,9 @@ export async function POST(request: Request) {
             backgroundTasks,
             doveRegistry,
             doveSettings.displayName,
+            agentTaskSM,
           ),
-          makeAwaitTool(agent, subprocessController.signal, doveRegistry),
+          makeAwaitTool(agent, subprocessController.signal, doveRegistry, agentTaskSM),
         ]),
         ...groupTools,
       ];

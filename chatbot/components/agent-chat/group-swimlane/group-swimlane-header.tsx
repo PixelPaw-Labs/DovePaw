@@ -7,12 +7,15 @@ import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { isDove } from "./swimlane-buckets";
 
+type AgentTaskStatus = "running" | "completed" | "failed" | "canceled" | "rejected";
+
 interface SwimlaneHeaderProps {
   groupName: string;
   memberAgentIds: string[];
   agentConfigs: AgentConfigEntry[];
   activeAgentIds: Set<string>;
   totalSteps: number;
+  agentStatuses?: Map<string, AgentTaskStatus>;
 }
 
 export function SwimlaneHeader({
@@ -21,6 +24,7 @@ export function SwimlaneHeader({
   agentConfigs,
   activeAgentIds,
   totalSteps,
+  agentStatuses,
 }: SwimlaneHeaderProps) {
   const reduce = useReducedMotion();
   const configByName = React.useMemo(
@@ -64,20 +68,45 @@ export function SwimlaneHeader({
             if (!config) return null;
             const { icon: Icon, iconBg, iconColor, displayName } = buildAgentDef(config);
             const isActive = activeAgentIds.has(agentId);
+            const status = agentStatuses?.get(agentId);
+            const isRunning = status === "running";
+            const isCompleted = status === "completed";
+            const isError = status === "failed" || status === "canceled" || status === "rejected";
             return (
-              <motion.div
-                key={agentId}
-                layout
-                transition={
-                  reduce ? { duration: 0 } : { type: "spring", stiffness: 320, damping: 26 }
-                }
-                title={displayName}
-                className={`w-6 h-6 rounded-md shrink-0 flex items-center justify-center ring-2 ring-background ${iconBg} ${
-                  isActive ? "shadow-[0_0_0_2px_rgb(73_97_115_/_0.6)]" : ""
-                }`}
-              >
-                <Icon className={`w-3 h-3 ${iconColor}`} />
-              </motion.div>
+              <div key={agentId} className="relative shrink-0">
+                {isRunning && (
+                  <motion.div
+                    className="absolute inset-0 rounded-md border-2 border-transparent border-t-primary pointer-events-none"
+                    animate={reduce ? {} : { rotate: 360 }}
+                    transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}
+                    aria-hidden="true"
+                  />
+                )}
+                {isCompleted && (
+                  <div
+                    className="absolute inset-0 rounded-md border-2 border-green-500/70 pointer-events-none"
+                    aria-hidden="true"
+                  />
+                )}
+                {isError && (
+                  <div
+                    className="absolute inset-0 rounded-md border-2 border-destructive/70 pointer-events-none"
+                    aria-hidden="true"
+                  />
+                )}
+                <motion.div
+                  layout
+                  transition={
+                    reduce ? { duration: 0 } : { type: "spring", stiffness: 320, damping: 26 }
+                  }
+                  title={displayName}
+                  className={`w-6 h-6 rounded-md flex items-center justify-center ring-2 ring-background ${iconBg} ${
+                    isActive || isRunning ? "shadow-[0_0_0_2px_rgb(73_97_115_/_0.6)]" : ""
+                  }`}
+                >
+                  <Icon className={`w-3 h-3 ${iconColor}`} />
+                </motion.div>
+              </div>
             );
           })}
         </div>

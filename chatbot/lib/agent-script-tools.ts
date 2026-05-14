@@ -10,6 +10,7 @@ import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { getMemoryProvider } from "@/lib/memory";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { taskRuntime } from "@/lib/task-runtime";
+import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
 import { MGMT_TOOL } from "./agent-mgmt-tools";
 
 // ─── Handoff completeness rule ────────────────────────────────────────────────
@@ -46,6 +47,7 @@ export function makeStartScriptTool(
   registry?: PendingRegistry,
   /** When set, appends the group-chat reminder using the supplied groupContextId. */
   groupChat?: GroupChatScriptOverrides,
+  stateMachine?: AgentTaskStateMachine,
 ) {
   return tool(
     startRunScriptToolName(agent.manifestKey),
@@ -85,6 +87,7 @@ export function makeStartScriptTool(
         idKey: "runId",
         id: runId,
       });
+      stateMachine?.transition(runId, agent.manifestKey, "running");
       return {
         content: [{ type: "text" as const, text: `Script started (runId: ${runId})` }],
         structuredContent: { runId },
@@ -94,7 +97,11 @@ export function makeStartScriptTool(
 }
 
 /** Polls a previously started script run; returns output or still_running. */
-export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry) {
+export function makeAwaitScriptTool(
+  agent: AgentDef,
+  registry?: PendingRegistry,
+  stateMachine?: AgentTaskStateMachine,
+) {
   return tool(
     awaitRunScriptToolName(agent.manifestKey),
     `Await a previously started ${agent.displayName} script run. Returns the output when complete, or { status: "still_running", runId } if still in progress.`,
@@ -121,6 +128,16 @@ export function makeAwaitScriptTool(agent: AgentDef, registry?: PendingRegistry)
       }
       if (result.status === "completed" || result.status === "not_found") {
         registry?.resolve(runId);
+      }
+      if (stateMachine) {
+        if (result.status === "still_running") {
+          stateMachine.transition(runId, agent.manifestKey, "running");
+        } else if (result.status === "completed") {
+          stateMachine.transition(runId, agent.manifestKey, "completed");
+        } else {
+          // "not_found"
+          stateMachine.transition(runId, agent.manifestKey, "failed");
+        }
       }
       return {
         content: [

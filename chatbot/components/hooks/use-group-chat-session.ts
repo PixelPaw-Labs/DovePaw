@@ -46,6 +46,12 @@ function createDirectAnimation(onUpdate: (id: string, content: string) => void) 
   };
 }
 
+type AgentTaskStatus = "running" | "completed" | "failed" | "canceled" | "rejected";
+
+function isAgentTaskStatus(s: string): s is AgentTaskStatus {
+  return ["running", "completed", "failed", "canceled", "rejected"].includes(s);
+}
+
 interface GroupPoolEvent {
   agentId: string;
   text: string;
@@ -55,12 +61,29 @@ interface GroupPoolEvent {
   seq?: number;
 }
 
-function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
+interface AgentStatusPoolEvent {
+  type: "agent_status";
+  agentKey: string;
+  id: string;
+  status: AgentTaskStatus;
+}
+
+function parseGroupPoolEvent(raw: string): GroupPoolEvent | AgentStatusPoolEvent | null {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above
     const p = parsed as Record<string, unknown>;
+    if (p.type === "agent_status") {
+      if (
+        typeof p.agentKey !== "string" ||
+        typeof p.id !== "string" ||
+        typeof p.status !== "string" ||
+        !isAgentTaskStatus(p.status)
+      )
+        return null;
+      return { type: "agent_status", agentKey: p.agentKey, id: p.id, status: p.status };
+    }
     if (typeof p.agentId !== "string" || typeof p.text !== "string" || typeof p.type !== "string")
       return null;
     const sessionId = typeof p.sessionId === "string" ? p.sessionId : undefined;
@@ -76,7 +99,7 @@ function parseGroupPoolEvent(raw: string): GroupPoolEvent | null {
 async function readGroupStream(
   body: ReadableStream<Uint8Array>,
   signal: AbortSignal,
-  onEvent: (event: GroupPoolEvent) => void,
+  onEvent: (event: GroupPoolEvent | AgentStatusPoolEvent) => void,
 ): Promise<void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -116,6 +139,7 @@ async function readGroupStream(
 export function useGroupChatSession(memberAgentIds: string[], groupName: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [agentStatuses, setAgentStatuses] = useState<Map<string, AgentTaskStatus>>(new Map());
 
   const memberStateRef = useRef<Map<string, MemberState>>(
     new Map(
@@ -314,7 +338,16 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     let subscribedContextId: string | null = null;
     let groupStreamAbort: AbortController | null = null;
 
-    const applyPoolEvent = (event: GroupPoolEvent) => {
+    const applyPoolEvent = (event: GroupPoolEvent | AgentStatusPoolEvent) => {
+      if (event.type === "agent_status") {
+        setAgentStatuses((prev) => {
+          const next = new Map(prev);
+          next.set(event.agentKey, event.status);
+          return next;
+        });
+        return;
+      }
+
       // Sender events (e.g. Dove's instruction to the group) render as a user-role
       // bubble and do not participate in activeGroupMembers loading tracking.
       if (event.isSender) {
@@ -536,7 +569,10 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
     loadHistory();
   }, []);
 
-  const clearMessages = useCallback(() => setMessages([]), []);
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setAgentStatuses(new Map());
+  }, []);
 
-  return { messages, isLoading, sendToAgent, clearMessages };
+  return { messages, isLoading, agentStatuses, sendToAgent, clearMessages };
 }

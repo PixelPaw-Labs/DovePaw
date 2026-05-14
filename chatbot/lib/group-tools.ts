@@ -22,6 +22,7 @@ import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } fr
 import { markGroupTaskDone, pendingGroupTasks, readGroupTaskRecord } from "@/lib/group-task-store";
 import { writeGroupGoal, buildGroupGoalIntent } from "@/lib/group-checkpoint";
 import { recoverGroupGaps } from "@/lib/group-recovery";
+import type { GroupMeta } from "@/lib/group-meta";
 
 // ─── Group tool name helpers ──────────────────────────────────────────────────
 
@@ -232,7 +233,12 @@ export function makeStartGroupTool(
         .filter((m) => m.relevanceScore >= GROUP_MEMBER_RELEVANCE_THRESHOLD)
         .slice(0, 3);
       const dispatched = qualified.length > 0 ? qualified : ranked.slice(0, 1);
-      const groupMeta = { isGroupChat: true, groupWorkspacePath, groupContextId, groupName };
+      const groupMeta: GroupMeta = {
+        isGroupChat: true,
+        groupWorkspacePath,
+        groupContextId,
+        groupName,
+      };
       const memberTaskIds: Record<string, string> = {};
       const allMemberDrains: Promise<CollectedStream>[] = [];
 
@@ -269,6 +275,12 @@ export function makeStartGroupTool(
           });
           const taskId = (result.structuredContent as { taskId?: string } | undefined)?.taskId;
           if (taskId) {
+            publishSessionEvent(groupContextId, {
+              type: "agent_status",
+              agentKey: memberDef.manifestKey,
+              id: taskId,
+              status: "running",
+            });
             memberTaskIds[memberDef.manifestKey] = taskId;
             if (backgroundTasks) backgroundTasks.push(...memberDrain);
             allMemberDrains.push(...memberDrain);
@@ -399,6 +411,29 @@ export function makeAwaitGroupTool(
           ).poll(t.taskId, timeoutMs);
         }),
       );
+
+      // Publish per-member agent_status to the group context so the pool stream
+      // can relay them to the UI cycle indicator.
+      for (let i = 0; i < pending.length; i++) {
+        const t = pending[i];
+        const sc = results[i].structuredContent as { status?: string } | undefined;
+        const agentStatus =
+          sc?.status === "still_running"
+            ? "running"
+            : sc?.status === "completed"
+              ? "completed"
+              : sc?.status === "canceled"
+                ? "canceled"
+                : sc?.status === "rejected"
+                  ? "rejected"
+                  : "failed";
+        publishSessionEvent(groupContextId, {
+          type: "agent_status",
+          agentKey: t.memberKey,
+          id: t.taskId,
+          status: agentStatus,
+        });
+      }
 
       const anyStillRunning = results.some((r) => {
         const sc = r.structuredContent as { status?: string } | undefined;
