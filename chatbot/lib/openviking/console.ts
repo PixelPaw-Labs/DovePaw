@@ -16,9 +16,9 @@ import {
   removePidFile,
   terminateChild,
   writePidFile,
-} from "@/lib/process-orphan-cleanup";
-import { getAvailablePort } from "@/lib/get-available-port";
-import { httpHealthProbe } from "@/lib/http-health-probe";
+} from "@@/lib/process-orphan-cleanup";
+import { getAvailablePort } from "@@/lib/get-available-port";
+import { httpHealthProbe } from "@@/lib/http-health-probe";
 
 const READY_TIMEOUT_MS = 15_000;
 const READY_POLL_INTERVAL_MS = 250;

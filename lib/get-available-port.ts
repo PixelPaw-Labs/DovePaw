@@ -1,10 +1,3 @@
-/**
- * Ask the OS for a free TCP port on 127.0.0.1.
- *
- * The same trick `a2a/lib/base-server.ts` uses, lifted into the chatbot lib
- * so files in the Next.js runtime can reach it without dragging in the A2A
- * server bundle (Express, A2A SDK, etc.).
- */
 import { createServer } from "node:net";
 
 export function getAvailablePort(): Promise<number> {

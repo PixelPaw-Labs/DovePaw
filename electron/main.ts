@@ -1,11 +1,20 @@
 import { app, Menu, nativeImage, shell, Tray } from "electron";
 import { type ChildProcess, spawn } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { createConnection } from "node:net";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { createServersProcess } from "../lib/server-manager";
 import { linkAgents } from "../lib/installer";
-import { DOVEPAW_LOGS_DIR, portsFile } from "../lib/paths";
+import {
+  DOVEPAW_LOGS_DIR,
+  OPENVIKING_PORT_FILE,
+  OPENVIKING_SIDECAR_PID_FILE,
+  portsFile,
+} from "../lib/paths";
+import { bootOpenViking } from "../lib/openviking-spawner";
+import { getAvailablePort } from "../lib/get-available-port";
+import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 
 // electron/.dist/main.cjs → ../../ = DovePaw repo root
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -17,9 +26,12 @@ const NPM_BIN = "npm";
 const CHATBOT_URL = `http://localhost:${NEXT_PORT}`;
 const SERVICE_NAME = "DovePaw";
 
+const SIDECAR_CMDLINE_RE = /openviking-server/;
+
 let tray: Tray | null = null;
 let serversProcess: ChildProcess | null = null;
 let nextProcess: ChildProcess | null = null;
+let ovProcess: ChildProcess | null = null;
 let isQuitting = false;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
@@ -168,6 +180,39 @@ function restartServers(): void {
   setTimeout(startServers, 500);
 }
 
+async function startOpenViking(): Promise<void> {
+  // Reuse an already-running sidecar (e.g. started by npm run chatbot:dev boot script).
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(OPENVIKING_PORT_FILE, "utf-8"));
+    const maybePort =
+      parsed !== null && typeof parsed === "object" && "port" in parsed
+        ? (parsed as Record<string, unknown>).port
+        : undefined;
+    const port = typeof maybePort === "number" ? maybePort : null;
+    if (port) {
+      await fetch(`http://localhost:${port}/health`);
+      console.log(`✓ OpenViking sidecar already running at http://localhost:${port}`);
+      return;
+    }
+  } catch {
+    // Port file missing, invalid, or sidecar not responding — boot fresh below.
+  }
+
+  await killStaleProcess(OPENVIKING_SIDECAR_PID_FILE, SIDECAR_CMDLINE_RE);
+  const port = await getAvailablePort();
+  try {
+    ovProcess = await bootOpenViking(port);
+    if (ovProcess.pid !== undefined) writePidFile(OPENVIKING_SIDECAR_PID_FILE, ovProcess.pid);
+    await mkdir(dirname(OPENVIKING_PORT_FILE), { recursive: true });
+    await writeFile(OPENVIKING_PORT_FILE, JSON.stringify({ port }, null, 2));
+    console.log(`✓ OpenViking sidecar ready at http://localhost:${port}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
+    console.warn(`⚠ OpenViking boot failed: ${msg} — group chat will fall back to .md moments`);
+  }
+}
+
 function startNextJs(): void {
   if (nextProcess) return;
 
@@ -208,6 +253,7 @@ void app.whenReady().then(async () => {
   tray.on("click", () => tray?.popUpContextMenu());
 
   startServers();
+  void startOpenViking();
   startNextJs();
   setInterval(checkHealth, 5_000);
 });
@@ -225,6 +271,13 @@ app.on("before-quit", () => {
   isQuitting = true;
   killGroup(serversProcess);
   killGroup(nextProcess);
+  if (ovProcess) {
+    try {
+      ovProcess.kill("SIGTERM");
+    } catch {}
+    void rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
+    // PID file intentionally left — killStaleProcess() cleans it on next boot
+  }
   setTimeout(() => process.exit(0), 500);
 });
 

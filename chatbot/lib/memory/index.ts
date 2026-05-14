@@ -12,6 +12,7 @@
 
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
+import { consola } from "consola";
 import { OPENVIKING_PORT_FILE } from "@@/lib/paths";
 import type { MemoryProvider } from "./types";
 import { MarkdownMemoryProvider } from "./markdown";
@@ -28,7 +29,12 @@ export async function getMemoryProvider(): Promise<MemoryProvider> {
       JSON.parse(await readFile(OPENVIKING_PORT_FILE, "utf-8")),
     );
     return new OpenVikingMemoryProvider(port);
-  } catch {
+  } catch (err) {
+    const codeVal = err instanceof Error && "code" in err ? err.code : undefined;
+    const code = typeof codeVal === "string" ? codeVal : undefined;
+    if (code !== "ENOENT") {
+      consola.warn("OpenViking port file unreadable, falling back to .md moments:", err);
+    }
     return new MarkdownMemoryProvider();
   }
 }

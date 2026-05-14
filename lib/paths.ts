@@ -1,6 +1,5 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join, isAbsolute } from "node:path";
-import { fileURLToPath } from "node:url";
 
 export * from "./plugin-paths";
 export * from "./group-paths";
@@ -9,7 +8,7 @@ function resolveAgentsRoot(): string {
   try {
     // Native ESM (Node.js / tsx / Electron tsup bundle): derive from this file's location.
     // lib/paths.ts → lib/ → DovePaw/
-    return join(dirname(fileURLToPath(import.meta.url)), "..");
+    return join(dirname(new URL(import.meta.url).pathname), "..");
   } catch {
     // webpack/Next.js bundle: import.meta.url is a webpack:/// URL that fileURLToPath rejects.
     // Next.js is invoked from the DovePaw root, so process.cwd() IS DovePaw.

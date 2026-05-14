@@ -1,58 +1,24 @@
 /**
  * OpenViking memory provider.
  *
- * Boots a localhost-only OpenViking sidecar in `auth_mode: "dev"` and routes
- * every group's moments through a `viking://agent/<groupContextId>/moments`
- * namespace. In dev mode all requests resolve as `default/default` ROOT;
- * group isolation is enforced by the `--agent-id` flag the agent passes on
- * every `ov` call.
- *
- * Boot lifecycle (static `boot()`):
- *   ensureSidecarConfig → preflight → spawn openviking-server → waitForReady
+ * Routes every group's moments through a `viking://agent/<groupContextId>/moments`
+ * namespace on the OpenViking sidecar. The sidecar is started externally
+ * (by Electron or scripts/boot-openviking.ts) — this class only owns the
+ * HTTP API calls and the in-process provider lifecycle.
  *
  * Per-group bootstrap (instance `initGroup()`):
- *   `ov mkdir viking://agent/<id>/moments`
+ *   POST /api/v1/fs/mkdir viking://agent/<id>/moments
  *
  * If anything in the boot path fails, callers fall back to MarkdownMemoryProvider
  * (see `getMemoryProvider()` registry).
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { consola } from "consola";
+import { type ChildProcess } from "node:child_process";
 import { z } from "zod";
-import { OPENVIKING_CONFIG_DIR, OPENVIKING_SERVER_CONFIG, OPENVIKING_DATA_DIR } from "@@/lib/paths";
+import { bootOpenViking } from "@@/lib/openviking-spawner";
 import type { MemoryProvider } from "./types";
 import { indentedMomentsPattern, rosterBullet } from "./types";
-import { KILL_ESCALATION_MS } from "@/lib/process-orphan-cleanup";
-import { httpHealthProbe } from "@/lib/http-health-probe";
-
-const HEALTH_TIMEOUT_MS = 30_000;
-const HEALTH_POLL_INTERVAL_MS = 500;
-
-const ovServerConfigSchema = z.looseObject({
-  server: z.looseObject({
-    auth_mode: z.string().optional(),
-    host: z.string().optional(),
-    root_api_key: z.string().optional(),
-  }),
-  storage: z.object({ workspace: z.string().optional() }).optional(),
-});
-
-/**
- * The server block written into every DovePaw-scoped `ov.conf`. Single
- * source of truth — `ensureSidecarConfig()` and the API route's save
- * handler both use this so they cannot drift.
- *
- * `dev` mode means: localhost-bound, no API key, all requests resolve as
- * default/default ROOT. Group isolation comes from `--agent-id` on every
- * `ov` call, not the auth identity.
- */
-export const DEV_MODE_SERVER_BLOCK = {
-  auth_mode: "dev" as const,
-  host: "127.0.0.1" as const,
-};
+import { KILL_ESCALATION_MS } from "@@/lib/process-constants";
 
 export class OpenVikingMemoryProvider implements MemoryProvider {
   /** Port the sidecar process is reachable on. */
@@ -68,34 +34,18 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
   /**
    * Boot the OpenViking sidecar in localhost-only dev mode and return a
    * fully-provisioned provider. Rejects on spawn or health-probe failure.
-   *
-   * dev mode means: no `root_api_key`, all requests accepted as
-   * default/default ROOT. Safe because the sidecar binds to 127.0.0.1 only.
-   * Group-scope isolation still works via the `--agent-id` flag passed by
-   * every `ov` invocation.
+   * Used only when the sidecar has not been started externally (no port file).
    */
   static async boot(port: number): Promise<OpenVikingMemoryProvider> {
-    await ensureSidecarConfig();
-    await preflightConfig();
-    const proc = spawnSidecar(port);
-    try {
-      await waitForReady(port);
-    } catch (err) {
-      try {
-        proc.kill("SIGTERM");
-      } catch {}
-      throw err;
-    }
+    const proc = await bootOpenViking(port);
     return new OpenVikingMemoryProvider(port, proc);
   }
 
   /**
    * Gracefully terminate the sidecar and wait for it to actually exit so the
-   * data-directory file lock at `OPENVIKING_DATA_DIR` is released before any
-   * caller tries to spawn a replacement. SIGTERM first, then SIGKILL as a
-   * backstop after `KILL_ESCALATION_MS`. The kernel always reaps the child on
-   * SIGKILL and releases its file locks as part of cleanup, so awaiting the
-   * `exit` event is the same as awaiting lock release.
+   * data-directory file lock is released before any caller tries to spawn a
+   * replacement. SIGTERM first, then SIGKILL as a backstop after
+   * KILL_ESCALATION_MS.
    */
   async shutdown(): Promise<void> {
     const proc = this.proc;
@@ -163,68 +113,7 @@ ${indentedMomentsPattern()}`;
   }
 }
 
-// ─── Internal helpers ─────────────────────────────────────────────────────────
-
-/**
- * Reject before spawning the sidecar when ov.conf is missing fields whose
- * absence is known to crash boot. Keeps the modal/fallback flow snappy: the
- * user sees "configure" instead of waiting 30s for a health-probe timeout.
- */
-const preflightSchema = z.object({
-  embedding: z.object({ dense: z.object({ provider: z.string().min(1) }) }).optional(),
-  vlm: z.object({ provider: z.string().min(1) }).optional(),
-});
-
-async function preflightConfig(): Promise<void> {
-  const parsed = preflightSchema.parse(
-    JSON.parse(await readFile(OPENVIKING_SERVER_CONFIG, "utf-8")),
-  );
-  const missing: string[] = [];
-  if (!parsed.embedding?.dense.provider) missing.push("embedding.dense.provider");
-  if (!parsed.vlm?.provider) missing.push("vlm.provider");
-  if (missing.length === 0) return;
-  throw new Error(
-    `OpenViking ov.conf is missing required fields (${missing.join(", ")}). ` +
-      "Configure them in Settings → OpenViking before the sidecar can start.",
-  );
-}
-
-async function ensureSidecarConfig(): Promise<void> {
-  await mkdir(OPENVIKING_CONFIG_DIR, { recursive: true });
-  await mkdir(OPENVIKING_DATA_DIR, { recursive: true });
-  if (existsSync(OPENVIKING_SERVER_CONFIG)) {
-    try {
-      ovServerConfigSchema.parse(JSON.parse(await readFile(OPENVIKING_SERVER_CONFIG, "utf-8")));
-      return;
-    } catch {
-      // fall through and regenerate
-    }
-  }
-  const config = {
-    server: DEV_MODE_SERVER_BLOCK,
-    storage: { workspace: OPENVIKING_DATA_DIR },
-  };
-  await writeFile(OPENVIKING_SERVER_CONFIG, JSON.stringify(config, null, 2), { mode: 0o600 });
-}
-
-function spawnSidecar(port: number): ChildProcess {
-  const proc = spawn(
-    "openviking-server",
-    ["--config", OPENVIKING_SERVER_CONFIG, "--port", String(port)],
-    { stdio: ["ignore", "inherit", "inherit"], env: process.env },
-  );
-  proc.on("error", (err) => {
-    consola.error("openviking-server failed to spawn:", err.message);
-  });
-  return proc;
-}
-
-function waitForReady(port: number): Promise<void> {
-  return httpHealthProbe(`http://localhost:${port}/health`, {
-    timeoutMs: HEALTH_TIMEOUT_MS,
-    intervalMs: HEALTH_POLL_INTERVAL_MS,
-  });
-}
+// ─── HTTP API helpers ─────────────────────────────────────────────────────────
 
 async function ensureNamespace(port: number, groupContextId: string): Promise<void> {
   const uri = `viking://agent/${groupContextId}/moments`;
@@ -236,8 +125,6 @@ async function ensureNamespace(port: number, groupContextId: string): Promise<vo
     },
     body: JSON.stringify({ uri }),
   });
-  // OpenViking envelope: { status: "ok"|"error", result?, error?: { code, message } }.
-  // ALREADY_EXISTS is treated as success — same idempotency the CLI offered via --parents.
   const bodySchema = z.object({
     status: z.string().optional(),
     error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
@@ -250,12 +137,6 @@ async function ensureNamespace(port: number, groupContextId: string): Promise<vo
   throw new Error(`POST /api/v1/fs/mkdir ${uri} failed: ${message}`);
 }
 
-/**
- * Best-effort cleanup of a group's agent namespace via the OpenViking HTTP API.
- * Swallows all failures — if the sidecar is down or the namespace was never
- * created, the function still resolves so the caller's session-delete path
- * is never blocked.
- */
 async function removeNamespace(port: number, groupContextId: string): Promise<void> {
   try {
     const uri = encodeURIComponent(`viking://agent/${groupContextId}`);

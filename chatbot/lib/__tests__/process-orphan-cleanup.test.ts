@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { killStaleProcess, writePidFile, removePidFile } from "@/lib/process-orphan-cleanup";
+import { killStaleProcess, writePidFile, removePidFile } from "@@/lib/process-orphan-cleanup";
 
 const tmpRoot = mkdtempSync(join(tmpdir(), "dovepaw-orphan-"));
 const pidFile = join(tmpRoot, ".pid");

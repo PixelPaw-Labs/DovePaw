@@ -27,9 +27,10 @@ import {
 } from "@@/lib/paths";
 import { USER_GLOBAL_OV_CONF } from "@/lib/openviking/prefill";
 import { getMemoryProvider, setMemoryProvider } from "@/lib/memory";
-import { DEV_MODE_SERVER_BLOCK, OpenVikingMemoryProvider } from "@/lib/memory/openviking";
-import { removePidFile, writePidFile } from "@/lib/process-orphan-cleanup";
-import { getAvailablePort } from "@/lib/get-available-port";
+import { DEV_MODE_SERVER_BLOCK } from "@@/lib/openviking-spawner";
+import { OpenVikingMemoryProvider } from "@/lib/memory/openviking";
+import { killStaleProcess, removePidFile, writePidFile } from "@@/lib/process-orphan-cleanup";
+import { getAvailablePort } from "@@/lib/get-available-port";
 
 const denseEmbeddingSchema = z.object({
   provider: z.string().min(1),
@@ -109,18 +110,19 @@ export async function POST(request: Request): Promise<Response> {
   await mkdir(dirname(OPENVIKING_SERVER_CONFIG), { recursive: true });
   await writeFile(OPENVIKING_SERVER_CONFIG, JSON.stringify(merged, null, 2), { mode: 0o600 });
 
-  // Shut down the previous sidecar AND wait for it to actually exit so the
-  // data-directory file lock at OPENVIKING_DATA_DIR is released. If we don't
-  // await this, the fresh sidecar spawns while the old one still holds the
-  // lock — openviking-server then exits cleanly with DataDirectoryLocked,
-  // and our /health probe times out at 30s with no process listening.
+  // Shut down the previous sidecar AND wait for it to exit so the data-dir
+  // lock is released before the new boot. Two paths:
+  //   1. Next.js owns the proc (direct dev mode) — shutdown() via ChildProcess
+  //   2. Electron owns the proc (proc: null on discovered provider) — shutdown()
+  //      is a no-op, so killStaleProcess() via the PID file handles it instead
   const previous = await getMemoryProvider();
   if (previous.shutdown) {
     try {
       await previous.shutdown();
     } catch {}
-    setMemoryProvider(null);
   }
+  await killStaleProcess(OPENVIKING_SIDECAR_PID_FILE, /openviking-server/);
+  setMemoryProvider(null);
 
   try {
     const port = await getAvailablePort();

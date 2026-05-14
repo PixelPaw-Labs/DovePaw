@@ -19,7 +19,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-export const KILL_ESCALATION_MS = 1_000;
+import { KILL_ESCALATION_MS } from "./process-constants";
 
 /**
  * Schedule `SIGKILL` against `pid` after `KILL_ESCALATION_MS`. Used after

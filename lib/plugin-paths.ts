@@ -1,9 +1,8 @@
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 function resolveAgentsRoot(): string {
   try {
-    return join(dirname(fileURLToPath(import.meta.url)), "..");
+    return join(dirname(new URL(import.meta.url).pathname), "..");
   } catch {
     return process.cwd();
   }
