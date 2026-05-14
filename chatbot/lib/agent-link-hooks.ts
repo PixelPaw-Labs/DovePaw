@@ -204,15 +204,26 @@ const GROUP_AWAIT_MATCHER = [
 ].join("|");
 
 const GROUP_START_SILENCE = `<reminder>
-You have started a handoff task.
-Call the corresponding await tool immediately to collect the result.
-Do NOT output and respond with any text such as narration, status updates, or confirmations before calling the await tool.
+You have started a handoff task. Call the corresponding await tool immediately.
+
+Bad: "I've dispatched this to the agent. Now I'll await the result…" [await tool call]
+Correct: [await tool call — no text before it]
+
+Bad: "Starting the handoff now. This will take a moment." [await tool call]
+Correct: [await tool call — no text before it]
+
+Bad: "Confidence: 85%. Routing this to the agent because it specialises in X." [await tool call]
+Correct: [await tool call — no text before it]
 </reminder>`;
 
 const GROUP_AWAIT_SILENCE = `<reminder>
-Do NOT output any text or narration between tool calls.
-Proceed directly to the next tool call.
-Only deliver your response when you have fully completed your task with concrete results to share.
+Proceed directly to the next tool call. Only speak when you have fully completed your task.
+
+Bad: "The agent responded. I'll now proceed to the next step." [next tool call]
+Correct: [next tool call — no text before it]
+
+Bad: "Got the result. Processing…" [next tool call]
+Correct: [next tool call — no text before it]
 </reminder>`;
 
 function makeGroupSilenceHook(matcher: string, context: string): HookCallbackMatcher {
