@@ -111,7 +111,9 @@ export const justificationField = z
       .number()
       .min(0)
       .max(1)
-      .describe(`Confidence score (0–1). Threshold is impact-gated: ${thresholdClause}.`),
+      .describe(
+        `Confidence score as a decimal fraction between 0.0 and 1.0 (e.g. 0.9 = 90% confident, NOT 90). Threshold is impact-gated: ${thresholdClause}.`,
+      ),
   })
   .describe("Required on every delegation call. Fill this out before handing off.");
 
