@@ -22,12 +22,12 @@ export function useAsyncAction(action: () => void | Promise<void>): {
   React.useEffect(() => {
     actionRef.current = action;
   }, [action]);
-  React.useEffect(
-    () => () => {
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
       mountedRef.current = false;
-    },
-    [],
-  );
+    };
+  }, []);
 
   const trigger = React.useCallback(async (): Promise<void> => {
     if (pendingRef.current) return;

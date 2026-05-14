@@ -1,3 +1,4 @@
+import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { useAsyncAction } from "../use-async-action";
@@ -46,6 +47,17 @@ describe("useAsyncAction", () => {
     await act(async () => {
       resolveFn();
     });
+  });
+
+  it("resets pending after trigger under React Strict Mode (double-invoke)", async () => {
+    const action = vi.fn(() => Promise.resolve());
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(React.StrictMode, null, children);
+    const { result } = renderHook(() => useAsyncAction(action), { wrapper });
+    await act(async () => {
+      await result.current.trigger();
+    });
+    expect(result.current.pending).toBe(false);
   });
 
   it("resets pending to false even when the action rejects", async () => {
