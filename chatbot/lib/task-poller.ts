@@ -297,24 +297,22 @@ export class TaskPoller {
       // Write a recovery checkpoint for every successfully completed group task.
       // Non-fatal: checkpoint failure must never break the main poll result.
       if (completed.status === "completed") {
-        void (async () => {
-          try {
-            const meta = await getGroupWorkspaceForTask(resolvedTaskId);
-            if (meta) {
-              await writeGroupCheckpoint(meta.workspacePath, {
-                memberKey: this.manifestKey,
-                displayName: this.displayName,
-                taskId: resolvedTaskId,
-                contextId: meta.contextId,
-                completedAt: new Date().toISOString(),
-                outputSummary: (result.result.output ?? "").slice(0, 500),
-                source: meta.source,
-              });
-            }
-          } catch (err) {
-            consola.warn("[group-checkpoint] Checkpoint write failed:", err);
+        try {
+          const meta = await getGroupWorkspaceForTask(resolvedTaskId);
+          if (meta) {
+            await writeGroupCheckpoint(meta.workspacePath, {
+              memberKey: this.manifestKey,
+              displayName: this.displayName,
+              taskId: resolvedTaskId,
+              contextId: meta.contextId,
+              completedAt: new Date().toISOString(),
+              outputSummary: (result.result.output ?? "").slice(0, 500),
+              source: meta.source,
+            });
           }
-        })();
+        } catch (err) {
+          consola.warn("[group-checkpoint] Checkpoint write failed:", err);
+        }
       }
 
       return {

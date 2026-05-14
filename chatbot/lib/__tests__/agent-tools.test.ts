@@ -42,6 +42,17 @@ vi.mock("@/a2a/lib/workspace", () => ({
 
 vi.mock("@/lib/relay-to-chatbot", () => ({ relaySessionEvent: vi.fn() }));
 
+vi.mock("@/lib/group-checkpoint", () => ({ writeGroupCheckpoint: vi.fn() }));
+vi.mock("@/lib/group-task-store", () => ({
+  getGroupWorkspaceForTask: vi.fn().mockResolvedValue(undefined),
+  markGroupTaskDone: vi.fn(),
+  pendingGroupTasks: vi.fn(),
+  readGroupTaskRecord: vi.fn(),
+  recordGroupTask: vi.fn(),
+  deleteGroupTaskLedger: vi.fn(),
+  groupTaskSourceSchema: { enum: ["group", "chat", "review", "escalation"] },
+}));
+
 // Memory provider is mocked per-test via vi.mocked(getMemoryProvider) below.
 vi.mock("@/lib/memory", async () => {
   const actual = await vi.importActual<typeof import("@/lib/memory")>("@/lib/memory");
@@ -61,6 +72,7 @@ import {
   makeStartScriptTool,
   makeStartChatToTool,
   makeStartReviewTool,
+  makeAwaitChatToTool,
   makeAwaitReviewTool,
   makeStartEscalateTool,
   makeAwaitEscalateTool,
@@ -92,6 +104,8 @@ import { startScript } from "@/a2a/lib/spawn";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
+import { writeGroupCheckpoint } from "@/lib/group-checkpoint";
+import { getGroupWorkspaceForTask } from "@/lib/group-task-store";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -632,6 +646,34 @@ describe("makeStartChatToTool — groupMeta", () => {
       expect.objectContaining({ isSender: true }),
     );
   });
+
+  it("appends cwd reminder to instruction description when groupMeta present", () => {
+    let capturedSchema: { instruction: { description?: string } } | undefined;
+    vi.mocked(tool).mockImplementationOnce((_n, _d, schema, handler) => {
+      capturedSchema = schema as any;
+      return handler as any;
+    });
+    makeStartChatToTool(AGENT, undefined, undefined, undefined, undefined, {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws/group-x",
+      groupName: "test-group",
+    });
+    const desc = capturedSchema?.instruction.description ?? "";
+    expect(desc).toContain("/ws/group-x");
+    expect(desc).toContain("cwd");
+  });
+
+  it("omits cwd reminder when groupMeta is absent", () => {
+    let capturedSchema: { instruction: { description?: string } } | undefined;
+    vi.mocked(tool).mockImplementationOnce((_n, _d, schema, handler) => {
+      capturedSchema = schema as any;
+      return handler as any;
+    });
+    makeStartChatToTool(AGENT);
+    const desc = capturedSchema?.instruction.description ?? "";
+    expect(desc).not.toMatch(/cwd|workspace cwd/i);
+  });
 });
 
 // ─── makeStartReviewTool ──────────────────────────────────────────────────────
@@ -695,6 +737,34 @@ describe("makeStartReviewTool", () => {
       undefined,
       groupMeta,
     );
+  });
+
+  it("appends cwd reminder to content description when groupMeta present", () => {
+    let capturedSchema: { content: { description?: string } } | undefined;
+    vi.mocked(tool).mockImplementationOnce((_n, _d, schema, handler) => {
+      capturedSchema = schema as any;
+      return handler as any;
+    });
+    makeStartReviewTool(AGENT, undefined, undefined, undefined, {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws/review-x",
+      groupName: "test-group",
+    });
+    const desc = capturedSchema?.content.description ?? "";
+    expect(desc).toContain("/ws/review-x");
+    expect(desc).toContain("cwd");
+  });
+
+  it("omits cwd reminder from content description when groupMeta absent", () => {
+    let capturedSchema: { content: { description?: string } } | undefined;
+    vi.mocked(tool).mockImplementationOnce((_n, _d, schema, handler) => {
+      capturedSchema = schema as any;
+      return handler as any;
+    });
+    makeStartReviewTool(AGENT);
+    const desc = capturedSchema?.content.description ?? "";
+    expect(desc).not.toMatch(/cwd|workspace cwd/i);
   });
 });
 
@@ -826,6 +896,34 @@ describe("makeStartEscalateTool", () => {
     })) as any;
     expect(result.structuredContent.taskId).toBe("task-123");
   });
+
+  it("appends cwd reminder to context description when groupMeta present", () => {
+    let capturedSchema: { context: { description?: string } } | undefined;
+    vi.mocked(tool).mockImplementationOnce((_n, _d, schema, handler) => {
+      capturedSchema = schema as any;
+      return handler as any;
+    });
+    makeStartEscalateTool(AGENT, undefined, undefined, undefined, {
+      isGroupChat: true,
+      groupContextId: "gc-1",
+      groupWorkspacePath: "/ws/escalate-x",
+      groupName: "test-group",
+    });
+    const desc = capturedSchema?.context.description ?? "";
+    expect(desc).toContain("/ws/escalate-x");
+    expect(desc).toContain("cwd");
+  });
+
+  it("omits cwd reminder from context description when groupMeta absent", () => {
+    let capturedSchema: { context: { description?: string } } | undefined;
+    vi.mocked(tool).mockImplementationOnce((_n, _d, schema, handler) => {
+      capturedSchema = schema as any;
+      return handler as any;
+    });
+    makeStartEscalateTool(AGENT);
+    const desc = capturedSchema?.context.description ?? "";
+    expect(desc).not.toMatch(/cwd|workspace cwd/i);
+  });
 });
 
 // ─── makeAwaitEscalateTool ────────────────────────────────────────────────────
@@ -889,5 +987,65 @@ describe("makeAgentMgmtTools install tool", () => {
     makeAgentMgmtTools({ ...AGENT, schedulingEnabled: false });
     const result = (await installHandler!({})) as any;
     expect(result.content[0].text).toMatch(/✅.*not scheduling-enabled/i);
+  });
+});
+
+// ─── TaskPoller checkpoint write — awaited inline, not fire-and-forget ───────
+
+describe("TaskPoller.poll checkpoint write", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(resolveAgentPort).mockReturnValue(9999);
+    vi.mocked(createAgentClient).mockResolvedValue({} as any);
+    vi.mocked(formatAgentStreamContext).mockReturnValue("ctx");
+    vi.mocked(subscribeTaskStream).mockImplementation(async function* () {
+      yield {
+        kind: "snapshot" as const,
+        taskId: "task-completed",
+        result: {
+          output: "done",
+          progress: [] as any[],
+          thinking: "",
+          toolCalls: [] as string[],
+          finalState: "completed" as const,
+        },
+      };
+    });
+    vi.mocked(getGroupWorkspaceForTask).mockResolvedValue({
+      workspacePath: "/tmp/test-ws",
+      contextId: "ctx-1",
+      source: "chat",
+    });
+  });
+
+  it("awaits writeGroupCheckpoint inline (poll does not resolve until checkpoint resolves)", async () => {
+    let resolveCp!: () => void;
+    const cpPromise = new Promise<void>((r) => {
+      resolveCp = r;
+    });
+    vi.mocked(writeGroupCheckpoint).mockReturnValueOnce(cpPromise);
+
+    vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
+    const handler = makeAwaitChatToTool(AGENT) as any;
+
+    let pollResolved = false;
+    const pollPromise = handler({ taskId: "task-completed", timeoutMs: 30000 }).then(
+      (r: unknown) => {
+        pollResolved = true;
+        return r;
+      },
+    );
+
+    // Let pending microtasks settle — if checkpoint were fire-and-forget,
+    // poll would resolve here even though writeGroupCheckpoint hasn't.
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    expect(writeGroupCheckpoint).toHaveBeenCalledTimes(1);
+    expect(pollResolved).toBe(false);
+
+    resolveCp();
+    await pollPromise;
+    expect(pollResolved).toBe(true);
   });
 });

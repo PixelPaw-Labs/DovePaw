@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import { TaskPoller } from "@/lib/task-poller";
+import type { AwaitToolContent } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
 import type { GroupMeta } from "@/lib/group-meta";
@@ -40,7 +41,13 @@ function emitGroupAgentStatus(
   relaySessionEvent(groupMeta.groupContextId, { type: "agent_status", agentKey, id, status });
 }
 
-function pollStatusToAgentStatus(sc: { status?: string } | undefined): AgentTaskStatus {
+/** Suffix appended to start_*_to_* path-bearing fields in group context. */
+function groupCwdSuffix(groupMeta: GroupMeta | undefined): string {
+  if (!groupMeta?.groupWorkspacePath) return "";
+  return ` Group context: the current workspace cwd is \`${groupMeta.groupWorkspacePath}\`. Any path field in the payload (repoPath, file paths, etc.) MUST point under this cwd — relevant repos are already cloned at \`<cwd>/<repo-name>\`. Never pass developer source paths from outside the workspace.`;
+}
+
+function pollStatusToAgentStatus(sc: AwaitToolContent | undefined): AgentTaskStatus {
   if (!sc) return "failed";
   if (sc.status === "still_running") return "running";
   if (sc.status === "completed") return "completed";
@@ -173,7 +180,8 @@ ${HANDOFF_PATTERNS(displayName)}`,
             `Open by addressing ${displayName} by name (e.g. "@${displayName}, I have done X and need Y"). ` +
             `Write in first person — never refer to yourself by name or in third person, ` +
             `because ${displayName} receives this as a direct message from you, not a report about you. ` +
-            `Do not prescribe how ${displayName} should respond or instruct them on their style — that is their decision, not yours.`,
+            `Do not prescribe how ${displayName} should respond or instruct them on their style — that is their decision, not yours.` +
+            groupCwdSuffix(groupMeta),
         ),
       contextId: z.string().optional().describe("Continue a prior session. Omit to start fresh."),
       justification: justificationField,
@@ -242,7 +250,7 @@ export function makeAwaitChatToTool(
         groupMeta,
         manifestKey,
         taskId,
-        pollStatusToAgentStatus(result.structuredContent as { status?: string } | undefined),
+        pollStatusToAgentStatus(result.structuredContent),
       );
       return result;
     },
@@ -278,7 +286,8 @@ export function makeStartReviewTool(
           `Your review request — describe what you have done and what you need reviewed. ${HANDOFF_COMPLETENESS} ` +
             `Open by addressing ${displayName} by name (e.g. "@${displayName}, I have completed X, please review Y"). ` +
             `Write in first person — the reviewer reads this as your direct submission, not a third-party description. ` +
-            `Must be complete, not a draft.`,
+            `Must be complete, not a draft.` +
+            groupCwdSuffix(groupMeta),
         ),
       context: z.string().optional().describe("Additional context the reviewer needs."),
       justification: justificationField,
@@ -355,7 +364,7 @@ export function makeAwaitReviewTool(
         groupMeta,
         manifestKey,
         taskId,
-        pollStatusToAgentStatus(pollResult.structuredContent as { status?: string } | undefined),
+        pollStatusToAgentStatus(pollResult.structuredContent),
       );
 
       const sc = pollResult.structuredContent;
@@ -430,7 +439,8 @@ export function makeStartEscalateTool(
         .describe(
           `What you have tried and what you know so far. ` +
             `Write in first person ("I tried X, it failed because Y. I know Z but not W.") — ` +
-            `this is your investigation log, not a summary written about you. Be concrete: include commands run, errors seen, assumptions made.`,
+            `this is your investigation log, not a summary written about you. Be concrete: include commands run, errors seen, assumptions made.` +
+            groupCwdSuffix(groupMeta),
         ),
       justification: justificationField,
     },
@@ -503,7 +513,7 @@ export function makeAwaitEscalateTool(
         groupMeta,
         manifestKey,
         taskId,
-        pollStatusToAgentStatus(result.structuredContent as { status?: string } | undefined),
+        pollStatusToAgentStatus(result.structuredContent),
       );
       return result;
     },
