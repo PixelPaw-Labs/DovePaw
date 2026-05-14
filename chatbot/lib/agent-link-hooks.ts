@@ -24,7 +24,7 @@ import {
   awaitEscalateToToolName,
   awaitRunScriptToolName,
 } from "@/lib/agent-tools";
-import { getMcpStructured } from "@/lib/hooks";
+import { getAwaitStatus } from "@/lib/hooks";
 import { getMemoryProvider } from "@/lib/memory";
 
 // ─── Reflection gate ──────────────────────────────────────────────────────────
@@ -253,12 +253,7 @@ export function makeGroupMomentSaveHook(
     hooks: [
       async (input) => {
         if (input.hook_event_name !== "PostToolUse") return { continue: true };
-        const structured = getMcpStructured(input.tool_response);
-        const status =
-          typeof structured === "object" && structured !== null && "status" in structured
-            ? (structured as { status: unknown }).status
-            : undefined;
-        if (status !== "completed") return { continue: true };
+        if (getAwaitStatus(input.tool_response) !== "completed") return { continue: true };
         const provider = await getMemoryProvider();
         const savePrompt = provider.buildSaveReminder(groupContextId, workspacePath);
         const hookSpecificOutput: PostToolUseHookSpecificOutput = {
@@ -277,12 +272,7 @@ export function makeGroupScriptAwaitToneHook(manifestKey: string): HookCallbackM
     hooks: [
       async (input) => {
         if (input.hook_event_name !== "PostToolUse") return { continue: true };
-        const structured = getMcpStructured(input.tool_response);
-        const status =
-          typeof structured === "object" && structured !== null && "status" in structured
-            ? (structured as { status: unknown }).status
-            : undefined;
-        if (status === "still_running") return { continue: true };
+        if (getAwaitStatus(input.tool_response) === "still_running") return { continue: true };
         const hookSpecificOutput: PostToolUseHookSpecificOutput = {
           hookEventName: "PostToolUse",
           additionalContext: `<reminder>Respond in your own voice and tone as defined by your agent script role.</reminder>`,

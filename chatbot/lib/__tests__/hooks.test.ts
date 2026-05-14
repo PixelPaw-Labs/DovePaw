@@ -4,6 +4,7 @@ import {
   buildDoveCanUseTool,
   buildDoveHooks,
   buildSubagentCanUseTool,
+  getAwaitStatus,
 } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
 import { GROUP_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
@@ -1327,5 +1328,34 @@ describe("buildSubagentCanUseTool", () => {
       (mockFetch.mock.calls[0] as [string, RequestInit])[1].body as string,
     ) as Record<string, unknown>;
     expect(body.toolInput).toEqual({ content: "hello", file_path: "/etc/hosts" });
+  });
+});
+
+describe("getAwaitStatus", () => {
+  it("returns known status values from a JSON string tool_response", () => {
+    expect(getAwaitStatus(JSON.stringify({ status: "completed" }))).toBe("completed");
+    expect(getAwaitStatus(JSON.stringify({ status: "still_running" }))).toBe("still_running");
+    expect(getAwaitStatus(JSON.stringify({ status: "canceled" }))).toBe("canceled");
+    expect(getAwaitStatus(JSON.stringify({ status: "failed" }))).toBe("failed");
+    expect(getAwaitStatus(JSON.stringify({ status: "rejected" }))).toBe("rejected");
+  });
+
+  it("returns known status from a plain object tool_response", () => {
+    expect(getAwaitStatus({ status: "completed" })).toBe("completed");
+  });
+
+  it("returns undefined when status is not a known enum value", () => {
+    expect(getAwaitStatus(JSON.stringify({ status: "unknown_state" }))).toBeUndefined();
+    expect(getAwaitStatus(JSON.stringify({ status: 42 }))).toBeUndefined();
+  });
+
+  it("returns undefined when status is missing", () => {
+    expect(getAwaitStatus(JSON.stringify({ output: "done" }))).toBeUndefined();
+  });
+
+  it("returns undefined for null, undefined, or non-object", () => {
+    expect(getAwaitStatus(null)).toBeUndefined();
+    expect(getAwaitStatus(undefined)).toBeUndefined();
+    expect(getAwaitStatus("not json{")).toBeUndefined();
   });
 });

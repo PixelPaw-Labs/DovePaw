@@ -59,6 +59,29 @@ export function getMcpStructured(tool_response: unknown): unknown {
   return undefined;
 }
 
+const AWAIT_TOOL_STATUSES = [
+  "completed",
+  "canceled",
+  "failed",
+  "rejected",
+  "still_running",
+] as const;
+export type AwaitToolStatus = (typeof AWAIT_TOOL_STATUSES)[number];
+
+function isAwaitToolStatus(s: unknown): s is AwaitToolStatus {
+  return (AWAIT_TOOL_STATUSES as readonly unknown[]).includes(s);
+}
+
+/** Extracts and narrows the `status` field from a PostToolUse `tool_response`. Returns undefined when absent or not a known AwaitToolStatus. */
+export function getAwaitStatus(tool_response: unknown): AwaitToolStatus | undefined {
+  const structured = getMcpStructured(tool_response);
+  if (typeof structured !== "object" || structured === null || !("status" in structured)) {
+    return undefined;
+  }
+  const { status } = structured as { status: unknown };
+  return isAwaitToolStatus(status) ? status : undefined;
+}
+
 // ─── Generic hook builder ─────────────────────────────────────────────────────
 
 export interface AgentHooksConfig {
@@ -260,11 +283,7 @@ export function buildAgentHooks(
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return { continue: true };
             const { tool_response } = input;
-            const structured = getMcpStructured(tool_response);
-            const status =
-              typeof structured === "object" && structured !== null && "status" in structured
-                ? (structured as { status: unknown }).status
-                : undefined;
+            const status = getAwaitStatus(tool_response);
             if (status === "still_running") {
               stillRunningCount++;
               const isFullReminder = stillRunningCount % STILL_RUNNING_FULL_EVERY === 1;
@@ -318,12 +337,7 @@ export function buildDoveHooks(
         hooks: [
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return { continue: true };
-            const structured = getMcpStructured(input.tool_response);
-            const status =
-              typeof structured === "object" && structured !== null && "status" in structured
-                ? (structured as { status: unknown }).status
-                : undefined;
-            if (status !== "completed") return { continue: true };
+            if (getAwaitStatus(input.tool_response) !== "completed") return { continue: true };
             const hookSpecificOutput: PostToolUseHookSpecificOutput = {
               hookEventName: "PostToolUse",
               additionalContext: `<reminder>\n${DOVE_RESPONSE_REMINDER}\n</reminder>`,

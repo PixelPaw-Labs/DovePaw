@@ -22,6 +22,7 @@ import {
 } from "@/lib/a2a-client";
 import type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import type { AwaitToolStatus } from "@/lib/hooks";
 import { taskRuntime } from "@/lib/task-runtime";
 import {
   recordGroupTask,
@@ -42,14 +43,14 @@ export type TaskStartedWithKeyContent = {
 
 /** Returned by await_* when the agent task has reached a terminal state. */
 export type TaskCompletedContent = {
-  status: "completed" | "canceled" | "failed" | "rejected";
+  status: Exclude<AwaitToolStatus, "still_running">;
   taskId: string;
   result: StreamedResult;
 };
 
 /** Returned by await_* when the poll window expired before the task finished. */
 export type TaskStillRunningContent = {
-  status: "still_running";
+  status: Extract<AwaitToolStatus, "still_running">;
   taskId: string;
 };
 
