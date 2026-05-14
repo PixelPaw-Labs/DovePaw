@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MAX_SESSIONS, SessionManager } from "@/lib/session-manager";
 
 function mockWorkspace(path = "/tmp/ws") {
-  return { path, cleanup: vi.fn() };
+  return { path, cleanup: vi.fn().mockResolvedValue(undefined) };
 }
 
 function makeState(contextId: string, label: string, startedAt: Date) {
@@ -51,18 +51,18 @@ describe("SessionManager", () => {
   });
 
   describe("delete()", () => {
-    it("calls workspace.cleanup() and removes the entry", () => {
+    it("calls workspace.cleanup() and removes the entry", async () => {
       const state = makeState("ctx-a", "A", new Date());
       manager.set("ctx-a", state);
 
-      manager.delete("ctx-a");
+      await manager.delete("ctx-a");
 
       expect(state.workspace.cleanup).toHaveBeenCalledOnce();
       expect(manager.getSessions()).toHaveLength(0);
     });
 
-    it("is a no-op for unknown contextId", () => {
-      expect(() => manager.delete("nonexistent")).not.toThrow();
+    it("is a no-op for unknown contextId", async () => {
+      await expect(manager.delete("nonexistent")).resolves.toBeUndefined();
     });
   });
 
