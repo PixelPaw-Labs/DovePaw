@@ -53,7 +53,7 @@
     "@streamdown/mermaid": "^1.0.2",
     "@uiw/react-codemirror": "^4.25.9",
     "@xyflow/react": "^12.10.2",
-    "ai": "^6.0.158",
+    "ai": "^6.0.180",
     "animejs": "^4.3.6",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
