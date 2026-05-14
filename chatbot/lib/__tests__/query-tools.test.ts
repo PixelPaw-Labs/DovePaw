@@ -1147,7 +1147,7 @@ describe("makeStartGroupTool", () => {
     expect(desc).not.toMatch(/<member name="gamma">/); // in-degree>0 → excluded
   });
 
-  it("lists isolated agents (no in or out edges) under <fallback>", () => {
+  it("hides <fallback> when <preferred> is non-empty; isolated agents not shown", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     const c: AgentDef = { ...AGENT, name: "gamma", manifestKey: "gamma", description: "C-desc" };
@@ -1165,11 +1165,12 @@ describe("makeStartGroupTool", () => {
       makeStartGroupTool(GROUP_3, [a, b, c], undefined, undefined, undefined, links),
     );
     const desc = getMembersDescription(tool);
-    // preferred: alpha (out>0, in=0)
+    // preferred: alpha (out>0, in=0) — shown
     expect(desc).toMatch(/<preferred>[\s\S]*<member name="alpha">[\s\S]*<\/preferred>/);
-    // fallback: gamma (out=0, in=0)
-    expect(desc).toMatch(/<fallback>[\s\S]*<member name="gamma">[\s\S]*<\/fallback>/);
-    // beta still excluded
+    // fallback not shown when preferred is non-empty
+    expect(desc).not.toMatch(/<fallback>/);
+    // gamma (isolated) and beta (in-degree>0) both excluded
+    expect(desc).not.toMatch(/<member name="gamma">/);
     expect(desc).not.toMatch(/<member name="beta">/);
   });
 
