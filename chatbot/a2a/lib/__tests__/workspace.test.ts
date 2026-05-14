@@ -42,63 +42,63 @@ describe("createAgentWorkspace", () => {
   beforeEach(() => mkdirSync(TMP_ROOT, { recursive: true }));
   afterEach(() => rmSync(TMP_ROOT, { recursive: true, force: true }));
 
-  it("parent dir uses full agent name", () => {
-    const ws = createAgentWorkspace("my-agent", "ma");
+  it("parent dir uses full agent name", async () => {
+    const ws = await createAgentWorkspace("my-agent", "ma");
 
     expect(existsSync(ws.path)).toBe(true);
     expect(ws.path.startsWith(join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent"))).toBe(true);
   });
 
-  it("workspace folder name is {alias}-{shortId}", () => {
-    const ws = createAgentWorkspace("my-agent", "ma");
+  it("workspace folder name is {alias}-{shortId}", async () => {
+    const ws = await createAgentWorkspace("my-agent", "ma");
     const folderName = basename(ws.path);
 
     expect(folderName).toMatch(/^ma-[0-9a-f]{8}$/);
   });
 
-  it("uses first 8 chars of taskId (dashes stripped) as shortId when provided", () => {
+  it("uses first 8 chars of taskId (dashes stripped) as shortId when provided", async () => {
     const taskId = "abc123de-f456-7890-abcd-ef1234567890";
-    const ws = createAgentWorkspace("my-agent", "ma", undefined, taskId);
+    const ws = await createAgentWorkspace("my-agent", "ma", undefined, taskId);
     const folderName = basename(ws.path);
 
     expect(folderName).toBe("ma-abc123de");
   });
 
-  it("uses a custom workspaceRoot when provided", () => {
+  it("uses a custom workspaceRoot when provided", async () => {
     const customRoot = join(TMP_ROOT, "custom-workspaces");
 
-    const ws = createAgentWorkspace("my-agent", "ma", customRoot);
+    const ws = await createAgentWorkspace("my-agent", "ma", customRoot);
 
     expect(ws.path.startsWith(customRoot)).toBe(true);
     expect(existsSync(ws.path)).toBe(true);
   });
 
-  it("calls onProgress for workspace creation", () => {
+  it("calls onProgress for workspace creation", async () => {
     const onProgress = vi.fn();
-    const ws = createAgentWorkspace("my-agent", "ma", undefined, undefined, onProgress);
+    const ws = await createAgentWorkspace("my-agent", "ma", undefined, undefined, onProgress);
 
     expect(onProgress).toHaveBeenCalledWith("Creating workspace", { workspace: ws.path });
   });
 
-  it("each call produces a unique workspace path", () => {
-    const ws1 = createAgentWorkspace("my-agent", "ma");
-    const ws2 = createAgentWorkspace("my-agent", "ma");
+  it("each call produces a unique workspace path", async () => {
+    const ws1 = await createAgentWorkspace("my-agent", "ma");
+    const ws2 = await createAgentWorkspace("my-agent", "ma");
 
     expect(ws1.path).not.toBe(ws2.path);
 
-    ws1.cleanup();
-    ws2.cleanup();
+    await ws1.cleanup();
+    await ws2.cleanup();
   });
 
   describe("writeWorkspaceSettings", () => {
-    it("writes .claude/settings.json into the workspace", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
+    it("writes .claude/settings.json into the workspace", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
       const settingsPath = join(ws.path, ".claude", "settings.json");
       expect(existsSync(settingsPath)).toBe(true);
     });
 
-    it("settings.json contains PostToolUse hook for ScheduleWakeup that touches flag file", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
+    it("settings.json contains PostToolUse hook for ScheduleWakeup that touches flag file", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
       const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
       const postHooks = settings.hooks?.PostToolUse;
       expect(Array.isArray(postHooks)).toBe(true);
@@ -110,8 +110,8 @@ describe("createAgentWorkspace", () => {
       expect(scheduleHook.hooks[0].command).toContain(".wakeup_pending");
     });
 
-    it("settings.json contains Stop hook that blocks when flag file exists", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
+    it("settings.json contains Stop hook that blocks when flag file exists", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
       const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
       const stopHooks = settings.hooks?.Stop;
       expect(Array.isArray(stopHooks)).toBe(true);
@@ -120,8 +120,8 @@ describe("createAgentWorkspace", () => {
       expect(cmd).toContain('"decision":"block"');
     });
 
-    it("settings.json contains UserPromptSubmit hook that removes flag file", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
+    it("settings.json contains UserPromptSubmit hook that removes flag file", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
       const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
       const upHooks = settings.hooks?.UserPromptSubmit;
       expect(Array.isArray(upHooks)).toBe(true);
@@ -131,42 +131,42 @@ describe("createAgentWorkspace", () => {
   });
 
   describe("cleanup()", () => {
-    it("removes the workspace directory", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
+    it("removes the workspace directory", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
       expect(existsSync(ws.path)).toBe(true);
 
-      ws.cleanup();
+      await ws.cleanup();
 
       expect(existsSync(ws.path)).toBe(false);
     });
 
-    it("does not throw if called twice", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
-      ws.cleanup();
-      expect(() => ws.cleanup()).not.toThrow();
+    it("does not throw if called twice", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
+      await ws.cleanup();
+      await expect(ws.cleanup()).resolves.toBeUndefined();
     });
 
-    it("removes the empty parent dir when it is the last workspace", () => {
-      const ws = createAgentWorkspace("my-agent", "ma");
+    it("removes the empty parent dir when it is the last workspace", async () => {
+      const ws = await createAgentWorkspace("my-agent", "ma");
       const parentDir = join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent");
 
-      ws.cleanup();
+      await ws.cleanup();
 
       expect(existsSync(ws.path)).toBe(false);
       expect(existsSync(parentDir)).toBe(false);
     });
 
-    it("leaves the parent dir when sibling workspaces still exist", () => {
-      const ws1 = createAgentWorkspace("my-agent", "ma");
-      const ws2 = createAgentWorkspace("my-agent", "ma");
+    it("leaves the parent dir when sibling workspaces still exist", async () => {
+      const ws1 = await createAgentWorkspace("my-agent", "ma");
+      const ws2 = await createAgentWorkspace("my-agent", "ma");
       const parentDir = join(TMP_ROOT, ".dovepaw", "workspaces", ".my-agent");
 
-      ws1.cleanup();
+      await ws1.cleanup();
 
       expect(existsSync(ws2.path)).toBe(true);
       expect(existsSync(parentDir)).toBe(true);
 
-      ws2.cleanup();
+      await ws2.cleanup();
     });
   });
 });

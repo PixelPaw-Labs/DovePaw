@@ -193,7 +193,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
   }
   await deleteSession(sessionId);
   await deleteGroupTaskLedger(sessionId);
-  if (workspacePath) restoreAgentWorkspace(workspacePath).cleanup();
+  if (workspacePath) await restoreAgentWorkspace(workspacePath).cleanup();
 
   return Response.json({ ok: true });
 }

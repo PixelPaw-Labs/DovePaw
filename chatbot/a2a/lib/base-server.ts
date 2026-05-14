@@ -138,10 +138,10 @@ export function createAgentServer(
 
   if (sessionManager) {
     app.get("/sessions", (_req, res) => res.json(sessionManager.getSessions()));
-    app.post("/session/clear", (req, res) => {
+    app.post("/session/clear", async (req, res) => {
       const body: unknown = req.body;
       const { contextId } = z.object({ contextId: z.string() }).parse(body);
-      sessionManager.delete(contextId);
+      await sessionManager.delete(contextId);
       res.json({ ok: true });
     });
   }

@@ -188,7 +188,7 @@ export class QueryAgentExecutor {
         workspace = existingState.workspace;
       } else if (!groupOverrides) {
         // First message in this context — create a fresh workspace.
-        workspace = createAgentWorkspace(
+        workspace = await createAgentWorkspace(
           this.def.name,
           this.def.alias,
           undefined,
@@ -426,6 +426,6 @@ export class QueryAgentExecutor {
 
   async cancelTask(): Promise<void> {
     this.abortController?.abort();
-    if (this.currentContextId) this.sessionManager.delete(this.currentContextId);
+    if (this.currentContextId) await this.sessionManager.delete(this.currentContextId);
   }
 }

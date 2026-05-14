@@ -46,10 +46,10 @@ export class SessionManager {
     this.evictOldestIfNeeded();
   }
 
-  delete(contextId: string): void {
+  async delete(contextId: string): Promise<void> {
     const state = this.sessions.get(contextId);
     if (state) {
-      state.workspace.cleanup();
+      await state.workspace.cleanup();
       this.sessions.delete(contextId);
     }
   }
@@ -134,7 +134,8 @@ export class SessionManager {
   private evictOldestIfNeeded(): void {
     if (this.sessions.size <= MAX_SESSIONS) return;
     for (const [oldestId, oldestState] of this.sessions) {
-      oldestState.workspace.cleanup();
+      // Eviction is opportunistic — old workspace removal does not block the new session.
+      void oldestState.workspace.cleanup().catch(() => {});
       this.sessions.delete(oldestId);
       break;
     }

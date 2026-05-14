@@ -1,14 +1,23 @@
 import { execFile } from "node:child_process";
-import { rmdirSync, rmSync, existsSync, writeFileSync, readFileSync, mkdirSync } from "node:fs";
+import { access, mkdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { AGENTS_ROOT, KARPATHY_HOOK_SRC, agentWorkspacePath } from "@@/lib/paths";
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface AgentWorkspace {
   /** Absolute path to the UUID workspace directory. */
   path: string;
   /** Remove the workspace directory. Best-effort — never throws. */
-  cleanup(): void;
+  cleanup(): Promise<void>;
 }
 
 /**
@@ -21,20 +30,20 @@ export interface AgentWorkspace {
  * @param alias         short alias, e.g. "gsd" — used as the workspace folder prefix
  * @param workspaceRoot optional override; defaults to ~/.dovepaw/workspaces/.{agentName}
  */
-export function createAgentWorkspace(
+export async function createAgentWorkspace(
   agentName: string,
   alias: string,
   workspaceRoot?: string,
   taskId?: string,
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
-): AgentWorkspace {
+): Promise<AgentWorkspace> {
   const shortId = taskId
     ? taskId.replace(/-/g, "").slice(0, 8)
     : randomUUID().replace(/-/g, "").slice(0, 8);
   const workspacePath = agentWorkspacePath(agentName, alias, shortId, workspaceRoot);
 
   onProgress?.(`Creating workspace`, { workspace: workspacePath });
-  writeWorkspaceSettings(workspacePath);
+  await writeWorkspaceSettings(workspacePath);
 
   return { path: workspacePath, cleanup: buildCleanup(workspacePath, dirname(workspacePath)) };
 }
@@ -46,9 +55,9 @@ export function createAgentWorkspace(
  * Without this, the SDK's query() resolves on end_turn and the A2A task
  * completes before the scheduled wakeup ever has a chance to reinject its prompt.
  */
-function writeWorkspaceSettings(workspacePath: string): void {
+async function writeWorkspaceSettings(workspacePath: string): Promise<void> {
   const claudeDir = join(workspacePath, ".claude");
-  mkdirSync(claudeDir, { recursive: true });
+  await mkdir(claudeDir, { recursive: true });
   const flagFile = ".claude/.wakeup_pending";
   const settings = {
     outputStyle: "Sub-agent",
@@ -77,18 +86,18 @@ function writeWorkspaceSettings(workspacePath: string): void {
       ],
     },
   };
-  writeFileSync(join(claudeDir, "settings.json"), JSON.stringify(settings, null, 2) + "\n");
+  await writeFile(join(claudeDir, "settings.json"), JSON.stringify(settings, null, 2) + "\n");
 }
 
-function buildCleanup(workspacePath: string, parentDir: string): () => void {
-  return function cleanup() {
+function buildCleanup(workspacePath: string, parentDir: string): () => Promise<void> {
+  return async function cleanup() {
     try {
-      rmSync(workspacePath, { recursive: true, force: true });
+      await rm(workspacePath, { recursive: true, force: true });
     } catch {
       // best effort — do not propagate
     }
     try {
-      rmdirSync(parentDir); // removes parent only if empty; throws ENOTEMPTY or ENOENT otherwise
+      await rmdir(parentDir); // removes parent only if empty; throws ENOTEMPTY or ENOENT otherwise
     } catch {
       // best effort — do not propagate
     }
@@ -163,7 +172,7 @@ export async function cloneReposIntoWorkspace(
       const clonePath = join(workspacePath, repoName);
       onProgress?.(slug);
       await ghClone(slug, clonePath);
-      writeWorkspacePermissions(clonePath);
+      await writeWorkspacePermissions(clonePath);
       return clonePath;
     }),
   );
@@ -180,9 +189,10 @@ export async function cloneReposIntoWorkspace(
  * checks (flags, allow-lists, PreToolUse hooks) and cannot be bypassed by them.
  * See: https://github.com/anthropics/claude-code/issues/37765
  */
-function writeWorkspacePermissions(clonePath: string): void {
-  mkdirSync(join(clonePath, ".claude"), { recursive: true });
+async function writeWorkspacePermissions(clonePath: string): Promise<void> {
+  await mkdir(join(clonePath, ".claude"), { recursive: true });
 
+  const hookSrc = await readFile(KARPATHY_HOOK_SRC, "utf8");
   const settings = {
     permissions: { allow: ["Write(/**)", "Edit(/**)", "Bash(*)"] },
     hooks: {
@@ -191,7 +201,7 @@ function writeWorkspacePermissions(clonePath: string): void {
           hooks: [
             {
               type: "command",
-              command: `echo ${Buffer.from(readFileSync(KARPATHY_HOOK_SRC, "utf8")).toString("base64")} | base64 -d | bash`,
+              command: `echo ${Buffer.from(hookSrc).toString("base64")} | base64 -d | bash`,
               timeout: 10,
             },
           ],
@@ -212,7 +222,7 @@ function writeWorkspacePermissions(clonePath: string): void {
       ],
     },
   };
-  writeFileSync(
+  await writeFile(
     join(clonePath, ".claude", "settings.local.json"),
     JSON.stringify(settings, null, 2) + "\n",
   );
@@ -230,12 +240,14 @@ export async function recloneReposIntoWorkspace(
   ghClone: GhCloneFn = defaultGhClone,
   onProgress?: (slug: string) => void,
 ): Promise<string[]> {
-  for (const slug of slugs) {
-    const repoName = slug.split("/").pop()!;
-    const clonePath = join(workspacePath, repoName);
-    if (existsSync(clonePath)) {
-      rmSync(clonePath, { recursive: true, force: true });
-    }
-  }
+  await Promise.all(
+    slugs.map(async (slug) => {
+      const repoName = slug.split("/").pop()!;
+      const clonePath = join(workspacePath, repoName);
+      if (await exists(clonePath)) {
+        await rm(clonePath, { recursive: true, force: true });
+      }
+    }),
+  );
   return cloneReposIntoWorkspace(workspacePath, slugs, ghClone, onProgress);
 }

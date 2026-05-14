@@ -2,6 +2,7 @@ import { deleteAllSessions, getAllSessionWorkspacePaths } from "@/lib/db";
 import { sessionRunner } from "@/lib/session-runner";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
 import { deletedSessionIds } from "@/lib/deleted-session-ids";
+import { deleteAllGroupTaskLedgers } from "@/lib/group-task-store";
 import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
 
 export async function DELETE() {
@@ -16,8 +17,7 @@ export async function DELETE() {
   // Collect workspace paths before wiping DB rows, then clean up the directories.
   const workspacePaths = getAllSessionWorkspacePaths();
   deleteAllSessions();
-  for (const path of workspacePaths) {
-    restoreAgentWorkspace(path).cleanup();
-  }
+  await deleteAllGroupTaskLedgers();
+  await Promise.all(workspacePaths.map((path) => restoreAgentWorkspace(path).cleanup()));
   return Response.json({ ok: true });
 }

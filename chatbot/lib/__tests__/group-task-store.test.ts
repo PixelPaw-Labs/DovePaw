@@ -22,6 +22,7 @@ import {
   pendingGroupTasks,
   readGroupTaskRecord,
   deleteGroupTaskLedger,
+  deleteAllGroupTaskLedgers,
 } from "../group-task-store";
 
 beforeEach(() => {
@@ -155,6 +156,26 @@ describe("group-task-store", () => {
 
   it("deleteGroupTaskLedger is a no-op for an unknown groupContextId", async () => {
     await expect(deleteGroupTaskLedger("missing")).resolves.toBeUndefined();
+  });
+
+  it("deleteAllGroupTaskLedgers removes every ledger file", async () => {
+    await recordGroupTask("ctx-1", sampleTask({ taskId: "t-1" }));
+    await recordGroupTask("ctx-2", sampleTask({ taskId: "t-2" }));
+    await recordGroupTask("ctx-3", sampleTask({ taskId: "t-3" }));
+    expect(existsSync(join(tmpDir, "ctx-1.json"))).toBe(true);
+    expect(existsSync(join(tmpDir, "ctx-2.json"))).toBe(true);
+    expect(existsSync(join(tmpDir, "ctx-3.json"))).toBe(true);
+
+    await deleteAllGroupTaskLedgers();
+
+    expect(existsSync(join(tmpDir, "ctx-1.json"))).toBe(false);
+    expect(existsSync(join(tmpDir, "ctx-2.json"))).toBe(false);
+    expect(existsSync(join(tmpDir, "ctx-3.json"))).toBe(false);
+  });
+
+  it("deleteAllGroupTaskLedgers is a no-op when the directory does not exist", async () => {
+    rmSync(tmpDir, { recursive: true, force: true });
+    await expect(deleteAllGroupTaskLedgers()).resolves.toBeUndefined();
   });
 
   it("concurrent markGroupTaskDone across many groups never throws and marks every task done", async () => {

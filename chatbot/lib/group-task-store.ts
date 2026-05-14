@@ -141,3 +141,10 @@ export async function deleteGroupTaskLedger(groupContextId: string): Promise<voi
   const file = groupTasksFile(groupContextId);
   if (await exists(file)) await unlink(file);
 }
+
+/** Removes every ledger file in GROUP_TASKS_DIR. Used by the bulk "delete all sessions" route. */
+export async function deleteAllGroupTaskLedgers(): Promise<void> {
+  if (!(await exists(GROUP_TASKS_DIR))) return;
+  const entries = (await readdir(GROUP_TASKS_DIR)).filter((e) => e.endsWith(".json"));
+  await Promise.all(entries.map((e) => deleteGroupTaskLedger(e.slice(0, -".json".length))));
+}
