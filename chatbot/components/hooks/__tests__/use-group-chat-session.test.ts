@@ -227,7 +227,32 @@ describe("useGroupChatSession", () => {
       unmount();
     });
 
-    it("creates a new response bubble after a sender (handoff) event from the same agent", async () => {
+    it("marks agent bubble done when done event follows a sender event (chat_to pattern)", async () => {
+      // Regression: sender event was incorrectly clearing activePoolMsgIdsRef for the calling
+      // agent. The done event then fell back to the plain "pool-agent-a" key (no UUID suffix)
+      // which doesn't match any message, so isLoading was never cleared on the original bubble.
+      vi.mocked(fetch).mockImplementation(
+        makeGroupFetchMock(
+          makeBlockingStream([
+            makePoolSseChunk("agent-a", "progress"), // creates bubble with isLoading:true
+            makeSenderSseChunk("agent-a"), // chat_to handoff — must NOT clear bubble ID
+            makePoolSseChunk("agent-a", "done"), // should mark the original bubble done
+          ]),
+        ),
+      );
+
+      const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
+
+      await waitFor(() => {
+        const bubble = result.current.messages.find((m) => m.id.startsWith("pool-agent-a"));
+        expect(bubble?.isLoading).toBe(false);
+      });
+      unmount();
+    });
+
+    it("reuses the same bubble (not a second) when progress arrives after a sender event", async () => {
+      // A sender event no longer clears the active bubble ID. Subsequent progress events for
+      // the same agent update the existing bubble rather than opening a second orphaned one.
       vi.mocked(fetch).mockImplementation(
         makeGroupFetchMock(
           makeClosingStream([
@@ -242,10 +267,10 @@ describe("useGroupChatSession", () => {
       const { result, unmount } = renderHook(() => useGroupChatSession(["agent-a"], "test-group"));
 
       await waitFor(() => {
-        // One sender bubble + two distinct response bubbles (before and after handoff)
         const responseMsgs = result.current.messages.filter((m) => m.id.startsWith("pool-agent-a"));
-        expect(responseMsgs).toHaveLength(2);
-        expect(responseMsgs[0].id).not.toBe(responseMsgs[1].id);
+        // Single response bubble — updated in place, marked done at the end
+        expect(responseMsgs).toHaveLength(1);
+        expect(responseMsgs[0].isLoading).toBe(false);
       });
       unmount();
     });

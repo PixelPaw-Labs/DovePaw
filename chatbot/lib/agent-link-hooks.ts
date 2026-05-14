@@ -260,18 +260,17 @@ export function makeGroupMomentSaveHook(
   workspacePath: string,
 ): HookCallbackMatcher {
   return {
-    matcher: GROUP_AWAIT_MATCHER,
+    matcher: `mcp__agents__${awaitRunScriptToolName(".*")}`,
     hooks: [
       async (input) => {
         if (input.hook_event_name !== "PostToolUse") return { continue: true };
         if (getAwaitStatus(input.tool_response) !== "completed") return { continue: true };
         const provider = await getMemoryProvider();
         const savePrompt = provider.buildSaveReminder(groupContextId, workspacePath);
-        const hookSpecificOutput: PostToolUseHookSpecificOutput = {
-          hookEventName: "PostToolUse",
-          additionalContext: `<reminder>\n${savePrompt}\n</reminder>`,
+        return {
+          decision: "block",
+          reason: `<reminder>\n${savePrompt}\n</reminder>`,
         };
-        return { hookSpecificOutput };
       },
     ],
   };

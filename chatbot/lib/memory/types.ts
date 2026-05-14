@@ -37,9 +37,9 @@ export interface MemoryProvider {
   buildReadReminder(workspacePath: string, groupContextId: string): string;
 
   /**
-   * Build the save-moments prompt injected as additionalContext by the
-   * PostToolUse hook when an await_chat_to_* / await_review_with_* /
-   * await_escalate_to_* tool completes with status "completed".
+   * Build the save-moments prompt returned as `{ decision: "block", reason }` by the
+   * PostToolUse hook (see makeGroupMomentSaveHook) when an await_script_* tool
+   * completes with status "completed". Blocking ensures the agent must respond before continuing.
    */
   buildSaveReminder(groupContextId: string, workspacePath: string): string;
 

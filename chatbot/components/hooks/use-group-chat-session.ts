@@ -367,9 +367,10 @@ export function useGroupChatSession(memberAgentIds: string[], groupName: string)
             },
           ]);
         }
-        // A handoff instruction is a logical break — clear the sender's active
-        // bubble so the next progress event opens a fresh response bubble.
-        activePoolMsgIdsRef.current.delete(event.agentId);
+        // Do NOT clear the active bubble ID here. The done event for this agent
+        // will arrive after the chat_to / handoff completes and needs to find the
+        // existing bubble to mark it done. The done handler (line 430) clears
+        // the ID, so the next run of the same agent still opens a fresh bubble.
         return;
       }
 

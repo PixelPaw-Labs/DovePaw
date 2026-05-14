@@ -182,15 +182,15 @@ export function makeStartGroupTool(
   const fallback = memberDefs.filter(
     (d) => (outDeg.get(d.name) ?? 0) === 0 && (inDeg.get(d.name) ?? 0) === 0,
   );
-  const buckets = [
-    preferred.length > 0 && `<preferred>\n${renderMemberXml(preferred)}\n</preferred>`,
-    fallback.length > 0 && `<fallback>\n${renderMemberXml(fallback)}\n</fallback>`,
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const buckets =
+    preferred.length > 0
+      ? `<preferred>\n${renderMemberXml(preferred)}\n</preferred>`
+      : fallback.length > 0
+        ? `<fallback>\n${renderMemberXml(fallback)}\n</fallback>`
+        : "";
   const candidateRule =
-    preferred.length > 0 && fallback.length > 0
-      ? "Pick from <preferred> first. Only include <fallback> entries to fill remaining slots within the 1–3 cap when <preferred> alone is insufficient. Never propose any agent not listed below."
+    preferred.length > 0
+      ? "Pick only from <preferred>. Do not fall back to any other agents."
       : "Pick only from the agents listed below. Never propose any agent not listed.";
 
   return tool(

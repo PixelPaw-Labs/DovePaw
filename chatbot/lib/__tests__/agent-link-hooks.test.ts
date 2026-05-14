@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PostToolUseHookSpecificOutput } from "@anthropic-ai/claude-agent-sdk";
 
 vi.mock("@/lib/memory", () => ({
   getMemoryProvider: vi.fn(async () => ({
@@ -10,7 +9,7 @@ vi.mock("@/lib/memory", () => ({
 
 import { makeGroupMomentSaveHook } from "@/lib/agent-link-hooks";
 
-function postToolUseInput(toolResponse: unknown, toolName = "mcp__agents__await_chat_to_test") {
+function postToolUseInput(toolResponse: unknown, toolName = "mcp__agents__await_script_my_agent") {
   return {
     hook_event_name: "PostToolUse" as const,
     tool_name: toolName,
@@ -30,12 +29,12 @@ describe("makeGroupMomentSaveHook", () => {
   const hook = makeGroupMomentSaveHook("grp-123", "/ws");
   const handler = hook.hooks[0];
 
-  it("returns additionalContext with provider save prompt when status is completed", async () => {
+  it("blocks with save prompt when status is completed", async () => {
     const result = await callHook(handler, postToolUseInput({ status: "completed" }));
-    const out = (result as { hookSpecificOutput: PostToolUseHookSpecificOutput })
-      .hookSpecificOutput;
-    expect(out.hookEventName).toBe("PostToolUse");
-    expect(out.additionalContext).toContain("Save to /ws/moments/");
+    expect(result).toMatchObject({
+      decision: "block",
+      reason: expect.stringContaining("Save to /ws/moments/"),
+    });
   });
 
   it("passes through when status is still_running", async () => {
