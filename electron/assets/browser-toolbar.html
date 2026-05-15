@@ -1,0 +1,253 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: rgba(248, 249, 250, 0.97);
+        color: #444;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 12px;
+        height: 70px;
+        display: flex;
+        flex-direction: column;
+        user-select: none;
+        -webkit-app-region: drag;
+      }
+      button,
+      input,
+      form,
+      svg,
+      path {
+        -webkit-app-region: no-drag;
+      }
+      /* ── Tabs row ── */
+      .tabs-row {
+        height: 30px;
+        display: flex;
+        align-items: flex-end;
+        gap: 2px;
+        padding: 4px 6px 0;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scrollbar-width: none;
+      }
+      .tabs-row::-webkit-scrollbar {
+        display: none;
+      }
+      .tab {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px 4px 0 0;
+        height: 26px;
+        padding: 0 4px 0 8px;
+        max-width: 140px;
+        min-width: 60px;
+        flex-shrink: 0;
+        -webkit-app-region: no-drag;
+      }
+      .tab.active {
+        background: #fff;
+        border-top: 2px solid #6366f1;
+      }
+      .tab-label {
+        flex: 1;
+        font-size: 11px;
+        color: #666;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+        -webkit-app-region: no-drag;
+      }
+      .tab.active .tab-label {
+        color: #4f46e5;
+      }
+      .tab-close {
+        background: transparent;
+        border: none;
+        color: #999;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 14px;
+        height: 14px;
+        border-radius: 2px;
+        flex-shrink: 0;
+        font-size: 12px;
+        line-height: 1;
+        -webkit-app-region: no-drag;
+      }
+      .tab-close:hover {
+        background: rgba(0, 0, 0, 0.12);
+        color: #333;
+      }
+      /* ── Nav row ── */
+      .nav-row {
+        height: 40px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 6px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      }
+      .btn {
+        background: transparent;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        border-radius: 4px;
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .btn:hover {
+        background: rgba(0, 0, 0, 0.06);
+        color: #333;
+      }
+      .btn:disabled {
+        opacity: 0.3;
+        cursor: default;
+      }
+      .btn:disabled:hover {
+        background: transparent;
+        color: #999;
+      }
+      .url-form {
+        flex: 1;
+        display: flex;
+      }
+      .url-input {
+        flex: 1;
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.15);
+        border-radius: 5px;
+        color: #333;
+        font-size: 12px;
+        height: 26px;
+        padding: 0 8px;
+        outline: none;
+        min-width: 0;
+      }
+      .url-input:focus {
+        border-color: rgba(99, 102, 241, 0.5);
+        box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="tabs-row" id="tabs-row"></div>
+    <div class="nav-row">
+      <button class="btn" id="back" title="Back" disabled>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M15 18l-6-6 6-6" />
+        </svg>
+      </button>
+      <button class="btn" id="forward" title="Forward" disabled>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M9 18l6-6-6-6" />
+        </svg>
+      </button>
+      <form class="url-form" id="url-form">
+        <input
+          class="url-input"
+          id="url-input"
+          type="text"
+          placeholder="https://"
+          spellcheck="false"
+        />
+      </form>
+      <button class="btn" id="close" title="Close browser">
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <script>
+      const backBtn = document.getElementById("back");
+      const fwdBtn = document.getElementById("forward");
+      const urlInput = document.getElementById("url-input");
+      const urlForm = document.getElementById("url-form");
+      const tabsRow = document.getElementById("tabs-row");
+
+      backBtn.onclick = () => window.browserToolbar.back();
+      fwdBtn.onclick = () => window.browserToolbar.forward();
+      document.getElementById("close").onclick = () => window.browserToolbar.close();
+
+      urlForm.onsubmit = (e) => {
+        e.preventDefault();
+        let url = urlInput.value.trim();
+        if (url && !/^https?:\/\//i.test(url)) url = "https://" + url;
+        if (url) window.browserToolbar.navigate(url);
+        urlInput.blur();
+      };
+
+      window.addEventListener("toolbar:state", (e) => {
+        const state = e.detail;
+        if (document.activeElement !== urlInput) urlInput.value = state.url || "";
+        backBtn.disabled = !state.canGoBack;
+        fwdBtn.disabled = !state.canGoForward;
+
+        tabsRow.innerHTML = "";
+        if (state.tabs && state.tabs.length > 0) {
+          state.tabs.forEach((tab) => {
+            const el = document.createElement("div");
+            el.className = "tab" + (tab.active ? " active" : "");
+
+            const label = document.createElement("span");
+            label.className = "tab-label";
+            label.textContent = tab.label || tab.tabId;
+            label.title = tab.label || tab.fullId || tab.tabId;
+            label.onclick = () => window.browserToolbar.switchTab(tab.fullId || tab.tabId);
+
+            const closeBtn = document.createElement("button");
+            closeBtn.className = "tab-close";
+            closeBtn.textContent = "×";
+            closeBtn.title = "Close tab";
+            closeBtn.onclick = (ev) => {
+              ev.stopPropagation();
+              window.browserToolbar.closeTab(tab.fullId || tab.tabId);
+            };
+
+            el.appendChild(label);
+            el.appendChild(closeBtn);
+            tabsRow.appendChild(el);
+          });
+        }
+      });
+    </script>
+  </body>
+</html>

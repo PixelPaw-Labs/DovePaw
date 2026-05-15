@@ -1,11 +1,19 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { writeFile } from "node:fs/promises";
-import type { WebContents } from "electron";
 import { BROWSER_BRIDGE_PORT_FILE } from "../lib/paths";
 
-type CdpSend = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+export type CdpSend = (method: string, params?: Record<string, unknown>) => Promise<unknown>;
+
+export interface TabInfo {
+  tabId: string;
+  url: string;
+  title: string;
+  active: boolean;
+}
 
 function readBody(req: IncomingMessage): Promise<string> {
+  const hasBody = req.headers["content-length"] != null || req.headers["transfer-encoding"] != null;
+  if (!hasBody) return Promise.resolve("");
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
@@ -26,22 +34,27 @@ function stringArg(args: Record<string, unknown>, key: string): string {
 }
 
 /* oxlint-disable typescript-eslint/no-unsafe-type-assertion -- CDP sendCommand returns unknown; no type definitions available without a full CDP type library */
-async function handleCommand(body: string, cdp: CdpSend, onShow: () => void): Promise<unknown> {
-  // JSON.parse returns any — assign to unknown first to satisfy no-unsafe-assignment
+async function handleCommand(
+  body: string,
+  getTabCdp: (sessionId: string) => CdpSend,
+  listTabs: () => TabInfo[],
+  onShow: (sessionId: string) => void,
+): Promise<unknown> {
   const raw: unknown = JSON.parse(body);
   if (!raw || typeof raw !== "object" || !("action" in raw)) {
     throw new Error("Invalid JSON body");
   }
-  const parsed = raw as { action: string; args?: Record<string, unknown> };
-  const { action, args = {} } = parsed;
+  const parsed = raw as { action: string; args?: Record<string, unknown>; session?: string };
+  const { action, args = {}, session = "default" } = parsed;
+  const cdp = getTabCdp(session);
 
   switch (action) {
     case "navigate": {
       const url = stringArg(args, "url");
       if (!url) throw new Error("args.url is required");
-      onShow();
+      onShow(session);
       await cdp("Page.navigate", { url });
-      return { ok: true, url };
+      return { ok: true, url, session };
     }
 
     case "snapshot": {
@@ -136,20 +149,13 @@ async function handleCommand(body: string, cdp: CdpSend, onShow: () => void): Pr
       return { ok: true, format, dataLength: data.length, data };
     }
 
-    case "list_tabs": {
-      const tabResult = await cdp("Runtime.evaluate", {
-        expression: "JSON.stringify({url: location.href, title: document.title})",
-        returnByValue: true,
-      });
-      const rawValue: unknown = (tabResult as { result: { value: unknown } }).result.value;
-      const tabInfo: { url?: string; title?: string } =
-        typeof rawValue === "string"
-          ? (JSON.parse(rawValue) as { url?: string; title?: string })
-          : {};
-      return {
-        ok: true,
-        tabs: [{ tabId: 0, url: tabInfo.url ?? "", title: tabInfo.title ?? "", active: true }],
-      };
+    case "list_tabs":
+      return { ok: true, tabs: listTabs() };
+
+    case "close_session": {
+      // Callers should call close_session when done with a session to free the tab
+      // Main process handles actual cleanup via the closeTab callback
+      return { ok: true, session };
     }
 
     default:
@@ -165,22 +171,11 @@ export interface BrowserBridge {
 }
 
 export async function startBrowserBridge(
-  webContents: WebContents,
-  onShow: () => void,
+  getTabCdp: (sessionId: string) => CdpSend,
+  listTabs: () => TabInfo[],
+  onShow: (sessionId: string) => void,
   onToggle: () => void,
 ): Promise<BrowserBridge> {
-  try {
-    webContents.debugger.attach("1.3");
-  } catch {
-    // already attached — ignore
-  }
-
-  // Wrap sendCommand so the return type is unknown (not any) throughout handleCommand
-  const cdp: CdpSend = async (method, params = {}) => {
-    const result: unknown = await webContents.debugger.sendCommand(method, params);
-    return result;
-  };
-
   const server = createServer((req, res) => {
     void (async () => {
       const url = req.url ?? "/";
@@ -197,7 +192,7 @@ export async function startBrowserBridge(
         }
 
         if (method === "POST" && url === "/browser/show") {
-          onShow();
+          onShow("default");
           return json(res, 200, { ok: true });
         }
 
@@ -208,7 +203,7 @@ export async function startBrowserBridge(
 
         if (method === "POST" && url === "/command") {
           const body = await readBody(req);
-          const result = await handleCommand(body, cdp, onShow);
+          const result = await handleCommand(body, getTabCdp, listTabs, onShow);
           return json(res, 200, result);
         }
 

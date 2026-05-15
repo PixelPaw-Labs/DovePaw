@@ -5,8 +5,9 @@ console.log("[preload] loaded");
 contextBridge.exposeInMainWorld("electron", {
   isElectron: true,
   browser: {
-    toggle: () => ipcRenderer.invoke("browser:toggle"),
-    navigate: (url: string) => ipcRenderer.invoke("browser:navigate", url),
+    toggle: (sessionId?: string) => ipcRenderer.invoke("browser:toggle", sessionId),
+    navigate: (url: string, sessionId?: string) =>
+      ipcRenderer.invoke("browser:navigate", url, sessionId),
     getUrl: (): Promise<string> => ipcRenderer.invoke("browser:get-url"),
     dim: () => ipcRenderer.invoke("browser:dim"),
     undim: () => ipcRenderer.invoke("browser:undim"),
@@ -15,6 +16,18 @@ contextBridge.exposeInMainWorld("electron", {
     close: () => ipcRenderer.invoke("browser:close"),
     onVisibilityChange: (cb: (visible: boolean) => void) => {
       ipcRenderer.on("browser:visibility-changed", (_e, visible: boolean) => cb(visible));
+    },
+    setPosition: (xFromLeft: number) => ipcRenderer.invoke("browser:set-position", xFromLeft),
+    listTabs: (): Promise<{ tabId: string; url: string; title: string; active: boolean }[]> =>
+      ipcRenderer.invoke("browser:list-tabs"),
+    switchTab: (sessionId: string) => ipcRenderer.invoke("browser:switch-tab", sessionId),
+    onTabsChanged: (
+      cb: (tabs: { tabId: string; url: string; title: string; active: boolean }[]) => void,
+    ) => {
+      ipcRenderer.on(
+        "browser:tabs-changed",
+        (_e, tabs: { tabId: string; url: string; title: string; active: boolean }[]) => cb(tabs),
+      );
     },
   },
 });

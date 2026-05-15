@@ -1,4 +1,14 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, session, shell, Tray } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  Menu,
+  nativeImage,
+  session,
+  shell,
+  Tray,
+  WebContentsView,
+} from "electron";
 import { type ChildProcess, spawn } from "node:child_process";
 import {
   createWriteStream,
@@ -25,6 +35,7 @@ import { bootOpenViking } from "../lib/openviking-spawner";
 import { getAvailablePort } from "../lib/get-available-port";
 import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 import { startBrowserBridge } from "./browser-bridge";
+import { animate } from "animejs";
 
 // Prevent Google/sites from detecting Electron's Chromium as a bot
 app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
@@ -46,6 +57,8 @@ const WINDOW_STATE_FILE = join(DOVEPAW_DIR, "window-state.json");
 
 const SIDECAR_CMDLINE_RE = /openviking-server/;
 
+let browserXFraction = 0.6; // fraction of content width where browser panel starts
+
 let tray: Tray | null = null;
 let win: BrowserWindow | null = null;
 let serversProcess: ChildProcess | null = null;
@@ -53,6 +66,7 @@ let nextProcess: ChildProcess | null = null;
 let ovProcess: ChildProcess | null = null;
 let isQuitting = false;
 let browserPanelVisible = false;
+let browserCompact = false;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -215,17 +229,30 @@ function saveWindowState(w: BrowserWindow): void {
 
 const BROWSER_HEADER_HEIGHT = 44; // matches chatbot header height
 
-/** Compute the screen bounds for the browser overlay window (right half, below the header). */
+/** Compute the screen bounds for the browser overlay window. xFraction sets where it starts. */
 function browserWinBounds(w: BrowserWindow): Electron.Rectangle {
   const outer = w.getBounds();
   const [contentW, contentH] = w.getContentSize();
   const titleBarH = outer.height - contentH;
-  const panelW = Math.floor(contentW / 2);
+  const xOffset = Math.floor(contentW * browserXFraction);
   return {
-    x: outer.x + panelW,
+    x: outer.x + xOffset,
     y: outer.y + titleBarH + BROWSER_HEADER_HEIGHT,
-    width: panelW,
+    width: contentW - xOffset,
     height: contentH - BROWSER_HEADER_HEIGHT,
+  };
+}
+
+/** Compact (mini) bounds: small floating window pinned to the bottom-right of the content area. */
+function browserMiniWinBounds(w: BrowserWindow): Electron.Rectangle {
+  const outer = w.getBounds();
+  const [contentW, contentH] = w.getContentSize();
+  const titleBarH = outer.height - contentH;
+  return {
+    x: outer.x + contentW - 300 - 12,
+    y: outer.y + titleBarH + contentH - 240 - 12,
+    width: 300,
+    height: 240,
   };
 }
 
@@ -372,46 +399,75 @@ void app.whenReady().then(async () => {
       );
   });
 
+  const TOOLBAR_HEIGHT = 70; // 30px tabs row + 40px nav row
+
+  // ── Embedded browser window — pure container, toolbar is a pinned WebContentsView ──
   const browserWin = new BrowserWindow({
-    parent: win, // stays above chat but goes to background with DovePaw
+    parent: win,
     frame: false,
     show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+
+  // Toolbar WebContentsView — always pinned at top, always above tab views
+  const toolbarView = new WebContentsView({
     webPreferences: {
-      session: browserSession,
+      preload: resolve(__dirname, "browser-toolbar-preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-
-  // Diagnostics — confirm session identity and cookie visibility
+  void toolbarView.webContents.loadFile(resolve(ASSETS_DIR, "browser-toolbar.html"));
+  browserWin.contentView.addChildView(toolbarView);
+  toolbarView.webContents.on("did-finish-load", () => {
+    // Resize toolbar to full width at y=0 and push initial state
+    const [w] = browserWin.getContentSize();
+    toolbarView.setBounds({ x: 0, y: 0, width: w, height: TOOLBAR_HEIGHT });
+    notifyToolbarState();
+  });
   console.log("[browser] session isPersistent:", browserSession.isPersistent());
-  console.log("[browser] sessions match:", browserWin.webContents.session === browserSession);
-  browserWin.webContents.on("did-navigate", (_e, url) => {
-    void browserWin.webContents.session.cookies.get({}).then((all) => {
-      const sessionCookies = all.filter((c) => !c.expirationDate);
-      console.log(
-        `[browser] navigate ${url} — total cookies: ${all.length}, session-only: ${sessionCookies.length}`,
-        sessionCookies.map((c) => c.name),
-      );
-    });
-  });
-
-  // Patch navigator.webdriver before any page script reads it
-  browserWin.webContents.on("dom-ready", () => {
-    void browserWin.webContents.executeJavaScript(
-      "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})",
-    );
-  });
 
   // Keep browser window aligned with the right half of the main window
   const syncBrowserWinBounds = () => {
-    if (browserPanelVisible && win) browserWin.setBounds(browserWinBounds(win));
+    if (browserPanelVisible && win)
+      browserWin.setBounds(browserCompact ? browserMiniWinBounds(win) : browserWinBounds(win));
   };
   win.on("resize", syncBrowserWinBounds);
   win.on("move", syncBrowserWinBounds);
 
-  // ── IPC handlers ──
-  let browserPanelEverShown = false;
+  let activeBoundsAnim: ReturnType<typeof animate> | null = null;
+  function animateBrowserWinBounds(to: Electron.Rectangle, duration: number, ease: string): void {
+    activeBoundsAnim?.pause();
+    const from = browserWin.getBounds();
+    const b = { x: from.x, y: from.y, width: from.width, height: from.height };
+    activeBoundsAnim = animate(b, {
+      x: to.x,
+      y: to.y,
+      width: to.width,
+      height: to.height,
+      duration,
+      ease,
+      onUpdate: () => {
+        if (!browserWin.isDestroyed()) {
+          browserWin.setBounds({
+            x: Math.round(b.x),
+            y: Math.round(b.y),
+            width: Math.round(b.width),
+            height: Math.round(b.height),
+          });
+        }
+      },
+    });
+  }
+
+  // ── Tab management ──
+  interface BrowserTab {
+    sessionId: string;
+    view: WebContentsView;
+    cdp: import("./browser-bridge").CdpSend;
+  }
+  const tabs = new Map<string, BrowserTab>();
+  let activeSessionId = "default";
 
   const notifyVisibility = (v: boolean) => {
     try {
@@ -421,17 +477,145 @@ void app.whenReady().then(async () => {
     }
   };
 
-  ipcMain.handle("browser:toggle", () => {
+  const notifyTabsChanged = () => {
+    try {
+      win?.webContents.send("browser:tabs-changed", listTabs());
+    } catch {
+      // renderer not ready yet — ignore
+    }
+  };
+
+  function getOrCreateTab(sessionId: string): BrowserTab {
+    const isNew = !tabs.has(sessionId);
+    if (!isNew) return tabs.get(sessionId)!;
+    const view = new WebContentsView({
+      webPreferences: { session: browserSession, contextIsolation: true, nodeIntegration: false },
+    });
+    view.webContents.on("dom-ready", () => {
+      void view.webContents.executeJavaScript(
+        "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})",
+      );
+    });
+    view.webContents.on("did-navigate", () => notifyToolbarState());
+    view.webContents.on("did-navigate-in-page", () => notifyToolbarState());
+    view.webContents.on("page-title-updated", () => notifyToolbarState());
+    try {
+      view.webContents.debugger.attach("1.3");
+    } catch {
+      // already attached
+    }
+    const cdp: import("./browser-bridge").CdpSend = async (method, params = {}) => {
+      const result: unknown = await view.webContents.debugger.sendCommand(method, params);
+      return result;
+    };
+    const tab: BrowserTab = { sessionId, view, cdp };
+    tabs.set(sessionId, tab);
+    void view.webContents.loadURL("about:blank"); // initialize the view
+    notifyTabsChanged();
+    return tab;
+  }
+
+  const notifyToolbarState = () => {
+    const tab = tabs.get(activeSessionId);
+    const wc = tab?.view.webContents;
+    const tabCount = tabs.size;
+    console.log(`[toolbar:state] tabs=${tabCount} active=${activeSessionId.slice(0, 8)}`);
+    try {
+      toolbarView.webContents.send("toolbar:state", {
+        url: wc?.getURL() ?? "",
+        title: wc?.getTitle() ?? "",
+        canGoBack: wc?.navigationHistory?.canGoBack() ?? false,
+        canGoForward: wc?.navigationHistory?.canGoForward() ?? false,
+        tabs: Array.from(tabs.values()).map((t) => {
+          const tabUrl = t.view.webContents.getURL();
+          const tabTitle = t.view.webContents.getTitle();
+          let label = tabTitle;
+          if (!label && tabUrl && tabUrl !== "about:blank") {
+            try {
+              label = new URL(tabUrl).hostname;
+            } catch {
+              /* ignore */
+            }
+          }
+          return {
+            tabId: t.sessionId.slice(0, 8),
+            fullId: t.sessionId,
+            label: label || t.sessionId.slice(0, 8),
+            active: t.sessionId === activeSessionId,
+          };
+        }),
+      });
+    } catch {
+      // toolbar not ready
+    }
+  };
+
+  function closeTab(sessionId: string): void {
+    const tab = tabs.get(sessionId);
+    if (!tab) return;
+    try {
+      tab.view.webContents.debugger.detach();
+    } catch {
+      /* already detached */
+    }
+    try {
+      browserWin.contentView.removeChildView(tab.view);
+    } catch {
+      /* not attached */
+    }
+    tabs.delete(sessionId);
+    if (activeSessionId === sessionId) {
+      const remaining = Array.from(tabs.keys());
+      if (remaining.length > 0) {
+        switchToTab(remaining[remaining.length - 1]);
+      } else {
+        browserPanelVisible = false;
+        browserWin.hide();
+        notifyVisibility(false);
+      }
+    } else {
+      notifyToolbarState();
+    }
+  }
+
+  function switchToTab(sessionId: string): void {
+    const tab = getOrCreateTab(sessionId);
+    const [w, h] = browserWin.getContentSize();
+    for (const [id, t] of tabs) {
+      if (id === sessionId) {
+        const tabBounds = { x: 0, y: TOOLBAR_HEIGHT, width: w, height: h - TOOLBAR_HEIGHT };
+        console.log(`[tab] setBounds sessionId=${id.slice(0, 8)} bounds=`, tabBounds);
+        t.view.setBounds(tabBounds);
+        browserWin.contentView.addChildView(t.view);
+      } else {
+        try {
+          browserWin.contentView.removeChildView(t.view);
+        } catch {
+          // not added yet
+        }
+      }
+    }
+    activeSessionId = sessionId;
+    void tab; // used above
+    // Re-add toolbar last so it's always the topmost view, and resize it correctly
+    const [tw, th] = browserWin.getContentSize();
+    console.log(`[toolbar] setBounds width=${tw} height=${th} TOOLBAR_HEIGHT=${TOOLBAR_HEIGHT}`);
+    toolbarView.setBounds({ x: 0, y: 0, width: tw, height: TOOLBAR_HEIGHT });
+    browserWin.contentView.removeChildView(toolbarView);
+    browserWin.contentView.addChildView(toolbarView);
+    notifyTabsChanged();
+    notifyToolbarState();
+  }
+
+  // ── IPC handlers ──
+  ipcMain.handle("browser:toggle", (_event, sessionId?: string) => {
+    const targetSession = sessionId ?? activeSessionId;
     browserPanelVisible = !browserPanelVisible;
+    browserCompact = false;
     if (browserPanelVisible && win) {
       browserWin.setBounds(browserWinBounds(win));
-      browserWin.setOpacity(1);
-      browserWin.setIgnoreMouseEvents(false);
       browserWin.show();
-      if (!browserPanelEverShown) {
-        browserPanelEverShown = true;
-        void browserWin.webContents.loadURL("about:blank");
-      }
+      switchToTab(targetSession);
     } else {
       browserWin.hide();
     }
@@ -439,18 +623,19 @@ void app.whenReady().then(async () => {
     return { visible: browserPanelVisible };
   });
 
-  ipcMain.handle("browser:navigate", async (_event, url: string) => {
+  ipcMain.handle("browser:navigate", async (_event, url: string, sessionId?: string) => {
     const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    const targetSession = sessionId ?? activeSessionId;
     if (!browserPanelVisible && win) {
       browserPanelVisible = true;
       browserWin.setBounds(browserWinBounds(win));
-      browserWin.setOpacity(1);
-      browserWin.setIgnoreMouseEvents(false);
       browserWin.show();
       notifyVisibility(true);
     }
+    switchToTab(targetSession);
+    const tab = getOrCreateTab(targetSession);
     try {
-      await browserWin.webContents.loadURL(normalized);
+      await tab.view.webContents.loadURL(normalized);
     } catch (err) {
       console.warn(
         `[browser:navigate] failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -459,37 +644,20 @@ void app.whenReady().then(async () => {
     return { ok: true, url: normalized };
   });
 
-  ipcMain.handle("browser:get-url", () => browserWin.webContents.getURL());
-  ipcMain.handle("browser:back", () => {
-    browserWin.webContents.goBack();
-  });
-  ipcMain.handle("browser:forward", () => {
-    browserWin.webContents.goForward();
-  });
-  ipcMain.handle("browser:close", () => {
-    browserPanelVisible = false;
-    browserWin.hide();
-    notifyVisibility(false);
-    return { visible: false };
+  ipcMain.handle(
+    "browser:get-url",
+    () => tabs.get(activeSessionId)?.view.webContents.getURL() ?? "",
+  );
+  ipcMain.handle("browser:set-position", (_event, xFraction: number) => {
+    browserXFraction = Math.max(0.3, Math.min(0.95, xFraction));
+    if (browserPanelVisible && win) {
+      browserWin.setBounds(browserWinBounds(win));
+      switchToTab(activeSessionId);
+    }
   });
 
-  // Semi-transparent overlay: clicks pass through to the chat below
-  ipcMain.handle("browser:dim", () => {
-    if (!browserPanelVisible) return;
-    browserWin.setOpacity(0.5);
-    browserWin.setIgnoreMouseEvents(true, { forward: true });
-  });
-
-  // Restore full opacity, interactivity, and focus
-  ipcMain.handle("browser:undim", () => {
-    if (!browserPanelVisible) return;
-    browserWin.setOpacity(1);
-    browserWin.setIgnoreMouseEvents(false);
-    browserWin.focus();
-  });
-
-  // ── Start bridge server ──
-  const showPanel = () => {
+  ipcMain.handle("browser:list-tabs", () => listTabs());
+  ipcMain.handle("browser:switch-tab", (_event, sessionId: string) => {
     if (!browserPanelVisible && win) {
       browserPanelVisible = true;
       browserWin.setBounds(browserWinBounds(win));
@@ -498,7 +666,80 @@ void app.whenReady().then(async () => {
       browserWin.show();
       notifyVisibility(true);
     }
+    switchToTab(sessionId);
+    return { activeTabId: sessionId };
+  });
+  ipcMain.handle("browser:back", () => {
+    tabs.get(activeSessionId)?.view.webContents.goBack();
+  });
+  ipcMain.handle("browser:forward", () => {
+    tabs.get(activeSessionId)?.view.webContents.goForward();
+  });
+
+  // ── Toolbar IPC (from browser-toolbar-preload) ──
+  ipcMain.handle("toolbar:back", () => {
+    tabs.get(activeSessionId)?.view.webContents.goBack();
+  });
+  ipcMain.handle("toolbar:forward", () => {
+    tabs.get(activeSessionId)?.view.webContents.goForward();
+  });
+  ipcMain.handle("toolbar:navigate", async (_event, url: string) => {
+    const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    const tab = tabs.get(activeSessionId);
+    if (tab) {
+      await tab.view.webContents.loadURL(normalized).catch(() => {});
+    }
+  });
+  ipcMain.handle("toolbar:close", () => {
+    console.log("[toolbar:close] hiding browser");
+    browserPanelVisible = false;
+    browserWin.hide();
+    notifyVisibility(false);
+    return { visible: false };
+  });
+  ipcMain.handle("toolbar:switch-tab", (_event, sessionId: string) => {
+    switchToTab(sessionId);
+  });
+  ipcMain.handle("toolbar:close-tab", (_event, sessionId: string) => {
+    closeTab(sessionId);
+  });
+  ipcMain.handle("browser:close", () => {
+    browserPanelVisible = false;
+    browserWin.hide();
+    notifyVisibility(false);
+    return { visible: false };
+  });
+
+  // Dim: shrink to mini window in bottom-right corner so the chatbot is usable but browser stays visible
+  ipcMain.handle("browser:dim", () => {
+    if (!browserPanelVisible || !win) return;
+    browserCompact = true;
+    animateBrowserWinBounds(browserMiniWinBounds(win), 200, "inOutCubic");
+  });
+
+  // Undim: restore to full-size panel
+  ipcMain.handle("browser:undim", () => {
+    if (!browserPanelVisible || !win) return;
+    browserCompact = false;
+    animateBrowserWinBounds(browserWinBounds(win), 280, "outExpo");
+    browserWin.show();
+    browserWin.focus();
+  });
+
+  // ── Start bridge server ──
+  // onShow(sessionId): show the panel and switch to the given session's tab.
+  // Always re-shows even if browserPanelVisible=true (the window may have been hidden by dim).
+  const showPanel = (sessionId: string) => {
+    if (win) {
+      browserPanelVisible = true;
+      browserCompact = false;
+      browserWin.setBounds(browserWinBounds(win));
+      browserWin.show();
+    }
+    switchToTab(sessionId);
+    notifyVisibility(true);
   };
+
   const togglePanel = () => {
     browserPanelVisible = !browserPanelVisible;
     if (browserPanelVisible && win) {
@@ -506,14 +747,48 @@ void app.whenReady().then(async () => {
       browserWin.setOpacity(1);
       browserWin.setIgnoreMouseEvents(false);
       browserWin.show();
+      switchToTab(activeSessionId);
     } else {
       browserWin.hide();
     }
     notifyVisibility(browserPanelVisible);
   };
 
+  const getTabCdp = (sessionId: string) => getOrCreateTab(sessionId).cdp;
+  const listTabs = (): import("./browser-bridge").TabInfo[] =>
+    Array.from(tabs.values()).map((t) => ({
+      tabId: t.sessionId,
+      url: t.view.webContents.getURL(),
+      title: t.view.webContents.getTitle(),
+      active: t.sessionId === activeSessionId,
+    }));
+
+  // Resize toolbar and active tab view when browserWin is resized
+  browserWin.on("resize", () => {
+    const [w, h] = browserWin.getContentSize();
+    toolbarView.setBounds({ x: 0, y: 0, width: w, height: TOOLBAR_HEIGHT });
+    tabs
+      .get(activeSessionId)
+      ?.view.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width: w, height: h - TOOLBAR_HEIGHT });
+  });
+
+  // Auto-shrink to mini when user switches focus to the chatbot (single-click to dim)
+  browserWin.on("blur", () => {
+    if (!browserPanelVisible || browserCompact || !win) return;
+    browserCompact = true;
+    animateBrowserWinBounds(browserMiniWinBounds(win), 200, "inOutCubic");
+  });
+
+  // Auto-expand to full when user clicks the mini browser (single-click to restore)
+  browserWin.on("focus", () => {
+    if (!browserPanelVisible || !browserCompact || !win) return;
+    browserCompact = false;
+    animateBrowserWinBounds(browserWinBounds(win), 280, "outExpo");
+    switchToTab(activeSessionId);
+  });
+
   try {
-    const bridge = await startBrowserBridge(browserWin.webContents, showPanel, togglePanel);
+    const bridge = await startBrowserBridge(getTabCdp, listTabs, showPanel, togglePanel);
     console.log(`✓ Browser bridge listening on port ${bridge.port}`);
   } catch (err) {
     console.warn(
