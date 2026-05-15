@@ -41,13 +41,16 @@ export class AgentConfigReader {
 
   /**
    * Returns the MCP tools for every agent this agent is linked to, based on strategy:
-   *   sequential  → chat_to_*
    *   chat        → start_chat_to_* + await_chat_to_*
-   *   review      → review_with_*
-   *   escalation  → escalate_to_*
+   *   review      → review_with_* + await_review_with_*
+   *   escalation  → escalate_to_* + await_escalate_to_*
    *
    * Only injects tools for linked agents that are currently online.
    * Before the first heartbeat cycle, falls back to port manifest presence.
+   *
+   * Returns:
+   *   tools     — all MCP tools to register with the SDK server
+   *   linkTools — start-only tools with handoffScore, used by the stop-hook handoff prompt
    */
   async resolveLinkedTools(
     agentName: string,
@@ -55,14 +58,28 @@ export class AgentConfigReader {
     backgroundTasks?: Promise<CollectedStream>[],
     registry?: PendingRegistry,
     groupMeta?: GroupMeta,
-  ) {
+  ): Promise<{
+    tools: Parameters<typeof createSdkMcpServer>[0]["tools"];
+    linkTools: Array<{
+      name: string;
+      description: string;
+      handoffScoreMin: number;
+      handoffScoreMax: number;
+    }>;
+  }> {
     const [links, allAgents] = await Promise.all([readAgentLinks(), readAgentsConfig()]);
 
     const resolvedLinks = resolveLinkedTargets(agentName, links);
     const tools: Parameters<typeof createSdkMcpServer>[0]["tools"] = [];
+    const linkTools: Array<{
+      name: string;
+      description: string;
+      handoffScoreMin: number;
+      handoffScoreMax: number;
+    }> = [];
     const callerDisplayName = allAgents.find((a) => a.name === agentName)?.displayName;
 
-    for (const { targetName, strategy } of resolvedLinks) {
+    for (const { targetName, strategy, handoffScoreMin, handoffScoreMax } of resolvedLinks) {
       const targetDef = allAgents.find((a) => a.name === targetName);
       if (!targetDef) continue;
 
@@ -70,40 +87,66 @@ export class AgentConfigReader {
       if (!online) continue;
 
       switch (strategy) {
-        case "review":
-          tools.push(
-            makeStartReviewTool(
-              targetDef,
-              signal,
-              registry,
-              agentName,
-              groupMeta,
-              callerDisplayName,
-            ),
+        case "review": {
+          const startTool = makeStartReviewTool(
+            targetDef,
+            signal,
+            registry,
+            agentName,
+            groupMeta,
+            callerDisplayName,
           );
+          tools.push(startTool);
           tools.push(makeAwaitReviewTool(targetDef, signal, registry, groupMeta));
+          linkTools.push({
+            name: startTool.name,
+            description: startTool.description ?? "",
+            handoffScoreMin,
+            handoffScoreMax,
+          });
           break;
-        case "escalation":
-          tools.push(
-            makeStartEscalateTool(
-              targetDef,
-              signal,
-              registry,
-              agentName,
-              groupMeta,
-              callerDisplayName,
-            ),
+        }
+        case "escalation": {
+          const startTool = makeStartEscalateTool(
+            targetDef,
+            signal,
+            registry,
+            agentName,
+            groupMeta,
+            callerDisplayName,
           );
+          tools.push(startTool);
           tools.push(makeAwaitEscalateTool(targetDef, signal, registry, groupMeta));
+          linkTools.push({
+            name: startTool.name,
+            description: startTool.description ?? "",
+            handoffScoreMin,
+            handoffScoreMax,
+          });
           break;
-        default: // "chat" and any future strategies default to start + await
-          tools.push(
-            makeStartChatToTool(targetDef, signal, backgroundTasks, registry, agentName, groupMeta),
+        }
+        default: {
+          // "chat" and any future strategies default to start + await
+          const startTool = makeStartChatToTool(
+            targetDef,
+            signal,
+            backgroundTasks,
+            registry,
+            agentName,
+            groupMeta,
           );
+          tools.push(startTool);
           tools.push(makeAwaitChatToTool(targetDef, signal, registry, groupMeta));
+          linkTools.push({
+            name: startTool.name,
+            description: startTool.description ?? "",
+            handoffScoreMin,
+            handoffScoreMax,
+          });
+        }
       }
     }
 
-    return tools;
+    return { tools, linkTools };
   }
 }

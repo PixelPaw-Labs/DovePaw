@@ -116,6 +116,8 @@ describe("detectGaps", () => {
     direction: "single",
     strategy: "chat",
     group: "my-group",
+    handoffScoreMin: 80,
+    handoffScoreMax: 100,
   };
 
   const checkpoint = (taskId: string, completedAt: string): GroupCheckpoint => ({

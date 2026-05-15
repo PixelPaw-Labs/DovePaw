@@ -58,9 +58,6 @@ function pollStatusToAgentStatus(sc: AwaitToolContent | undefined): AgentTaskSta
 
 // ─── Delegation thresholds ────────────────────────────────────────────────────
 
-/** Minimum handoff score (0–100) in the stop-hook consideration prompt that forces a handoff call. */
-export const HANDOFF_SCORE_THRESHOLD = 80;
-
 export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; description: string }> = {
   high: {
     threshold: 0.7,

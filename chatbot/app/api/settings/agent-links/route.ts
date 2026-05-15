@@ -24,13 +24,16 @@ const postBodySchema = z.object({
   direction: z.enum(["single", "dual"]),
   strategy: z.enum(AGENT_LINK_STRATEGIES).default("chat"),
   group: z.string().optional(),
+  handoffScoreMin: z.number().min(0).max(100).default(80).optional(),
+  handoffScoreMax: z.number().min(0).max(100).default(100).optional(),
 });
 
 export async function POST(request: Request) {
   const parsed = await parseBody(request, postBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { source, target, direction, strategy, group } = parsed.data;
+  const { source, target, direction, strategy, group, handoffScoreMin, handoffScoreMax } =
+    parsed.data;
 
   if (source === target) {
     return Response.json({ error: "An agent cannot link to itself" }, { status: 400 });
@@ -60,7 +63,18 @@ export async function POST(request: Request) {
 
   await writeAgentLinksFile({
     ...file,
-    links: [...file.links, { source, target, direction, strategy, group }],
+    links: [
+      ...file.links,
+      {
+        source,
+        target,
+        direction,
+        strategy,
+        group,
+        handoffScoreMin: handoffScoreMin ?? 80,
+        handoffScoreMax: handoffScoreMax ?? 100,
+      },
+    ],
   });
   return Response.json({ ok: true }, { status: 201 });
 }
@@ -76,14 +90,26 @@ const patchBodySchema = z.object({
   direction: z.enum(["single", "dual"]),
   strategy: z.enum(AGENT_LINK_STRATEGIES).default("chat"),
   group: z.string().optional(),
+  handoffScoreMin: z.number().min(0).max(100).default(80).optional(),
+  handoffScoreMax: z.number().min(0).max(100).default(100).optional(),
 });
 
 export async function PATCH(request: Request) {
   const parsed = await parseBody(request, patchBodySchema);
   if (!parsed.ok) return parsed.response;
 
-  const { source, target, currentStrategy, newSource, newTarget, direction, strategy, group } =
-    parsed.data;
+  const {
+    source,
+    target,
+    currentStrategy,
+    newSource,
+    newTarget,
+    direction,
+    strategy,
+    group,
+    handoffScoreMin,
+    handoffScoreMax,
+  } = parsed.data;
 
   if (newSource === newTarget) {
     return Response.json({ error: "An agent cannot link to itself" }, { status: 400 });
@@ -119,7 +145,15 @@ export async function PATCH(request: Request) {
   }
 
   const updatedLinks = [...file.links];
-  updatedLinks[idx] = { source: newSource, target: newTarget, direction, strategy, group };
+  updatedLinks[idx] = {
+    source: newSource,
+    target: newTarget,
+    direction,
+    strategy,
+    group,
+    handoffScoreMin: handoffScoreMin ?? 80,
+    handoffScoreMax: handoffScoreMax ?? 100,
+  };
   await writeAgentLinksFile({ ...file, links: updatedLinks });
   return Response.json({ ok: true });
 }

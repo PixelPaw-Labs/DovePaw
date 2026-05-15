@@ -28,7 +28,18 @@ import {
 } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
 import Link from "next/link";
-import { FolderPlus, Home, Info, LayoutGrid, List, Plus, Settings2, Users2, X } from "lucide-react";
+import {
+  FolderPlus,
+  Home,
+  Info,
+  LayoutGrid,
+  List,
+  Pencil,
+  Plus,
+  Settings2,
+  Users2,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
@@ -85,6 +96,8 @@ type AgentNodeData = { config: AgentConfigEntry } & Record<string, unknown>;
 type AgentEdgeData = {
   direction: "single" | "dual";
   strategy: AgentLinkStrategy;
+  handoffScoreMin: number;
+  handoffScoreMax: number;
 } & Record<string, unknown>;
 type GroupNodeData = { group: AgentGroup } & Record<string, unknown>;
 
@@ -97,6 +110,7 @@ type AgentFlowEdge = Edge<AgentEdgeData, "agentEdge">;
 
 const HeartbeatContext = createContext<Record<string, { online: boolean }>>({});
 const DeleteEdgeContext = createContext<(edgeId: string, data: AgentEdgeData) => void>(() => {});
+const EditEdgeContext = createContext<(edgeId: string, data: AgentEdgeData) => void>(() => {});
 const RemoveNodeContext = createContext<(nodeId: string) => void>(() => {});
 const EdgesContext = createContext<AgentFlowEdge[]>([]);
 const EditGroupContext = createContext<(groupName: string) => void>(() => {});
@@ -172,13 +186,15 @@ function buildFlowEdge(
   target: string,
   direction: "single" | "dual",
   strategy: AgentLinkStrategy,
+  handoffScoreMin = 80,
+  handoffScoreMax = 100,
 ): AgentFlowEdge {
   return {
     id: buildEdgeId(source, target, strategy),
     source,
     target,
     type: "agentEdge",
-    data: { direction, strategy },
+    data: { direction, strategy, handoffScoreMin, handoffScoreMax },
     markerEnd: { type: MarkerType.ArrowClosed, color: STRATEGY_COLORS[strategy] },
     markerStart:
       direction === "dual"
@@ -624,6 +640,7 @@ function AgentEdge({
   style,
 }: EdgeProps<AgentFlowEdge>) {
   const onDelete = useContext(DeleteEdgeContext);
+  const onEdit = useContext(EditEdgeContext);
   const allEdges = useContext(EdgesContext);
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
@@ -783,7 +800,34 @@ function AgentEdge({
             {STRATEGY_LABELS[strategy]} {data?.direction === "dual" ? "↔" : "→"}
           </span>
           <button
-            onClick={() => onDelete(id, data ?? { direction: "single", strategy: "chat" })}
+            onClick={() =>
+              onEdit(
+                id,
+                data ?? {
+                  direction: "single",
+                  strategy: "chat",
+                  handoffScoreMin: 80,
+                  handoffScoreMax: 100,
+                },
+              )
+            }
+            className="w-4 h-4 rounded-full bg-background/80 border border-border/40 flex items-center justify-center text-muted-foreground hover:text-foreground hover:border-border transition-colors shadow-sm"
+            title="Edit link"
+          >
+            <Pencil className="w-2.5 h-2.5" />
+          </button>
+          <button
+            onClick={() =>
+              onDelete(
+                id,
+                data ?? {
+                  direction: "single",
+                  strategy: "chat",
+                  handoffScoreMin: 80,
+                  handoffScoreMax: 100,
+                },
+              )
+            }
             className="w-4 h-4 rounded-full bg-background/80 border border-border/40 flex items-center justify-center text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-colors shadow-sm"
             title="Remove link"
           >
@@ -1012,6 +1056,176 @@ function SelectedAgentPanel({
   );
 }
 
+// ─── EditLinkDialog ───────────────────────────────────────────────────────────
+
+interface EditLinkDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  edgeId: string;
+  initialData: AgentEdgeData;
+  onSuccess: (edgeId: string, newData: AgentEdgeData) => void;
+}
+
+function EditLinkDialog({
+  open,
+  onOpenChange,
+  edgeId,
+  initialData,
+  onSuccess,
+}: EditLinkDialogProps) {
+  const [direction, setDirection] = useState<"single" | "dual">(initialData.direction);
+  const [strategy, setStrategy] = useState<AgentLinkStrategy>(initialData.strategy);
+  const [handoffMin, setHandoffMin] = useState(initialData.handoffScoreMin);
+  const [handoffMax, setHandoffMax] = useState(initialData.handoffScoreMax);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setDirection(initialData.direction);
+      setStrategy(initialData.strategy);
+      setHandoffMin(initialData.handoffScoreMin);
+      setHandoffMax(initialData.handoffScoreMax);
+      setError("");
+    }
+  }, [open, initialData]);
+
+  const [source, , currentStrategy] = edgeId.split("||");
+  const target = edgeId.split("||")[1] ?? "";
+
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/settings/agent-links", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source,
+          target,
+          currentStrategy: currentStrategy ?? "chat",
+          newSource: source,
+          newTarget: target,
+          direction,
+          strategy,
+          handoffScoreMin: handoffMin,
+          handoffScoreMax: handoffMax,
+        }),
+      });
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(json.error ?? "Failed to save.");
+        return;
+      }
+      onSuccess(edgeId, {
+        direction,
+        strategy,
+        handoffScoreMin: handoffMin,
+        handoffScoreMax: handoffMax,
+      });
+      onOpenChange(false);
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Edit Link</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Strategy</label>
+            <Select
+              value={strategy}
+              onValueChange={(v) =>
+                setStrategy(AGENT_LINK_STRATEGIES.find((s) => s === v) ?? "chat")
+              }
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {AGENT_LINK_STRATEGIES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    <span style={{ color: STRATEGY_COLORS[s] }} className="font-medium">
+                      {STRATEGY_LABELS[s]}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Direction</label>
+            <Select
+              value={direction}
+              onValueChange={(v) => setDirection(v === "dual" ? "dual" : "single")}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="single">Single → (source to target only)</SelectItem>
+                <SelectItem value="dual">Bidirectional ↔ (both directions)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Handoff range</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={handoffMin}
+                onChange={(e) => setHandoffMin(Number(e.target.value))}
+                className="w-20 text-sm bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <span className="text-sm text-muted-foreground">–</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={handoffMax}
+                onChange={(e) => setHandoffMax(Number(e.target.value))}
+                className="w-20 text-sm bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Score window that triggers a handoff (0–100).
+            </p>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" className="flex-1" disabled={submitting}>
+              {submitting ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── AddLinkDialog ────────────────────────────────────────────────────────────
 
 interface AddLinkDialogProps {
@@ -1037,6 +1251,8 @@ function AddLinkDialog({
   const [target, setTarget] = useState("");
   const [direction, setDirection] = useState<"single" | "dual">("single");
   const [strategy, setStrategy] = useState<AgentLinkStrategy>("chat");
+  const [handoffMin, setHandoffMin] = useState(80);
+  const [handoffMax, setHandoffMax] = useState(100);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -1047,6 +1263,8 @@ function AddLinkDialog({
       setTarget(initialTarget ?? "");
       setDirection("single");
       setStrategy("chat");
+      setHandoffMin(80);
+      setHandoffMax(100);
       setError("");
     }
   }, [open, initialSource, initialTarget]);
@@ -1076,7 +1294,14 @@ function AddLinkDialog({
       const res = await fetch("/api/settings/agent-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source, target, direction, strategy }),
+        body: JSON.stringify({
+          source,
+          target,
+          direction,
+          strategy,
+          handoffScoreMin: handoffMin,
+          handoffScoreMax: handoffMax,
+        }),
       });
       // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       const json = (await res.json()) as { error?: string };
@@ -1187,6 +1412,32 @@ function AddLinkDialog({
                 <SelectItem value="dual">Bidirectional ↔ (both directions)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">Handoff range</label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={handoffMin}
+                onChange={(e) => setHandoffMin(Number(e.target.value))}
+                className="w-20 text-sm bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+              <span className="text-sm text-muted-foreground">–</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={handoffMax}
+                onChange={(e) => setHandoffMax(Number(e.target.value))}
+                className="w-20 text-sm bg-background border border-input rounded-md px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Score window that triggers a handoff (0–100). Default: 80–100.
+            </p>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -1615,7 +1866,14 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
     setNodes([...groupNodes, ...groupMemberNodes, ...standaloneNodes]);
     setEdges(
       linksFile.links.map((link) =>
-        buildFlowEdge(link.source, link.target, link.direction, link.strategy),
+        buildFlowEdge(
+          link.source,
+          link.target,
+          link.direction,
+          link.strategy,
+          link.handoffScoreMin,
+          link.handoffScoreMax,
+        ),
       ),
     );
   }, [agentConfigs, linksFile.links, linksFile.groups]);
@@ -1627,6 +1885,14 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogInitialSource, setDialogInitialSource] = useState<string | undefined>();
   const [dialogInitialTarget, setDialogInitialTarget] = useState<string | undefined>();
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editEdgeId, setEditEdgeId] = useState("");
+  const [editEdgeData, setEditEdgeData] = useState<AgentEdgeData>({
+    direction: "single",
+    strategy: "chat",
+    handoffScoreMin: 80,
+    handoffScoreMax: 100,
+  });
   const [editingGroup, setEditingGroup] = useState<string | null>(null);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
 
@@ -1706,6 +1972,36 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
     },
     [edges],
   );
+
+  const handleEdgeEdit = useCallback((edgeId: string, data: AgentEdgeData) => {
+    setEditEdgeId(edgeId);
+    setEditEdgeData(data);
+    setEditDialogOpen(true);
+  }, []);
+
+  const handleEdgeEditSuccess = useCallback((edgeId: string, newData: AgentEdgeData) => {
+    const newEdgeId = buildEdgeId(
+      edgeId.split("||")[0] ?? "",
+      edgeId.split("||")[1] ?? "",
+      newData.strategy,
+    );
+    setEdges((prev) =>
+      prev.map((e) =>
+        e.id === edgeId
+          ? {
+              ...e,
+              id: newEdgeId,
+              data: newData,
+              markerEnd: { type: MarkerType.ArrowClosed, color: STRATEGY_COLORS[newData.strategy] },
+              markerStart:
+                newData.direction === "dual"
+                  ? { type: MarkerType.ArrowClosed, color: STRATEGY_COLORS[newData.strategy] }
+                  : undefined,
+            }
+          : e,
+      ),
+    );
+  }, []);
 
   const handleApplyLayout = useCallback(
     async (newLayout: CanvasLayout) => {
@@ -1985,168 +2281,177 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
       <EdgesContext.Provider value={edges}>
         <RemoveNodeContext.Provider value={handleRemoveNode}>
           <DeleteEdgeContext.Provider value={handleEdgeDelete}>
-            <EditGroupContext.Provider value={setEditingGroup}>
-              <div className="w-full h-screen flex">
-                <UnlinkedAgentsSidebar agents={sidebarAgents} />
-                <div
-                  className="flex-1 h-full"
-                  onDrop={onDrop}
-                  onDragOver={(e) => e.preventDefault()}
-                >
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    nodeTypes={nodeTypes}
-                    edgeTypes={edgeTypes}
-                    defaultEdgeOptions={{ zIndex: 1000 }}
-                    onNodesChange={onNodesChange}
-                    onConnect={onConnect}
-                    onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                    onPaneClick={() => setSelectedNodeId(null)}
-                    connectionMode={ConnectionMode.Loose}
-                    deleteKeyCode={null}
-                    fitView
-                    panOnDrag
-                    panOnScroll
-                    selectionOnDrag
-                    zoomOnDoubleClick={false}
+            <EditEdgeContext.Provider value={handleEdgeEdit}>
+              <EditGroupContext.Provider value={setEditingGroup}>
+                <div className="w-full h-screen flex">
+                  <UnlinkedAgentsSidebar agents={sidebarAgents} />
+                  <div
+                    className="flex-1 h-full"
+                    onDrop={onDrop}
+                    onDragOver={(e) => e.preventDefault()}
                   >
-                    <Background bgColor="var(--sidebar)" />
-                    <Controls position="bottom-left" />
+                    <ReactFlow
+                      nodes={nodes}
+                      edges={edges}
+                      nodeTypes={nodeTypes}
+                      edgeTypes={edgeTypes}
+                      defaultEdgeOptions={{ zIndex: 1000 }}
+                      onNodesChange={onNodesChange}
+                      onConnect={onConnect}
+                      onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+                      onPaneClick={() => setSelectedNodeId(null)}
+                      connectionMode={ConnectionMode.Loose}
+                      deleteKeyCode={null}
+                      fitView
+                      panOnDrag
+                      panOnScroll
+                      selectionOnDrag
+                      zoomOnDoubleClick={false}
+                    >
+                      <Background bgColor="var(--sidebar)" />
+                      <Controls position="bottom-left" />
 
-                    {/* Top-left: nav + add link */}
-                    <Panel position="top-left">
-                      <div className="flex items-center gap-2.5 bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg px-3 py-2">
-                        <Link
-                          href="/"
-                          className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
-                        >
-                          <Home className="w-3.5 h-3.5" />
-                          Home
-                        </Link>
-                        <span className="text-border">·</span>
-                        <Link
-                          href="/settings/agent-links"
-                          className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
-                        >
-                          <List className="w-3.5 h-3.5" />
-                          List view
-                        </Link>
-                        <span className="text-border">·</span>
-                        <button
-                          onClick={() => openAddDialog()}
-                          className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add Link
-                        </button>
-                        <span className="text-border">·</span>
-                        <button
-                          onClick={() => setCreateGroupOpen(true)}
-                          className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
-                        >
-                          <FolderPlus className="w-3.5 h-3.5" />
-                          New Group
-                        </button>
-                      </div>
-                    </Panel>
-
-                    {/* Top-right: layout + legend toggles */}
-                    <Panel position="top-right">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setShowLayout((v) => !v);
-                            setShowLegend(false);
-                          }}
-                          className={cn(
-                            "bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg p-2.5 transition-colors",
-                            showLayout
-                              ? "text-primary bg-primary/10 border-primary/20"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                          title={showLayout ? "Hide layout options" : "Auto layout"}
-                        >
-                          <LayoutGrid className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowLegend((v) => !v);
-                            setShowLayout(false);
-                          }}
-                          className={cn(
-                            "bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg p-2.5 transition-colors",
-                            showLegend
-                              ? "text-primary bg-primary/10 border-primary/20"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                          title={showLegend ? "Hide legend" : "Show legend"}
-                        >
-                          <Info className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </Panel>
-
-                    {/* Top-right dropdown: layout panel */}
-                    {showLayout && (
-                      <Panel position="top-right" style={{ top: 56 }}>
-                        <LayoutPanel layout={layout} onApply={handleApplyLayout} />
+                      {/* Top-left: nav + add link */}
+                      <Panel position="top-left">
+                        <div className="flex items-center gap-2.5 bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg px-3 py-2">
+                          <Link
+                            href="/"
+                            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
+                          >
+                            <Home className="w-3.5 h-3.5" />
+                            Home
+                          </Link>
+                          <span className="text-border">·</span>
+                          <Link
+                            href="/settings/agent-links"
+                            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
+                          >
+                            <List className="w-3.5 h-3.5" />
+                            List view
+                          </Link>
+                          <span className="text-border">·</span>
+                          <button
+                            onClick={() => openAddDialog()}
+                            className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Link
+                          </button>
+                          <span className="text-border">·</span>
+                          <button
+                            onClick={() => setCreateGroupOpen(true)}
+                            className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                          >
+                            <FolderPlus className="w-3.5 h-3.5" />
+                            New Group
+                          </button>
+                        </div>
                       </Panel>
-                    )}
 
-                    {/* Bottom-right: legend */}
-                    {showLegend && (
-                      <Panel position="bottom-right">
-                        <AgentLinksLegend />
+                      {/* Top-right: layout + legend toggles */}
+                      <Panel position="top-right">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setShowLayout((v) => !v);
+                              setShowLegend(false);
+                            }}
+                            className={cn(
+                              "bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg p-2.5 transition-colors",
+                              showLayout
+                                ? "text-primary bg-primary/10 border-primary/20"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                            title={showLayout ? "Hide layout options" : "Auto layout"}
+                          >
+                            <LayoutGrid className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setShowLegend((v) => !v);
+                              setShowLayout(false);
+                            }}
+                            className={cn(
+                              "bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg p-2.5 transition-colors",
+                              showLegend
+                                ? "text-primary bg-primary/10 border-primary/20"
+                                : "text-muted-foreground hover:text-foreground",
+                            )}
+                            title={showLegend ? "Hide legend" : "Show legend"}
+                          >
+                            <Info className="w-4 h-4" />
+                          </button>
+                        </div>
                       </Panel>
-                    )}
 
-                    {/* Bottom-center: selected agent info */}
-                    {selectedConfig && (
-                      <Panel position="bottom-center">
-                        <SelectedAgentPanel
-                          agentConfig={selectedConfig}
-                          allEdges={edges}
-                          onClose={() => setSelectedNodeId(null)}
-                          onAddLink={openAddDialog}
-                        />
-                      </Panel>
-                    )}
-                  </ReactFlow>
+                      {/* Top-right dropdown: layout panel */}
+                      {showLayout && (
+                        <Panel position="top-right" style={{ top: 56 }}>
+                          <LayoutPanel layout={layout} onApply={handleApplyLayout} />
+                        </Panel>
+                      )}
+
+                      {/* Bottom-right: legend */}
+                      {showLegend && (
+                        <Panel position="bottom-right">
+                          <AgentLinksLegend />
+                        </Panel>
+                      )}
+
+                      {/* Bottom-center: selected agent info */}
+                      {selectedConfig && (
+                        <Panel position="bottom-center">
+                          <SelectedAgentPanel
+                            agentConfig={selectedConfig}
+                            allEdges={edges}
+                            onClose={() => setSelectedNodeId(null)}
+                            onAddLink={openAddDialog}
+                          />
+                        </Panel>
+                      )}
+                    </ReactFlow>
+                  </div>
                 </div>
-              </div>
 
-              <AddLinkDialog
-                open={dialogOpen}
-                onOpenChange={(open) => {
-                  if (!open) {
-                    setDialogInitialSource(undefined);
-                    setDialogInitialTarget(undefined);
-                  }
-                  setDialogOpen(open);
-                }}
-                agentConfigs={agentConfigs}
-                initialSource={dialogInitialSource}
-                initialTarget={dialogInitialTarget}
-                existingEdges={edges}
-                onSuccess={handleAddLinkSuccess}
-              />
-              <EditGroupDialog
-                group={editingGroupData}
-                onOpenChange={(open) => {
-                  if (!open) setEditingGroup(null);
-                }}
-                allAgentConfigs={agentConfigs}
-                existingGroupNames={existingGroupNames}
-                onSuccess={handleGroupUpdated}
-              />
-              <CreateGroupDialog
-                open={createGroupOpen}
-                onOpenChange={setCreateGroupOpen}
-                existingGroupNames={existingGroupNames}
-                onSuccess={handleGroupCreated}
-              />
-            </EditGroupContext.Provider>
+                <AddLinkDialog
+                  open={dialogOpen}
+                  onOpenChange={(open) => {
+                    if (!open) {
+                      setDialogInitialSource(undefined);
+                      setDialogInitialTarget(undefined);
+                    }
+                    setDialogOpen(open);
+                  }}
+                  agentConfigs={agentConfigs}
+                  initialSource={dialogInitialSource}
+                  initialTarget={dialogInitialTarget}
+                  existingEdges={edges}
+                  onSuccess={handleAddLinkSuccess}
+                />
+                <EditLinkDialog
+                  open={editDialogOpen}
+                  onOpenChange={setEditDialogOpen}
+                  edgeId={editEdgeId}
+                  initialData={editEdgeData}
+                  onSuccess={handleEdgeEditSuccess}
+                />
+                <EditGroupDialog
+                  group={editingGroupData}
+                  onOpenChange={(open) => {
+                    if (!open) setEditingGroup(null);
+                  }}
+                  allAgentConfigs={agentConfigs}
+                  existingGroupNames={existingGroupNames}
+                  onSuccess={handleGroupUpdated}
+                />
+                <CreateGroupDialog
+                  open={createGroupOpen}
+                  onOpenChange={setCreateGroupOpen}
+                  existingGroupNames={existingGroupNames}
+                  onSuccess={handleGroupCreated}
+                />
+              </EditGroupContext.Provider>
+            </EditEdgeContext.Provider>
           </DeleteEdgeContext.Provider>
         </RemoveNodeContext.Provider>
       </EdgesContext.Provider>

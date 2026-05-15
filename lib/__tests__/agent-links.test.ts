@@ -116,12 +116,16 @@ const link = (
   target,
   direction,
   strategy: "chat",
+  handoffScoreMin: 80,
+  handoffScoreMax: 100,
 });
 
 describe("resolveLinkedTargets", () => {
   it("returns target for a single link where agent is source", () => {
     const links = [link("a", "b")];
-    expect(resolveLinkedTargets("a", links)).toEqual([{ targetName: "b", strategy: "chat" }]);
+    expect(resolveLinkedTargets("a", links)).toEqual([
+      { targetName: "b", strategy: "chat", handoffScoreMin: 80, handoffScoreMax: 100 },
+    ]);
   });
 
   it("does not return target for a single link where agent is target (not source)", () => {
@@ -131,22 +135,37 @@ describe("resolveLinkedTargets", () => {
 
   it("returns source for a dual link where agent is target", () => {
     const links = [link("a", "b", "dual")];
-    expect(resolveLinkedTargets("b", links)).toEqual([{ targetName: "a", strategy: "chat" }]);
+    expect(resolveLinkedTargets("b", links)).toEqual([
+      { targetName: "a", strategy: "chat", handoffScoreMin: 80, handoffScoreMax: 100 },
+    ]);
   });
 
   it("returns both directions for a dual link", () => {
     const links = [link("a", "b", "dual")];
     const fromA = resolveLinkedTargets("a", links);
     const fromB = resolveLinkedTargets("b", links);
-    expect(fromA).toEqual([{ targetName: "b", strategy: "chat" }]);
-    expect(fromB).toEqual([{ targetName: "a", strategy: "chat" }]);
+    expect(fromA).toEqual([
+      { targetName: "b", strategy: "chat", handoffScoreMin: 80, handoffScoreMax: 100 },
+    ]);
+    expect(fromB).toEqual([
+      { targetName: "a", strategy: "chat", handoffScoreMin: 80, handoffScoreMax: 100 },
+    ]);
   });
 
   it("preserves strategy on resolved link", () => {
     const links: AgentLink[] = [
-      { source: "a", target: "b", direction: "single", strategy: "review" },
+      {
+        source: "a",
+        target: "b",
+        direction: "single",
+        strategy: "review",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
+      },
     ];
-    expect(resolveLinkedTargets("a", links)).toEqual([{ targetName: "b", strategy: "review" }]);
+    expect(resolveLinkedTargets("a", links)).toEqual([
+      { targetName: "b", strategy: "review", handoffScoreMin: 80, handoffScoreMax: 100 },
+    ]);
   });
 
   it("returns empty when agent has no links", () => {

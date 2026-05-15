@@ -126,6 +126,8 @@ function AddLinkForm({
   const [target, setTarget] = React.useState("");
   const [direction, setDirection] = React.useState<"single" | "dual">("single");
   const [strategy, setStrategy] = React.useState<AgentLinkStrategy>("chat");
+  const [handoffMin, setHandoffMin] = React.useState(80);
+  const [handoffMax, setHandoffMax] = React.useState(100);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const abortRef = React.useRef<AbortController | null>(null);
@@ -165,14 +167,30 @@ function AddLinkForm({
       const res = await fetch("/api/settings/agent-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source, target, direction, strategy, group: defaultGroup }),
+        body: JSON.stringify({
+          source,
+          target,
+          direction,
+          strategy,
+          group: defaultGroup,
+          handoffScoreMin: handoffMin,
+          handoffScoreMax: handoffMax,
+        }),
         signal: abortRef.current.signal,
       });
       const data: unknown = await res.json();
       if (!res.ok) {
         throw new Error(errorResponseSchema.parse(data).error ?? "Failed to add link");
       }
-      onAdded({ source, target, direction, strategy, group: defaultGroup });
+      onAdded({
+        source,
+        target,
+        direction,
+        strategy,
+        group: defaultGroup,
+        handoffScoreMin: handoffMin,
+        handoffScoreMax: handoffMax,
+      });
     } catch (e) {
       if (e instanceof Error && e.name === "AbortError") return;
       setError(e instanceof Error ? e.message : "Failed to add link");
@@ -251,6 +269,31 @@ function AddLinkForm({
         </div>
 
         <StrategySelect value={strategy} onChange={setStrategy} disabled={busy} />
+
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-muted-foreground">Handoff range</label>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={handoffMin}
+              onChange={(e) => setHandoffMin(Number(e.target.value))}
+              disabled={busy}
+              className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-16"
+            />
+            <span className="text-xs text-muted-foreground">–</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={handoffMax}
+              onChange={(e) => setHandoffMax(Number(e.target.value))}
+              disabled={busy}
+              className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-16"
+            />
+          </div>
+        </div>
       </div>
 
       {error && <p className="text-xs text-destructive">{error}</p>}
@@ -302,6 +345,8 @@ function LinkCard({
     link.strategy ?? "chat",
   );
   const [editGroup, setEditGroup] = React.useState(link.group ?? "");
+  const [editHandoffMin, setEditHandoffMin] = React.useState(link.handoffScoreMin);
+  const [editHandoffMax, setEditHandoffMax] = React.useState(link.handoffScoreMax);
   const [confirming, setConfirming] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -331,6 +376,8 @@ function LinkCard({
     setEditDirection(link.direction);
     setEditStrategy(link.strategy ?? "chat");
     setEditGroup(link.group ?? "");
+    setEditHandoffMin(link.handoffScoreMin);
+    setEditHandoffMax(link.handoffScoreMax);
     setError(null);
     setEditing(true);
   }
@@ -356,6 +403,8 @@ function LinkCard({
           direction: editDirection,
           strategy: editStrategy,
           group: editGroup || undefined,
+          handoffScoreMin: editHandoffMin,
+          handoffScoreMax: editHandoffMax,
         }),
         signal: abortRef.current.signal,
       });
@@ -370,6 +419,8 @@ function LinkCard({
         direction: editDirection,
         strategy: editStrategy,
         group: editGroup || undefined,
+        handoffScoreMin: editHandoffMin,
+        handoffScoreMax: editHandoffMax,
       });
       setEditing(false);
     } catch (e) {
@@ -483,6 +534,31 @@ function LinkCard({
           </div>
 
           <StrategySelect value={editStrategy} onChange={setEditStrategy} disabled={busy} />
+
+          <div className="flex flex-col gap-1">
+            <label className="text-xs text-muted-foreground">Handoff range</label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={editHandoffMin}
+                onChange={(e) => setEditHandoffMin(Number(e.target.value))}
+                disabled={busy}
+                className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-16"
+              />
+              <span className="text-xs text-muted-foreground">–</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={editHandoffMax}
+                onChange={(e) => setEditHandoffMax(Number(e.target.value))}
+                disabled={busy}
+                className="text-sm bg-background border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 w-16"
+              />
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1">
             <label className="text-xs text-muted-foreground">Group</label>

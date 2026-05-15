@@ -1128,6 +1128,8 @@ describe("makeStartGroupTool", () => {
         direction: "single",
         strategy: "chat",
         group: "PixelPaw Labs",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
       },
       {
         source: "alpha",
@@ -1135,6 +1137,8 @@ describe("makeStartGroupTool", () => {
         direction: "single",
         strategy: "chat",
         group: "PixelPaw Labs",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
       },
     ];
     captureTools(() =>
@@ -1157,6 +1161,8 @@ describe("makeStartGroupTool", () => {
         direction: "single",
         strategy: "chat",
         group: "PixelPaw Labs",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
       },
     ];
     captureTools(() =>
@@ -1178,6 +1184,8 @@ describe("makeStartGroupTool", () => {
         direction: "dual",
         strategy: "chat",
         group: "PixelPaw Labs",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
       },
     ];
     captureTools(() =>
@@ -1206,6 +1214,8 @@ describe("makeStartGroupTool", () => {
         direction: "single",
         strategy: "chat",
         group: "Other Group",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
       },
     ];
     captureTools(() =>

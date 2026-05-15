@@ -1,43 +1,48 @@
 import { describe, it, expect } from "vitest";
 import { buildHandoffConsiderationPrompt } from "./agent-link-hooks";
-import { HANDOFF_SCORE_THRESHOLD } from "./agent-link-tools";
 
 const tools = [
-  { name: "start_chat_to_reviewer", description: "Hand off to the reviewer agent" },
-  { name: "start_escalate_to_admin", description: "Escalate to admin" },
+  {
+    name: "start_chat_to_reviewer",
+    description: "Hand off to the reviewer agent",
+    handoffScoreMin: 80,
+    handoffScoreMax: 100,
+  },
+  {
+    name: "start_escalate_to_admin",
+    description: "Escalate to admin",
+    handoffScoreMin: 0,
+    handoffScoreMax: 100,
+  },
 ];
 
-describe("HANDOFF_SCORE_THRESHOLD", () => {
-  it("is 80", () => {
-    expect(HANDOFF_SCORE_THRESHOLD).toBe(80);
-  });
-});
-
 describe("buildHandoffConsiderationPrompt", () => {
-  it("includes tool names and descriptions as XML", () => {
+  it("includes tool names, descriptions, and handoff_range as XML", () => {
     const prompt = buildHandoffConsiderationPrompt(tools);
     expect(prompt).toContain("<name>start_chat_to_reviewer</name>");
     expect(prompt).toContain("<description>Hand off to the reviewer agent</description>");
+    expect(prompt).toContain("<handoff_range>[80, 100]</handoff_range>");
     expect(prompt).toContain("<name>start_escalate_to_admin</name>");
+    expect(prompt).toContain("<handoff_range>[0, 100]</handoff_range>");
   });
 
-  it("embeds HANDOFF_SCORE_THRESHOLD in the scoring guide", () => {
+  it("defaults to [80, 100] when range is absent", () => {
+    const prompt = buildHandoffConsiderationPrompt([
+      { name: "start_chat_to_x", description: "desc" },
+    ]);
+    expect(prompt).toContain("<handoff_range>[80, 100]</handoff_range>");
+  });
+
+  it("includes the RULE referencing handoff_range", () => {
     const prompt = buildHandoffConsiderationPrompt(tools);
-    expect(prompt).toContain(`${HANDOFF_SCORE_THRESHOLD}–100`);
-    expect(prompt).toContain(`1–${HANDOFF_SCORE_THRESHOLD - 1}`);
+    expect(prompt).toContain("score falls within its handoff_range");
+    expect(prompt).toContain("you MUST call it now");
   });
 
-  it("includes the RULE forcing handoff when score >= threshold", () => {
-    const prompt = buildHandoffConsiderationPrompt(tools);
-    expect(prompt).toContain(
-      `If any tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}, you MUST call it now`,
-    );
-  });
-
-  it("non-group mode: ifBelow instructs to respond with lastAssistantMessage", () => {
+  it("non-group mode: ifNoMatch instructs to respond with lastAssistantMessage", () => {
     const prompt = buildHandoffConsiderationPrompt(tools, false, "Here are your results.");
     expect(prompt).toContain(
-      `If no tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}: respond with exactly:\n"Here are your results."`,
+      `If no tool's score falls within its handoff_range: respond with exactly:\n"Here are your results."`,
     );
     expect(prompt).not.toContain("DO NOT explain your reasoning");
   });
@@ -47,10 +52,10 @@ describe("buildHandoffConsiderationPrompt", () => {
     expect(prompt).toContain(`respond with exactly:\n""`);
   });
 
-  it("group mode: ifBelow instructs to stop silently", () => {
+  it("group mode: ifNoMatch instructs to stop silently", () => {
     const prompt = buildHandoffConsiderationPrompt(tools, true);
     expect(prompt).toContain(
-      `If no tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}: stop immediately and DO NOT explain your reasoning.`,
+      `If no tool's score falls within its handoff_range: stop immediately and DO NOT explain your reasoning.`,
     );
   });
 

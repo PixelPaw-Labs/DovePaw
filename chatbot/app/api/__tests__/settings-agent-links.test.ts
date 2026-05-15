@@ -35,6 +35,8 @@ const SAMPLE_FILE: AgentLinksFile = {
       direction: "single",
       strategy: "chat",
       group: "Review Chain",
+      handoffScoreMin: 80,
+      handoffScoreMax: 100,
     },
     {
       source: "agent-c",
@@ -42,6 +44,8 @@ const SAMPLE_FILE: AgentLinksFile = {
       direction: "dual",
       strategy: "review",
       group: "Data Pipeline",
+      handoffScoreMin: 80,
+      handoffScoreMax: 100,
     },
   ],
 };
@@ -187,7 +191,14 @@ describe("DELETE /api/settings/agent-links", () => {
       ...SAMPLE_FILE,
       links: [
         ...SAMPLE_FILE.links,
-        { source: "agent-a", target: "agent-b", direction: "single", strategy: "review" },
+        {
+          source: "agent-a",
+          target: "agent-b",
+          direction: "single",
+          strategy: "review",
+          handoffScoreMin: 80,
+          handoffScoreMax: 100,
+        },
       ],
     });
 

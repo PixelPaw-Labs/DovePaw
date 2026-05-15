@@ -58,5 +58,7 @@ export function resolveLinkedTargets(agentName: string, links: AgentLink[]): Res
     .map((l) => ({
       targetName: l.source === agentName ? l.target : l.source,
       strategy: l.strategy,
+      handoffScoreMin: l.handoffScoreMin,
+      handoffScoreMax: l.handoffScoreMax,
     }));
 }

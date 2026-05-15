@@ -31,7 +31,12 @@ import { buildGroupReminder, buildSubAgentReminder } from "@@/lib/subagent-remin
 export function buildSubAgentHooks(
   cwd: string,
   additionalDirectories: string[],
-  agentLinkTools: Array<{ name: string; description: string }>,
+  agentLinkTools: Array<{
+    name: string;
+    description: string;
+    handoffScoreMin?: number;
+    handoffScoreMax?: number;
+  }>,
   registry: PendingRegistry,
   manifestKey: string,
   agentDisplayName?: string,

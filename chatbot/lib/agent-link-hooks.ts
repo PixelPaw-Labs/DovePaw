@@ -14,7 +14,6 @@ import type {
 import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@/lib/agent-link-patterns";
 import {
   CONFIDENCE_THRESHOLD,
-  HANDOFF_SCORE_THRESHOLD,
   impactPlaceholder,
   startChatToToolName,
   startReviewWithToolName,
@@ -159,19 +158,25 @@ export function buildReflectionMatchers(isGroupMode?: boolean): HookCallbackMatc
 // ─── Stop hook: handoff consideration ────────────────────────────────────────
 
 export function buildHandoffConsiderationPrompt(
-  tools: Array<{ name: string; description: string }>,
+  tools: Array<{
+    name: string;
+    description: string;
+    handoffScoreMin?: number;
+    handoffScoreMax?: number;
+  }>,
   isGroupMode?: boolean,
   lastAssistantMessage?: string,
 ): string {
   const toolsXml = tools
-    .map(
-      (t) =>
-        `  <tool>\n    <name>${t.name}</name>\n    <description>${t.description}</description>\n  </tool>`,
-    )
+    .map((t) => {
+      const min = t.handoffScoreMin ?? 80;
+      const max = t.handoffScoreMax ?? 100;
+      return `  <tool>\n    <name>${t.name}</name>\n    <description>${t.description}</description>\n    <handoff_range>[${min}, ${max}]</handoff_range>\n  </tool>`;
+    })
     .join("\n");
-  const ifBelow = isGroupMode
-    ? `If no tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}: stop immediately and DO NOT explain your reasoning.`
-    : `If no tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}: respond with exactly:\n"${lastAssistantMessage ?? ""}"`;
+  const ifNoMatch = isGroupMode
+    ? `If no tool's score falls within its handoff_range: stop immediately and DO NOT explain your reasoning.`
+    : `If no tool's score falls within its handoff_range: respond with exactly:\n"${lastAssistantMessage ?? ""}"`;
   return `<reminder>
 Before you finish: score your handoff likelihood (0–100) for each available linked agent.
 
@@ -179,13 +184,11 @@ Before you finish: score your handoff likelihood (0–100) for each available li
 ${toolsXml}
 </handoff_tools>
 
-Scoring guide:
-  ${HANDOFF_SCORE_THRESHOLD}–100  Preconditions fully met, your task is complete, and the recipient is directly unblocked by your output → MUST hand off
-  1–${HANDOFF_SCORE_THRESHOLD - 1}    Partial match or uncertain → do not hand off
-  0       No relevant match → do not hand off
+Each tool has a handoff_range [min, max]. If your score for a tool falls within that range, you MUST call it.
+  Example: range [80, 100] → hand off only when highly confident. Range [0, 100] → always hand off.
 
-RULE: If any tool scores ≥ ${HANDOFF_SCORE_THRESHOLD}, you MUST call it now. Do not override this with reasoning about such as user preferences, review steps, staying in scope, or "the user is orchestrating" — a score ≥ ${HANDOFF_SCORE_THRESHOLD} IS your decision to hand off.
-${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}${ifBelow}
+RULE: If a tool's score falls within its handoff_range, you MUST call it now. Do not override this with reasoning such as user preferences, review steps, staying in scope, or "the user is orchestrating" — a score within the range IS your decision to hand off.
+${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}${ifNoMatch}
 </reminder>`;
 }
 

@@ -217,7 +217,7 @@ export class QueryAgentExecutor {
 
       const registry = new PendingRegistry();
 
-      const chatToTools = await this.agentConfigReader.resolveLinkedTools(
+      const { tools: chatToTools, linkTools } = await this.agentConfigReader.resolveLinkedTools(
         this.def.name,
         this.abortController.signal,
         backgroundTasks,
@@ -239,7 +239,7 @@ export class QueryAgentExecutor {
           ),
           makeAwaitScriptTool(this.def, registry),
           ...this.mgmtTools,
-          ...chatToTools,
+          ...(chatToTools ?? []),
         ],
         async (innerMcpServer) => {
           const additionalDirectories = [
@@ -298,7 +298,7 @@ export class QueryAgentExecutor {
                     : []),
                   `mcp__agents__${awaitRunScriptToolName(this.def.manifestKey)}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
-                  ...(!isAskMode ? chatToTools.map((t) => `mcp__agents__${t.name}`) : []),
+                  ...(!isAskMode ? (chatToTools ?? []).map((t) => `mcp__agents__${t.name}`) : []),
                 ],
                 disallowedTools: [
                   ...getSecurityModeStrategy(effectiveDoveSettings(globalSettings).securityMode)
@@ -310,7 +310,7 @@ export class QueryAgentExecutor {
                 hooks: buildSubAgentHooks(
                   cwd,
                   additionalDirectories,
-                  chatToTools,
+                  linkTools,
                   registry,
                   this.def.manifestKey,
                   this.def.displayName,

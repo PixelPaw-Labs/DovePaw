@@ -16,6 +16,13 @@ export const agentLinkSchema = z.object({
   strategy: z.enum(AGENT_LINK_STRATEGIES).default("chat"),
   /** User-defined group name this link belongs to */
   group: z.string().optional(),
+  /**
+   * Score window [min, max] on the 0–100 handoff scale.
+   * The LLM scores this link 0–100; if the score falls within [min, max] it MUST hand off.
+   * [0, 100] = always hand off. [80, 100] = only when highly confident (default).
+   */
+  handoffScoreMin: z.number().min(0).max(100).default(80),
+  handoffScoreMax: z.number().min(0).max(100).default(100),
 });
 
 /**
@@ -46,4 +53,9 @@ export type AgentLink = z.infer<typeof agentLinkSchema>;
 export type AgentGroup = z.infer<typeof agentGroupSchema>;
 export type AgentLinksFile = z.infer<typeof agentLinksFileSchema>;
 
-export type ResolvedLink = { targetName: string; strategy: AgentLinkStrategy };
+export type ResolvedLink = {
+  targetName: string;
+  strategy: AgentLinkStrategy;
+  handoffScoreMin: number;
+  handoffScoreMax: number;
+};
