@@ -207,7 +207,7 @@ export class QueryAgentExecutor {
           ...extraEnv,
           ...buildSecurityEnv(
             effectiveDoveSettings(globalSettings).securityMode,
-            effectiveDoveSettings(globalSettings).allowWebTools,
+            agentSettings.allowScriptWebTools,
           ),
           ...(this.port ? { DOVEPAW_A2A_PORT: String(this.port) } : {}),
         },
@@ -304,6 +304,7 @@ export class QueryAgentExecutor {
                   ...getSecurityModeStrategy(effectiveDoveSettings(globalSettings).securityMode)
                     .disallowedTools,
                   ...ALWAYS_DISALLOWED_TOOLS,
+                  ...(agentSettings.allowSdkWebTools ? [] : ["WebFetch", "WebSearch"]),
                 ],
                 mcpServers: { agents: innerMcpServer },
                 hooks: buildSubAgentHooks(

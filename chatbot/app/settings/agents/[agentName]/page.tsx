@@ -43,6 +43,8 @@ export default async function AgentSettingsPage({ params }: Props) {
         doveDisplayName={effectiveDoveSettings(globalSettings).displayName}
         initialLocked={agentFile?.locked ?? false}
         initialNotifications={agentSettings.notifications ?? null}
+        initialAllowSdkWebTools={agentSettings.allowSdkWebTools ?? false}
+        initialAllowScriptWebTools={agentSettings.allowScriptWebTools ?? false}
       />
     </SettingsPageLayout>
   );

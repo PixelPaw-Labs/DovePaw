@@ -18,7 +18,7 @@ export function defaultSettings(): GlobalSettings {
 }
 
 export function defaultAgentSettings(): AgentSettings {
-  return { repos: [], envVars: [] };
+  return { repos: [], envVars: [], allowSdkWebTools: false, allowScriptWebTools: false };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -82,6 +82,8 @@ export async function readAgentSettings(agentName: string): Promise<AgentSetting
     repos: file?.repos ?? [],
     envVars: file?.envVars ?? [],
     notifications: file?.notifications,
+    allowSdkWebTools: file?.allowSdkWebTools ?? false,
+    allowScriptWebTools: file?.allowScriptWebTools ?? false,
   };
 }
 

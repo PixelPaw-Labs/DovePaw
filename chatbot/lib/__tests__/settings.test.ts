@@ -76,8 +76,13 @@ describe("defaultSettings", () => {
 });
 
 describe("defaultAgentSettings", () => {
-  it("returns empty repos and envVars", () => {
-    expect(defaultAgentSettings()).toEqual({ repos: [], envVars: [] });
+  it("returns empty repos and envVars with web tools disabled", () => {
+    expect(defaultAgentSettings()).toEqual({
+      repos: [],
+      envVars: [],
+      allowSdkWebTools: false,
+      allowScriptWebTools: false,
+    });
   });
 });
 
@@ -229,18 +234,53 @@ describe("writeSettings", () => {
 
 describe("readAgentSettings", () => {
   it("returns default when agent dir does not exist", async () => {
-    expect(await readAgentSettings("nonexistent-agent")).toEqual({ repos: [], envVars: [] });
+    expect(await readAgentSettings("nonexistent-agent")).toEqual({
+      repos: [],
+      envVars: [],
+      allowSdkWebTools: false,
+      allowScriptWebTools: false,
+    });
   });
 
   it("reads saved agent settings", async () => {
     await writeAgentSettings("my-agent", { repos: ["r1", "r2"], envVars: [] });
-    expect(await readAgentSettings("my-agent")).toEqual({ repos: ["r1", "r2"], envVars: [] });
+    expect(await readAgentSettings("my-agent")).toEqual({
+      repos: ["r1", "r2"],
+      envVars: [],
+      allowSdkWebTools: false,
+      allowScriptWebTools: false,
+    });
   });
 
-  it("returns only repos and envVars (not definition fields)", async () => {
+  it("returns runtime settings keys only (not definition fields)", async () => {
     await writeAgentSettings("my-agent", { repos: ["r1"], envVars: [] });
     const settings = await readAgentSettings("my-agent");
-    expect(Object.keys(settings).toSorted()).toEqual(["envVars", "notifications", "repos"]);
+    expect(Object.keys(settings).toSorted()).toEqual([
+      "allowScriptWebTools",
+      "allowSdkWebTools",
+      "envVars",
+      "notifications",
+      "repos",
+    ]);
+  });
+
+  it("reads allowSdkWebTools and allowScriptWebTools when set to true", async () => {
+    await writeAgentSettings("my-agent", {
+      repos: [],
+      envVars: [],
+      allowSdkWebTools: true,
+      allowScriptWebTools: true,
+    });
+    const settings = await readAgentSettings("my-agent");
+    expect(settings.allowSdkWebTools).toBe(true);
+    expect(settings.allowScriptWebTools).toBe(true);
+  });
+
+  it("defaults allowSdkWebTools and allowScriptWebTools to false", async () => {
+    await writeAgentSettings("my-agent", { repos: [], envVars: [] });
+    const settings = await readAgentSettings("my-agent");
+    expect(settings.allowSdkWebTools).toBe(false);
+    expect(settings.allowScriptWebTools).toBe(false);
   });
 });
 
@@ -255,7 +295,12 @@ describe("writeAgentSettings", () => {
 
   it("writes and reads back", async () => {
     await writeAgentSettings("my-agent", { repos: ["r1", "r2", "r3"], envVars: [] });
-    expect(await readAgentSettings("my-agent")).toEqual({ repos: ["r1", "r2", "r3"], envVars: [] });
+    expect(await readAgentSettings("my-agent")).toEqual({
+      repos: ["r1", "r2", "r3"],
+      envVars: [],
+      allowSdkWebTools: false,
+      allowScriptWebTools: false,
+    });
   });
 
   it("creates a .bak file after write", async () => {

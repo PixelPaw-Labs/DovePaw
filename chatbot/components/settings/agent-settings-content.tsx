@@ -3,7 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, FolderGit2, KeyRound, Lock, LockOpen, Pencil, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  FolderGit2,
+  KeyRound,
+  Lock,
+  LockOpen,
+  Pencil,
+  ShieldCheck,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AddEnvVarDialog } from "./add-env-var-dialog";
 import { EditEnvVarDialog } from "./edit-env-var-dialog";
@@ -45,6 +54,8 @@ interface AgentSettingsContentProps {
   initialTab?: Tab;
   initialLocked?: boolean;
   initialNotifications?: AgentNotificationConfig | null;
+  initialAllowSdkWebTools?: boolean;
+  initialAllowScriptWebTools?: boolean;
 }
 
 function MaskedValue({
@@ -82,6 +93,8 @@ export function AgentSettingsContent({
   initialTab = "definition",
   initialLocked = false,
   initialNotifications = null,
+  initialAllowSdkWebTools = false,
+  initialAllowScriptWebTools = false,
 }: AgentSettingsContentProps) {
   const [agentEntry, setAgentEntry] = React.useState(initialAgentEntry);
   const agent = buildAgentDef(agentEntry);
@@ -213,7 +226,12 @@ export function AgentSettingsContent({
   const overriddenKeys = new Set(agentEnvVars.map((v) => v.key));
   const inheritedGlobals = globalEnvVars.filter((v) => !overriddenKeys.has(v.key));
 
-  const saving = repoSaving || envSaving;
+  // ── web tools toggles ────────────────────────────────────────────────────────
+  const [allowSdkWebTools, setAllowSdkWebTools] = React.useState(initialAllowSdkWebTools);
+  const [allowScriptWebTools, setAllowScriptWebTools] = React.useState(initialAllowScriptWebTools);
+  const [webToolsSaving, setWebToolsSaving] = React.useState(false);
+
+  const saving = repoSaving || envSaving || webToolsSaving;
 
   // ── lock toggle ──────────────────────────────────────────────────────────────
   const [locked, setLocked] = React.useState(initialLocked);
@@ -231,6 +249,30 @@ export function AgentSettingsContent({
       if (res.ok) setLocked(next);
     } finally {
       setLockSaving(false);
+    }
+  }
+
+  async function handleWebToolsToggle(
+    field: "allowSdkWebTools" | "allowScriptWebTools",
+    next: boolean,
+  ) {
+    const nextSdk = field === "allowSdkWebTools" ? next : allowSdkWebTools;
+    const nextScript = field === "allowScriptWebTools" ? next : allowScriptWebTools;
+    if (field === "allowSdkWebTools") setAllowSdkWebTools(next);
+    else setAllowScriptWebTools(next);
+    setWebToolsSaving(true);
+    try {
+      await fetch("/api/settings/agent-web-tools", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentName,
+          allowSdkWebTools: nextSdk,
+          allowScriptWebTools: nextScript,
+        }),
+      });
+    } finally {
+      setWebToolsSaving(false);
     }
   }
 
@@ -366,6 +408,68 @@ export function AgentSettingsContent({
                 onSaved={setAgentEntry}
                 doveDisplayName={doveDisplayName}
               />
+
+              {/* Web Access */}
+              <div className="mt-4 rounded-xl border border-outline-variant/30 bg-surface-container p-5 flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-on-surface-variant shrink-0" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                    Web Access
+                  </h3>
+                </div>
+
+                {/* SDK sub-agent */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-on-surface">
+                      Allow web tools in SDK sub-agent
+                    </p>
+                    <p className="text-xs text-on-surface-variant">
+                      Enables WebFetch and WebSearch inside the Claude Agent SDK query() call.
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={allowSdkWebTools}
+                      disabled={webToolsSaving}
+                      onChange={() =>
+                        void handleWebToolsToggle("allowSdkWebTools", !allowSdkWebTools)
+                      }
+                      aria-label="Allow web tools in SDK sub-agent"
+                    />
+                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                  </label>
+                </div>
+
+                <div className="h-px bg-outline-variant/20" />
+
+                {/* Agent script runner */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-on-surface">
+                      Allow web tools in agent script
+                    </p>
+                    <p className="text-xs text-on-surface-variant">
+                      Sets DOVEPAW_ALLOW_WEB_TOOLS for the Claude CLI / Codex script runner.
+                    </p>
+                  </div>
+                  <label className="inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      className="sr-only peer"
+                      checked={allowScriptWebTools}
+                      disabled={webToolsSaving}
+                      onChange={() =>
+                        void handleWebToolsToggle("allowScriptWebTools", !allowScriptWebTools)
+                      }
+                      aria-label="Allow web tools in agent script"
+                    />
+                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                  </label>
+                </div>
+              </div>
 
               {/* Danger zone */}
               <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/5 p-5 flex flex-col gap-4">

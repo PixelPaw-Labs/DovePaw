@@ -121,6 +121,10 @@ export const agentSettingsSchema = z.object({
   envVars: z.array(envVarSchema).default([]),
   /** Optional notification config for SessionStart / SessionEnd events. */
   notifications: agentNotificationConfigSchema.optional(),
+  /** Allow WebFetch/WebSearch in the Claude Agent SDK query() sub-agent call for this agent. */
+  allowSdkWebTools: z.boolean().optional(),
+  /** Allow web tools (DOVEPAW_ALLOW_WEB_TOOLS) in the agent script runner (Claude CLI / Codex). */
+  allowScriptWebTools: z.boolean().optional(),
 });
 
 export type AgentSettings = z.infer<typeof agentSettingsSchema>;
