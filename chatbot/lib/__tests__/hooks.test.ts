@@ -167,7 +167,7 @@ describe("buildAgentHooks — PostToolUse hook", () => {
 describe("buildAgentHooks — PreToolUse ScheduleWakeup guard (index 0)", () => {
   it("is always present even without allowedDirectories", () => {
     const hooks = buildAgentHooks(makeConfig());
-    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PreToolUse).toHaveLength(2);
     expect(hooks.PreToolUse![0]!.matcher).toBe("ScheduleWakeup");
   });
 
@@ -241,13 +241,13 @@ describe("buildAgentHooks — PreToolUse Bash write guard", () => {
 describe("buildAgentHooks — PreToolUse Edit|Write guard (index 1)", () => {
   it("is absent when allowedDirectories is not set", () => {
     const hooks = buildAgentHooks(makeConfig());
-    // Only ScheduleWakeup guard — no Edit|Write entry
-    expect(hooks.PreToolUse).toHaveLength(1);
+    // ScheduleWakeup guard + Read allow hook — no Edit|Write entry
+    expect(hooks.PreToolUse).toHaveLength(2);
   });
 
   it("is absent when allowedDirectories is empty", () => {
     const hooks = buildAgentHooks(makeConfig({ allowedDirectories: [] }));
-    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PreToolUse).toHaveLength(2);
   });
 
   it("has matcher Edit|Write at index 1", () => {

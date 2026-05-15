@@ -1,12 +1,21 @@
-import { app, Menu, nativeImage, shell, Tray } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, session, shell, Tray } from "electron";
 import { type ChildProcess, spawn } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { createConnection } from "node:net";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { createServersProcess } from "../lib/server-manager";
 import { linkAgents } from "../lib/installer";
 import {
+  BROWSER_BRIDGE_PORT_FILE,
+  DOVEPAW_DIR,
   DOVEPAW_LOGS_DIR,
   OPENVIKING_PORT_FILE,
   OPENVIKING_SIDECAR_PID_FILE,
@@ -15,6 +24,14 @@ import {
 import { bootOpenViking } from "../lib/openviking-spawner";
 import { getAvailablePort } from "../lib/get-available-port";
 import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
+import { startBrowserBridge } from "./browser-bridge";
+
+// Prevent Google/sites from detecting Electron's Chromium as a bot
+app.commandLine.appendSwitch("disable-blink-features", "AutomationControlled");
+
+// Scope all Electron session data under ~/.dovepaw/browser/ to keep ~/.dovepaw/ clean
+// Must be set before app.whenReady() — affects session.fromPartition() partition paths
+app.setPath("userData", join(DOVEPAW_DIR, "browser"));
 
 // electron/.dist/main.cjs → ../../ = DovePaw repo root
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -25,14 +42,17 @@ const LOGS_DIR = DOVEPAW_LOGS_DIR;
 const NPM_BIN = "npm";
 const CHATBOT_URL = `http://localhost:${NEXT_PORT}`;
 const SERVICE_NAME = "DovePaw";
+const WINDOW_STATE_FILE = join(DOVEPAW_DIR, "window-state.json");
 
 const SIDECAR_CMDLINE_RE = /openviking-server/;
 
 let tray: Tray | null = null;
+let win: BrowserWindow | null = null;
 let serversProcess: ChildProcess | null = null;
 let nextProcess: ChildProcess | null = null;
 let ovProcess: ChildProcess | null = null;
 let isQuitting = false;
+let browserPanelVisible = false;
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 
@@ -121,8 +141,13 @@ function buildMenu(isHealthy: boolean): Electron.Menu {
     },
     { type: "separator" },
     {
-      label: "Open Chatbot UI",
-      click: () => shell.openExternal(CHATBOT_URL),
+      label: "Open Dove",
+      click: () => {
+        if (win) {
+          win.show();
+          win.focus();
+        }
+      },
     },
     {
       label: "Restart Servers",
@@ -154,6 +179,54 @@ function buildMenu(isHealthy: boolean): Electron.Menu {
       },
     },
   ]);
+}
+
+// ── Window state ──────────────────────────────────────────────────────────────
+
+interface WindowState {
+  x?: number;
+  y?: number;
+  width: number;
+  height: number;
+}
+
+function loadWindowState(): WindowState {
+  try {
+    if (existsSync(WINDOW_STATE_FILE)) {
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- unknown → WindowState: shape validated by try/catch around corrupt files
+      return JSON.parse(readFileSync(WINDOW_STATE_FILE, "utf-8")) as WindowState;
+    }
+  } catch {
+    // ignore corrupt state
+  }
+  return { width: 1400, height: 800 };
+}
+
+function saveWindowState(w: BrowserWindow): void {
+  try {
+    const bounds = w.getBounds();
+    writeFileSync(WINDOW_STATE_FILE, JSON.stringify(bounds, null, 2) + "\n");
+  } catch {
+    // best effort
+  }
+}
+
+// ── Browser panel bounds ──────────────────────────────────────────────────────
+
+const BROWSER_HEADER_HEIGHT = 44; // matches chatbot header height
+
+/** Compute the screen bounds for the browser overlay window (right half, below the header). */
+function browserWinBounds(w: BrowserWindow): Electron.Rectangle {
+  const outer = w.getBounds();
+  const [contentW, contentH] = w.getContentSize();
+  const titleBarH = outer.height - contentH;
+  const panelW = Math.floor(contentW / 2);
+  return {
+    x: outer.x + panelW,
+    y: outer.y + titleBarH + BROWSER_HEADER_HEIGHT,
+    width: panelW,
+    height: contentH - BROWSER_HEADER_HEIGHT,
+  };
 }
 
 // ── Servers ───────────────────────────────────────────────────────────────────
@@ -239,18 +312,237 @@ process.title = SERVICE_NAME;
 void app.whenReady().then(async () => {
   await linkAgents();
 
-  if (process.platform === "darwin") {
-    const dockIcon = makeIcon(true);
-    if (!dockIcon.isEmpty()) app.dock?.setIcon(dockIcon);
-    app.dock?.hide();
+  // ── Main window ──
+  const windowState = loadWindowState();
+  win = new BrowserWindow({
+    ...windowState,
+    minWidth: 1200,
+    minHeight: 700,
+    title: SERVICE_NAME,
+    webPreferences: {
+      preload: resolve(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // Hide to tray on close instead of quitting
+  win.on("close", (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      win?.hide();
+    }
+  });
+
+  // Persist window bounds on resize/move
+  win.on("resize", () => win && saveWindowState(win));
+  win.on("move", () => win && saveWindowState(win));
+
+  // ── Embedded browser panel ──
+  // A separate frameless BrowserWindow gives us setOpacity() + setIgnoreMouseEvents(),
+  // which are the only OS-level way to produce a true semi-transparent overlay.
+  const browserSession = session.fromPartition("persist:browser-profile", { cache: true });
+  browserSession.setUserAgent(
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  );
+  browserSession.setSpellCheckerLanguages(["en-US"]);
+  app.commandLine.appendSwitch("lang", "en-US");
+  app.commandLine.appendSwitch("accept-lang", "en-US,en;q=0.9");
+  // Convert session cookies (no expiry) to persistent ones so Okta/SSO logins survive restarts.
+  // Chromium only restores persistent cookies on startup — session cookies are always discarded.
+  const THIRTY_DAYS_S = 30 * 24 * 60 * 60;
+  browserSession.cookies.on("changed", (_e, cookie, _cause, removed) => {
+    if (removed || cookie.expirationDate) return; // already persistent or being deleted
+    const url = `${cookie.secure ? "https" : "http"}://${(cookie.domain ?? "").replace(/^\./, "")}${cookie.path ?? "/"}`;
+    void browserSession.cookies
+      .set({
+        url,
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        expirationDate: Math.floor(Date.now() / 1000) + THIRTY_DAYS_S,
+        sameSite: cookie.sameSite ?? "unspecified",
+      })
+      .then(() => console.log(`[cookies] persisted ${cookie.name} on ${cookie.domain}`))
+      .catch((err: unknown) =>
+        console.warn(`[cookies] failed to persist ${cookie.name} on ${cookie.domain}:`, err),
+      );
+  });
+
+  const browserWin = new BrowserWindow({
+    parent: win, // stays above chat but goes to background with DovePaw
+    frame: false,
+    show: false,
+    webPreferences: {
+      session: browserSession,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  // Diagnostics — confirm session identity and cookie visibility
+  console.log("[browser] session isPersistent:", browserSession.isPersistent());
+  console.log("[browser] sessions match:", browserWin.webContents.session === browserSession);
+  browserWin.webContents.on("did-navigate", (_e, url) => {
+    void browserWin.webContents.session.cookies.get({}).then((all) => {
+      const sessionCookies = all.filter((c) => !c.expirationDate);
+      console.log(
+        `[browser] navigate ${url} — total cookies: ${all.length}, session-only: ${sessionCookies.length}`,
+        sessionCookies.map((c) => c.name),
+      );
+    });
+  });
+
+  // Patch navigator.webdriver before any page script reads it
+  browserWin.webContents.on("dom-ready", () => {
+    void browserWin.webContents.executeJavaScript(
+      "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})",
+    );
+  });
+
+  // Keep browser window aligned with the right half of the main window
+  const syncBrowserWinBounds = () => {
+    if (browserPanelVisible && win) browserWin.setBounds(browserWinBounds(win));
+  };
+  win.on("resize", syncBrowserWinBounds);
+  win.on("move", syncBrowserWinBounds);
+
+  // ── IPC handlers ──
+  let browserPanelEverShown = false;
+
+  const notifyVisibility = (v: boolean) => {
+    try {
+      win?.webContents.send("browser:visibility-changed", v);
+    } catch {
+      // renderer not ready yet — ignore
+    }
+  };
+
+  ipcMain.handle("browser:toggle", () => {
+    browserPanelVisible = !browserPanelVisible;
+    if (browserPanelVisible && win) {
+      browserWin.setBounds(browserWinBounds(win));
+      browserWin.setOpacity(1);
+      browserWin.setIgnoreMouseEvents(false);
+      browserWin.show();
+      if (!browserPanelEverShown) {
+        browserPanelEverShown = true;
+        void browserWin.webContents.loadURL("about:blank");
+      }
+    } else {
+      browserWin.hide();
+    }
+    notifyVisibility(browserPanelVisible);
+    return { visible: browserPanelVisible };
+  });
+
+  ipcMain.handle("browser:navigate", async (_event, url: string) => {
+    const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    if (!browserPanelVisible && win) {
+      browserPanelVisible = true;
+      browserWin.setBounds(browserWinBounds(win));
+      browserWin.setOpacity(1);
+      browserWin.setIgnoreMouseEvents(false);
+      browserWin.show();
+      notifyVisibility(true);
+    }
+    try {
+      await browserWin.webContents.loadURL(normalized);
+    } catch (err) {
+      console.warn(
+        `[browser:navigate] failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    return { ok: true, url: normalized };
+  });
+
+  ipcMain.handle("browser:get-url", () => browserWin.webContents.getURL());
+  ipcMain.handle("browser:back", () => {
+    browserWin.webContents.goBack();
+  });
+  ipcMain.handle("browser:forward", () => {
+    browserWin.webContents.goForward();
+  });
+  ipcMain.handle("browser:close", () => {
+    browserPanelVisible = false;
+    browserWin.hide();
+    notifyVisibility(false);
+    return { visible: false };
+  });
+
+  // Semi-transparent overlay: clicks pass through to the chat below
+  ipcMain.handle("browser:dim", () => {
+    if (!browserPanelVisible) return;
+    browserWin.setOpacity(0.5);
+    browserWin.setIgnoreMouseEvents(true, { forward: true });
+  });
+
+  // Restore full opacity, interactivity, and focus
+  ipcMain.handle("browser:undim", () => {
+    if (!browserPanelVisible) return;
+    browserWin.setOpacity(1);
+    browserWin.setIgnoreMouseEvents(false);
+    browserWin.focus();
+  });
+
+  // ── Start bridge server ──
+  const showPanel = () => {
+    if (!browserPanelVisible && win) {
+      browserPanelVisible = true;
+      browserWin.setBounds(browserWinBounds(win));
+      browserWin.setOpacity(1);
+      browserWin.setIgnoreMouseEvents(false);
+      browserWin.show();
+      notifyVisibility(true);
+    }
+  };
+  const togglePanel = () => {
+    browserPanelVisible = !browserPanelVisible;
+    if (browserPanelVisible && win) {
+      browserWin.setBounds(browserWinBounds(win));
+      browserWin.setOpacity(1);
+      browserWin.setIgnoreMouseEvents(false);
+      browserWin.show();
+    } else {
+      browserWin.hide();
+    }
+    notifyVisibility(browserPanelVisible);
+  };
+
+  try {
+    const bridge = await startBrowserBridge(browserWin.webContents, showPanel, togglePanel);
+    console.log(`✓ Browser bridge listening on port ${bridge.port}`);
+  } catch (err) {
+    console.warn(
+      `⚠ Browser bridge failed to start: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 
+  // ── Load chatbot — retry until Next.js is ready ──
+  win.webContents.on("did-fail-load", () => {
+    if (!isQuitting) setTimeout(() => win?.loadURL(CHATBOT_URL), 1_500);
+  });
+  void win.loadURL(CHATBOT_URL);
+
+  // ── Tray ──
   const icon = makeIcon(false);
   tray = new Tray(icon);
   if (icon.isEmpty()) tray.setTitle("▽");
   tray.setToolTip(`${SERVICE_NAME} — starting…`);
   tray.setContextMenu(buildMenu(false));
-  tray.on("click", () => tray?.popUpContextMenu());
+  tray.on("click", () => {
+    if (win) {
+      if (win.isVisible()) {
+        win.focus();
+      } else {
+        win.show();
+        win.focus();
+      }
+    }
+  });
 
   startServers();
   void startOpenViking();
@@ -269,6 +561,11 @@ function killGroup(proc: ChildProcess | null): void {
 
 app.on("before-quit", () => {
   isQuitting = true;
+  try {
+    unlinkSync(BROWSER_BRIDGE_PORT_FILE);
+  } catch {
+    // ignore — file may not exist if bridge never started
+  }
   killGroup(serversProcess);
   killGroup(nextProcess);
   if (ovProcess) {
@@ -276,12 +573,14 @@ app.on("before-quit", () => {
       ovProcess.kill("SIGTERM");
     } catch {}
     void rm(OPENVIKING_PORT_FILE, { force: true }).catch(() => {});
-    // PID file intentionally left — killStaleProcess() cleans it on next boot
   }
-  setTimeout(() => process.exit(0), 500);
+  // Flush localStorage + cookies so Okta/SSO sessions survive restarts
+  const quitSession = session.fromPartition("persist:browser-profile");
+  quitSession.flushStorageData();
+  void quitSession.cookies.flushStore().then(() => setTimeout(() => process.exit(0), 300));
 });
 
-// Menubar app — stay alive when no windows are open
+// Stay alive when all windows are closed (window is hidden to tray)
 app.on("window-all-closed", () => {
   // intentionally empty
 });

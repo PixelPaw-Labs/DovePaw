@@ -148,6 +148,7 @@ vite.config.ts.timestamp-*
 !.claude/rules/
 .claude/skills/*
 !.claude/skills/sub-agent-builder/
+!.claude/skills/dovepaw-browser/
 !.claude/output-styles/
 
 # Runtime data

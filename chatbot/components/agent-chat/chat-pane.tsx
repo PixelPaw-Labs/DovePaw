@@ -2,7 +2,18 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Bell, Bot, ChevronLeft, ChevronRight, Clock, Info, Settings, Trash2 } from "lucide-react";
+import {
+  Bell,
+  Bot,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Globe,
+  Info,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
@@ -84,6 +95,14 @@ export function ChatPane({
   const [historyOpen, setHistoryOpen] = React.useState(true);
   const [activeQuestionIdx, setActiveQuestionIdx] = React.useState(0);
   const [showAllAgents, setShowAllAgents] = React.useState(false);
+  const [isElectron, setIsElectron] = React.useState(false);
+  const [browserPanelActive, setBrowserPanelActive] = React.useState(false);
+  const [browserUrl, setBrowserUrl] = React.useState("https://google.com");
+  React.useEffect(() => {
+    if (!window.electron?.isElectron) return;
+    setIsElectron(true);
+    window.electron.browser.onVisibilityChange((visible) => setBrowserPanelActive(visible));
+  }, []);
   React.useEffect(() => {
     setShowAllAgents(false);
   }, [agentId, currentSessionId]);
@@ -118,7 +137,18 @@ export function ChatPane({
 
   return (
     <>
-      <main className="flex-1 flex flex-col bg-background relative min-w-0">
+      <main
+        className="flex-1 flex flex-col bg-background relative min-w-0"
+        onMouseDown={(e) => {
+          if (!isElectron || !browserPanelActive) return;
+          // Click on right half (browser overlay area) → focus browser; left half → dim
+          if (e.clientX > window.innerWidth / 2) {
+            void window.electron!.browser.undim();
+          } else {
+            void window.electron!.browser.dim();
+          }
+        }}
+      >
         {/* Glass header */}
         <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex justify-between items-center w-full px-6 py-2.5 shrink-0">
           <div className="flex items-center gap-3">
@@ -155,6 +185,91 @@ export function ChatPane({
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+            )}
+            {isElectron && (
+              <button
+                onMouseDown={() => {
+                  if (browserPanelActive) void window.electron!.browser.undim();
+                }}
+                onClick={() => {
+                  console.log(
+                    "[DovePaw] browser toggle clicked, window.electron=",
+                    window.electron,
+                  );
+                  window
+                    .electron!.browser.toggle()
+                    .then((r) => {
+                      console.log("[DovePaw] browser:toggle result", r);
+                      setBrowserPanelActive(r.visible);
+                    })
+                    .catch((err: unknown) => {
+                      console.error("[DovePaw] browser:toggle error", err);
+                    });
+                }}
+                className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${browserPanelActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+                title={browserPanelActive ? "Hide browser" : "Open browser"}
+              >
+                <Globe className="w-4 h-4" />
+              </button>
+            )}
+            {isElectron && browserPanelActive && (
+              <div
+                className="flex items-center gap-1"
+                onMouseDown={() => void window.electron!.browser.undim()}
+              >
+                <button
+                  type="button"
+                  onClick={() => void window.electron!.browser.back()}
+                  className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                  title="Back"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void window.electron!.browser.forward()}
+                  className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                  title="Forward"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                <form
+                  className="flex items-center gap-1"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const url = /^https?:\/\//i.test(browserUrl)
+                      ? browserUrl
+                      : `https://${browserUrl}`;
+                    setBrowserUrl(url);
+                    void window.electron!.browser.navigate(url);
+                  }}
+                >
+                  <input
+                    value={browserUrl}
+                    onChange={(e) => setBrowserUrl(e.target.value)}
+                    className="h-7 w-48 px-2 text-xs bg-muted rounded border border-border/40 focus:outline-none focus:ring-1 focus:ring-primary/40"
+                    placeholder="https://"
+                  />
+                  <button
+                    type="submit"
+                    className="text-xs text-muted-foreground hover:text-foreground px-1"
+                  >
+                    Go
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void window
+                      .electron!.browser.close()
+                      .then((r) => setBrowserPanelActive(r.visible));
+                  }}
+                  className="w-7 h-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                  title="Close browser"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             )}
             <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
               <Bell className="w-4 h-4" />

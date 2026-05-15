@@ -1,8 +1,13 @@
 import { execFile } from "node:child_process";
-import { access, mkdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { AGENTS_ROOT, KARPATHY_HOOK_SRC, agentWorkspacePath } from "@@/lib/paths";
+import {
+  AGENTS_ROOT,
+  DOVEPAW_BROWSER_SKILL_SRC,
+  KARPATHY_HOOK_SRC,
+  agentWorkspacePath,
+} from "@@/lib/paths";
 
 async function exists(path: string): Promise<boolean> {
   try {
@@ -44,6 +49,7 @@ export async function createAgentWorkspace(
 
   onProgress?.(`Creating workspace`, { workspace: workspacePath });
   await writeWorkspaceSettings(workspacePath);
+  await seedBrowserSkill(workspacePath);
 
   return { path: workspacePath, cleanup: buildCleanup(workspacePath, dirname(workspacePath)) };
 }
@@ -87,6 +93,17 @@ async function writeWorkspaceSettings(workspacePath: string): Promise<void> {
     },
   };
   await writeFile(join(claudeDir, "settings.json"), JSON.stringify(settings, null, 2) + "\n");
+}
+
+/** Copy the dovepaw-browser skill into a .claude/skills/ directory.
+ *  Best-effort — never throws; workspace creation must not fail if the skill is absent. */
+async function seedBrowserSkill(targetDir: string): Promise<void> {
+  try {
+    const dest = join(targetDir, ".claude", "skills", "dovepaw-browser");
+    await cp(DOVEPAW_BROWSER_SKILL_SRC, dest, { recursive: true });
+  } catch {
+    // skill source may not exist before first install; ignore silently
+  }
 }
 
 function buildCleanup(workspacePath: string, parentDir: string): () => Promise<void> {
@@ -226,6 +243,7 @@ async function writeWorkspacePermissions(clonePath: string): Promise<void> {
     join(clonePath, ".claude", "settings.local.json"),
     JSON.stringify(settings, null, 2) + "\n",
   );
+  await seedBrowserSkill(clonePath);
 }
 
 /**

@@ -123,6 +123,11 @@ export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guide
 
 // ─── Scheduler paths (cross-platform) ────────────────────────────────────────
 
+/** ~/.dovepaw/.browser-bridge-port.json — port of the live browser bridge HTTP server */
+export const BROWSER_BRIDGE_PORT_FILE = join(DOVEPAW_DIR, ".browser-bridge-port.json");
+/** DovePaw/.claude/skills/dovepaw-browser — source for the dovepaw-browser skill */
+export const DOVEPAW_BROWSER_SKILL_SRC = join(AGENTS_ROOT, ".claude", "skills", "dovepaw-browser");
+
 /** DovePaw/dist — compiled agent scripts */
 export const AGENTS_DIST = join(AGENTS_ROOT, "dist");
 /** ~/.dovepaw/cron — deployed agent scripts and native node_modules */

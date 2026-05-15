@@ -247,6 +247,22 @@ export function buildAgentHooks(
     });
   }
 
+  // Read is non-destructive — always allow without prompting the user.
+  preToolUseHooks.push({
+    matcher: "Read",
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PreToolUse") return { continue: true };
+        if (input.tool_name !== "Read") return { continue: true };
+        const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+          hookEventName: "PreToolUse",
+          permissionDecision: "allow",
+        };
+        return { hookSpecificOutput };
+      },
+    ],
+  });
+
   return {
     ...(userPromptReminder && {
       UserPromptSubmit: [
