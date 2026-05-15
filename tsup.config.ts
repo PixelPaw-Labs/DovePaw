@@ -13,7 +13,7 @@ export default defineConfig({
   outDir: "dist",
   bundle: true,
   splitting: false,
-  external: ["@ladybugdb/core", "@a2a-js/sdk"], // native addon + SDK deployed to scheduler separately
+  external: ["@ladybugdb/core", "@a2a-js/sdk", "undici"], // native addon + SDK + undici deployed to scheduler separately
   platform: "node",
   target: "node24",
   banner: { js: "#!/usr/bin/env node" },

@@ -93,7 +93,7 @@ async function _doDeployTriggerScript(): Promise<void> {
   }
   await copyFile(src, A2A_TRIGGER_SCRIPT);
   await chmod(A2A_TRIGGER_SCRIPT, 0o755);
-  await copyNativePackages(["@a2a-js/sdk", "uuid"]);
+  await copyNativePackages(["@a2a-js/sdk", "undici", "uuid"]);
 }
 
 /**
