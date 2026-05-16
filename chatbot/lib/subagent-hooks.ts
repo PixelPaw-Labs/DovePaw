@@ -2,28 +2,22 @@
  * Hook configuration specific to the QueryAgentExecutor sub-agent query().
  *
  * Separated from hooks.ts (generic/Dove hooks) so sub-agent concerns
- * — script start/await reminder, agent link self-reflection gate — are
+ * — script start/await reminder, links-reminder for orchestrator mode — are
  * owned and maintained here independently.
  */
 
 export * from "./agent-link-hooks";
 
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
-import {
-  buildReflectionMatchers,
-  buildHandoffConsiderationPrompt,
-  groupStartHandoffHook,
-  groupAwaitHandoffHook,
-  awaitHandoffNoActionHook,
-  makeGroupScriptAwaitToneHook,
-  makeGroupMomentSaveHook,
-} from "@/lib/agent-link-hooks";
-import { buildAgentHooks } from "@/lib/hooks";
+import type { AgentDef } from "@@/lib/agents";
+import { makeGroupScriptAwaitToneHook, makeGroupMomentSaveHook } from "@/lib/agent-link-hooks";
+import { buildAgentHooks, buildLinksReminder, getAwaitStatus } from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
 import { ALWAYS_DISALLOWED_TOOLS } from "@@/lib/security-policy";
 import { buildGroupReminder, buildSubAgentReminder } from "@@/lib/subagent-reminder";
+import { awaitRunScriptToolName } from "@/lib/agent-tools";
 
 // ─── Builder ──────────────────────────────────────────────────────────────────
 
@@ -31,12 +25,7 @@ import { buildGroupReminder, buildSubAgentReminder } from "@@/lib/subagent-remin
 export function buildSubAgentHooks(
   cwd: string,
   additionalDirectories: string[],
-  agentLinkTools: Array<{
-    name: string;
-    description: string;
-    handoffScoreMin?: number;
-    handoffScoreMax?: number;
-  }>,
+  agents: AgentDef[],
   registry: PendingRegistry,
   manifestKey: string,
   agentDisplayName?: string,
@@ -48,27 +37,6 @@ export function buildSubAgentHooks(
   groupContextId?: string,
   groupWorkspacePath?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
-  const hasAgentLinks = agentLinkTools.length > 0;
-  const handoffConsiderationStop: HookCallbackMatcher = {
-    hooks: [
-      async (input) => {
-        if (input.hook_event_name !== "Stop") return { continue: true };
-        // Already reminded once this turn — let the agent stop.
-        if (input.stop_hook_active) return { continue: true };
-        // Pending operations exist — the base Stop hook handles that case.
-        if (registry.hasPending()) return { continue: true };
-        return {
-          decision: "block",
-          reason: buildHandoffConsiderationPrompt(
-            agentLinkTools,
-            isGroupMode,
-            input.last_assistant_message,
-          ),
-        };
-      },
-    ],
-  };
-
   const notifHooks =
     notifications && agentDisplayName
       ? buildNotificationHooks(manifestKey, agentDisplayName, notifications, env)
@@ -83,21 +51,48 @@ export function buildSubAgentHooks(
     allowedDirectories: [cwd, ...additionalDirectories],
     disallowedTools: ALWAYS_DISALLOWED_TOOLS,
   });
+
+  // Orchestrator-mode links reminder: only when the sub-agent is the directly
+  // chatted entry point (non-group, non-ask). After any await_* completes,
+  // surface the completed agent's outgoing links so the sub-agent can chain
+  // the next call at its own level instead of letting a downstream cascade.
+  const ownRunScriptAwaitName = `mcp__agents__${awaitRunScriptToolName(manifestKey)}`;
+  const linksReminderHook: HookCallbackMatcher = {
+    matcher: "mcp__agents__await_.*",
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PostToolUse") return { continue: true };
+        if (getAwaitStatus(input.tool_response) !== "completed") return { continue: true };
+
+        // Resolve the agent whose work just completed:
+        //   await_run_script_<self>   → the current sub-agent itself
+        //   await_<otherKey>          → a linked agent we just orchestrated
+        let completedAgentName: string | undefined;
+        if (input.tool_name === ownRunScriptAwaitName) {
+          completedAgentName = agents.find((a) => a.manifestKey === manifestKey)?.name;
+        } else {
+          const otherKey = input.tool_name.replace(/^mcp__agents__await_/, "");
+          completedAgentName = agents.find((a) => a.manifestKey === otherKey)?.name;
+        }
+        if (!completedAgentName) return { continue: true };
+
+        const linksReminder = await buildLinksReminder(completedAgentName, agents);
+        if (!linksReminder) return { continue: true };
+
+        return { decision: "block", reason: linksReminder };
+      },
+    ],
+  };
+
   return {
     ...base,
-    PreToolUse: [
-      ...(base.PreToolUse ?? []),
-      ...(notifHooks.PreToolUse ?? []),
-      ...(!isAskMode ? buildReflectionMatchers(isGroupMode) : []),
-    ],
+    PreToolUse: [...(base.PreToolUse ?? []), ...(notifHooks.PreToolUse ?? [])],
     PostToolUse: [
       ...(base.PostToolUse ?? []),
       ...(notifHooks.PostToolUse ?? []),
-      ...(hasAgentLinks && !isAskMode ? [awaitHandoffNoActionHook] : []),
+      ...(!isGroupMode && !isAskMode ? [linksReminderHook] : []),
       ...(isGroupMode
         ? [
-            groupStartHandoffHook,
-            groupAwaitHandoffHook,
             makeGroupScriptAwaitToneHook(manifestKey),
             ...(groupContextId && groupWorkspacePath
               ? [makeGroupMomentSaveHook(groupContextId, groupWorkspacePath)]
@@ -105,9 +100,5 @@ export function buildSubAgentHooks(
           ]
         : []),
     ],
-    ...(hasAgentLinks &&
-      !isAskMode && {
-        Stop: [...(base.Stop ?? []), handoffConsiderationStop],
-      }),
   };
 }

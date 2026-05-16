@@ -18,7 +18,6 @@ import { startAgentStream, streamCollect, resolveAgentPort } from "@/lib/a2a-cli
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { subscribeSession } from "@/lib/session-events";
 import { deleteSession, setSessionStatus, getSessionWorkspacePath } from "@/lib/db";
-import { deleteGroupTaskLedger } from "@/lib/group-task-store";
 import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
 import { z } from "zod";
 
@@ -192,7 +191,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
     }
   }
   await deleteSession(sessionId);
-  await deleteGroupTaskLedger(sessionId);
   if (workspacePath) await restoreAgentWorkspace(workspacePath).cleanup();
 
   return Response.json({ ok: true });

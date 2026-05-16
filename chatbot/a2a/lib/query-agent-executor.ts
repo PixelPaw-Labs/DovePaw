@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { consola } from "consola";
 import type { RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
+import { readAgentsConfig } from "@@/lib/agents-config";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
@@ -217,13 +218,14 @@ export class QueryAgentExecutor {
 
       const registry = new PendingRegistry();
 
-      const { tools: chatToTools, linkTools } = await this.agentConfigReader.resolveLinkedTools(
+      const { tools: linkedAgentTools } = await this.agentConfigReader.resolveLinkedTools(
         this.def.name,
         this.abortController.signal,
         backgroundTasks,
         registry,
-        groupOverrides ? { isGroupChat: true, ...groupOverrides } : undefined,
+        !!groupOverrides,
       );
+      const allAgents = await readAgentsConfig();
 
       await withMcpQuery(
         [
@@ -239,7 +241,7 @@ export class QueryAgentExecutor {
           ),
           makeAwaitScriptTool(this.def, registry),
           ...this.mgmtTools,
-          ...(chatToTools ?? []),
+          ...(linkedAgentTools ?? []),
         ],
         async (innerMcpServer) => {
           const additionalDirectories = [
@@ -298,7 +300,9 @@ export class QueryAgentExecutor {
                     : []),
                   `mcp__agents__${awaitRunScriptToolName(this.def.manifestKey)}`,
                   ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
-                  ...(!isAskMode ? (chatToTools ?? []).map((t) => `mcp__agents__${t.name}`) : []),
+                  ...(!isAskMode
+                    ? (linkedAgentTools ?? []).map((t) => `mcp__agents__${t.name}`)
+                    : []),
                 ],
                 disallowedTools: [
                   ...getSecurityModeStrategy(effectiveDoveSettings(globalSettings).securityMode)
@@ -310,7 +314,7 @@ export class QueryAgentExecutor {
                 hooks: buildSubAgentHooks(
                   cwd,
                   additionalDirectories,
-                  linkTools,
+                  allAgents,
                   registry,
                   this.def.manifestKey,
                   this.def.displayName,

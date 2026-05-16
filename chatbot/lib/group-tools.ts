@@ -12,16 +12,13 @@ import { z } from "zod";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
-import { taskRuntime } from "@/lib/task-runtime";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { withStartReminder } from "@@/lib/subagent-reminder";
 import { cloneReposIntoWorkspace } from "@/a2a/lib/workspace";
 import { getMemoryProvider } from "@/lib/memory";
 import { publishSessionEvent } from "@/lib/session-events";
-import { upsertSession, setActiveSession, setGroupMessage, setSessionStatus } from "@/lib/db";
-import { markGroupTaskDone, pendingGroupTasks, readGroupTaskRecord } from "@/lib/group-task-store";
-import { writeGroupGoal, buildGroupGoalIntent } from "@/lib/group-checkpoint";
-import { recoverGroupGaps } from "@/lib/group-recovery";
+import { upsertSession, setActiveSession } from "@/lib/db";
+import { groupMemberCounters } from "@/lib/group-member-counter";
 import type { GroupMeta } from "@/lib/group-meta";
 
 // ─── Group tool name helpers ──────────────────────────────────────────────────
@@ -38,12 +35,6 @@ export const doveStartGroupToolName = (groupName: string) =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")}`;
-/** Tool name for awaiting all members of a group. */
-export const doveAwaitGroupToolName = (groupName: string) =>
-  `await_group_${groupName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "")}`;
 
 // ─── makeInitGroupTool ────────────────────────────────────────────────────────
 
@@ -56,7 +47,7 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
   return tool(
     doveInitGroupToolName(group.name),
     [
-      `Initialize a shared workspace for the "${group.name}" group, then delegate work to members using start_group_* tools.`,
+      `Initialize a shared workspace for the "${group.name}" group, then delegate work to members using start_group_*.`,
       group.description && `Group focus: ${group.description}`,
       `Members: ${group.members.join(", ")}`,
     ]
@@ -123,12 +114,6 @@ export function makeInitGroupTool(group: AgentGroup, memberDefs: AgentDef[]) {
         await cloneReposIntoWorkspace(groupWorkspacePath, repoSlugs);
       }
 
-      await writeGroupGoal(
-        groupWorkspacePath,
-        groupContextId,
-        buildGroupGoalIntent(group.name, group.description),
-      ).catch((err) => consola.warn("writeGroupGoal failed (non-fatal):", err));
-
       return {
         content: [
           {
@@ -151,8 +136,14 @@ const renderMembers = (defs: AgentDef[]) =>
   defs.map((d) => `- ${d.name}: ${d.description}`).join("\n");
 
 /**
- * Fans out the instruction to all online members of the group.
- * Returns memberTaskIds (manifestKey → taskId) to pass to await_group_*.
+ * Fans out the instruction to all relevant members of the group.
+ *
+ * Each dispatched member is registered in `groupMemberCounters` so the
+ * matching `await_<memberKey>` call (with groupContextId in its input)
+ * can fire the group "done" event when the last member completes.
+ *
+ * Returns memberTaskIds (manifestKey → taskId) — Dove passes each one to the
+ * corresponding `await_<memberKey>` together with the groupContextId.
  */
 export function makeStartGroupTool(
   group: AgentGroup,
@@ -195,7 +186,7 @@ export function makeStartGroupTool(
 
   return tool(
     doveStartGroupToolName(group.name),
-    `Start the most relevant members of the "${group.name}" group, each with a tailored instruction. Returns memberTaskIds to pass to ${doveAwaitGroupToolName(group.name)}.`,
+    `Start the most relevant members of the "${group.name}" group, each with a tailored instruction. Returns memberTaskIds — call \`await_<memberManifestKey>\` for each, passing the matching taskId and the groupContextId.`,
     {
       members: z
         .array(
@@ -245,7 +236,6 @@ export function makeStartGroupTool(
         groupName,
       };
       const memberTaskIds: Record<string, string> = {};
-      const allMemberDrains: Promise<CollectedStream>[] = [];
 
       await Promise.all(
         dispatched.map(async (member) => {
@@ -261,19 +251,15 @@ export function makeStartGroupTool(
             isSender: true,
           });
 
-          // Per-member drain bucket — captures the stream promise so we can
-          // publish the final group_member event from this (Next.js) process.
-          // Streaming progress events are handled by the A2A dispatcher's groupRelay path.
-          const memberDrain: Promise<CollectedStream>[] = [];
           const result = await new TaskPoller(
             memberDef.manifestKey,
             memberDef.displayName,
             signal,
             registry,
-            doveAwaitGroupToolName(group.name),
+            doveAwaitToolName(memberDef),
             memberDef.name,
           ).start(withStartReminder(member.instruction, memberDef.manifestKey), {
-            backgroundTasks: memberDrain,
+            backgroundTasks,
             senderAgentId: "dove",
             extraMetadata: groupMeta,
             groupSource: "group",
@@ -287,180 +273,27 @@ export function makeStartGroupTool(
               status: "running",
             });
             memberTaskIds[memberDef.manifestKey] = taskId;
-            if (backgroundTasks) backgroundTasks.push(...memberDrain);
-            allMemberDrains.push(...memberDrain);
-            if (memberDrain.length > 0) {
-              void (async () => {
-                try {
-                  const collected = await memberDrain[0];
-                  setGroupMessage(taskId, collected.result.output);
-                  await markGroupTaskDone(taskId);
-                } catch (err) {
-                  consola.warn("group member drain cleanup failed:", err);
-                }
-              })();
-            }
+            // Register this member in the group completion counter so the matching
+            // `await_<memberKey>(groupContextId=…)` call fires the group "done"
+            // event when the last member resolves.
+            const counter = groupMemberCounters.get(groupContextId) ?? {
+              started: 0,
+              completed: 0,
+            };
+            counter.started += 1;
+            groupMemberCounters.set(groupContextId, counter);
           }
         }),
       );
-
-      // Close the group context after all member drains (including cascading
-      // member-to-member handoffs) have settled. This triggers the session-events
-      // TTL and marks the group session done in the DB.
-      if (allMemberDrains.length > 0) {
-        void Promise.allSettled(allMemberDrains).then(() => {
-          publishSessionEvent(groupContextId, { type: "done" });
-          setSessionStatus(groupContextId, "done");
-        });
-      }
 
       return {
         content: [
           {
             type: "text" as const,
-            text: `Group "${group.name}" started (${Object.keys(memberTaskIds).length} members). Call ${doveAwaitGroupToolName(group.name)} to collect results.`,
+            text: `Group "${group.name}" started (${Object.keys(memberTaskIds).length} members). Call \`await_<memberKey>\` for each (with groupContextId) to collect results.`,
           },
         ],
         structuredContent: { memberTaskIds, groupContextId },
-      };
-    },
-  );
-}
-
-// ─── makeAwaitGroupTool ───────────────────────────────────────────────────────
-
-/**
- * Polls all member tasks started by start_group_*. Returns combined output when
- * all complete, or { status: "still_running", memberTaskIds } for re-polling.
- */
-export function makeAwaitGroupTool(
-  group: AgentGroup,
-  memberDefs: AgentDef[],
-  signal?: AbortSignal,
-  registry?: PendingRegistry,
-) {
-  return tool(
-    doveAwaitGroupToolName(group.name),
-    `Await all still-running tasks for the "${group.name}" group. Reads the live task list from the per-group ledger (keyed by groupContextId) — no memberTaskIds needed. Re-call with the same groupContextId if still_running.`,
-    {
-      groupContextId: z
-        .string()
-        .describe("groupContextId from init_group_* / start_group_* result"),
-      timeoutMs: z
-        .number()
-        .int()
-        .min(10000)
-        .describe(
-          taskRuntime.buildGroupDescription(
-            memberDefs.map((d) => ({ agentName: d.name, toolName: doveAwaitToolName(d) })),
-          ),
-        ),
-    },
-    async ({ groupContextId, timeoutMs }) => {
-      const pending = await pendingGroupTasks(groupContextId);
-      if (pending.length === 0) {
-        // Resolve all tasks in this group from the registry. Completed tasks never
-        // went through TaskPoller.poll() so their registry entries were never cleared.
-        if (registry) {
-          const record = await readGroupTaskRecord(groupContextId);
-          record?.tasks.forEach((t) => registry.resolve(t.taskId));
-          // Also resolve the groupContextId itself — handles the case where a
-          // group member task timed out and was re-registered by TaskPoller with
-          // idKey:"taskId" pointing to the member's task ID (used as groupContextId
-          // here). Without this, those timeout-reregistered entries never clear.
-          registry.resolve(groupContextId);
-        }
-
-        const recovered = await recoverGroupGaps({
-          groupContextId,
-          groupName: group.name,
-          groupDescription: group.description,
-          memberDefs,
-          awaitToolName: doveAwaitGroupToolName(group.name),
-          signal,
-          registry,
-        });
-        if (recovered > 0) {
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: `Recovered ${recovered} pipeline gap(s) in group "${group.name}". Re-polling.`,
-              },
-            ],
-            structuredContent: { status: "still_running", groupContextId },
-          };
-        }
-
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: `No pending tasks for group "${group.name}" — all done.`,
-            },
-          ],
-          structuredContent: { status: "no_pending", groupContextId },
-        };
-      }
-
-      const results = await Promise.all(
-        pending.map((t) => {
-          const memberDef = memberDefs.find((a) => a.manifestKey === t.memberKey);
-          return new TaskPoller(
-            t.memberKey,
-            memberDef?.displayName ?? t.displayName,
-            signal,
-            registry,
-            doveAwaitGroupToolName(group.name),
-            memberDef?.name,
-          ).poll(t.taskId, timeoutMs);
-        }),
-      );
-
-      // Publish per-member agent_status to the group context so the pool stream
-      // can relay them to the UI cycle indicator.
-      for (let i = 0; i < pending.length; i++) {
-        const t = pending[i];
-        const sc = results[i].structuredContent as { status?: string } | undefined;
-        const agentStatus =
-          sc?.status === "still_running"
-            ? "running"
-            : sc?.status === "completed"
-              ? "completed"
-              : sc?.status === "canceled"
-                ? "canceled"
-                : sc?.status === "rejected"
-                  ? "rejected"
-                  : "failed";
-        publishSessionEvent(groupContextId, {
-          type: "agent_status",
-          agentKey: t.memberKey,
-          id: t.taskId,
-          status: agentStatus,
-        });
-      }
-
-      const anyStillRunning = results.some((r) => {
-        const sc = r.structuredContent as { status?: string } | undefined;
-        return sc?.status === "still_running";
-      });
-
-      if (anyStillRunning) {
-        return {
-          content: [{ type: "text" as const, text: "Group still running. Re-call to poll." }],
-          structuredContent: { status: "still_running", groupContextId },
-        };
-      }
-
-      const combinedText = results
-        .map((r, i) => `[${pending[i].memberKey}]: ${r.content?.[0]?.text ?? ""}`)
-        .join("\n\n");
-      return {
-        content: [{ type: "text" as const, text: combinedText }],
-        structuredContent: {
-          memberResults: Object.fromEntries(pending.map((t, i) => [t.memberKey, results[i]])),
-          groupContextId,
-        },
       };
     },
   );

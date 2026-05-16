@@ -1,14 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@@/lib/agent-links", () => ({
+  readAgentLinks: vi.fn().mockResolvedValue([]),
+  resolveLinkedTargets: vi.fn().mockReturnValue([]),
+}));
+
 import {
   buildAgentHooks,
   buildDoveCanUseTool,
   buildDoveHooks,
+  buildLinksReminder,
   buildSubagentCanUseTool,
   getAwaitStatus,
 } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
 import { GROUP_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
 import { DOVE_RESPONSE_REMINDER } from "@@/lib/dove-lean-reminder";
+import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
+import type { AgentDef } from "@@/lib/agents";
 import { PendingRegistry } from "../pending-registry";
 import { resolvePendingPermission } from "../pending-permissions";
 import { resolvePendingQuestion } from "../pending-questions";
@@ -443,165 +452,86 @@ describe("buildDoveHooks — PostToolUse await_* response reminder", () => {
     const result = await callHook(fn, awaitInput("still_running"));
     expect(result).toEqual({ continue: true });
   });
+
+  it("blocks with a links reminder when the completed agent has outgoing links", async () => {
+    vi.mocked(readAgentLinks).mockResolvedValueOnce([]);
+    vi.mocked(resolveLinkedTargets).mockReturnValueOnce([
+      {
+        targetName: "fixer",
+        strategy: "chat" as const,
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
+      },
+    ]);
+    const agents = [
+      { name: "support-agent", manifestKey: "support_agent", toolName: "yolo_support" },
+      { name: "fixer", manifestKey: "fixer", toolName: "yolo_fixer" },
+    ] as Parameters<typeof buildDoveHooks>[0];
+    const hooks = buildDoveHooks(agents, makeRegistry(), "/cwd", []);
+    const fn = hooks.PostToolUse![1]!.hooks[0]!;
+    const result = (await callHook(fn, awaitInput("completed"))) as {
+      decision: string;
+      reason: string;
+    };
+    expect(result.decision).toBe("block");
+    expect(result.reason).toContain("<links>");
+    expect(result.reason).toContain("support-agent completed");
+    expect(result.reason).toContain("start_fixer");
+    expect(result.reason).toContain("[80, 100]");
+  });
 });
 
-// ─── buildSubAgentHooks — self-reflection gate ────────────────────────────────
+// ─── buildLinksReminder ──────────────────────────────────────────────────────
 
-describe("buildSubAgentHooks — chat_to reflection gate", () => {
-  function getReflectionHook() {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-    );
-    // The reflection matcher is the last PreToolUse matcher
-    const matchers = hooks.PreToolUse!;
-    const reflectionMatcher = matchers[matchers.length - 1]!;
-    return reflectionMatcher.hooks[0]!;
-  }
+describe("buildLinksReminder", () => {
+  const agents = [
+    { name: "alpha", manifestKey: "alpha" },
+    { name: "beta", manifestKey: "beta" },
+    { name: "gamma", manifestKey: "gamma" },
+  ] as AgentDef[];
 
-  function chatToInput(toolInput: unknown) {
-    return {
-      hook_event_name: "PreToolUse" as const,
-      tool_name: "mcp__agents__chat_to_fixer",
-      tool_input: toolInput,
-      tool_use_id: "tu-1",
-    };
-  }
-
-  function justification(overrides: Record<string, unknown> = {}) {
-    return {
-      impact: "medium",
-      pattern: "Detection → Resolution",
-      handoff: "3 errors found",
-      confidence: 0.9,
-      ...overrides,
-    };
-  }
-
-  it("denies when justification is absent", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(fn, chatToInput({ instruction: "fix it" }));
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+  beforeEach(() => {
+    vi.mocked(readAgentLinks).mockResolvedValue([]);
+    vi.mocked(resolveLinkedTargets).mockReturnValue([]);
   });
 
-  it("denies when justification is not an object", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({ instruction: "fix it", justification: "some string" }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
+  it("returns null when the agent has no outgoing links", async () => {
+    vi.mocked(resolveLinkedTargets).mockReturnValueOnce([]);
+    expect(await buildLinksReminder("alpha", agents)).toBeNull();
   });
 
-  it("denies when confidence is missing", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ confidence: undefined }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("confidence");
+  it("includes per-link handoff_range, strategy and tool names", async () => {
+    vi.mocked(resolveLinkedTargets).mockReturnValueOnce([
+      { targetName: "beta", strategy: "chat" as const, handoffScoreMin: 70, handoffScoreMax: 95 },
+      {
+        targetName: "gamma",
+        strategy: "escalation" as const,
+        handoffScoreMin: 50,
+        handoffScoreMax: 90,
+      },
+    ]);
+    const reminder = (await buildLinksReminder("alpha", agents))!;
+    expect(reminder).toContain("alpha completed");
+    expect(reminder).toContain("start_beta / await_beta");
+    expect(reminder).toContain("[70, 95]");
+    expect(reminder).toContain("beta (chat)");
+    expect(reminder).toContain("start_gamma / await_gamma");
+    expect(reminder).toContain("[50, 90]");
+    expect(reminder).toContain("gamma (escalation)");
   });
 
-  it("denies when impact is missing", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({ instruction: "fix it", justification: justification({ impact: undefined }) }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("impact");
-  });
-
-  it("denies when impact is invalid", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({ instruction: "fix it", justification: justification({ impact: "critical" }) }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("impact");
-  });
-
-  it("always denies low impact regardless of confidence", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ impact: "low", confidence: 1 }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("Low-impact");
-  });
-
-  it("denies high impact when confidence is below 0.7", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ impact: "high", confidence: 0.69 }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("0.69");
-  });
-
-  it("allows high impact when confidence meets 0.7", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ impact: "high", confidence: 0.7 }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
-  });
-
-  it("denies medium impact when confidence is below 0.85", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ impact: "medium", confidence: 0.84 }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("deny");
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toContain("0.84");
-  });
-
-  it("allows medium impact when confidence meets 0.85", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ impact: "medium", confidence: 0.85 }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
-  });
-
-  it("allows medium impact when confidence exceeds threshold", async () => {
-    const fn = getReflectionHook();
-    const result = await callHook(
-      fn,
-      chatToInput({
-        instruction: "fix it",
-        justification: justification({ impact: "medium", confidence: 0.98 }),
-      }),
-    );
-    expect(result.hookSpecificOutput?.permissionDecision).toBe("allow");
+  it("selects per-strategy pattern text", async () => {
+    vi.mocked(resolveLinkedTargets).mockReturnValueOnce([
+      {
+        targetName: "beta",
+        strategy: "review" as const,
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
+      },
+    ]);
+    const reminder = (await buildLinksReminder("alpha", agents))!;
+    // REVIEW_PATTERNS contains "reviews finished output"
+    expect(reminder).toContain("reviews finished output");
   });
 });
 
@@ -663,55 +593,6 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
   });
 });
 
-describe("buildSubAgentHooks — reflection gate (group mode)", () => {
-  function getGroupReflectionHook() {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-    const matchers = hooks.PreToolUse!;
-    const reflectionMatcher = matchers[matchers.length - 1]!;
-    return reflectionMatcher.hooks[0]!;
-  }
-
-  it("includes DO NOT output rule in denial reason when in group mode", async () => {
-    const fn = getGroupReflectionHook();
-    const result = await callHook(fn, {
-      hook_event_name: "PreToolUse" as const,
-      tool_name: "mcp__agents__chat_to_fixer",
-      tool_input: { instruction: "fix it" },
-      tool_use_id: "tu-1",
-    });
-    expect(result.hookSpecificOutput?.permissionDecisionReason).toMatch(/DO NOT output/i);
-  });
-
-  it("does not include DO NOT output rule when not in group mode", async () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-    );
-    const matchers = hooks.PreToolUse!;
-    const fn = matchers[matchers.length - 1]!.hooks[0]!;
-    const result = await callHook(fn, {
-      hook_event_name: "PreToolUse" as const,
-      tool_name: "mcp__agents__chat_to_fixer",
-      tool_input: { instruction: "fix it" },
-      tool_use_id: "tu-1",
-    });
-    expect(result.hookSpecificOutput?.permissionDecisionReason).not.toMatch(/DO NOT output/i);
-  });
-});
-
 describe("buildSubAgentHooks — UserPromptSubmit reminder (group mode)", () => {
   it("injects GROUP_PROMPT_REMINDER instead of SUBAGENT_PROMPT_REMINDER", async () => {
     const hooks = buildSubAgentHooks(
@@ -745,131 +626,6 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder (group mode)", () => 
   });
 });
 
-// ─── buildSubAgentHooks — handoff consideration stop hook ─────────────────────
-
-describe("buildSubAgentHooks — handoff consideration stop hook", () => {
-  function getHandoffStopHook(registry = makeRegistry()) {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      registry,
-      "test_agent",
-    );
-    // The handoff hook is the last Stop matcher (base pending-work hook is first)
-    const matchers = hooks.Stop!;
-    return matchers[matchers.length - 1]!.hooks[0]!;
-  }
-
-  it("blocks on first stop with handoff reminder when registry is empty", async () => {
-    const fn = getHandoffStopHook();
-    const result = await callHook(fn, stopInput());
-    expect(result).toMatchObject({ decision: "block" });
-    expect((result as { reason: string }).reason).toContain("hand off");
-  });
-
-  it("allows on second stop when stop_hook_active is true", async () => {
-    const fn = getHandoffStopHook();
-    const result = await callHook(fn, stopInput({ stop_hook_active: true }));
-    expect(result).toEqual({ continue: true });
-  });
-
-  it("allows when registry has pending entries (defers to base stop hook)", async () => {
-    const registry = makeRegistry([{ awaitTool: "await_run_script", idKey: "runId", id: "run-1" }]);
-    const fn = getHandoffStopHook(registry);
-    const result = await callHook(fn, stopInput());
-    expect(result).toEqual({ continue: true });
-  });
-
-  it("passes through non-Stop events", async () => {
-    const fn = getHandoffStopHook();
-    const result = await callHook(fn, {
-      hook_event_name: "PreToolUse",
-      tool_name: "foo",
-      tool_input: {},
-      tool_use_id: "t1",
-    });
-    expect(result).toEqual({ continue: true });
-  });
-
-  it("is absent when no agent link tools are provided", () => {
-    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
-    // Stop array should only contain the base pending-work hook, not the handoff hook
-    expect(hooks.Stop).toHaveLength(1);
-  });
-
-  it("embeds last_assistant_message in block reason when not in group mode", async () => {
-    const fn = getHandoffStopHook();
-    const result = await callHook(
-      fn,
-      stopInput({ last_assistant_message: "Here are the results." }),
-    );
-    expect((result as { reason: string }).reason).toContain("Here are the results.");
-  });
-
-  it("uses empty string in block reason when last_assistant_message is absent", async () => {
-    const fn = getHandoffStopHook();
-    const result = await callHook(fn, stopInput());
-    expect((result as { reason: string }).reason).toContain("respond with exactly:");
-  });
-});
-
-// ─── buildSubAgentHooks — ask mode (no linked agent tools) ───────────────────
-
-describe("buildSubAgentHooks — ask mode", () => {
-  const LINK_TOOLS = [{ name: "chat_to_fixer", description: "Send a message to Fixer." }];
-
-  it("has no Stop hook in ask mode even when link tools are provided", () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      LINK_TOOLS,
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      false,
-      true, // isAskMode
-    );
-    expect(hooks.Stop).toHaveLength(1); // only the base pending-work hook
-  });
-
-  it("has no reflection matchers in PreToolUse in ask mode", () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      LINK_TOOLS,
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      false,
-      true, // isAskMode
-    );
-    // In ask mode: only the base PreToolUse hooks (no reflection matchers for chat_to/etc.)
-    const hooksWithoutAskMode = buildSubAgentHooks(
-      "/cwd",
-      [],
-      LINK_TOOLS,
-      makeRegistry(),
-      "test_agent",
-    );
-    expect(hooks.PreToolUse!.length).toBeLessThan(hooksWithoutAskMode.PreToolUse!.length);
-  });
-
-  it("stop hook still fires in start mode (default) with link tools", async () => {
-    const hooks = buildSubAgentHooks("/cwd", [], LINK_TOOLS, makeRegistry(), "test_agent");
-    const matchers = hooks.Stop!;
-    const fn = matchers[matchers.length - 1]!.hooks[0]!;
-    const result = await callHook(fn, stopInput());
-    expect(result).toMatchObject({ decision: "block" });
-  });
-});
-
-// ─── buildSubAgentHooks — group handoff silence hooks ────────────────────────
-
 function postToolUseByName(toolName: string) {
   return {
     hook_event_name: "PostToolUse" as const,
@@ -879,131 +635,6 @@ function postToolUseByName(toolName: string) {
     tool_response: "",
   };
 }
-
-describe("buildSubAgentHooks — group handoff silence hooks", () => {
-  function getGroupPostToolUseHooks() {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [],
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-    // base hook is [0]; group hooks are appended after
-    return hooks.PostToolUse!;
-  }
-
-  it("is absent when isGroupMode is false", () => {
-    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
-    // only the base still_running hook should be present
-    expect(hooks.PostToolUse).toHaveLength(1);
-  });
-
-  it("injects additionalContext after start_* handoff tools", async () => {
-    const matchers = getGroupPostToolUseHooks();
-    // start matcher is second (index 1)
-    const fn = matchers[1]!.hooks[0]!;
-    const result = await callHook(fn, postToolUseByName("mcp__agents__start_chat_to_agent_b"));
-    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toBeTruthy();
-    expect(hookSpecificOutput.additionalContext).toContain("await");
-    expect(hookSpecificOutput.additionalContext).toContain("no text before it");
-  });
-
-  it("injects additionalContext after await_* handoff tools", async () => {
-    const matchers = getGroupPostToolUseHooks();
-    // await matcher is third (index 2)
-    const fn = matchers[2]!.hooks[0]!;
-    const result = await callHook(fn, postToolUseByName("mcp__agents__await_chat_to_agent_b"));
-    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toBeTruthy();
-  });
-
-  it("passes through non-PostToolUse events", async () => {
-    const matchers = getGroupPostToolUseHooks();
-    const fn = matchers[1]!.hooks[0]!;
-    const result = await callHook(fn, {
-      hook_event_name: "PreToolUse" as const,
-      tool_name: "foo",
-      tool_input: {},
-      tool_use_id: "t1",
-    });
-    expect(result).toEqual({ continue: true });
-  });
-});
-
-// ─── buildSubAgentHooks — await handoff no-action reminder ───────────────────
-
-describe("buildSubAgentHooks — await handoff no-action reminder", () => {
-  it("is absent when there are no agent link tools", () => {
-    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
-    expect(hooks.PostToolUse).toHaveLength(1);
-  });
-
-  it("is absent in ask mode even with agent links", () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      false,
-      true,
-    );
-    expect(hooks.PostToolUse).toHaveLength(1);
-  });
-
-  it("injects no-action reminder after await_* handoff tools when links exist", async () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-    );
-    expect(hooks.PostToolUse).toHaveLength(2);
-    const fn = hooks.PostToolUse![1]!.hooks[0]!;
-    const result = await callHook(fn, postToolUseByName("mcp__agents__await_chat_to_fixer"));
-    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
-    expect(hookSpecificOutput.additionalContext).toContain(
-      "Never try to action with skill or tools based on the target agent response",
-    );
-  });
-
-  it("fires for await_review_with_* and await_escalate_to_* as well", async () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-    );
-    const fn = hooks.PostToolUse![1]!.hooks[0]!;
-    const reviewResult = await callHook(
-      fn,
-      postToolUseByName("mcp__agents__await_review_with_reviewer"),
-    );
-    const escalateResult = await callHook(
-      fn,
-      postToolUseByName("mcp__agents__await_escalate_to_supervisor"),
-    );
-    expect(
-      (reviewResult as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput
-        .additionalContext,
-    ).toContain("Never try to action");
-    expect(
-      (escalateResult as { hookSpecificOutput: { additionalContext: string } }).hookSpecificOutput
-        .additionalContext,
-    ).toContain("Never try to action");
-  });
-});
 
 // ─── buildSubAgentHooks — group script await tone hook ───────────────────────
 
@@ -1023,14 +654,14 @@ describe("buildSubAgentHooks — group script await tone hook", () => {
     return hooks.PostToolUse!;
   }
 
-  it("is at index 3 in group mode (after base, start-silence, await-silence)", () => {
+  it("is at index 1 in group mode (after base PostToolUse hooks)", () => {
     const matchers = getGroupPostToolUseHooks();
-    expect(matchers).toHaveLength(4);
+    expect(matchers).toHaveLength(2);
   });
 
   it("injects tone additionalContext after await_test_agent completes", async () => {
     const matchers = getGroupPostToolUseHooks();
-    const fn = matchers[3]!.hooks[0]!;
+    const fn = matchers[1]!.hooks[0]!;
     const result = await callHook(fn, postToolUseByName("mcp__agents__await_test_agent"));
     const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
     expect(hookSpecificOutput.additionalContext).toContain("agent script role");
@@ -1038,7 +669,7 @@ describe("buildSubAgentHooks — group script await tone hook", () => {
 
   it("skips tone hint when script is still_running", async () => {
     const matchers = getGroupPostToolUseHooks();
-    const fn = matchers[3]!.hooks[0]!;
+    const fn = matchers[1]!.hooks[0]!;
     const input = {
       hook_event_name: "PostToolUse" as const,
       tool_name: "mcp__agents__await_test_agent",
@@ -1052,7 +683,7 @@ describe("buildSubAgentHooks — group script await tone hook", () => {
 
   it("passes through non-PostToolUse events", async () => {
     const matchers = getGroupPostToolUseHooks();
-    const fn = matchers[3]!.hooks[0]!;
+    const fn = matchers[1]!.hooks[0]!;
     const result = await callHook(fn, {
       hook_event_name: "PreToolUse" as const,
       tool_name: "foo",

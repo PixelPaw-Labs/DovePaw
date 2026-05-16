@@ -26,6 +26,9 @@ import { withStartReminder, withMemoryReminder } from "@@/lib/subagent-reminder"
 import { agentPersistentStateDir } from "@/lib/paths";
 import { taskRuntime } from "@/lib/task-runtime";
 import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
+import { groupMemberCounters } from "@/lib/group-member-counter";
+import { publishSessionEvent } from "@/lib/session-events";
+import { setGroupMessage, setSessionStatus } from "@/lib/db";
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -154,17 +157,22 @@ export function makeAskTool(
 /**
  * Fires a task on the A2A server and returns a taskId as soon as the task is accepted.
  * Pair with makeAwaitTool to retrieve the result later.
- * Use when Dove needs to start multiple agents concurrently or inform the user right away.
+ * Use when an orchestrator needs to start multiple agents concurrently or inform the user right away.
+ *
+ * `senderAgentId` identifies the caller in A2A task metadata. Defaults to "dove" for Dove's
+ * own orchestration. Pass the sub-agent's name when registering this tool for a sub-agent
+ * orchestrator's linked agents.
  */
 export function makeStartTool(
   agent: AgentDef,
   signal?: AbortSignal,
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
-  doveDisplayName?: string,
+  orchestratorDisplayName?: string,
   stateMachine?: AgentTaskStateMachine,
+  senderAgentId: string = "dove",
 ) {
-  const orchestratorName = doveDisplayName ?? "Dove";
+  const orchestratorName = orchestratorDisplayName ?? "Dove";
   return tool(
     doveStartToolName(agent),
     `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
@@ -185,7 +193,7 @@ export function makeStartTool(
         agent.name,
       ).start(withStartReminder(instruction, agent.manifestKey), {
         backgroundTasks,
-        senderAgentId: "dove",
+        senderAgentId,
         extraMetadata: { mode: AgentCallMode.Start },
       });
       if (result.structuredContent) {
@@ -220,8 +228,14 @@ export function makeAwaitTool(
         .int()
         .min(10000)
         .describe(taskRuntime.buildDescription(agent.name, doveAwaitToolName(agent))),
+      groupContextId: z
+        .string()
+        .optional()
+        .describe(
+          "Provide when this await collects a group member started by start_group_*. The last member completion fires the group `done` event and closes the group SSE session.",
+        ),
     },
-    async ({ taskId, timeoutMs }) => {
+    async ({ taskId, timeoutMs, groupContextId }) => {
       const result = await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
@@ -239,6 +253,25 @@ export function makeAwaitTool(
         } else {
           // "completed" | "canceled" | "failed" | "rejected" — use A2A status directly
           stateMachine.transition(taskId, agent.manifestKey, sc.status);
+        }
+      }
+
+      // Group-mode cleanup: persist the member's output and tick the completion
+      // counter registered by start_group_*. When all dispatched members have
+      // resolved, publish `done` so the group SSE stream closes.
+      if (groupContextId) {
+        const sc = result.structuredContent;
+        if (sc && sc.status === "completed" && "result" in sc) {
+          setGroupMessage(taskId, sc.result.output ?? "");
+          const counter = groupMemberCounters.get(groupContextId);
+          if (counter) {
+            counter.completed += 1;
+            if (counter.completed >= counter.started) {
+              publishSessionEvent(groupContextId, { type: "done" });
+              setSessionStatus(groupContextId, "done");
+              groupMemberCounters.delete(groupContextId);
+            }
+          }
         }
       }
       return result;

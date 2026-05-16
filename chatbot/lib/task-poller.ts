@@ -2,14 +2,13 @@
  * TaskPoller — shared A2A start/poll logic for MCP await tools.
  *
  * Owns port resolution, error handling, the start → stream-drain cycle, and
- * the poll → timeout race. Used by both Dove (makeStartTool / makeAwaitTool)
- * and subagents (makeStartChatToTool / makeAwaitChatToTool).
+ * the poll → timeout race. Used by Dove and sub-agent orchestrators
+ * (makeStartTool / makeAwaitTool — sub-agents pass their own senderAgentId).
  *
  * Callers pass registry + awaitTool; TaskPoller handles all registration and
  * resolution internally so pending-state logic is never duplicated.
  */
 
-import { consola } from "consola";
 import { TaskNotFoundError } from "@a2a-js/sdk/client";
 import {
   resolveAgentPort,
@@ -24,13 +23,6 @@ import type { CollectedStream, StreamedResult } from "@/lib/a2a-client";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AwaitToolStatus } from "@/lib/hooks";
 import { taskRuntime } from "@/lib/task-runtime";
-import {
-  recordGroupTask,
-  markGroupTaskDone,
-  getGroupWorkspaceForTask,
-  type GroupTaskSource,
-} from "@/lib/group-task-store";
-import { writeGroupCheckpoint } from "@/lib/group-checkpoint";
 
 // ─── Content types ────────────────────────────────────────────────────────────
 
@@ -121,18 +113,17 @@ export class TaskPoller {
       backgroundTasks,
       senderAgentId,
       extraMetadata,
-      groupSource,
     }: {
       contextId?: string;
       backgroundTasks?: Promise<CollectedStream>[];
       senderAgentId?: string;
       extraMetadata?: Record<string, unknown>;
       /**
-       * Which delegation flow spawned this task. When provided AND
-       * `extraMetadata.groupContextId` is a string, the task is persisted to
-       * the per-group ledger so completion can be tracked across handoffs.
+       * Tag indicating which delegation flow spawned the task. Accepted but
+       * currently unused — kept for compatibility with `start_group_*` callers
+       * that still set it.
        */
-      groupSource?: GroupTaskSource;
+      groupSource?: string;
     } = {},
   ): Promise<StartToolResult> {
     const port = resolveAgentPort(this.manifestKey);
@@ -160,28 +151,6 @@ export class TaskPoller {
       taskRuntime.start(taskId);
       const { registry, awaitTool } = this;
       if (registry && awaitTool) registry.register({ awaitTool, idKey: "taskId", id: taskId });
-
-      // Persist to the per-group ledger when this task was spawned inside a
-      // group context. Strictly keyed by groupContextId — non-group tasks are
-      // not persisted.
-      const groupContextId = extraMetadata?.["groupContextId"];
-      const groupWorkspacePath =
-        typeof extraMetadata?.["groupWorkspacePath"] === "string"
-          ? extraMetadata["groupWorkspacePath"]
-          : undefined;
-      if (groupSource && typeof groupContextId === "string") {
-        await recordGroupTask(
-          groupContextId,
-          {
-            taskId,
-            contextId: sessionContextId,
-            source: groupSource,
-            memberKey: this.manifestKey,
-            displayName: this.displayName,
-          },
-          groupWorkspacePath,
-        );
-      }
 
       // Always drain to avoid stalling the EventQueue.
       // Returns CollectedStream so callers that track backgroundTasks can read the final output.
@@ -289,31 +258,6 @@ export class TaskPoller {
       };
       if (this.agentName && this.awaitTool && completed.status === "completed") {
         taskRuntime.record(taskId, this.agentName, this.awaitTool);
-      }
-      // Mark done in the group-task ledger if this taskId was registered there.
-      // No-op when the task was never group-scoped (the ledger is strictly per
-      // groupContextId; non-group tasks are simply absent from any record).
-      await markGroupTaskDone(resolvedTaskId);
-
-      // Write a recovery checkpoint for every successfully completed group task.
-      // Non-fatal: checkpoint failure must never break the main poll result.
-      if (completed.status === "completed") {
-        try {
-          const meta = await getGroupWorkspaceForTask(resolvedTaskId);
-          if (meta) {
-            await writeGroupCheckpoint(meta.workspacePath, {
-              memberKey: this.manifestKey,
-              displayName: this.displayName,
-              taskId: resolvedTaskId,
-              contextId: meta.contextId,
-              completedAt: new Date().toISOString(),
-              outputSummary: (result.result.output ?? "").slice(0, 500),
-              source: meta.source,
-            });
-          }
-        } catch (err) {
-          consola.warn("[group-checkpoint] Checkpoint write failed:", err);
-        }
       }
 
       return {
