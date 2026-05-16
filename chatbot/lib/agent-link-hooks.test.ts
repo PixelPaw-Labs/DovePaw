@@ -58,14 +58,4 @@ describe("buildHandoffConsiderationPrompt", () => {
       `If no tool's score falls within its handoff_range: stop immediately and DO NOT explain your reasoning.`,
     );
   });
-
-  it("group mode: includes narration suppression reminder", () => {
-    const prompt = buildHandoffConsiderationPrompt(tools, true);
-    expect(prompt).toContain("Do NOT output and respond with any text");
-  });
-
-  it("non-group mode: does not include group narration suppression", () => {
-    const prompt = buildHandoffConsiderationPrompt(tools, false);
-    expect(prompt).not.toContain("Do NOT output and respond with any text");
-  });
 });

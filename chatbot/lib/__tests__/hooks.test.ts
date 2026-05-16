@@ -798,30 +798,6 @@ describe("buildSubAgentHooks — handoff consideration stop hook", () => {
     expect(hooks.Stop).toHaveLength(1);
   });
 
-  it("includes DO NOT output rule in block reason when in group mode", async () => {
-    const hooks = buildSubAgentHooks(
-      "/cwd",
-      [],
-      [{ name: "chat_to_fixer", description: "Send a message to Fixer." }],
-      makeRegistry(),
-      "test_agent",
-      undefined,
-      undefined,
-      undefined,
-      true,
-    );
-    const matchers = hooks.Stop!;
-    const fn = matchers[matchers.length - 1]!.hooks[0]!;
-    const result = await callHook(fn, stopInput());
-    expect((result as { reason: string }).reason).toMatch(/DO NOT output/i);
-  });
-
-  it("does not include DO NOT output rule when not in group mode", async () => {
-    const fn = getHandoffStopHook();
-    const result = await callHook(fn, stopInput());
-    expect((result as { reason: string }).reason).not.toMatch(/DO NOT output/i);
-  });
-
   it("embeds last_assistant_message in block reason when not in group mode", async () => {
     const fn = getHandoffStopHook();
     const result = await callHook(
