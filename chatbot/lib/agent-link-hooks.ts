@@ -188,7 +188,7 @@ Each tool has a handoff_range [min, max]. If your score for a tool falls within 
   Example: range [80, 100] → hand off only when highly confident. Range [0, 100] → always hand off.
 
 RULE: If a tool's score falls within its handoff_range, you MUST call it now. Do not override this with reasoning such as user preferences, review steps, staying in scope, or "the user is orchestrating" — a score within the range IS your decision to hand off.
-${isGroupMode ? "Do NOT output and respond with any text such as narration, status updates, or confirmations.\n" : ""}${ifNoMatch}
+${ifNoMatch}
 </reminder>`;
 }
 
