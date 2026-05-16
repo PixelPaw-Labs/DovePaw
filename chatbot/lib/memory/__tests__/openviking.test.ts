@@ -85,7 +85,7 @@ describe("OpenVikingMemoryProvider.buildReadReminder", () => {
 
   it("uses the find endpoint's real request shape (target_uri + limit, not node_limit)", () => {
     const body = provider.buildReadReminder("/ws/x", "grp-xyz");
-    expect(body).toContain('"target_uri": "viking://agent/grp-xyz/moments"');
+    expect(body).toContain('"target_uri": "viking://agent/memories"');
     expect(body).toContain('"limit": 10');
     expect(body).not.toContain('"node_limit"');
   });
@@ -178,7 +178,7 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ status: "ok", result: { uri: "viking://agent/grp-xyz/moments" } }),
+          JSON.stringify({ status: "ok", result: { uri: "viking://agent/grp-xyz/memories" } }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
       );
@@ -190,7 +190,7 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>)["Content-Type"]).toBe("application/json");
     expect((init.headers as Record<string, string>)["X-OpenViking-Agent"]).toBe("grp-xyz");
-    expect(JSON.parse(init.body as string)).toEqual({ uri: "viking://agent/grp-xyz/moments" });
+    expect(JSON.parse(init.body as string)).toEqual({ uri: "viking://agent/grp-xyz/memories" });
     fetchSpy.mockRestore();
   });
 
@@ -199,7 +199,7 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
       new Response(
         JSON.stringify({
           status: "error",
-          error: { code: "ALREADY_EXISTS", message: "viking://agent/grp-xyz/moments exists" },
+          error: { code: "ALREADY_EXISTS", message: "viking://agent/grp-xyz/memories exists" },
         }),
         { status: 409, headers: { "Content-Type": "application/json" } },
       ),

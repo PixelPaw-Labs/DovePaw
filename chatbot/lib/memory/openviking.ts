@@ -87,7 +87,7 @@ ${rosterBullet(workspacePath)}
 curl -sX POST ${base}/api/v1/search/find \\
   -H "X-OpenViking-Agent: ${groupContextId}" \\
   -H "Content-Type: application/json" \\
-  -d '{"query": "<topic>", "target_uri": "viking://agent/${groupContextId}/moments", "limit": 10}'
+  -d '{"query": "<topic>", "target_uri": "viking://agent/memories", "limit": 10}'
 \`\`\``;
   }
 
@@ -120,7 +120,7 @@ ${indentedMomentsPattern()}`;
 // ─── HTTP API helpers ─────────────────────────────────────────────────────────
 
 async function ensureNamespace(port: number, groupContextId: string): Promise<void> {
-  const uri = `viking://agent/${groupContextId}/moments`;
+  const uri = `viking://agent/${groupContextId}/memories`;
   const response = await fetch(`http://localhost:${port}/api/v1/fs/mkdir`, {
     method: "POST",
     headers: {
