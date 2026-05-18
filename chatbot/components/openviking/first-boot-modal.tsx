@@ -63,7 +63,7 @@ export function OpenVikingFirstBootModal() {
             Without it, members write plain <code>.md</code> files instead.
           </DialogDescription>
         </DialogHeader>
-        <p className="text-sm text-on-surface-variant">
+        <p className="text-sm text-muted-foreground">
           One-time setup: pick an embedding provider (OpenAI, voyage, ollama, …) and save. You can
           prefill from your existing <code>~/.openviking/ov.conf</code> if you have one.
         </p>

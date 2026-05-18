@@ -99,7 +99,7 @@ export function AddEnvVarDialog({ existingKeys, onAdd }: AddEnvVarDialogProps) {
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="env-key" className="text-sm font-medium text-on-surface">
+            <label htmlFor="env-key" className="text-sm font-medium text-foreground">
               Key
             </label>
             <Input

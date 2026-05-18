@@ -177,10 +177,10 @@ export function SettingsContent({
       {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-on-surface tracking-tight">
+          <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
             Global Settings
           </h1>
-          <p className="text-sm text-on-surface-variant mt-1">
+          <p className="text-sm text-muted-foreground mt-1">
             Configure repositories and environment variables for all agents.
             {saving && <span className="ml-2 text-primary">Saving…</span>}
           </p>
@@ -204,14 +204,14 @@ export function SettingsContent({
 
       {/* Tabs */}
       <div className="flex flex-col gap-4">
-        <div className="flex gap-1 border-b border-outline-variant/20">
+        <div className="flex gap-1 border-b border-border/20">
           <button
             type="button"
             onClick={() => setTab("dove")}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === "dove"
                 ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             {doveDisplayName}
@@ -222,7 +222,7 @@ export function SettingsContent({
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === "repositories"
                 ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Repositories
@@ -234,7 +234,7 @@ export function SettingsContent({
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === "env-vars"
                 ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Environment Variables
@@ -246,7 +246,7 @@ export function SettingsContent({
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === "agent-management"
                 ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Scheduled Agents Management
@@ -257,7 +257,7 @@ export function SettingsContent({
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === "memory"
                 ? "border-primary text-primary"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+                : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >
             Memory Provider

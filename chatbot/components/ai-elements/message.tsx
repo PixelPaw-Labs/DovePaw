@@ -35,12 +35,9 @@ export const MessageContent = ({ children, className, ...props }: MessageContent
   <div
     className={cn(
       "flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
-      // User bubble — primary bg, clipped top-right corner
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-2xl group-[.is-user]:rounded-tr-none group-[.is-user]:bg-primary group-[.is-user]:text-primary-foreground group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:shadow-lg group-[.is-user]:shadow-primary/10",
-      // Assistant bubble — muted bg, clipped bottom-left corner
-      "group-[.is-assistant]:bg-muted group-[.is-assistant]:rounded-2xl group-[.is-assistant]:rounded-bl-none group-[.is-assistant]:px-4 group-[.is-assistant]:py-3 group-[.is-assistant]:border group-[.is-assistant]:border-border/30 group-[.is-assistant]:text-foreground",
-      // Inline code: bg-muted shows as white on dark primary bg — replace with translucent overlay
-      "group-[.is-user]:[&_code[data-streamdown]]:bg-white/15 group-[.is-user]:[&_code[data-streamdown]]:text-primary-foreground",
+      // User bubble — secondary bg, standard rounded
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-2xl group-[.is-user]:bg-secondary group-[.is-user]:text-secondary-foreground group-[.is-user]:px-4 group-[.is-user]:py-3",
+      // Assistant — full-width flat (no bubble background)
       className,
     )}
     {...props}

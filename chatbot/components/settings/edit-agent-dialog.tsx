@@ -233,7 +233,7 @@ export function EditAgentDialog({ agent, onSave, onClose, doveDisplayName }: Edi
                   className="w-4 h-4 shrink-0"
                 />
                 <div>
-                  <span className="text-sm font-medium text-on-surface">
+                  <span className="text-sm font-medium text-foreground">
                     Hide from {doveDisplayName}
                   </span>
                   <p className="text-[11px] text-muted-foreground">
@@ -253,7 +253,7 @@ export function EditAgentDialog({ agent, onSave, onClose, doveDisplayName }: Edi
                   className="w-4 h-4 shrink-0"
                 />
                 <div>
-                  <span className="text-sm font-medium text-on-surface">Enable scheduling</span>
+                  <span className="text-sm font-medium text-foreground">Enable scheduling</span>
                   <p className="text-[11px] text-muted-foreground">
                     Uncheck to hide from Scheduled Agents Management
                   </p>
@@ -329,7 +329,7 @@ export function EditAgentDialog({ agent, onSave, onClose, doveDisplayName }: Edi
                     onChange={(e) => set("runAtLoad", e.target.checked)}
                     className="w-4 h-4 shrink-0"
                   />
-                  <span className="text-sm font-medium text-on-surface">
+                  <span className="text-sm font-medium text-foreground">
                     Start immediately when loaded
                   </span>
                 </label>
@@ -457,7 +457,7 @@ function Row({
   return (
     <div className="grid grid-cols-[140px_1fr] items-start gap-3">
       <div className="pt-2">
-        <label className="text-sm font-medium text-on-surface">{label}</label>
+        <label className="text-sm font-medium text-foreground">{label}</label>
         {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
       </div>
       {children}

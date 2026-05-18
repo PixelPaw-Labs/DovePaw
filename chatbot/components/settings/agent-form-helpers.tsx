@@ -29,7 +29,7 @@ export function Row({
   return (
     <div className="grid grid-cols-[140px_1fr] items-start gap-3">
       <div className="pt-2">
-        <label className="text-sm font-medium text-on-surface">{label}</label>
+        <label className="text-sm font-medium text-foreground">{label}</label>
         {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
       </div>
       {children}

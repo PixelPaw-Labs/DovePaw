@@ -67,7 +67,7 @@ export function RepoTable({
               onClick={() => toggle(group.owner)}
               aria-expanded={!collapsed}
               aria-controls={`owner-section-${ownerLabel}`}
-              className="col-span-full flex items-center gap-2 pt-3 pb-1 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant hover:text-on-surface transition-colors"
+              className="col-span-full flex items-center gap-2 pt-3 pb-1 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors"
             >
               <ChevronDown
                 className={`w-3 h-3 transition-transform ${collapsed ? "-rotate-90" : ""}`}
@@ -113,17 +113,17 @@ export function RepoTable({
                   <>
                     <div className="flex items-center gap-2.5 min-w-0">
                       <FolderGit2 className="w-4 h-4 text-primary shrink-0" />
-                      <span className="text-sm font-semibold text-on-surface truncate">
+                      <span className="text-sm font-semibold text-foreground truncate">
                         {repo.name}
                       </span>
                     </div>
-                    <span className="text-xs font-mono text-on-surface-variant truncate">
+                    <span className="text-xs font-mono text-muted-foreground truncate">
                       {repo.githubRepo}
                     </span>
 
                     <div className="flex items-center gap-1">
                       {enabledAgents.length === 0 ? (
-                        <span className="text-xs text-on-surface-variant/40">—</span>
+                        <span className="text-xs text-muted-foreground/40">—</span>
                       ) : (
                         enabledAgents.map((agent) => {
                           const Icon = agent.icon;
@@ -149,7 +149,7 @@ export function RepoTable({
                         variant="ghost"
                         size="sm"
                         onClick={() => onEdit(repo)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted-high h-8 w-8 p-0"
                         title={`Edit ${repo.name}`}
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -158,7 +158,7 @@ export function RepoTable({
                         variant="ghost"
                         size="sm"
                         onClick={() => setDeletingId(repo.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
                         title={`Remove ${repo.name}`}
                       >
                         <Trash2 className="w-3.5 h-3.5" />

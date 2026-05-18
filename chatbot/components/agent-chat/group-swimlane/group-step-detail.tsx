@@ -5,6 +5,7 @@ import { X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
+import { Button } from "@/components/ui/button";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { MESSAGE_RESPONSE_SPACING } from "@/components/agent-chat/chat-message";
 import type { Step } from "./use-swimlane-steps";
@@ -63,14 +64,16 @@ export function StepDetail({ step, agentConfig, onClose }: StepDetailProps) {
                   {STATUS_LABEL[step.status]}
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="icon-sm"
                 onClick={onClose}
                 aria-label="Close step detail"
-                className="ml-auto w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                className="ml-auto"
               >
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
             <div className="text-sm leading-relaxed text-foreground/90 max-h-72 overflow-y-auto">
               {step.fullText ? (

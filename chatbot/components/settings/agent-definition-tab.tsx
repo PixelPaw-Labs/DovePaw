@@ -395,7 +395,7 @@ export function AgentDefinitionTab({
             className="w-4 h-4 shrink-0"
           />
           <div>
-            <span className="text-sm font-medium text-on-surface">Hide from {doveDisplayName}</span>
+            <span className="text-sm font-medium text-foreground">Hide from {doveDisplayName}</span>
             <p className="text-[11px] text-muted-foreground">
               When checked, {doveDisplayName} cannot invoke this agent
             </p>
@@ -413,7 +413,7 @@ export function AgentDefinitionTab({
             className="w-4 h-4 shrink-0"
           />
           <div>
-            <span className="text-sm font-medium text-on-surface">Enable scheduling</span>
+            <span className="text-sm font-medium text-foreground">Enable scheduling</span>
             <p className="text-[11px] text-muted-foreground">
               Uncheck to hide from Scheduled Agents Management
             </p>
@@ -533,7 +533,7 @@ export function AgentDefinitionTab({
                     onChange={(e) => updateJob(i, "runAtLoad", e.target.checked)}
                     className="w-4 h-4 shrink-0"
                   />
-                  <span className="text-sm font-medium text-on-surface">
+                  <span className="text-sm font-medium text-foreground">
                     Start immediately when loaded
                   </span>
                 </label>

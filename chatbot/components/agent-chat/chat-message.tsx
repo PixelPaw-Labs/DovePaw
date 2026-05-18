@@ -154,7 +154,7 @@ export function ChatMessageItem({
         toolCalls={msg.segments.filter((s) => s.type === "tool_call").map((s) => s.tool)}
       />
       {msg.isCancelled && (
-        <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-bl-none bg-amber-50 border border-amber-200 text-amber-600 text-sm font-medium">
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
           <Ban className="w-3.5 h-3.5 shrink-0" />
           Stopped
         </div>

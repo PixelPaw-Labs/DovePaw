@@ -66,8 +66,10 @@ function DiffBlock({
             key={i}
             className={cn(
               "px-3 whitespace-pre",
-              line.type === "added" && "bg-green-50 text-green-800",
-              line.type === "removed" && "bg-red-50 text-red-800",
+              line.type === "added" &&
+                "bg-green-50 dark:bg-green-950/30 text-green-800 dark:text-green-400",
+              line.type === "removed" &&
+                "bg-red-50 dark:bg-red-950/30 text-red-800 dark:text-red-400",
               line.type === "context" && "text-foreground/70",
             )}
           >

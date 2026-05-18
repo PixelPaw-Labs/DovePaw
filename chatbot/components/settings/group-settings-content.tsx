@@ -56,12 +56,12 @@ function MaskedValue({
   const [visible, setVisible] = React.useState(false);
 
   if (!isSecret) {
-    return <span className="text-xs font-mono text-on-surface-variant truncate">{value}</span>;
+    return <span className="text-xs font-mono text-muted-foreground truncate">{value}</span>;
   }
 
   return (
     <div className="flex items-center gap-1.5 min-w-0">
-      <span className="text-xs font-mono text-on-surface-variant truncate">
+      <span className="text-xs font-mono text-muted-foreground truncate">
         {visible ? value : "•".repeat(Math.min(value.length || 8, 24))}
       </span>
       <span className="shrink-0 text-[10px] font-medium text-primary/70 bg-primary/10 rounded px-1 py-0.5 leading-none">
@@ -70,7 +70,7 @@ function MaskedValue({
       <button
         type="button"
         onClick={() => setVisible((v) => !v)}
-        className="shrink-0 text-on-surface-variant/50 hover:text-on-surface-variant transition-colors"
+        className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
         title={visible ? "Hide value" : "Show value"}
       >
         {visible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -220,8 +220,8 @@ export function GroupSettingsContent({
             <Users2 className="w-6 h-6 text-primary" />
           </div>
           <div>
-            <h1 className="text-3xl font-extrabold text-on-surface tracking-tight">{groupName}</h1>
-            <p className="text-sm text-on-surface-variant mt-1">
+            <h1 className="text-3xl font-extrabold text-foreground tracking-tight">{groupName}</h1>
+            <p className="text-sm text-muted-foreground mt-1">
               Shared configuration for all members of this group.
               {saving && <span className="ml-2 text-primary">Saving…</span>}
             </p>
@@ -235,14 +235,14 @@ export function GroupSettingsContent({
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-8 items-start">
         <div className="flex flex-col gap-4">
           {/* Tabs */}
-          <div className="flex gap-1 border-b border-outline-variant/20">
+          <div className="flex gap-1 border-b border-border/20">
             <button
               type="button"
               onClick={() => setTab("repositories")}
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "repositories"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Repositories
@@ -256,7 +256,7 @@ export function GroupSettingsContent({
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "env-vars"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Environment Variables
@@ -272,23 +272,23 @@ export function GroupSettingsContent({
           {tab === "repositories" && (
             <>
               <div className="flex items-center gap-3">
-                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                   Repositories
                 </h3>
-                <span className="text-xs text-on-surface-variant opacity-60">
+                <span className="text-xs text-muted-foreground opacity-60">
                   {enabledCount} of {totalCount} enabled
                 </span>
-                <div className="flex-1 h-px bg-outline-variant/20" />
+                <div className="flex-1 h-px bg-border/20" />
               </div>
 
               {repositories.length === 0 ? (
-                <div className="rounded-xl border border-outline-variant/30 bg-surface-container">
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-on-surface-variant">
+                <div className="rounded-xl border border-border/30 bg-muted">
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
                     <FolderGit2 className="w-10 h-10 opacity-30" />
                     <p className="text-sm font-medium">No repositories configured</p>
                     <p className="text-xs opacity-60">
                       Add repositories in{" "}
-                      <Link href="/settings" className="underline hover:text-on-surface">
+                      <Link href="/settings" className="underline hover:text-foreground">
                         Global Settings
                       </Link>
                     </p>
@@ -305,7 +305,7 @@ export function GroupSettingsContent({
                         type="button"
                         onClick={() => toggleOwner(group.owner)}
                         aria-expanded={!collapsed}
-                        className="flex items-center gap-2 pt-2 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant hover:text-on-surface transition-colors"
+                        className="flex items-center gap-2 pt-2 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <ChevronDown
                           className={`w-3 h-3 transition-transform ${collapsed ? "-rotate-90" : ""}`}
@@ -321,17 +321,17 @@ export function GroupSettingsContent({
                         return (
                           <div
                             key={repo.id}
-                            className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 transition-all group"
+                            className="bg-card rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 transition-all group"
                           >
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
+                              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
                                 <FolderGit2 className="w-5 h-5" />
                               </div>
                               <div>
-                                <h4 className="font-semibold text-on-surface text-sm">
+                                <h4 className="font-semibold text-foreground text-sm">
                                   {repo.name}
                                 </h4>
-                                <p className="text-xs font-mono text-on-surface-variant mt-0.5">
+                                <p className="text-xs font-mono text-muted-foreground mt-0.5">
                                   {repo.githubRepo}
                                 </p>
                               </div>
@@ -344,7 +344,7 @@ export function GroupSettingsContent({
                                 onChange={() => handleToggleRepo(repo.id)}
                                 aria-label={`${enabled ? "Disable" : "Enable"} ${repo.name} for ${groupName}`}
                               />
-                              <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                              <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-input peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
                             </label>
                           </div>
                         );
@@ -359,10 +359,10 @@ export function GroupSettingsContent({
           {/* Environment Variables tab */}
           {tab === "env-vars" && (
             <>
-              <p className="text-xs text-on-surface-variant">
+              <p className="text-xs text-muted-foreground">
                 Group-specific overrides take precedence over global values. Inherited globals are
                 read-only here — edit them in{" "}
-                <Link href="/settings" className="underline hover:text-on-surface">
+                <Link href="/settings" className="underline hover:text-foreground">
                   Global Settings
                 </Link>
                 .
@@ -427,7 +427,7 @@ export function GroupSettingsContent({
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="text-sm font-mono font-semibold text-on-surface truncate">
+                                  <span className="text-sm font-mono font-semibold text-foreground truncate">
                                     {envVar.key}
                                   </span>
                                 </TooltipTrigger>
@@ -446,7 +446,7 @@ export function GroupSettingsContent({
                               variant="ghost"
                               size="sm"
                               onClick={() => setEditingEnvVar(envVar)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted-high h-8 w-8 p-0"
                               title={`Edit ${envVar.key}`}
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -455,7 +455,7 @@ export function GroupSettingsContent({
                               variant="ghost"
                               size="sm"
                               onClick={() => setDeletingEnvVarId(envVar.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
                               title={`Remove ${envVar.key}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -469,7 +469,7 @@ export function GroupSettingsContent({
                   {/* Inherited globals (read-only) */}
                   {inheritedGlobals.map((envVar, i) => (
                     <DataTableRow key={envVar.id} isLast={i === inheritedGlobals.length - 1}>
-                      <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 leading-none shrink-0 self-center bg-surface-container text-on-surface-variant">
+                      <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 leading-none shrink-0 self-center bg-muted text-muted-foreground">
                         inherited
                       </span>
                       <div className="flex items-center gap-2 min-w-0">
@@ -481,7 +481,7 @@ export function GroupSettingsContent({
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-sm font-mono font-semibold text-on-surface/60 truncate">
+                              <span className="text-sm font-mono font-semibold text-foreground/60 truncate">
                                 {envVar.key}
                               </span>
                             </TooltipTrigger>

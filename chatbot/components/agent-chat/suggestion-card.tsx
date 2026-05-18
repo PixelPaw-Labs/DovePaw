@@ -23,7 +23,7 @@ export function SuggestionCard({
   return (
     <button
       onClick={onClick}
-      className="suggestion-card group flex flex-col items-start p-5 bg-card border border-border/10 rounded-xl text-left transition-all duration-300 hover:shadow-lg hover:shadow-slate-200/60 hover:-translate-y-0.5 active:scale-[0.98] opacity-0"
+      className="suggestion-card group flex flex-col items-start p-5 bg-card border border-border/10 rounded-xl text-left transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 opacity-0"
     >
       <div
         className={cn(

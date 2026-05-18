@@ -330,10 +330,10 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
         >
           <div className="flex flex-col gap-3">
             <details className="group">
-              <summary className="cursor-pointer text-xs text-on-surface-variant hover:text-on-surface select-none">
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none">
                 View built-in {form.displayName} reminder (for reference)
               </summary>
-              <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-on-surface-variant border border-outline-variant/20">
+              <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-muted-foreground border border-border/20">
                 {DOVE_LEAN_REMINDER}
               </pre>
             </details>
@@ -352,10 +352,10 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
         >
           <div className="flex flex-col gap-3">
             <details className="group">
-              <summary className="cursor-pointer text-xs text-on-surface-variant hover:text-on-surface select-none">
+              <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none">
                 View built-in sub-agent reminder (for reference)
               </summary>
-              <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-on-surface-variant border border-outline-variant/20">
+              <pre className="mt-2 p-3 rounded-lg bg-muted text-xs font-mono leading-relaxed whitespace-pre-wrap break-words text-muted-foreground border border-border/20">
                 {SUBAGENT_PROMPT_REMINDER}
               </pre>
             </details>

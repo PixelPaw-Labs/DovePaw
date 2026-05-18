@@ -16,28 +16,28 @@ describe("CopyAction", () => {
 
   it("renders with title 'Copy' by default", () => {
     render(<CopyAction text="hello" />);
-    expect(screen.getByTitle("Copy")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
   });
 
   it("calls clipboard.writeText with the provided text on click", () => {
     render(<CopyAction text="test content" />);
-    fireEvent.click(screen.getByTitle("Copy"));
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith("test content");
   });
 
   it("shows 'Copied!' title immediately after click", () => {
     render(<CopyAction text="hi" />);
-    fireEvent.click(screen.getByTitle("Copy"));
-    expect(screen.getByTitle("Copied!")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeTruthy();
   });
 
   it("reverts to 'Copy' title after 1500ms", () => {
     render(<CopyAction text="hi" />);
-    fireEvent.click(screen.getByTitle("Copy"));
-    expect(screen.getByTitle("Copied!")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    expect(screen.getByRole("button", { name: "Copied!" })).toBeTruthy();
     act(() => {
       vi.advanceTimersByTime(1500);
     });
-    expect(screen.getByTitle("Copy")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeTruthy();
   });
 });

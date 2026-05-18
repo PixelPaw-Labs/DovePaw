@@ -74,7 +74,7 @@ export function EditRepoDialog({
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-repo-github" className="text-sm font-medium text-on-surface">
+            <label htmlFor="edit-repo-github" className="text-sm font-medium text-foreground">
               GitHub repository
             </label>
             <Input
@@ -92,9 +92,9 @@ export function EditRepoDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="edit-repo-name" className="text-sm font-medium text-on-surface">
+            <label htmlFor="edit-repo-name" className="text-sm font-medium text-foreground">
               Display name
-              <span className="ml-1.5 text-xs font-normal text-on-surface-variant">
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
                 (optional — defaults to repo slug)
               </span>
             </label>

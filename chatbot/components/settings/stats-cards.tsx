@@ -62,10 +62,10 @@ export function StatsCards({ repoCount, agentCount, statuses }: StatsCardsProps)
         return (
           <div
             key={card.label}
-            className="rounded-xl bg-surface-container border border-outline-variant/30 p-5 flex flex-col gap-3"
+            className="rounded-xl bg-muted border border-border/30 p-5 flex flex-col gap-3"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 {card.label}
               </span>
               <div
@@ -73,7 +73,7 @@ export function StatsCards({ repoCount, agentCount, statuses }: StatsCardsProps)
                   "w-8 h-8 rounded-lg flex items-center justify-center",
                   card.accent
                     ? "bg-primary text-on-primary"
-                    : "bg-surface-container-high text-on-surface-variant",
+                    : "bg-muted-high text-muted-foreground",
                 )}
               >
                 <Icon className="w-4 h-4" />
@@ -83,12 +83,12 @@ export function StatsCards({ repoCount, agentCount, statuses }: StatsCardsProps)
               <p
                 className={cn(
                   "text-3xl font-extrabold tracking-tight",
-                  card.accent ? "text-primary" : "text-on-surface",
+                  card.accent ? "text-primary" : "text-foreground",
                 )}
               >
                 {card.value}
               </p>
-              {card.sub && <p className="text-xs text-on-surface-variant mt-0.5">{card.sub}</p>}
+              {card.sub && <p className="text-xs text-muted-foreground mt-0.5">{card.sub}</p>}
             </div>
           </div>
         );

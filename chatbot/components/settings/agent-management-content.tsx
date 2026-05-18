@@ -151,10 +151,10 @@ export function AgentManagementContent({ agents, plugins = [] }: AgentManagement
       {/* Section header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-on-surface tracking-tight">
+          <h2 className="text-2xl font-extrabold text-foreground tracking-tight">
             Scheduled Agents Management
           </h2>
-          <p className="text-sm text-on-surface-variant mt-1 max-w-2xl">
+          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Install and manage agents as scheduled daemons. Each agent runs on its own schedule —
             enable or disable them individually, or install all at once.
           </p>
@@ -257,7 +257,7 @@ function AgentCard({ agent, agentStatus, busy, onAction }: AgentCardProps) {
   );
 
   return (
-    <div className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex flex-col gap-4 p-6 transition-all">
+    <div className="bg-card rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex flex-col gap-4 p-6 transition-all">
       {/* Card header */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -267,7 +267,7 @@ function AgentCard({ agent, agentStatus, busy, onAction }: AgentCardProps) {
             <Icon className="w-5 h-5" />
           </div>
           <div>
-            <h3 className="font-bold text-on-surface text-sm leading-tight">{agent.displayName}</h3>
+            <h3 className="font-bold text-foreground text-sm leading-tight">{agent.displayName}</h3>
           </div>
         </div>
 
@@ -282,7 +282,7 @@ function AgentCard({ agent, agentStatus, busy, onAction }: AgentCardProps) {
 
       {/* Per-job rows */}
       {jobs === null ? (
-        <span className="text-xs text-on-surface-variant opacity-60">Loading…</span>
+        <span className="text-xs text-muted-foreground opacity-60">Loading…</span>
       ) : jobs.length === 0 ? (
         <p className="text-xs text-muted-foreground italic">
           No scheduled jobs — add one in agent settings.
@@ -304,7 +304,7 @@ function AgentCard({ agent, agentStatus, busy, onAction }: AgentCardProps) {
 
       {/* Agent-level status summary */}
       {jobs !== null && (
-        <div className="pt-2 border-t border-outline-variant/20">
+        <div className="pt-2 border-t border-border/20">
           <StatusBadge
             loaded={anyLoaded}
             configExists={jobs.some(([, j]) => j.configExists)}
@@ -334,7 +334,7 @@ function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) 
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border/40 px-3 py-2">
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-medium text-on-surface truncate">{displayLabel}</p>
+        <p className="text-xs font-medium text-foreground truncate">{displayLabel}</p>
         {!isLegacy && label && (
           <p className="text-[10px] text-muted-foreground truncate">
             {formatScheduleDisplay(schedule)}
@@ -359,7 +359,7 @@ function JobRow({ jobId, jobStatus, isBusy, agentBusy, onAction }: JobRowProps) 
           onChange={() => onAction(loaded ? "unload" : "load")}
           aria-label={loaded ? "Unload" : "Load"}
         />
-        <div className="relative w-8 h-4 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-disabled:opacity-40 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-3 after:h-3 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-4" />
+        <div className="relative w-8 h-4 rounded-full transition-colors duration-200 bg-input peer-checked:bg-primary peer-disabled:opacity-40 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-3 after:h-3 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-4" />
       </label>
 
       {/* Job-level actions */}

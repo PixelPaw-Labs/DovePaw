@@ -1,6 +1,7 @@
 "use client";
 
 import { Paperclip, SendHorizonal, Square, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   PromptInput,
   PromptInputBody,
@@ -73,17 +74,19 @@ export function ChatInputBar({
 
       <PromptInput
         onSubmit={handleSubmit}
-        className={`**:data-[slot=input-group]:relative **:data-[slot=input-group]:flex **:data-[slot=input-group]:items-center **:data-[slot=input-group]:bg-input **:data-[slot=input-group]:shadow-2xl **:data-[slot=input-group]:shadow-foreground/5 **:data-[slot=input-group]:border **:data-[slot=input-group]:border-border/10 **:data-[slot=input-group]:h-auto ${pendingQueue.length > 0 ? "**:data-[slot=input-group]:rounded-t-none **:data-[slot=input-group]:rounded-b-2xl" : "**:data-[slot=input-group]:rounded-2xl"}`}
+        className={`**:data-[slot=input-group]:relative **:data-[slot=input-group]:flex **:data-[slot=input-group]:items-center **:data-[slot=input-group]:bg-input **:data-[slot=input-group]:border **:data-[slot=input-group]:border-border/10 **:data-[slot=input-group]:h-auto ${pendingQueue.length > 0 ? "**:data-[slot=input-group]:rounded-t-none **:data-[slot=input-group]:rounded-b-2xl" : "**:data-[slot=input-group]:rounded-2xl"}`}
       >
         <PromptInputBody>
           {/* Attach — absolute left */}
-          <button
+          <Button
             type="button"
-            className="absolute left-3 bottom-3 w-8 h-8 rounded-xl flex items-center justify-center text-muted-foreground hover:bg-secondary transition-all z-10"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute left-3 bottom-3 z-10"
             title="Attach file"
           >
             <Paperclip className="w-4 h-4" />
-          </button>
+          </Button>
 
           {/* Textarea — full width, padded for buttons */}
           <PromptInputTextarea
@@ -94,20 +97,19 @@ export function ChatInputBar({
           {/* Stop + Send — absolute right, always both visible when loading */}
           <div className="absolute right-3 bottom-3 flex items-center gap-2 z-10">
             {isLoading && (
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={onCancel}
-                className="h-8 px-3 bg-primary/10 text-primary border border-primary/20 rounded-xl font-bold text-xs flex items-center gap-1.5 hover:bg-primary/20 transition-all active:scale-[0.98]"
+                className="text-primary hover:bg-primary/10"
               >
                 STOP <Square className="w-3 h-3 fill-current" />
-              </button>
+              </Button>
             )}
-            <button
-              type="submit"
-              className="h-8 px-3 bg-primary text-primary-foreground rounded-xl font-bold text-xs flex items-center gap-1.5 hover:shadow-lg hover:shadow-primary/30 transition-all active:scale-[0.98]"
-            >
+            <Button type="submit" size="sm">
               {isLoading ? "QUEUE" : "SEND"} <SendHorizonal className="w-3.5 h-3.5" />
-            </button>
+            </Button>
           </div>
         </PromptInputBody>
       </PromptInput>

@@ -70,7 +70,7 @@ function LaunchdBadge({
 }) {
   if (processing)
     return (
-      <span className="text-[9px] text-blue-500 font-semibold uppercase tracking-wide">
+      <span className="text-[9px] text-blue-500 dark:text-blue-400 font-semibold uppercase tracking-wide">
         ● processing{processingTrigger ? ` · ${processingTrigger}` : ""}
       </span>
     );
@@ -83,7 +83,7 @@ function LaunchdBadge({
     );
   if (!scheduler.loaded)
     return (
-      <span className="text-[9px] text-amber-500/80 font-medium uppercase tracking-wide">
+      <span className="text-[9px] text-amber-500/80 dark:text-amber-400/80 font-medium uppercase tracking-wide">
         unloaded
       </span>
     );
@@ -92,7 +92,7 @@ function LaunchdBadge({
 
   return (
     <span className="flex items-center gap-1.5">
-      <span className="text-[9px] text-emerald-500/90 font-medium uppercase tracking-wide">
+      <span className="text-[9px] text-emerald-500/90 dark:text-emerald-400/90 font-medium uppercase tracking-wide">
         ● idle
       </span>
       {countdown}
@@ -212,7 +212,7 @@ export function AgentButton({
             "shrink-0 w-5 h-5 rounded flex items-center justify-center transition-colors relative z-10",
             isAgentSettings
               ? "bg-primary/20 text-primary"
-              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5",
+              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/50",
           )}
         >
           <Settings className="w-3 h-3" />
@@ -222,7 +222,7 @@ export function AgentButton({
         className={cn(
           "w-1.5 h-1.5 rounded-full shrink-0 transition-colors duration-500",
           isOnline
-            ? "bg-green-500 animate-pulse"
+            ? "bg-green-500 dark:bg-green-400 animate-pulse"
             : !hasData
               ? "bg-muted-foreground/20"
               : "bg-red-400/60",

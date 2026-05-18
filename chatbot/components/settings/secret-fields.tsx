@@ -42,7 +42,7 @@ export function SecretFields({
       {/* Value field — only shown for non-secret or new-secret */}
       {(!isSecret || secretMode === "new") && (
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="secret-value" className="text-sm font-medium text-on-surface">
+          <label htmlFor="secret-value" className="text-sm font-medium text-foreground">
             Value
           </label>
           <Input
@@ -63,12 +63,12 @@ export function SecretFields({
         className={`flex items-center gap-2.5 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
           isSecret
             ? "border-primary/40 bg-primary/8 text-primary"
-            : "border-outline-variant/30 bg-surface-container text-on-surface-variant hover:border-outline-variant/60"
+            : "border-border/30 bg-muted text-muted-foreground hover:border-border/60"
         }`}
       >
         <div
           className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border transition-colors ${
-            isSecret ? "border-primary bg-primary" : "border-outline-variant/50 bg-transparent"
+            isSecret ? "border-primary bg-primary" : "border-border/50 bg-transparent"
           }`}
         >
           {isSecret && (
@@ -97,7 +97,7 @@ export function SecretFields({
       {/* New vs Link radio — only shown when secret is on */}
       {isSecret && (
         <div className="flex flex-col gap-2 pl-1">
-          <p className="text-xs font-medium text-on-surface-variant uppercase tracking-wider">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Storage
           </p>
           <div className="flex gap-2">
@@ -107,7 +107,7 @@ export function SecretFields({
               className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm flex-1 transition-colors ${
                 secretMode === "new"
                   ? "border-primary/50 bg-primary/8 text-primary"
-                  : "border-outline-variant/30 bg-surface-container text-on-surface-variant hover:border-outline-variant/60"
+                  : "border-border/30 bg-muted text-muted-foreground hover:border-border/60"
               }`}
             >
               <Plus className="w-3.5 h-3.5 shrink-0" />
@@ -119,7 +119,7 @@ export function SecretFields({
               className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm flex-1 transition-colors ${
                 secretMode === "link"
                   ? "border-primary/50 bg-primary/8 text-primary"
-                  : "border-outline-variant/30 bg-surface-container text-on-surface-variant hover:border-outline-variant/60"
+                  : "border-border/30 bg-muted text-muted-foreground hover:border-border/60"
               }`}
             >
               <Link2 className="w-3.5 h-3.5 shrink-0" />
@@ -129,15 +129,15 @@ export function SecretFields({
 
           {/* Link fields */}
           {secretMode === "link" && (
-            <div className="flex flex-col gap-2 rounded-lg border border-outline-variant/20 bg-surface-container p-3">
-              <p className="text-xs text-on-surface-variant">
+            <div className="flex flex-col gap-2 rounded-lg border border-border/20 bg-muted p-3">
+              <p className="text-xs text-muted-foreground">
                 Dovepaw will read this entry but never modify or delete it.
               </p>
               <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col gap-1">
                   <label
                     htmlFor="keychain-service"
-                    className="text-xs font-medium text-on-surface-variant"
+                    className="text-xs font-medium text-muted-foreground"
                   >
                     Service
                   </label>
@@ -152,7 +152,7 @@ export function SecretFields({
                 <div className="flex flex-col gap-1">
                   <label
                     htmlFor="keychain-account"
-                    className="text-xs font-medium text-on-surface-variant"
+                    className="text-xs font-medium text-muted-foreground"
                   >
                     Account
                   </label>

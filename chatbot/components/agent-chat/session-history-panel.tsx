@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Clock, Loader2, PlusCircle, Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import { formatRelativeTime } from "@/lib/utils";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
@@ -99,14 +100,16 @@ export function SessionHistoryPanel({
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border/20 bg-muted/10 shrink-0">
-        <button
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onNew}
-          className="flex items-center gap-2 text-sm font-semibold text-primary bg-primary/10 hover:bg-primary/20 transition-colors px-4 py-1.5 rounded-full"
+          className="rounded-full text-primary hover:bg-primary/10"
           title="New session"
         >
           <PlusCircle size={16} />
           New session
-        </button>
+        </Button>
         <span className="flex-1" />
         <Clock className="w-4 h-4 text-primary" />
         <span className="text-sm font-semibold text-foreground">Session History</span>

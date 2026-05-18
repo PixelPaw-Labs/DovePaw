@@ -95,15 +95,15 @@ export function AgentNotificationsTab({
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-3">
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
           Notifications
         </h3>
-        <div className="flex-1 h-px bg-outline-variant/20" />
+        <div className="flex-1 h-px bg-border/20" />
       </div>
 
       {!hasConfig && (
-        <div className="rounded-xl border border-outline-variant/30 bg-surface-container">
-          <div className="flex flex-col items-center justify-center py-12 gap-3 text-on-surface-variant">
+        <div className="rounded-xl border border-border/30 bg-muted">
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
             <Bell className="w-10 h-10 opacity-30" />
             <p className="text-sm font-medium">No notifications configured</p>
             <p className="text-xs opacity-60">
@@ -117,8 +117,8 @@ export function AgentNotificationsTab({
         {/* Enable toggle */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium text-on-surface">Enable notifications</p>
-            <p className="text-xs text-on-surface-variant mt-0.5">
+            <p className="text-sm font-medium text-foreground">Enable notifications</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Send alerts when this agent&apos;s session starts or ends.
             </p>
           </div>
@@ -130,17 +130,17 @@ export function AgentNotificationsTab({
               onChange={(e) => setEnabled(e.target.checked)}
               aria-label="Enable notifications"
             />
-            <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+            <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-input peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
           </label>
         </div>
 
         {/* ntfy channel */}
         <div className="flex flex-col gap-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Channel — ntfy
           </p>
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-on-surface" htmlFor="ntfy-topic">
+            <label className="text-xs font-medium text-foreground" htmlFor="ntfy-topic">
               Topic <span className="text-destructive">*</span>
             </label>
             <Input
@@ -151,13 +151,13 @@ export function AgentNotificationsTab({
               disabled={!enabled}
               className="font-mono text-sm"
             />
-            <p className="text-xs text-on-surface-variant">
+            <p className="text-xs text-muted-foreground">
               The ntfy topic to publish to. Use a private, hard-to-guess name, or reference an env
               var (e.g. <code className="font-mono">$NTFY_TOPIC</code>).
             </p>
           </div>
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-on-surface" htmlFor="ntfy-server">
+            <label className="text-xs font-medium text-foreground" htmlFor="ntfy-server">
               Server URL
             </label>
             <Input
@@ -168,7 +168,7 @@ export function AgentNotificationsTab({
               disabled={!enabled}
               className="font-mono text-sm"
             />
-            <p className="text-xs text-on-surface-variant">
+            <p className="text-xs text-muted-foreground">
               Leave blank to use the default public server (ntfy.sh) or set your self-hosted URL.
             </p>
           </div>
@@ -176,7 +176,7 @@ export function AgentNotificationsTab({
 
         {/* Event toggles */}
         <div className="flex flex-col gap-3">
-          <p className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Events
           </p>
           <label className="flex items-center gap-3 cursor-pointer">
@@ -185,9 +185,9 @@ export function AgentNotificationsTab({
               checked={onSessionStart}
               onChange={(e) => setOnSessionStart(e.target.checked)}
               disabled={!enabled}
-              className="w-4 h-4 rounded border-outline-variant accent-primary"
+              className="w-4 h-4 rounded border-border accent-primary"
             />
-            <span className="text-sm text-on-surface">Session Start</span>
+            <span className="text-sm text-foreground">Session Start</span>
           </label>
           <label className="flex items-center gap-3 cursor-pointer">
             <input
@@ -195,9 +195,9 @@ export function AgentNotificationsTab({
               checked={onSessionEnd}
               onChange={(e) => setOnSessionEnd(e.target.checked)}
               disabled={!enabled}
-              className="w-4 h-4 rounded border-outline-variant accent-primary"
+              className="w-4 h-4 rounded border-border accent-primary"
             />
-            <span className="text-sm text-on-surface">Session End</span>
+            <span className="text-sm text-foreground">Session End</span>
           </label>
         </div>
 

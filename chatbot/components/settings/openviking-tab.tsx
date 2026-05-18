@@ -211,9 +211,7 @@ export function OpenVikingTab() {
         <Button onClick={() => void handleSave()} disabled={saving}>
           {saving ? "Saving…" : "Save & reboot sidecar"}
         </Button>
-        {successMessage && (
-          <span className="text-sm text-on-surface-variant">{successMessage}</span>
-        )}
+        {successMessage && <span className="text-sm text-muted-foreground">{successMessage}</span>}
       </div>
 
       <Dialog open={errorMessage !== null} onOpenChange={(open) => !open && setErrorMessage(null)}>
@@ -226,7 +224,7 @@ export function OpenVikingTab() {
               you fix the underlying issue and try again.
             </DialogDescription>
           </DialogHeader>
-          <pre className="rounded-md border border-outline-variant/40 bg-surface-container px-3 py-2 text-xs whitespace-pre-wrap text-on-surface-variant">
+          <pre className="rounded-md border border-border/40 bg-muted px-3 py-2 text-xs whitespace-pre-wrap text-muted-foreground">
             {errorMessage}
           </pre>
           <DialogFooter>
@@ -246,21 +244,21 @@ function SourceBanner({
   if (source === "loading") return null;
   if (source === "dovepaw") {
     return (
-      <p className="text-xs text-on-surface-variant">
+      <p className="text-xs text-muted-foreground">
         Editing <code>~/.dovepaw/openviking/ov.conf</code>.
       </p>
     );
   }
   if (source === "user-global-prefill") {
     return (
-      <p className="text-xs text-on-surface-variant">
+      <p className="text-xs text-muted-foreground">
         Prefilled from <code>~/.openviking/ov.conf</code>. Save to copy into the DovePaw-scoped
         config.
       </p>
     );
   }
   return (
-    <p className="text-xs text-on-surface-variant">
+    <p className="text-xs text-muted-foreground">
       No config yet. Fill in the embedding provider at minimum, then save.
     </p>
   );
@@ -269,7 +267,7 @@ function SourceBanner({
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-on-surface">{title}</h2>
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </div>
   );
@@ -290,7 +288,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-on-surface">{label}</label>
+      <label className="text-sm font-medium text-foreground">{label}</label>
       <Input
         type={secret ? "password" : "text"}
         value={value}
@@ -314,7 +312,7 @@ function NumberField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-on-surface">{label}</label>
+      <label className="text-sm font-medium text-foreground">{label}</label>
       <Input
         type="number"
         value={value ?? ""}

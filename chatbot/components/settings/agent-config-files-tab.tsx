@@ -143,10 +143,10 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
   return (
     <>
       <div className="flex items-center gap-3">
-        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+        <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
           Config Files
         </h3>
-        <div className="flex-1 h-px bg-outline-variant/20" />
+        <div className="flex-1 h-px bg-border/20" />
         <Button size="sm" className="gap-2" onClick={openAdd}>
           <Plus className="w-4 h-4" />
           New File
@@ -154,7 +154,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-on-surface-variant text-sm">
+        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
           Loading…
         </div>
       ) : files.length === 0 ? (
@@ -168,15 +168,15 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
           {files.map((file) => (
             <div
               key={file.name}
-              className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 group"
+              className="bg-card rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 group"
             >
               <div className="flex items-center gap-4 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary shrink-0">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-primary shrink-0">
                   <FileJson className="w-5 h-5" />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-semibold text-on-surface text-sm font-mono">{file.name}</h4>
-                  <p className="text-xs text-on-surface-variant mt-0.5 font-mono truncate max-w-sm">
+                  <h4 className="font-semibold text-foreground text-sm font-mono">{file.name}</h4>
+                  <p className="text-xs text-muted-foreground mt-0.5 font-mono truncate max-w-sm">
                     {previewContent(file.content)}
                   </p>
                 </div>
@@ -208,7 +208,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
                       variant="ghost"
                       size="sm"
                       onClick={() => openEdit(file)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted-high h-8 w-8 p-0"
                       title={`Edit ${file.name}`}
                     >
                       <Pencil className="w-3.5 h-3.5" />
@@ -217,7 +217,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
                       variant="ghost"
                       size="sm"
                       onClick={() => setDeletingName(file.name)}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
                       title={`Delete ${file.name}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -248,7 +248,7 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
           <form onSubmit={handleSave} className="flex flex-col gap-4">
             {dialog?.mode === "add" && (
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="cfg-filename" className="text-sm font-medium text-on-surface">
+                <label htmlFor="cfg-filename" className="text-sm font-medium text-foreground">
                   Filename
                 </label>
                 <Input
@@ -267,12 +267,12 @@ export function AgentConfigFilesTab({ agentName }: { agentName: string }) {
             )}
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium text-on-surface">JSON Content</label>
+                <label className="text-sm font-medium text-foreground">JSON Content</label>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-xs text-on-surface-variant hover:text-on-surface"
+                  className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
                   onClick={() => {
                     try {
                       setEditContent(JSON.stringify(JSON.parse(editContent), null, 2));

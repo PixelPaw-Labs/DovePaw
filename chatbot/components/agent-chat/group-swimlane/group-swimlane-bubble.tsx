@@ -23,7 +23,8 @@ const STATUS_LABEL: Record<Step["status"], string> = {
 export function SwimlaneBubble({ step, agentConfig, isSelected, onSelect }: SwimlaneBubbleProps) {
   const reduce = useReducedMotion();
   const def = agentConfig ? buildAgentDef(agentConfig) : null;
-  const iconBg = step.status === "done" ? "bg-green-500" : (def?.iconBg ?? "bg-muted");
+  const iconBg =
+    step.status === "done" ? "bg-green-500 dark:bg-green-400" : (def?.iconBg ?? "bg-muted");
 
   const sizeClass =
     step.status === "running" ? "w-3.5 h-3.5" : isSelected ? "w-3.5 h-3.5" : "w-3 h-3";

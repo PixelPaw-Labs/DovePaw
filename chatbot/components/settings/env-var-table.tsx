@@ -28,12 +28,12 @@ function MaskedValue({
   keychainAccount?: string;
 }) {
   if (!isSecret) {
-    return <span className="text-xs font-mono text-on-surface-variant truncate">{value}</span>;
+    return <span className="text-xs font-mono text-muted-foreground truncate">{value}</span>;
   }
 
   return (
     <div className="flex items-center gap-1.5 min-w-0">
-      <span className="text-xs font-mono text-on-surface-variant truncate">{"•".repeat(8)}</span>
+      <span className="text-xs font-mono text-muted-foreground truncate">{"•".repeat(8)}</span>
       <span className="shrink-0 text-[10px] font-medium text-primary/70 bg-primary/10 rounded px-1 py-0.5 leading-none">
         {keychainService ? `${keychainService} / ${keychainAccount ?? ""}` : "keychain"}
       </span>
@@ -97,7 +97,7 @@ export function EnvVarTable({ envVars, onEdit, onRemove }: EnvVarTableProps) {
                 ) : (
                   <KeyRound className="w-4 h-4 text-primary shrink-0" />
                 )}
-                <span className="text-sm font-mono font-semibold text-on-surface truncate">
+                <span className="text-sm font-mono font-semibold text-foreground truncate">
                   {envVar.key}
                 </span>
               </div>
@@ -112,7 +112,7 @@ export function EnvVarTable({ envVars, onEdit, onRemove }: EnvVarTableProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => onEdit(envVar)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted-high h-8 w-8 p-0"
                   title={`Edit ${envVar.key}`}
                 >
                   <Pencil className="w-3.5 h-3.5" />
@@ -121,7 +121,7 @@ export function EnvVarTable({ envVars, onEdit, onRemove }: EnvVarTableProps) {
                   variant="ghost"
                   size="sm"
                   onClick={() => setDeletingId(envVar.id)}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
                   title={`Remove ${envVar.key}`}
                 >
                   <Trash2 className="w-3.5 h-3.5" />

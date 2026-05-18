@@ -70,12 +70,12 @@ function MaskedValue({
   keychainAccount?: string;
 }) {
   if (!isSecret) {
-    return <span className="text-xs font-mono text-on-surface-variant truncate">{value}</span>;
+    return <span className="text-xs font-mono text-muted-foreground truncate">{value}</span>;
   }
 
   return (
     <div className="flex items-center gap-1.5 min-w-0">
-      <span className="text-xs font-mono text-on-surface-variant truncate">{"•".repeat(8)}</span>
+      <span className="text-xs font-mono text-muted-foreground truncate">{"•".repeat(8)}</span>
       <span className="shrink-0 text-[10px] font-medium text-primary/70 bg-primary/10 rounded px-1 py-0.5 leading-none">
         {keychainService ? `${keychainService} / ${keychainAccount ?? ""}` : "keychain"}
       </span>
@@ -315,10 +315,10 @@ export function AgentSettingsContent({
             <Icon className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-3xl font-extrabold text-on-surface tracking-tight">
+            <h1 className="text-3xl font-extrabold text-foreground tracking-tight">
               {agent.displayName}
             </h1>
-            <p className="text-sm text-on-surface-variant mt-1 max-w-2xl">
+            <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
               {agent.description.slice(0, 120)}
               {agent.description.length > 120 ? "…" : ""}
               {saving && <span className="ml-2 text-primary">Saving…</span>}
@@ -334,14 +334,14 @@ export function AgentSettingsContent({
         {/* Left: tabs + tab content */}
         <div className="flex flex-col gap-4">
           {/* Tabs */}
-          <div className="flex gap-1 border-b border-outline-variant/20">
+          <div className="flex gap-1 border-b border-border/20">
             <button
               type="button"
               onClick={() => setTab("definition")}
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "definition"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Definition
@@ -352,7 +352,7 @@ export function AgentSettingsContent({
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "repositories"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Repositories
@@ -366,7 +366,7 @@ export function AgentSettingsContent({
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "env-vars"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Environment Variables
@@ -382,7 +382,7 @@ export function AgentSettingsContent({
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "config-files"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Config Files
@@ -393,7 +393,7 @@ export function AgentSettingsContent({
               className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
                 tab === "notifications"
                   ? "border-primary text-primary"
-                  : "border-transparent text-on-surface-variant hover:text-on-surface"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Notifications
@@ -410,10 +410,10 @@ export function AgentSettingsContent({
               />
 
               {/* Web Access */}
-              <div className="mt-4 rounded-xl border border-outline-variant/30 bg-surface-container p-5 flex flex-col gap-4">
+              <div className="mt-4 rounded-xl border border-border/30 bg-muted p-5 flex flex-col gap-4">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-on-surface-variant shrink-0" />
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-on-surface-variant">
+                  <ShieldCheck className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                     Web Access
                   </h3>
                 </div>
@@ -421,10 +421,10 @@ export function AgentSettingsContent({
                 {/* SDK sub-agent */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-on-surface">
+                    <p className="text-sm font-medium text-foreground">
                       Allow web tools in SDK sub-agent
                     </p>
-                    <p className="text-xs text-on-surface-variant">
+                    <p className="text-xs text-muted-foreground">
                       Enables WebFetch and WebSearch inside the Claude Agent SDK query() call.
                     </p>
                   </div>
@@ -439,19 +439,19 @@ export function AgentSettingsContent({
                       }
                       aria-label="Allow web tools in SDK sub-agent"
                     />
-                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-input peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
                   </label>
                 </div>
 
-                <div className="h-px bg-outline-variant/20" />
+                <div className="h-px bg-border/20" />
 
                 {/* Agent script runner */}
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm font-medium text-on-surface">
+                    <p className="text-sm font-medium text-foreground">
                       Allow web tools in agent script
                     </p>
-                    <p className="text-xs text-on-surface-variant">
+                    <p className="text-xs text-muted-foreground">
                       Sets DOVEPAW_ALLOW_WEB_TOOLS for the Claude CLI / Codex script runner.
                     </p>
                   </div>
@@ -466,7 +466,7 @@ export function AgentSettingsContent({
                       }
                       aria-label="Allow web tools in agent script"
                     />
-                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-input peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
                   </label>
                 </div>
               </div>
@@ -483,13 +483,13 @@ export function AgentSettingsContent({
                     {locked ? (
                       <Lock className="w-4 h-4 text-amber-600 shrink-0" />
                     ) : (
-                      <LockOpen className="w-4 h-4 text-on-surface-variant shrink-0" />
+                      <LockOpen className="w-4 h-4 text-muted-foreground shrink-0" />
                     )}
                     <div>
-                      <p className="text-sm font-medium text-on-surface">
+                      <p className="text-sm font-medium text-foreground">
                         {locked ? "Agent is locked" : "Lock agent"}
                       </p>
-                      <p className="text-xs text-on-surface-variant">
+                      <p className="text-xs text-muted-foreground">
                         {locked
                           ? "Unlock to allow deletion."
                           : "Prevent this agent from being deleted."}
@@ -505,7 +505,7 @@ export function AgentSettingsContent({
                       onChange={() => void handleLockToggle()}
                       aria-label={locked ? "Unlock agent" : "Lock agent"}
                     />
-                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-500 peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                    <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-input peer-checked:bg-amber-500 peer-focus-visible:ring-2 peer-focus-visible:ring-amber-500 peer-focus-visible:ring-offset-2 peer-disabled:opacity-50 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
                   </label>
                 </div>
 
@@ -536,7 +536,7 @@ export function AgentSettingsContent({
                   </div>
                 ) : (
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-on-surface-variant">
+                    <p className="text-sm text-muted-foreground">
                       {locked
                         ? "Unlock this agent before deleting."
                         : "Permanently remove this agent and its configuration."}
@@ -559,23 +559,23 @@ export function AgentSettingsContent({
           {tab === "repositories" && (
             <>
               <div className="flex items-center gap-3">
-                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-on-surface-variant">
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground">
                   Repositories
                 </h3>
-                <span className="text-xs text-on-surface-variant opacity-60">
+                <span className="text-xs text-muted-foreground opacity-60">
                   {enabledCount} of {totalCount} enabled
                 </span>
-                <div className="flex-1 h-px bg-outline-variant/20" />
+                <div className="flex-1 h-px bg-border/20" />
               </div>
 
               {repositories.length === 0 ? (
-                <div className="rounded-xl border border-outline-variant/30 bg-surface-container">
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-on-surface-variant">
+                <div className="rounded-xl border border-border/30 bg-muted">
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
                     <FolderGit2 className="w-10 h-10 opacity-30" />
                     <p className="text-sm font-medium">No repositories configured</p>
                     <p className="text-xs opacity-60">
                       Add repositories in{" "}
-                      <Link href="/settings" className="underline hover:text-on-surface">
+                      <Link href="/settings" className="underline hover:text-foreground">
                         Global Settings
                       </Link>
                     </p>
@@ -592,7 +592,7 @@ export function AgentSettingsContent({
                         type="button"
                         onClick={() => toggleOwner(group.owner)}
                         aria-expanded={!collapsed}
-                        className="flex items-center gap-2 pt-2 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant hover:text-on-surface transition-colors"
+                        className="flex items-center gap-2 pt-2 text-left text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground hover:text-foreground transition-colors"
                       >
                         <ChevronDown
                           className={`w-3 h-3 transition-transform ${collapsed ? "-rotate-90" : ""}`}
@@ -608,17 +608,17 @@ export function AgentSettingsContent({
                         return (
                           <div
                             key={repo.id}
-                            className="bg-surface-container-lowest rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 transition-all group"
+                            className="bg-card rounded-xl shadow-[0_4px_16px_-4px_rgba(43,52,55,0.08)] flex items-center justify-between px-6 py-5 transition-all group"
                           >
                             <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
+                              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-primary shrink-0 group-hover:scale-110 transition-transform">
                                 <FolderGit2 className="w-5 h-5" />
                               </div>
                               <div>
-                                <h4 className="font-semibold text-on-surface text-sm">
+                                <h4 className="font-semibold text-foreground text-sm">
                                   {repo.name}
                                 </h4>
-                                <p className="text-xs font-mono text-on-surface-variant mt-0.5">
+                                <p className="text-xs font-mono text-muted-foreground mt-0.5">
                                   {repo.githubRepo}
                                 </p>
                               </div>
@@ -631,7 +631,7 @@ export function AgentSettingsContent({
                                 onChange={() => handleToggleRepo(repo.id)}
                                 aria-label={`${enabled ? "Disable" : "Enable"} ${repo.name} for ${agent.displayName}`}
                               />
-                              <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-slate-300 peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
+                              <div className="relative w-11 h-6 rounded-full transition-colors duration-200 bg-input peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 after:absolute after:content-[''] after:top-[2px] after:left-[2px] after:w-5 after:h-5 after:rounded-full after:bg-card after:shadow-sm after:transition-all after:duration-200 peer-checked:after:translate-x-5" />
                             </label>
                           </div>
                         );
@@ -657,10 +657,10 @@ export function AgentSettingsContent({
           {/* Environment Variables tab */}
           {tab === "env-vars" && (
             <>
-              <p className="text-xs text-on-surface-variant">
+              <p className="text-xs text-muted-foreground">
                 Agent-specific overrides take precedence over global values. Inherited globals are
                 read-only here — edit them in{" "}
-                <Link href="/settings" className="underline hover:text-on-surface">
+                <Link href="/settings" className="underline hover:text-foreground">
                   Global Settings
                 </Link>
                 .
@@ -726,7 +726,7 @@ export function AgentSettingsContent({
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <span className="text-sm font-mono font-semibold text-on-surface truncate">
+                                  <span className="text-sm font-mono font-semibold text-foreground truncate">
                                     {envVar.key}
                                   </span>
                                 </TooltipTrigger>
@@ -745,7 +745,7 @@ export function AgentSettingsContent({
                               variant="ghost"
                               size="sm"
                               onClick={() => setEditingEnvVar(envVar)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high h-8 w-8 p-0"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground hover:bg-muted-high h-8 w-8 p-0"
                               title={`Edit ${envVar.key}`}
                             >
                               <Pencil className="w-3.5 h-3.5" />
@@ -754,7 +754,7 @@ export function AgentSettingsContent({
                               variant="ghost"
                               size="sm"
                               onClick={() => setDeletingEnvVarId(envVar.id)}
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-on-surface-variant hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-error hover:bg-error-container/30 h-8 w-8 p-0"
                               title={`Remove override for ${envVar.key}`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -768,7 +768,7 @@ export function AgentSettingsContent({
                   {/* Inherited globals (read-only) */}
                   {inheritedGlobals.map((envVar, i) => (
                     <DataTableRow key={envVar.id} isLast={i === inheritedGlobals.length - 1}>
-                      <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 leading-none shrink-0 self-center bg-surface-container text-on-surface-variant">
+                      <span className="inline-flex items-center text-[10px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 leading-none shrink-0 self-center bg-muted text-muted-foreground">
                         inherited
                       </span>
                       <div className="flex items-center gap-2 min-w-0">
@@ -780,7 +780,7 @@ export function AgentSettingsContent({
                         <TooltipProvider>
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="text-sm font-mono font-semibold text-on-surface/60 truncate">
+                              <span className="text-sm font-mono font-semibold text-foreground/60 truncate">
                                 {envVar.key}
                               </span>
                             </TooltipTrigger>
@@ -830,12 +830,12 @@ export function AgentSettingsContent({
             </div>
           </div>
 
-          <div className="rounded-xl border border-outline-variant/30 bg-surface-container p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-on-surface-variant mb-3">
+          <div className="rounded-xl border border-border/30 bg-muted p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground mb-3">
               Status
             </h3>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-on-surface">Enabled repos</span>
+              <span className="text-sm text-foreground">Enabled repos</span>
               <span className="text-sm font-bold text-primary">
                 {enabledCount} / {totalCount}
               </span>

@@ -84,7 +84,7 @@ export function SwimlaneHeader({
                 )}
                 {isCompleted && (
                   <div
-                    className="absolute inset-0 rounded-md border-2 border-green-500/70 pointer-events-none"
+                    className="absolute inset-0 rounded-md border-2 border-green-500/70 dark:border-green-400/70 pointer-events-none"
                     aria-hidden="true"
                   />
                 )}

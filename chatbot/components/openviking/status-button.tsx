@@ -52,7 +52,7 @@ export function OpenVikingStatusButton() {
       <span
         aria-hidden
         className={`absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full ${
-          sidecarRunning ? "bg-green-500 animate-pulse" : "bg-muted-foreground/30"
+          sidecarRunning ? "bg-green-500 dark:bg-green-400 animate-pulse" : "bg-muted-foreground/30"
         }`}
       />
     </button>

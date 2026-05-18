@@ -65,13 +65,13 @@ export function GroupButton({
             "shrink-0 w-5 h-5 rounded flex items-center justify-center transition-colors relative z-10",
             isGroupSettings
               ? "bg-primary/20 text-primary"
-              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-black/5",
+              : "text-muted-foreground/40 hover:text-muted-foreground hover:bg-muted/50",
           )}
         >
           <Settings className="w-3 h-3" />
         </Link>
       )}
-      <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-green-500 animate-pulse" />
+      <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-green-500 dark:bg-green-400 animate-pulse" />
     </button>
   );
 }

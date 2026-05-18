@@ -16,7 +16,7 @@ export function DataTable({
   return (
     <DataTableContext.Provider value={{ headerClassName }}>
       <div
-        className={`rounded-xl border border-outline-variant/30 bg-surface-container overflow-hidden grid ${cols}${className ? ` ${className}` : ""}`}
+        className={`rounded-xl border border-border/30 bg-muted overflow-hidden grid ${cols}${className ? ` ${className}` : ""}`}
       >
         {children}
       </div>
@@ -34,7 +34,7 @@ export function DataTableHeader({
   const { headerClassName } = React.useContext(DataTableContext);
   return (
     <div
-      className={`col-span-full grid grid-cols-subgrid gap-4 items-center px-5 py-3 border-b border-outline-variant/20 bg-primary/10${headerClassName ? ` ${headerClassName}` : ""}${className ? ` ${className}` : ""}`}
+      className={`col-span-full grid grid-cols-subgrid gap-4 items-center px-5 py-3 border-b border-border/20 bg-primary/10${headerClassName ? ` ${headerClassName}` : ""}${className ? ` ${className}` : ""}`}
     >
       {children}
     </div>
@@ -52,7 +52,7 @@ export function DataTableRow({
 }) {
   return (
     <div
-      className={`col-span-full grid grid-cols-subgrid gap-4 items-center px-5 py-4 hover:bg-surface-container-high/50 transition-colors group${isLast ? "" : " border-b border-outline-variant/10"}${className ? ` ${className}` : ""}`}
+      className={`col-span-full grid grid-cols-subgrid gap-4 items-center px-5 py-4 hover:bg-muted-high/50 transition-colors group${isLast ? "" : " border-b border-border/10"}${className ? ` ${className}` : ""}`}
     >
       {children}
     </div>
@@ -72,9 +72,9 @@ export function DataTableEmpty({
 }) {
   return (
     <div
-      className={`rounded-xl border border-outline-variant/30 bg-surface-container${className ? ` ${className}` : ""}`}
+      className={`rounded-xl border border-border/30 bg-muted${className ? ` ${className}` : ""}`}
     >
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-on-surface-variant">
+      <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
         <Icon className="w-10 h-10 opacity-30" />
         <p className="text-sm font-medium">{title}</p>
         <p className="text-xs opacity-60">{description}</p>
@@ -84,4 +84,4 @@ export function DataTableEmpty({
 }
 
 export const headerCellClass =
-  "text-xs font-semibold text-on-surface-variant uppercase tracking-wider";
+  "text-xs font-semibold text-muted-foreground uppercase tracking-wider";

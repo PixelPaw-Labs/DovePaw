@@ -71,7 +71,7 @@ export function AddRepoDialog({ existingGithubRepos, onAdd }: AddRepoDialogProps
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="repo-github" className="text-sm font-medium text-on-surface">
+            <label htmlFor="repo-github" className="text-sm font-medium text-foreground">
               GitHub repository
             </label>
             <Input
