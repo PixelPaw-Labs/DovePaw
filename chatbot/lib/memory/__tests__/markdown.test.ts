@@ -27,10 +27,22 @@ describe("MarkdownMemoryProvider", () => {
     expect(body).not.toContain("All substance stays. Only fluff dies.");
   });
 
+  it("buildReadReminder uses hard mandatory language for moments read", () => {
+    const body = provider.buildReadReminder("/ws/x", "grp-abc");
+    expect(body).toContain("MUST");
+    expect(body).toContain("hard requirement");
+  });
+
   it("buildSaveReminder includes write path and writing pattern", () => {
     const body = provider.buildSaveReminder("grp-abc", "/ws/x");
     expect(body).toContain("/ws/x/moments/");
     expect(body).toContain("All substance stays. Only fluff dies.");
+  });
+
+  it("buildSaveReminder uses hard mandatory language", () => {
+    const body = provider.buildSaveReminder("grp-abc", "/ws/x");
+    expect(body).toContain("MUST");
+    expect(body).toContain("hard requirement");
   });
 
   it("deleteGroup removes the moments/ subtree", async () => {

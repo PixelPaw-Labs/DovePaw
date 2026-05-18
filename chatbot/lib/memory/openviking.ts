@@ -82,7 +82,7 @@ export class OpenVikingMemoryProvider implements MemoryProvider {
     const base = `http://localhost:${this.port}`;
     return `You are participating in a group task. Before starting:
 ${rosterBullet(workspacePath)}
-- Query past moments before acting via the OpenViking HTTP API:
+- You MUST query past moments before acting. This is a hard requirement — do not skip it:
 \`\`\`
 curl -sX POST ${base}/api/v1/search/find \\
   -H "X-OpenViking-Agent: ${groupContextId}" \\
@@ -93,8 +93,8 @@ curl -sX POST ${base}/api/v1/search/find \\
 
   buildSaveReminder(groupContextId: string, _workspacePath: string): string {
     const base = `http://localhost:${this.port}`;
-    return `Save moments (decisions, artifacts, insights) via the sessions API
-  — send \`X-OpenViking-Agent: ${groupContextId}\` on all three calls.
+    return `You MUST save moments (decisions, artifacts, insights) via the sessions API — this is a hard requirement, do not skip it.
+  Send \`X-OpenViking-Agent: ${groupContextId}\` on all three calls.
   Step 1 returns \`{result:{session_id:SID}}\` — use that SID in steps 2 and 3:
 \`\`\`
 curl -sX POST ${base}/api/v1/sessions \\

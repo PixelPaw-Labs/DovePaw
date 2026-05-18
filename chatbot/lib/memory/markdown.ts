@@ -23,11 +23,11 @@ export class MarkdownMemoryProvider implements MemoryProvider {
   buildReadReminder(workspacePath: string, _groupContextId: string): string {
     return `You are participating in a group task. Before starting:
 ${rosterBullet(workspacePath)}
-- Read ${workspacePath}/moments/ to understand what other agents have already decided or produced.`;
+- You MUST read ${workspacePath}/moments/ before acting. This is a hard requirement — do not skip it.`;
   }
 
   buildSaveReminder(_groupContextId: string, workspacePath: string): string {
-    return `Save moments (decisions, artifacts, insights) to ${workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing.
+    return `You MUST save moments (decisions, artifacts, insights) to ${workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing. This is a hard requirement — do not skip it.
   Writing style:
 ${indentedMomentsPattern()}`;
   }

@@ -87,5 +87,5 @@ export function indentedMomentsPattern(): string {
 
 /** Common roster bullet shared by every provider. */
 export function rosterBullet(workspacePath: string): string {
-  return `- Read ${workspacePath}/members/roster.md to understand who is in this group. Only collaborate with, assign work to, or communicate with the agents listed there — no one else.`;
+  return `- You MUST read ${workspacePath}/members/roster.md before doing anything. Only collaborate with, assign work to, or communicate with the agents listed there — no one else. This is a hard requirement.`;
 }

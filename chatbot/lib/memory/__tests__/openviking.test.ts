@@ -83,6 +83,13 @@ describe("OpenVikingMemoryProvider.buildReadReminder", () => {
     expect(body).not.toContain("/api/v1/sessions");
   });
 
+  it("uses hard mandatory language — must, not suggestion", () => {
+    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
+    expect(body).toContain("MUST");
+    expect(body).toContain("hard requirement");
+    expect(body).not.toContain("Query past moments before acting via");
+  });
+
   it("uses the find endpoint's real request shape (target_uri + limit, not node_limit)", () => {
     const body = provider.buildReadReminder("/ws/x", "grp-xyz");
     expect(body).toContain('"target_uri": "viking://agent/memories"');
@@ -96,9 +103,11 @@ describe("OpenVikingMemoryProvider.buildReadReminder", () => {
     expect(fence).not.toBeNull();
   });
 
-  it("includes the roster bullet", () => {
+  it("includes roster bullet with hard mandatory language", () => {
     const body = provider.buildReadReminder("/ws/x", "grp-xyz");
     expect(body).toContain("/ws/x/members/roster.md");
+    expect(body).toContain("MUST");
+    expect(body).toContain("hard requirement");
   });
 });
 
@@ -117,6 +126,12 @@ describe("OpenVikingMemoryProvider.buildSaveReminder", () => {
   it("includes the writing pattern", () => {
     const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
     expect(body).toContain("All substance stays. Only fluff dies.");
+  });
+
+  it("buildSaveReminder uses hard mandatory language", () => {
+    const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
+    expect(body).toContain("MUST");
+    expect(body).toContain("hard requirement");
   });
 });
 
