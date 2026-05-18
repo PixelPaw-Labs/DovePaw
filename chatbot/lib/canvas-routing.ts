@@ -146,6 +146,25 @@ export function findOptimalConnection(
   return longest(candidates);
 }
 
+/**
+ * The point where a ray from the center of `rect` in direction (dirX, dirY)
+ * exits the rectangle's border. Gives a continuous, angle-accurate border exit
+ * for center-to-center edge routing.
+ */
+export function rectBorderExit(rect: Rect, dirX: number, dirY: number): Point {
+  const cx = rect.x + rect.w / 2;
+  const cy = rect.y + rect.h / 2;
+  if (dirX === 0 && dirY === 0) return { x: cx, y: rect.y };
+  const hw = rect.w / 2;
+  const hh = rect.h / 2;
+  const tRight = dirX > 0 ? hw / dirX : Infinity;
+  const tLeft = dirX < 0 ? -hw / dirX : Infinity;
+  const tBottom = dirY > 0 ? hh / dirY : Infinity;
+  const tTop = dirY < 0 ? -hh / dirY : Infinity;
+  const t = Math.min(tRight, tLeft, tBottom, tTop);
+  return { x: cx + dirX * t, y: cy + dirY * t };
+}
+
 export function pointInRect(p: Point, r: Rect): boolean {
   return p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h;
 }
@@ -165,12 +184,12 @@ export function clampOutsideRects(node: Rect, obstacles: Rect[]): { x: number; y
   for (const obs of obstacles) {
     if (!rectsOverlap({ x, y, w: node.w, h: node.h }, obs)) continue;
     const ol = x + node.w - obs.x;
-    const or_ = obs.x + obs.w - x;
+    const oRight = obs.x + obs.w - x;
     const ot = y + node.h - obs.y;
     const ob = obs.y + obs.h - y;
-    const min = Math.min(ol, or_, ot, ob);
+    const min = Math.min(ol, oRight, ot, ob);
     if (min === ol) x = obs.x - node.w;
-    else if (min === or_) x = obs.x + obs.w;
+    else if (min === oRight) x = obs.x + obs.w;
     else if (min === ot) y = obs.y - node.h;
     else y = obs.y + obs.h;
   }

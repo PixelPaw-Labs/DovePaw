@@ -6,7 +6,6 @@ import {
   ReactFlowProvider,
   Background,
   Controls,
-  Panel,
   Handle,
   Position,
   BaseEdge,
@@ -46,14 +45,12 @@ import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { AGENT_LINK_STRATEGIES } from "@@/lib/agent-links-schemas";
 import type { AgentGroup, AgentLinksFile, AgentLinkStrategy } from "@@/lib/agent-links-schemas";
 import {
-  connectionPointsFromRect,
-  findOptimalConnection,
+  rectBorderExit,
   pointInRect,
   clampOutsideRects,
   nudgeControlPointClear,
   rectsOverlap,
   segmentPassesThroughRect,
-  type ConnectionPoints,
   type Rect,
 } from "@/lib/canvas-routing";
 import { useAgentHeartbeat } from "@/components/hooks/use-agent-heartbeat";
@@ -209,10 +206,6 @@ const NODE_W = 200;
 const NODE_H = 110;
 // Bow amount per step for parallel edges between the same node pair.
 const CURVE_AMOUNT = 120;
-// Minimum straight-line distance between chosen border points; if no border-pair
-// meets this threshold the link is invisible (e.g. cards touching). Picks a
-// longer border-pair so there's visible room for the bezier to curve.
-const MIN_VISIBLE_LINK_LENGTH = 30;
 
 // ─── Group helpers ───────────────────────────────────────────────────────────
 
@@ -296,8 +289,6 @@ function styleNum(
 
 // ─── Edge helpers (React Flow adapters) ─────────────────────────────────────
 // Pure geometry lives in @/lib/canvas-routing; these two functions bridge
-// React Flow's InternalNode to the framework-agnostic Rect / ConnectionPoints.
-
 function nodeToRect(node: InternalNode): Rect {
   return {
     x: node.internals.positionAbsolute.x,
@@ -305,10 +296,6 @@ function nodeToRect(node: InternalNode): Rect {
     w: node.measured?.width ?? 160,
     h: node.measured?.height ?? 110,
   };
-}
-
-function getConnectionPoints(node: InternalNode): ConnectionPoints {
-  return connectionPointsFromRect(nodeToRect(node));
 }
 
 // ─── EditGroupDialog ──────────────────────────────────────────────────────────
@@ -506,29 +493,29 @@ function GroupNode({ data, selected }: NodeProps<GroupFlowNode>) {
         minWidth={220}
         minHeight={160}
         isVisible={selected}
-        lineClassName="!border-primary/40"
-        handleClassName="!w-2.5 !h-2.5 !border-primary/40 !bg-background"
+        lineClassName="!border-indigo-500/40"
+        handleClassName="!w-2.5 !h-2.5 !border-indigo-500/40 !bg-background"
       />
       <div
         className={cn(
-          "w-full h-full rounded-2xl border-2 border-border/60 bg-muted/15 backdrop-blur-sm",
-          selected ? "border-primary/60" : "border-border/60",
+          "w-full h-full rounded-2xl border-2 bg-indigo-500/5 backdrop-blur-sm",
+          selected ? "border-indigo-500/60" : "border-indigo-500/30",
         )}
       >
         <div
-          className="px-3 pt-2 pb-2 cursor-pointer nodrag rounded-t-2xl hover:bg-primary/10 transition-colors group/header"
+          className="px-3 pt-2 pb-2 cursor-pointer nodrag rounded-t-2xl hover:bg-indigo-500/10 transition-colors group/header"
           onClick={() => onEditGroup(data.group.name)}
           title="Click to edit group"
         >
           <div className="flex items-center gap-2">
-            <Users2 className="w-5 h-5 text-primary/70 shrink-0" />
-            <span className="flex-1 text-base font-bold uppercase tracking-widest text-foreground/80 truncate">
+            <Users2 className="w-5 h-5 text-indigo-500/70 shrink-0" />
+            <span className="flex-1 text-base font-bold uppercase tracking-widest text-indigo-500/70 truncate">
               {data.group.name}
             </span>
-            <Settings2 className="w-5 h-5 text-primary/60 shrink-0" />
+            <Settings2 className="w-5 h-5 text-indigo-500/60 shrink-0" />
           </div>
           {data.group.description && (
-            <p className="mt-1 text-[11px] leading-snug text-muted-foreground line-clamp-2">
+            <p className="mt-1 text-[11px] leading-snug text-indigo-500/50 line-clamp-2">
               {data.group.description}
             </p>
           )}
@@ -692,33 +679,35 @@ function AgentEdge({
   const curvature =
     parallelGroup.length > 1 ? (parallelIdx - (parallelGroup.length - 1) / 2) * CURVE_AMOUNT : 0;
 
-  // Canonical perpendicular from canonSrc→canonTgt optimal border pair.
-  const canonSrcNode = canonSrc === source ? sourceNode : targetNode;
-  const canonTgtNode = canonSrc === source ? targetNode : sourceNode;
-  const { from: canonFrom, to: canonTo } = findOptimalConnection(
-    getConnectionPoints(canonSrcNode),
-    getConnectionPoints(canonTgtNode),
-    obstacleRects,
-    MIN_VISIBLE_LINK_LENGTH,
-  );
-  const cdx = canonTo.x - canonFrom.x;
-  const cdy = canonTo.y - canonFrom.y;
-  const clen = Math.hypot(cdx, cdy) || 1;
-  const perpX = -cdy / clen;
-  const perpY = cdx / clen;
-
-  // Quadratic bezier: both parallel edges share the same border-center endpoints;
-  // the control point is pushed perpendicularly so each edge bows a different way.
-  const { from: sp, to: tp } = findOptimalConnection(
-    getConnectionPoints(sourceNode),
-    getConnectionPoints(targetNode),
-    obstacleRects,
-    MIN_VISIBLE_LINK_LENGTH,
-  );
-
-  // If the chosen segment still crosses a card (fallback case), force a curve.
+  // Center-to-center exit points: ray from each card's center exits the border
+  // at the exact angle toward the other card — continuous during drag.
   const sRect = nodeToRect(sourceNode);
   const tRect = nodeToRect(targetNode);
+  const sCx = sRect.x + sRect.w / 2;
+  const sCy = sRect.y + sRect.h / 2;
+  const tCx = tRect.x + tRect.w / 2;
+  const tCy = tRect.y + tRect.h / 2;
+  const dx = tCx - sCx;
+  const dy = tCy - sCy;
+  const sp = rectBorderExit(sRect, dx, dy);
+  const tp = rectBorderExit(tRect, -dx, -dy);
+
+  // Canonical perpendicular: always computed from the lex-smaller node toward the
+  // lex-larger node so all parallel edges (including reverse-direction ones) bow
+  // consistently — without this, reversed edges get a flipped perpendicular and
+  // end up overlapping instead of spreading apart.
+  const canonSrcNode = canonSrc === source ? sourceNode : targetNode;
+  const canonTgtNode = canonSrc === source ? targetNode : sourceNode;
+  const cSRect = nodeToRect(canonSrcNode);
+  const cTRect = nodeToRect(canonTgtNode);
+  const cDx = cTRect.x + cTRect.w / 2 - (cSRect.x + cSRect.w / 2);
+  const cDy = cTRect.y + cTRect.h / 2 - (cSRect.y + cSRect.h / 2);
+  const cLen = Math.hypot(cDx, cDy) || 1;
+  const perpX = -cDy / cLen;
+  const perpY = cDx / cLen;
+
+  // If the segment crosses a card (degenerate/touching case), force a curve.
+
   const straightCrossesCard =
     curvature === 0 &&
     (segmentPassesThroughRect(sp, tp, sRect, true, false) ||
@@ -2283,133 +2272,115 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
           <DeleteEdgeContext.Provider value={handleEdgeDelete}>
             <EditEdgeContext.Provider value={handleEdgeEdit}>
               <EditGroupContext.Provider value={setEditingGroup}>
-                <div className="w-full h-screen flex">
-                  <UnlinkedAgentsSidebar agents={sidebarAgents} />
-                  <div
-                    className="flex-1 h-full"
-                    onDrop={onDrop}
-                    onDragOver={(e) => e.preventDefault()}
-                  >
-                    <ReactFlow
-                      nodes={nodes}
-                      edges={edges}
-                      nodeTypes={nodeTypes}
-                      edgeTypes={edgeTypes}
-                      defaultEdgeOptions={{ zIndex: 1000 }}
-                      onNodesChange={onNodesChange}
-                      onConnect={onConnect}
-                      onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-                      onPaneClick={() => setSelectedNodeId(null)}
-                      connectionMode={ConnectionMode.Loose}
-                      deleteKeyCode={null}
-                      fitView
-                      panOnDrag
-                      panOnScroll
-                      selectionOnDrag
-                      zoomOnDoubleClick={false}
+                <div className="flex h-screen flex-col bg-background">
+                  {/* ── Header ──────────────────────────────────────────── */}
+                  <div className="flex items-center gap-2 border-b border-border/20 px-4 py-2 bg-background/80 backdrop-blur-xl shrink-0 z-10 shadow-sm">
+                    <Link
+                      href="/"
+                      className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
                     >
-                      <Background bgColor="var(--sidebar)" />
-                      <Controls position="bottom-left" />
+                      <Home className="w-3.5 h-3.5" /> Home
+                    </Link>
+                    <span className="text-border">·</span>
+                    <Link
+                      href="/settings/agent-links"
+                      className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
+                    >
+                      <List className="w-3.5 h-3.5" /> List view
+                    </Link>
+                    <span className="text-border">·</span>
+                    <button
+                      onClick={() => openAddDialog()}
+                      className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add Link
+                    </button>
+                    <span className="text-border">·</span>
+                    <button
+                      onClick={() => setCreateGroupOpen(true)}
+                      className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
+                    >
+                      <FolderPlus className="w-3.5 h-3.5" /> New Group
+                    </button>
 
-                      {/* Top-left: nav + add link */}
-                      <Panel position="top-left">
-                        <div className="flex items-center gap-2.5 bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg px-3 py-2">
-                          <Link
-                            href="/"
-                            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
-                          >
-                            <Home className="w-3.5 h-3.5" />
-                            Home
-                          </Link>
-                          <span className="text-border">·</span>
-                          <Link
-                            href="/settings/agent-links"
-                            className="text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5 text-xs font-medium"
-                          >
-                            <List className="w-3.5 h-3.5" />
-                            List view
-                          </Link>
-                          <span className="text-border">·</span>
-                          <button
-                            onClick={() => openAddDialog()}
-                            className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add Link
-                          </button>
-                          <span className="text-border">·</span>
-                          <button
-                            onClick={() => setCreateGroupOpen(true)}
-                            className="text-primary hover:text-primary/80 transition-colors flex items-center gap-1.5 text-xs font-medium"
-                          >
-                            <FolderPlus className="w-3.5 h-3.5" />
-                            New Group
-                          </button>
-                        </div>
-                      </Panel>
+                    <div className="flex-1" />
 
-                      {/* Top-right: layout + legend toggles */}
-                      <Panel position="top-right">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => {
-                              setShowLayout((v) => !v);
-                              setShowLegend(false);
-                            }}
-                            className={cn(
-                              "bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg p-2.5 transition-colors",
-                              showLayout
-                                ? "text-primary bg-primary/10 border-primary/20"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                            title={showLayout ? "Hide layout options" : "Auto layout"}
-                          >
-                            <LayoutGrid className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setShowLegend((v) => !v);
-                              setShowLayout(false);
-                            }}
-                            className={cn(
-                              "bg-background/80 backdrop-blur-xl border border-border/20 rounded-xl shadow-lg p-2.5 transition-colors",
-                              showLegend
-                                ? "text-primary bg-primary/10 border-primary/20"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                            title={showLegend ? "Hide legend" : "Show legend"}
-                          >
-                            <Info className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </Panel>
-
-                      {/* Top-right dropdown: layout panel */}
-                      {showLayout && (
-                        <Panel position="top-right" style={{ top: 56 }}>
-                          <LayoutPanel layout={layout} onApply={handleApplyLayout} />
-                        </Panel>
+                    <button
+                      onClick={() => {
+                        setShowLayout((v) => !v);
+                        setShowLegend(false);
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors",
+                        showLayout
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted",
                       )}
-
-                      {/* Bottom-right: legend */}
-                      {showLegend && (
-                        <Panel position="bottom-right">
-                          <AgentLinksLegend />
-                        </Panel>
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" /> Layout
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowLegend((v) => !v);
+                        setShowLayout(false);
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors",
+                        showLegend
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border/40 text-muted-foreground hover:text-foreground hover:bg-muted",
                       )}
+                    >
+                      <Info className="w-3.5 h-3.5" /> Legend
+                    </button>
+                  </div>
 
-                      {/* Bottom-center: selected agent info */}
-                      {selectedConfig && (
-                        <Panel position="bottom-center">
+                  {/* ── Main ────────────────────────────────────────────── */}
+                  <div className="flex flex-1 overflow-hidden">
+                    <UnlinkedAgentsSidebar agents={sidebarAgents} />
+                    <div
+                      className="flex-1 h-full"
+                      onDrop={onDrop}
+                      onDragOver={(e) => e.preventDefault()}
+                    >
+                      <ReactFlow
+                        nodes={nodes}
+                        edges={edges}
+                        nodeTypes={nodeTypes}
+                        edgeTypes={edgeTypes}
+                        defaultEdgeOptions={{ zIndex: 1000 }}
+                        onNodesChange={onNodesChange}
+                        onConnect={onConnect}
+                        onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+                        onPaneClick={() => setSelectedNodeId(null)}
+                        connectionMode={ConnectionMode.Loose}
+                        deleteKeyCode={null}
+                        fitView
+                        panOnDrag
+                        panOnScroll
+                        selectionOnDrag
+                        zoomOnDoubleClick={false}
+                      >
+                        <Background bgColor="var(--sidebar)" />
+                        <Controls position="bottom-left" />
+                      </ReactFlow>
+                    </div>
+
+                    {/* Right panel column */}
+                    {(selectedConfig ?? showLayout ?? showLegend) && (
+                      <div className="w-80 shrink-0 border-l border-border/20 bg-background overflow-y-auto flex flex-col gap-3 p-3">
+                        {selectedConfig && (
                           <SelectedAgentPanel
                             agentConfig={selectedConfig}
                             allEdges={edges}
                             onClose={() => setSelectedNodeId(null)}
                             onAddLink={openAddDialog}
                           />
-                        </Panel>
-                      )}
-                    </ReactFlow>
+                        )}
+                        {showLayout && <LayoutPanel layout={layout} onApply={handleApplyLayout} />}
+                        {showLegend && <AgentLinksLegend />}
+                      </div>
+                    )}
                   </div>
                 </div>
 

@@ -4,6 +4,7 @@ import {
   connectionPointsFromRect,
   nudgeControlPointClear,
   quadBezierPassesThroughRect,
+  rectBorderExit,
   segmentPassesThroughRect,
   findOptimalConnection,
   pointInRect,
@@ -132,6 +133,47 @@ describe("nudgeControlPointClear", () => {
     const result = nudgeControlPointClear(p0, p2, perpX, perpY, step, step, [blocker]);
     // Should resolve to negative curvature (above the line)
     expect(result.curvature).toBeLessThan(0);
+  });
+});
+
+describe("rectBorderExit", () => {
+  const rect: Rect = { x: 0, y: 0, w: 100, h: 60 };
+
+  it("exits the right border when direction is east", () => {
+    const p = rectBorderExit(rect, 1, 0);
+    expect(p).toEqual({ x: 100, y: 30 });
+  });
+
+  it("exits the left border when direction is west", () => {
+    const p = rectBorderExit(rect, -1, 0);
+    expect(p).toEqual({ x: 0, y: 30 });
+  });
+
+  it("exits the bottom border when direction is south", () => {
+    const p = rectBorderExit(rect, 0, 1);
+    expect(p).toEqual({ x: 50, y: 60 });
+  });
+
+  it("exits the top border when direction is north", () => {
+    const p = rectBorderExit(rect, 0, -1);
+    expect(p).toEqual({ x: 50, y: 0 });
+  });
+
+  it("exits the correct border for a diagonal direction", () => {
+    // 45° southeast: hw=50, hh=30 → tRight=50, tBottom=30; tBottom wins → bottom border
+    const p = rectBorderExit(rect, 1, 1);
+    expect(p.y).toBeCloseTo(60);
+    expect(p.x).toBeGreaterThan(50); // right of center
+  });
+
+  it("result is on the border of the rect", () => {
+    const p = rectBorderExit(rect, 2, 1);
+    const onBorder =
+      Math.abs(p.x - 0) < 1e-9 ||
+      Math.abs(p.x - 100) < 1e-9 ||
+      Math.abs(p.y - 0) < 1e-9 ||
+      Math.abs(p.y - 60) < 1e-9;
+    expect(onBorder).toBe(true);
   });
 });
 
