@@ -22,10 +22,69 @@ import {
   isConnectionError,
 } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
+import { AGENT_LINK_STRATEGIES, type AgentLinkStrategy } from "@@/lib/agent-links-schemas";
 import { withStartReminder, withMemoryReminder } from "@@/lib/subagent-reminder";
 import { agentPersistentStateDir } from "@/lib/paths";
 import { taskRuntime } from "@/lib/task-runtime";
 import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
+import { groupMemberCounters } from "@/lib/group-member-counter";
+import { publishSessionEvent } from "@/lib/session-events";
+import { setGroupMessage, setSessionStatus } from "@/lib/db";
+
+// ─── Justification gate ───────────────────────────────────────────────────────
+
+export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; description: string }> = {
+  high: {
+    threshold: 0.7,
+    description:
+      "your output is pivotal — the recipient cannot meaningfully proceed, decide, or respond without it. " +
+      "The handoff has clear directionality: there is an obvious and immediate action the recipient takes from what you are giving them.",
+  },
+  medium: {
+    threshold: 0.85,
+    description:
+      "your output is complete and self-contained — the recipient can engage with it fully, build on it, or use it as a foundation for their own contribution. " +
+      "Use this for the normal progression of work: your analysis is ready, your prediction is formed, your part of a collaborative task is done.",
+  },
+  low: {
+    threshold: Infinity,
+    description:
+      "your output is preliminary, tangential, or informational only — the recipient may find it interesting but does not need it to do their part. " +
+      "A formal handoff is not the right vehicle: share via message, add it as context, or hold it until you have something more complete.",
+  },
+};
+
+const [firstImpact, ...restImpacts] = Object.keys(CONFIDENCE_THRESHOLD);
+
+const thresholdClause = Object.entries(CONFIDENCE_THRESHOLD)
+  .map(
+    ([k, { threshold, description }]) =>
+      `${k} ${threshold === Infinity ? "never handed off" : `≥ ${threshold}`} (${description})`,
+  )
+  .join(", ");
+
+export const justificationField = z
+  .object({
+    impact: z
+      .enum([firstImpact, ...restImpacts] as [string, ...string[]])
+      .describe(`Impact level of this handoff. Threshold is impact-gated: ${thresholdClause}.`),
+    pattern: z
+      .string()
+      .describe(
+        "Which handoff pattern applies: 'Detection → Resolution', 'Aggregation → Action', 'Blocked by gap', or 'Phase handoff'.",
+      ),
+    handoff: z
+      .string()
+      .describe("One sentence describing the concrete output or blocker being handed off."),
+    confidence: z
+      .number()
+      .min(0)
+      .max(1)
+      .describe(
+        `Confidence score as a decimal fraction 0.0–1.0 (e.g. 0.9 = 90% confident). Threshold is impact-gated: ${thresholdClause}.`,
+      ),
+  })
+  .describe("Required on every delegation call. Fill this out before handing off.");
 
 // ─── Structured content types ─────────────────────────────────────────────────
 
@@ -154,17 +213,47 @@ export function makeAskTool(
 /**
  * Fires a task on the A2A server and returns a taskId as soon as the task is accepted.
  * Pair with makeAwaitTool to retrieve the result later.
- * Use when Dove needs to start multiple agents concurrently or inform the user right away.
+ * Use when an orchestrator needs to start multiple agents concurrently or inform the user right away.
+ *
+ * `senderAgentId` identifies the caller in A2A task metadata. Defaults to "dove" for Dove's
+ * own orchestration. Pass the sub-agent's name when registering this tool for a sub-agent
+ * orchestrator's linked agents.
  */
+function buildStrategyInstruction(
+  instruction: string,
+  strategy: AgentLinkStrategy,
+  callerName: string,
+): string {
+  if (strategy === "review") {
+    return [
+      `REVIEW REQUEST from @${callerName}`,
+      `Your entire final response must be ONLY a JSON object — no text before or after it:`,
+      `{"decision":"APPROVED"|"REJECTED","reason":"<comprehensive feedback: what is correct, what is missing or wrong, what must change for approval>"}`,
+      `In the reason field, address the sender as @${callerName}.`,
+      `\nWork for review:\n${instruction}`,
+    ].join("\n");
+  }
+  if (strategy === "escalation") {
+    return [
+      `ESCALATION from @${callerName}`,
+      `Open your response by addressing the sender as @${callerName}.`,
+      `\nBlocker:\n${instruction}`,
+      `\nPlease provide guidance or make the decision so I can continue.`,
+    ].join("\n");
+  }
+  return instruction;
+}
+
 export function makeStartTool(
   agent: AgentDef,
   signal?: AbortSignal,
   backgroundTasks?: Promise<CollectedStream>[],
   registry?: PendingRegistry,
-  doveDisplayName?: string,
+  orchestratorDisplayName?: string,
   stateMachine?: AgentTaskStateMachine,
+  senderAgentId: string = "dove",
 ) {
-  const orchestratorName = doveDisplayName ?? "Dove";
+  const orchestratorName = orchestratorDisplayName ?? "Dove";
   return tool(
     doveStartToolName(agent),
     `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
@@ -174,8 +263,15 @@ export function makeStartTool(
         .describe(
           `Instruction to pass to the agent, synthesized from conversation context. Must open with a self-introduction of the orchestrator, e.g. 'I am ${orchestratorName}, your orchestrator. ' followed by the task instruction.`,
         ),
+      strategy: z
+        .enum(AGENT_LINK_STRATEGIES)
+        .describe(
+          `The link strategy for this call: "chat" for peer collaboration or task delegation, "review" for output sign-off (agent responds with JSON {decision, reason}), "escalation" for authority decision when blocked.`,
+        ),
+      justification: justificationField,
     },
-    async ({ instruction }) => {
+    async ({ instruction, strategy }) => {
+      const wrappedInstruction = buildStrategyInstruction(instruction, strategy, orchestratorName);
       const result = await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
@@ -183,9 +279,9 @@ export function makeStartTool(
         registry,
         doveAwaitToolName(agent),
         agent.name,
-      ).start(withStartReminder(instruction, agent.manifestKey), {
+      ).start(withStartReminder(wrappedInstruction, agent.manifestKey), {
         backgroundTasks,
-        senderAgentId: "dove",
+        senderAgentId,
         extraMetadata: { mode: AgentCallMode.Start },
       });
       if (result.structuredContent) {
@@ -220,8 +316,14 @@ export function makeAwaitTool(
         .int()
         .min(10000)
         .describe(taskRuntime.buildDescription(agent.name, doveAwaitToolName(agent))),
+      groupContextId: z
+        .string()
+        .optional()
+        .describe(
+          "Provide when this await collects a group member started by start_group_*. The last member completion fires the group `done` event and closes the group SSE session.",
+        ),
     },
-    async ({ taskId, timeoutMs }) => {
+    async ({ taskId, timeoutMs, groupContextId }) => {
       const result = await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
@@ -239,6 +341,25 @@ export function makeAwaitTool(
         } else {
           // "completed" | "canceled" | "failed" | "rejected" — use A2A status directly
           stateMachine.transition(taskId, agent.manifestKey, sc.status);
+        }
+      }
+
+      // Group-mode cleanup: persist the member's output and tick the completion
+      // counter registered by start_group_*. When all dispatched members have
+      // resolved, publish `done` so the group SSE stream closes.
+      if (groupContextId) {
+        const sc = result.structuredContent;
+        if (sc && sc.status === "completed" && "result" in sc) {
+          setGroupMessage(taskId, sc.result.output ?? "");
+          const counter = groupMemberCounters.get(groupContextId);
+          if (counter) {
+            counter.completed += 1;
+            if (counter.completed >= counter.started) {
+              publishSessionEvent(groupContextId, { type: "done" });
+              setSessionStatus(groupContextId, "done");
+              groupMemberCounters.delete(groupContextId);
+            }
+          }
         }
       }
       return result;

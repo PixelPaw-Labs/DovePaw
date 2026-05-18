@@ -54,40 +54,22 @@ export async function createAgentWorkspace(
   return { path: workspacePath, cleanup: buildCleanup(workspacePath, dirname(workspacePath)) };
 }
 
-/**
- * Write .claude/settings.json to the workspace root so CLI-level hooks can
- * detect a ScheduleWakeup call and block the Stop event until the wakeup fires.
- *
- * Without this, the SDK's query() resolves on end_turn and the A2A task
- * completes before the scheduled wakeup ever has a chance to reinject its prompt.
- */
 async function writeWorkspaceSettings(workspacePath: string): Promise<void> {
   const claudeDir = join(workspacePath, ".claude");
   await mkdir(claudeDir, { recursive: true });
-  const flagFile = ".claude/.wakeup_pending";
   const settings = {
     outputStyle: "Sub-agent",
     hooks: {
-      PostToolUse: [
+      PreToolUse: [
         {
           matcher: "ScheduleWakeup",
-          hooks: [{ type: "command", command: `touch ${flagFile}`, timeout: 5 }],
-        },
-      ],
-      Stop: [
-        {
           hooks: [
             {
               type: "command",
-              command: `[ -f ${flagFile} ] && printf '{"decision":"block","reason":"Wakeup scheduled. Stay alive. Output nothing."}' || true`,
-              timeout: 5,
+              command: `python3 -c "import sys,json,time; d=json.load(sys.stdin); time.sleep(d.get('tool_input',{}).get('delaySeconds',60))" && printf '{"hookSpecificOutput":{"permissionDecision":"deny","permissionDecisionReason":"Replaced ScheduleWakeup with python sleep"}}'`,
+              timeout: 3660,
             },
           ],
-        },
-      ],
-      UserPromptSubmit: [
-        {
-          hooks: [{ type: "command", command: `rm -f ${flagFile}`, timeout: 5 }],
         },
       ],
     },

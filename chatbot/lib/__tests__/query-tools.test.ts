@@ -94,13 +94,10 @@ import {
 import {
   makeInitGroupTool,
   makeStartGroupTool,
-  makeAwaitGroupTool,
   doveInitGroupToolName,
   doveStartGroupToolName,
-  doveAwaitGroupToolName,
 } from "@/lib/group-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
-import { recordGroupTask } from "@/lib/group-task-store";
 import { MGMT_TOOL } from "@/lib/agent-tools";
 import { upsertSession, setActiveSession } from "@/lib/db";
 import { publishSessionEvent } from "@/lib/session-events";
@@ -737,6 +734,79 @@ describe("makeAwaitTool", () => {
   });
 });
 
+// ─── makeAwaitTool — group-done detection ────────────────────────────────────
+
+describe("makeAwaitTool — group-done detection", () => {
+  function mockCompletedAwait(output: string) {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          resubscribeTask: vi.fn().mockReturnValue(
+            asyncEvents(
+              {
+                kind: "status-update",
+                status: {
+                  state: "working",
+                  message: {
+                    kind: "message",
+                    messageId: "1",
+                    role: "agent",
+                    parts: [{ kind: "text", text: "done" }],
+                  },
+                  timestamp: "",
+                },
+                final: false,
+              },
+              {
+                kind: "artifact-update",
+                artifact: { name: "final-output", parts: [{ kind: "text", text: output }] },
+              },
+              { kind: "status-update", status: { state: "completed", timestamp: "" }, final: true },
+            ),
+          ),
+        }),
+      };
+    } as any);
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { groupMemberCounters } = await import("@/lib/group-member-counter");
+    groupMemberCounters.clear();
+  });
+
+  it("does nothing when groupContextId is omitted (non-group await)", async () => {
+    mockCompletedAwait("ok");
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-1", timeoutMs: 10000 });
+    expect(publishSessionEvent).not.toHaveBeenCalled();
+  });
+
+  it("does not fire done event when completed < started", async () => {
+    mockCompletedAwait("ok");
+    const { groupMemberCounters } = await import("@/lib/group-member-counter");
+    groupMemberCounters.set("grp-1", { started: 2, completed: 0 });
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-1", timeoutMs: 10000, groupContextId: "grp-1" });
+    expect(groupMemberCounters.get("grp-1")).toEqual({ started: 2, completed: 1 });
+    expect(publishSessionEvent).not.toHaveBeenCalledWith("grp-1", { type: "done" });
+  });
+
+  it("fires done event and deletes counter when the last member completes", async () => {
+    mockCompletedAwait("ok");
+    const { groupMemberCounters } = await import("@/lib/group-member-counter");
+    groupMemberCounters.set("grp-1", { started: 1, completed: 0 });
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-1", timeoutMs: 10000, groupContextId: "grp-1" });
+    expect(publishSessionEvent).toHaveBeenCalledWith("grp-1", { type: "done" });
+    expect(groupMemberCounters.has("grp-1")).toBe(false);
+  });
+});
+
 // ─── doveInitGroupToolName ────────────────────────────────────────────────────
 
 describe("doveInitGroupToolName", () => {
@@ -747,17 +817,11 @@ describe("doveInitGroupToolName", () => {
   });
 });
 
-// ─── doveStartGroupToolName / doveAwaitGroupToolName ──────────────────────────
+// ─── doveStartGroupToolName ───────────────────────────────────────────────────
 
 describe("doveStartGroupToolName", () => {
   it("slugifies the group name", () => {
     expect(doveStartGroupToolName("PixelPaw Labs")).toBe("start_group_pixelpaw_labs");
-  });
-});
-
-describe("doveAwaitGroupToolName", () => {
-  it("slugifies the group name", () => {
-    expect(doveAwaitGroupToolName("PixelPaw Labs")).toBe("await_group_pixelpaw_labs");
   });
 });
 
@@ -1250,74 +1314,5 @@ describe("makeStartGroupTool", () => {
     const desc = getMembersDescription(tool);
     expect(desc).toContain("- alpha: A-desc");
     expect(desc).toContain("- beta: B-desc");
-  });
-});
-
-// ─── makeAwaitGroupTool ───────────────────────────────────────────────────────
-
-describe("makeAwaitGroupTool", () => {
-  const GROUP = {
-    name: "PixelPaw Labs",
-    description: "Simulates Envato's business",
-    members: ["test-agent"],
-  };
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 9999 } as any);
-    vi.mocked(ClientFactory).mockImplementation(function () {
-      return {
-        createFromUrl: vi.fn().mockResolvedValue({
-          resubscribeTask: vi.fn((_req: unknown) =>
-            asyncEvents({
-              kind: "task",
-              id: "task-grp-1",
-              contextId: "ctx-grp-1",
-              status: { state: "completed" },
-              result: { parts: [{ kind: "text", text: "done" }] },
-            }),
-          ),
-        }),
-      };
-    } as any);
-  });
-
-  it("registers a tool named await_group_<slug>", () => {
-    captureTools(() => makeAwaitGroupTool(GROUP, [AGENT]));
-    expect(vi.mocked(tool)).toHaveBeenCalledWith(
-      doveAwaitGroupToolName(GROUP.name),
-      expect.any(String),
-      expect.any(Object),
-      expect.any(Function),
-    );
-  });
-
-  it("derives memberTaskIds from the per-group ledger (no memberTaskIds input)", async () => {
-    const groupContextId = `gc-await-${Date.now()}-${Math.random()}`;
-    await recordGroupTask(groupContextId, {
-      taskId: "task-grp-1",
-      source: "group",
-      memberKey: AGENT.manifestKey,
-      displayName: AGENT.displayName,
-    });
-
-    const captured = captureTools(() => makeAwaitGroupTool(GROUP, [AGENT]));
-    const handler = captured[doveAwaitGroupToolName(GROUP.name)];
-    const result = await handler({ groupContextId, timeoutMs: 10000 });
-
-    // resubscribeTask is mocked to emit a "completed" task event for task-grp-1.
-    const sc = result.structuredContent as { memberResults?: Record<string, unknown> };
-    expect(sc.memberResults).toBeDefined();
-    expect(sc.memberResults).toHaveProperty(AGENT.manifestKey);
-  });
-
-  it("returns no-pending message when the ledger has nothing running for the group", async () => {
-    const captured = captureTools(() => makeAwaitGroupTool(GROUP, [AGENT]));
-    const handler = captured[doveAwaitGroupToolName(GROUP.name)];
-    const result = await handler({
-      groupContextId: `gc-empty-${Date.now()}-${Math.random()}`,
-      timeoutMs: 10000,
-    });
-    expect(result.content[0].text).toMatch(/no .*pending|nothing .*running|all .*done/i);
   });
 });

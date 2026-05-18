@@ -443,28 +443,6 @@ describe("A2AQueryDispatcher", () => {
       expect(senderCall).toBeUndefined();
     });
 
-    it("suppresses group relay after a handoff tool call", () => {
-      const dispatcher = new A2AQueryDispatcher(makePublisher(), undefined, {
-        groupContextId: "grp-1",
-        agentName: "agent-a",
-      });
-      dispatcher.onTextDelta("deliverable");
-      dispatcher.onToolCall("start_chat_to_alex");
-      dispatcher.onTextDelta("justification reasoning — should not reach pool");
-      const groupCalls = vi.mocked(relaySessionEvent).mock.calls.filter(([sid]) => sid === "grp-1");
-      // Only the pre-handoff text should have been relayed
-      expect(
-        groupCalls.every(
-          ([, e]) =>
-            (e as { text?: string }).text !==
-            "deliverable\njustification reasoning — should not reach pool",
-        ),
-      ).toBe(true);
-      const lastGroupCall = groupCalls.at(-1);
-      expect(lastGroupCall).toBeDefined();
-      expect((lastGroupCall![1] as { text: string }).text).toBe("deliverable");
-    });
-
     it("sessionId relay and groupRelay fire independently when both set", () => {
       const dispatcher = new A2AQueryDispatcher(makePublisher(), "ctx-1", {
         groupContextId: "grp-1",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveLinkedTargets } from "../agent-links";
+import { resolveLinkedTargets, resolveTransitiveTargets } from "../agent-links";
 import type { AgentLink } from "../agent-links-schemas";
 import {
   agentLinkSchema,
@@ -177,5 +177,68 @@ describe("resolveLinkedTargets", () => {
     const result = resolveLinkedTargets("a", links);
     expect(result).toHaveLength(2);
     expect(result.map((r) => r.targetName)).toEqual(["b", "c"]);
+  });
+});
+
+// ─── resolveTransitiveTargets ─────────────────────────────────────────────────
+
+describe("resolveTransitiveTargets", () => {
+  it("returns direct link (single hop)", () => {
+    const links = [link("a", "b")];
+    const result = resolveTransitiveTargets("a", links);
+    expect(result.map((r) => r.targetName)).toEqual(["b"]);
+  });
+
+  it("returns two-hop chain a → b → c", () => {
+    const links = [link("a", "b"), link("b", "c")];
+    const result = resolveTransitiveTargets("a", links);
+    expect(result.map((r) => r.targetName).toSorted()).toEqual(["b", "c"]);
+  });
+
+  it("does not include the starting agent even with a back-link", () => {
+    const links = [link("a", "b"), link("b", "a")];
+    const result = resolveTransitiveTargets("a", links);
+    expect(result.map((r) => r.targetName)).toEqual(["b"]);
+  });
+
+  it("handles dual links without cycles (a ↔ b ↔ c)", () => {
+    const links = [link("a", "b", "dual"), link("b", "c", "dual")];
+    const result = resolveTransitiveTargets("a", links);
+    expect(result.map((r) => r.targetName).toSorted()).toEqual(["b", "c"]);
+  });
+
+  it("deduplicates diamond: a → b, a → c, b → d, c → d", () => {
+    const links = [link("a", "b"), link("a", "c"), link("b", "d"), link("c", "d")];
+    const result = resolveTransitiveTargets("a", links);
+    expect(result.map((r) => r.targetName).toSorted()).toEqual(["b", "c", "d"]);
+  });
+
+  it("returns empty when agent has no links", () => {
+    expect(resolveTransitiveTargets("z", [link("a", "b")])).toEqual([]);
+  });
+
+  it("preserves the link metadata of the first edge that discovers each target", () => {
+    const links: AgentLink[] = [
+      {
+        source: "a",
+        target: "b",
+        direction: "single",
+        strategy: "chat",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
+      },
+      {
+        source: "b",
+        target: "c",
+        direction: "single",
+        strategy: "review",
+        handoffScoreMin: 90,
+        handoffScoreMax: 100,
+      },
+    ];
+    const result = resolveTransitiveTargets("a", links);
+    const c = result.find((r) => r.targetName === "c");
+    expect(c?.strategy).toBe("review");
+    expect(c?.handoffScoreMin).toBe(90);
   });
 });

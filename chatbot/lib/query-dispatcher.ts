@@ -49,7 +49,6 @@ export interface QueryResponseDispatcher {
 
 export { ARTIFACT, TRANSIENT_ARTIFACT_NAMES } from "@/lib/artifact-names";
 import { ARTIFACT } from "@/lib/artifact-names";
-import { isHandoffToolName } from "@/lib/agent-tools";
 import { upsertSession } from "@/lib/db";
 import { getSessionCurrentSeq, publishSessionEvent } from "@/lib/session-events";
 import { relaySessionEvent } from "@/lib/relay-to-chatbot";
@@ -386,10 +385,6 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
   private _finalContent: string | undefined;
 
   private groupStreamText = "";
-  // Set when a handoff tool (chat_to_*, review_with_*, escalate_to_*) is attempted.
-  // Any text after that point is either handoff narration or declined-handoff reasoning —
-  // neither belongs in the group pool stream.
-  private handoffAttempted = false;
 
   /**
    * @param publisher   A2A event bus publisher (required)
@@ -435,7 +430,7 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     this.publisher.send(text, ARTIFACT.STREAM);
     this.accumulator.onTextDelta(text);
     this.emit({ type: "text", content: text });
-    if (this.groupRelay && !this.handoffAttempted) {
+    if (this.groupRelay) {
       this.groupStreamText += text;
       this.emit(
         {
@@ -470,9 +465,6 @@ export class A2AQueryDispatcher implements QueryResponseDispatcher {
     if (this.groupRelay) {
       // Discard text before this tool call — only post-tool text reaches the pool.
       this.groupStreamText = "";
-      // Mark handoff attempts so any following text (narration or declined-handoff
-      // reasoning) is suppressed from the group pool stream.
-      this.handoffAttempted ||= isHandoffToolName(name);
     }
     this.emit({ type: "tool_call", name });
     this.emit({ type: "progress", result: { output: "", progress: [entry] } });

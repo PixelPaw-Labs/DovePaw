@@ -25,7 +25,10 @@ import {
   buildDoveLeanReminder,
   buildDovePromptReminder,
 } from "@@/lib/dove-lean-reminder";
-import { doveAwaitToolName } from "@/lib/query-tools";
+import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
+import type { AgentLinkStrategy } from "@@/lib/agent-links-schemas";
+import { HANDOFF_PATTERNS, REVIEW_PATTERNS, ESCALATE_PATTERNS } from "@/lib/agent-link-patterns";
+import { doveAwaitToolName, doveStartToolName, CONFIDENCE_THRESHOLD } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
@@ -80,6 +83,61 @@ export function getAwaitStatus(tool_response: unknown): AwaitToolStatus | undefi
   }
   const { status } = structured as { status: unknown };
   return isAwaitToolStatus(status) ? status : undefined;
+}
+
+// ─── Links reminder ──────────────────────────────────────────────────────────
+
+const STRATEGY_PATTERNS: Record<AgentLinkStrategy, (name?: string) => string> = {
+  chat: HANDOFF_PATTERNS,
+  review: REVIEW_PATTERNS,
+  escalation: ESCALATE_PATTERNS,
+};
+
+/**
+ * Builds a PostToolUse reminder listing the completed agent's outgoing links.
+ * The orchestrator scores each linked agent 0–100; only links whose score
+ * falls within [handoffScoreMin, handoffScoreMax] should be started next.
+ * Returns null when the agent has no outgoing links (caller should fall back
+ * to a generic reminder or skip the block).
+ */
+export async function buildLinksReminder(
+  completedAgentName: string,
+  agents: AgentDef[],
+  excludeAgentName?: string,
+): Promise<string | null> {
+  const links = await readAgentLinks();
+  const outgoing = resolveLinkedTargets(completedAgentName, links).filter(
+    (l) => l.targetName !== excludeAgentName,
+  );
+  if (outgoing.length === 0) return null;
+
+  const toolsXml = outgoing
+    .map((link) => {
+      const targetDef = agents.find((a) => a.name === link.targetName);
+      const key = targetDef?.manifestKey ?? link.targetName.replace(/-/g, "_");
+      const patterns = STRATEGY_PATTERNS[link.strategy](link.targetName);
+      return [
+        `  <tool>`,
+        `    <name>start_${key} / await_${key}</name>`,
+        `    <description>Call start_${key} with strategy="${link.strategy}" for ${link.targetName}</description>`,
+        `    <strategy>${link.strategy}</strategy>`,
+        `    <handoff_range>[${link.handoffScoreMin}, ${link.handoffScoreMax}]</handoff_range>`,
+        `    <patterns>${patterns}</patterns>`,
+        `  </tool>`,
+      ].join("\n");
+    })
+    .join("\n");
+
+  return [
+    `<links>`,
+    `${completedAgentName} completed. Score your handoff likelihood (0–100) for each linked agent below:`,
+    `<handoff_tools>`,
+    toolsXml,
+    `</handoff_tools>`,
+    `If a tool's score falls within its handoff_range, call \`start_*\` then \`await_*\` for that agent now.`,
+    `If no score falls within its range, continue without handing off.`,
+    `</links>`,
+  ].join("\n");
 }
 
 // ─── Generic hook builder ─────────────────────────────────────────────────────
@@ -317,6 +375,72 @@ export function buildAgentHooks(
   };
 }
 
+// ─── Justification gate ───────────────────────────────────────────────────────
+
+/**
+ * PreToolUse hook that validates justification before any start_* call.
+ * Denies the call when justification is missing, impact is invalid, impact
+ * is "low" (never hand off), or confidence is below the impact threshold.
+ */
+export function makeJustificationGateHook(matcher = "mcp__agents__start_.*"): HookCallbackMatcher {
+  const impactKeys = Object.keys(CONFIDENCE_THRESHOLD).join("|");
+  return {
+    matcher,
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PreToolUse") return { continue: true };
+        if (typeof input.tool_input !== "object" || input.tool_input === null)
+          return { continue: true };
+        const just: unknown = Reflect.get(input.tool_input, "justification");
+
+        if (typeof just !== "object" || just === null) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `justification is required before calling start_*. Provide: impact (${impactKeys}), confidence (0.0–1.0), pattern, handoff.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        const impact: unknown = Reflect.get(just, "impact");
+        const confidence: unknown = Reflect.get(just, "confidence");
+        const impactKey =
+          typeof impact === "string" && impact in CONFIDENCE_THRESHOLD ? impact : undefined;
+
+        if (!impactKey) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `impact "${String(impact)}" is invalid. Use: ${impactKeys}.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        const entry = CONFIDENCE_THRESHOLD[impactKey];
+        if (entry.threshold === Infinity) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Low-impact handoffs must not use start_*. Share via message instead, or raise the impact level if genuinely consequential.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        if (typeof confidence !== "number" || confidence < entry.threshold) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Confidence ${typeof confidence === "number" ? confidence : "missing"} is below the ${impactKey} threshold of ${entry.threshold}. Raise confidence or reconsider this handoff.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        return { continue: true };
+      },
+    ],
+  };
+}
+
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
 
 /** Hooks for Dove's top-level query() in route.ts. */
@@ -343,7 +467,10 @@ export function buildDoveHooks(
     disallowedTools: options.disallowedTools,
     readOnly: options.readOnly,
   });
-
+  const startMatcher = agents.map((a) => `mcp__agents__${doveStartToolName(a)}`).join("|");
+  if (startMatcher) {
+    hooks.PreToolUse = [...(hooks.PreToolUse ?? []), makeJustificationGateHook(startMatcher)];
+  }
   const awaitMatcher = agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|");
   if (awaitMatcher) {
     hooks.PostToolUse = [
@@ -354,6 +481,12 @@ export function buildDoveHooks(
           async (input) => {
             if (input.hook_event_name !== "PostToolUse") return { continue: true };
             if (getAwaitStatus(input.tool_response) !== "completed") return { continue: true };
+            const manifestKey = input.tool_name.replace(/^mcp__agents__await_/, "");
+            const agentDef = agents.find((a) => a.manifestKey === manifestKey);
+            const linksReminder = agentDef ? await buildLinksReminder(agentDef.name, agents) : null;
+            if (linksReminder) {
+              return { decision: "block", reason: linksReminder };
+            }
             const hookSpecificOutput: PostToolUseHookSpecificOutput = {
               hookEventName: "PostToolUse",
               additionalContext: `<reminder>\n${DOVE_RESPONSE_REMINDER}\n</reminder>`,

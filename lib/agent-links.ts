@@ -62,3 +62,29 @@ export function resolveLinkedTargets(agentName: string, links: AgentLink[]): Res
       handoffScoreMax: l.handoffScoreMax,
     }));
 }
+
+/**
+ * BFS over the link graph from `agentName`, returning all reachable agents
+ * (direct + transitive). The starting agent is never included in the result.
+ * Each entry carries the metadata of the edge that first discovers that target.
+ *
+ * Used to register the full cascade of MCP tools for a mini-orchestrator
+ * (sub-agent acting as isDirectChat) so it can hand off across the entire chain.
+ */
+export function resolveTransitiveTargets(agentName: string, links: AgentLink[]): ResolvedLink[] {
+  const visited = new Set<string>([agentName]);
+  const result: ResolvedLink[] = [];
+  const queue: ResolvedLink[] = resolveLinkedTargets(agentName, links);
+
+  while (queue.length > 0) {
+    const link = queue.shift()!;
+    if (visited.has(link.targetName)) continue;
+    visited.add(link.targetName);
+    result.push(link);
+    for (const next of resolveLinkedTargets(link.targetName, links)) {
+      if (!visited.has(next.targetName)) queue.push(next);
+    }
+  }
+
+  return result;
+}

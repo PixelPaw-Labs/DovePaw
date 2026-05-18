@@ -38,10 +38,8 @@ import {
 import {
   makeInitGroupTool,
   makeStartGroupTool,
-  makeAwaitGroupTool,
   doveInitGroupToolName,
   doveStartGroupToolName,
-  doveAwaitGroupToolName,
 } from "@/lib/group-tools";
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
@@ -49,7 +47,6 @@ import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { AgentTaskStateMachine } from "@/lib/agent-task-state";
 import { deleteSession, setSessionStatus } from "@/lib/db";
-import { deleteGroupTaskLedger } from "@/lib/group-task-store";
 import { enablePersistence } from "@/lib/persistence";
 import { SessionManager } from "@/lib/session-manager";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
@@ -182,15 +179,6 @@ export async function POST(request: Request) {
                   linksFile.links,
                 );
               }),
-              ...eligibleGroups.map((group) => {
-                const memberDefs = agents.filter((a) => group.members.includes(a.name));
-                return makeAwaitGroupTool(
-                  group,
-                  memberDefs,
-                  subprocessController.signal,
-                  doveRegistry,
-                );
-              }),
             ]
           : [];
 
@@ -273,7 +261,6 @@ export async function POST(request: Request) {
                       ? eligibleGroups.flatMap((g) => [
                           `mcp__agents__${doveInitGroupToolName(g.name)}`,
                           `mcp__agents__${doveStartGroupToolName(g.name)}`,
-                          `mcp__agents__${doveAwaitGroupToolName(g.name)}`,
                         ])
                       : []),
                     ...(doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
@@ -411,6 +398,5 @@ export async function DELETE(request: Request) {
   deletedSessionIds.add(sessionId);
   agentContextRegistry.delete(sessionId);
   await deleteSession(sessionId);
-  await deleteGroupTaskLedger(sessionId);
   return Response.json({ ok: true });
 }

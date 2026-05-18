@@ -13,13 +13,6 @@ import { taskRuntime } from "@/lib/task-runtime";
 import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
 import { MGMT_TOOL } from "./agent-mgmt-tools";
 
-// ─── Handoff completeness rule ────────────────────────────────────────────────
-
-export const HANDOFF_COMPLETENESS =
-  `Completeness is critical — the recipient has no access to your prior context, memory, or intermediate work. ` +
-  `Include all significant findings, decisions, data, and assumptions. ` +
-  `Do not summarise lossy — missing information cannot be recovered after handoff.`;
-
 // ─── Script run tool name helpers ─────────────────────────────────────────────
 
 /** Tool name for firing the agent script in the background (start_run_script_* pattern). */
