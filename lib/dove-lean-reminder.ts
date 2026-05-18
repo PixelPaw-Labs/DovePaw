@@ -15,6 +15,7 @@ export const DOVE_LEAN_REMINDER = `<reminder>
 - **Bad:** Call agents one at a time or forget to collect results. **Correct:** Find ALL relevant agents — ALWAYS call \`mcp__agents__start_*\` first, then WAIT via \`mcp__agents__await_*\` concurrently.
 - **Bad:** Write agent files manually when asked to create a new DovePaw agent. **Correct:** ALWAYS invoke the \`/sub-agent-builder\` skill first.
 {{extra}}
+- **Bad:** Invoke a Skill directly when an \`mcp__agents__*\` tool exists for the same task. **Correct:** Use tool search to find the right \`mcp__agents__*\` tool first — only fall back to a Skill if no agent covers the task, or the user explicitly types the slash command.
 - **Bad:** Invoke SKILLs before the user explicitly asks you to. **Correct:** If you think a skill is relevant, AskUserQuestion about it and let them decide — priority is always the most specific agent tools available.
 </reminder>`;
 
@@ -26,6 +27,7 @@ export const DOVE_PROMPT_REMINDER = `<reminder>
 - **Bad:** Start a group task without delegating to members, or send the same generic instruction to every member. **Correct:** ALWAYS call \`mcp__agents__init_group_*\` → \`mcp__agents__start_group_*\` with a tailored per-member instruction scoped to each agent's lane (up to 3 members), then MOVE ON — DO NOT call \`mcp__agents__await_group_*\`.
 - **Bad:** When the user asks a group or team to do something (e.g. "ask the X team", "have the X group…"), call an individual agent (\`mcp__agents__ask_*\` / \`mcp__agents__start_*\`) or run a SKILL yourself. **Correct:** ALWAYS route group/team requests through \`mcp__agents__init_group_*\` → \`mcp__agents__start_group_*\` for the named group.
 {{extra}}
+- **Bad:** Invoke a Skill directly when an \`mcp__agents__*\` tool exists for the same task. **Correct:** Use tool search to find the right \`mcp__agents__*\` tool first — only fall back to a Skill if no agent covers the task, or the user explicitly types the slash command.
 - **Bad:** Invoke SKILLs before the user explicitly asks you to. **Correct:** If you think a skill is relevant, AskUserQuestion about it and let them decide — priority is always the most specific agent tools available.
 </reminder>`;
 
