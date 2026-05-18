@@ -6,7 +6,7 @@
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readSettings, readAgentSettings } from "@@/lib/settings";
 import { resolveSettingsEnv } from "@/lib/env-resolver";
-import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
+import { readAgentLinks, resolveTransitiveTargets } from "@@/lib/agent-links";
 import { makeStartTool, makeAwaitTool } from "@/lib/query-tools";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
@@ -56,14 +56,11 @@ export class AgentConfigReader {
 
     const [links, allAgents] = await Promise.all([readAgentLinks(), readAgentsConfig()]);
 
-    const resolvedLinks = resolveLinkedTargets(agentName, links);
+    const resolvedLinks = resolveTransitiveTargets(agentName, links);
     const tools: Parameters<typeof createSdkMcpServer>[0]["tools"] = [];
     const callerDisplayName = allAgents.find((a) => a.name === agentName)?.displayName;
-    const seenTargets = new Set<string>();
 
     for (const { targetName } of resolvedLinks) {
-      if (seenTargets.has(targetName)) continue;
-      seenTargets.add(targetName);
       const targetDef = allAgents.find((a) => a.name === targetName);
       if (!targetDef) continue;
 
