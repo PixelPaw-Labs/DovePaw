@@ -29,14 +29,26 @@ vi.mock("@/a2a/lib/workspace", () => ({
   recloneReposIntoWorkspace: vi.fn(),
 }));
 
-// Memory provider is mocked per-test via vi.mocked(getMemoryProvider) below.
+// Memory provider is mocked with a simple fake that avoids real file I/O.
+// Provider-specific behavior (curl commands in scripts) is tested in openviking.test.ts.
 vi.mock("@/lib/memory", async () => {
   const actual = await vi.importActual<typeof import("@/lib/memory")>("@/lib/memory");
-  const { MarkdownMemoryProvider } =
-    await vi.importActual<typeof import("@/lib/memory/markdown")>("@/lib/memory/markdown");
+  const fakeProvider = {
+    buildReadReminder: vi.fn(
+      async (workspacePath: string, _contextId: string): Promise<string> =>
+        `bash ${workspacePath}/memory.sh read <topic>`,
+    ),
+    buildSaveReminder: vi.fn(
+      (workspacePath: string): string => `bash ${workspacePath}/memory.sh save <name> "<moment>"`,
+    ),
+    rosterReadReminder: vi.fn(
+      (workspacePath: string): string =>
+        `You are participating in a group task. Before starting:\n- You MUST read ${workspacePath}/members/roster.md before doing anything.`,
+    ),
+  };
   return {
     ...actual,
-    getMemoryProvider: vi.fn(async () => new MarkdownMemoryProvider()),
+    getMemoryProvider: vi.fn(async () => fakeProvider),
   };
 });
 
@@ -208,7 +220,7 @@ describe("makeStartScriptTool", () => {
     await handler({});
 
     expect(startScript).toHaveBeenCalledWith(
-      expect.objectContaining({ extraEnv: { OTHER: "keep" } }),
+      expect.objectContaining({ extraEnv: expect.objectContaining({ OTHER: "keep" }) }),
       "",
       undefined,
       undefined,
@@ -265,11 +277,8 @@ describe("makeStartScriptTool", () => {
     );
   });
 
-  it("routes group-chat reminder via extraEnv.DOVE_MEMORY_REMINDER and keeps instruction clean", async () => {
+  it("sets DOVE_MEMORY_REMINDER from provider when groupChat is supplied", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
-    const { getMemoryProvider } = await import("@/lib/memory");
-    const { OpenVikingMemoryProvider } = await import("@/lib/memory/openviking");
-    vi.mocked(getMemoryProvider).mockResolvedValue(new OpenVikingMemoryProvider(51234));
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartScriptTool(
       AGENT,
@@ -291,9 +300,8 @@ describe("makeStartScriptTool", () => {
     const reminder = passedConfig.extraEnv?.DOVE_MEMORY_REMINDER;
     expect(reminder).toBeDefined();
     expect(reminder).toContain("/ws/ta-abc123/members/roster.md");
-    expect(reminder).toContain("/api/v1/search/find");
+    expect(reminder).toContain("bash /ws/ta-abc123/memory.sh read");
     expect(reminder).not.toContain("/api/v1/sessions");
-    expect(reminder).toContain("X-OpenViking-Agent: grp-xyz-123");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-memory");
     expect(reminder).not.toContain("ov add-resource");
@@ -302,9 +310,6 @@ describe("makeStartScriptTool", () => {
 
   it("falls back to .md moments reminder when MarkdownMemoryProvider is active", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
-    const { getMemoryProvider } = await import("@/lib/memory");
-    const { MarkdownMemoryProvider } = await import("@/lib/memory/markdown");
-    vi.mocked(getMemoryProvider).mockResolvedValue(new MarkdownMemoryProvider());
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartScriptTool(
       AGENT,
@@ -326,13 +331,13 @@ describe("makeStartScriptTool", () => {
     const reminder = passedConfig.extraEnv?.DOVE_MEMORY_REMINDER;
     expect(reminder).toBeDefined();
     expect(reminder).toContain("/ws/ta-abc123/members/roster.md");
-    expect(reminder).toContain("/ws/ta-abc123/moments/");
+    expect(reminder).toContain("bash /ws/ta-abc123/memory.sh");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-resource");
     expect(reminder).not.toContain("All substance stays. Only fluff dies.");
   });
 
-  it("does not set DOVE_MEMORY_REMINDER when groupChat is absent", async () => {
+  it("sets DOVE_MEMORY_REMINDER from provider even when groupChat is absent", async () => {
     vi.mocked(recloneReposIntoWorkspace).mockResolvedValue([]);
     vi.mocked(tool).mockImplementationOnce((_n, _d, _s, handler) => handler as any);
     const handler = makeStartScriptTool(AGENT, BASE_CONFIG, []) as any;
@@ -340,7 +345,9 @@ describe("makeStartScriptTool", () => {
     await handler({ instruction: "do work" });
 
     const passedConfig = vi.mocked(startScript).mock.calls[0][0];
-    expect(passedConfig.extraEnv?.DOVE_MEMORY_REMINDER).toBeUndefined();
+    const reminder = passedConfig.extraEnv?.DOVE_MEMORY_REMINDER;
+    expect(reminder).toBeDefined();
+    expect(reminder).toContain(BASE_CONFIG.workspacePath);
   });
 });
 

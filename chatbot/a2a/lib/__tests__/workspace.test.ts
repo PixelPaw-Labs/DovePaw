@@ -97,36 +97,18 @@ describe("createAgentWorkspace", () => {
       expect(existsSync(settingsPath)).toBe(true);
     });
 
-    it("settings.json contains PostToolUse hook for ScheduleWakeup that touches flag file", async () => {
+    it("settings.json contains PreToolUse hook for ScheduleWakeup that sleeps then denies", async () => {
       const ws = await createAgentWorkspace("my-agent", "ma");
       const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
-      const postHooks = settings.hooks?.PostToolUse;
-      expect(Array.isArray(postHooks)).toBe(true);
-      const scheduleHook = postHooks.find(
+      const preHooks = settings.hooks?.PreToolUse;
+      expect(Array.isArray(preHooks)).toBe(true);
+      const scheduleHook = preHooks.find(
         (h: { matcher?: string }) => h.matcher === "ScheduleWakeup",
       );
       expect(scheduleHook).toBeDefined();
-      expect(scheduleHook.hooks[0].command).toContain("touch");
-      expect(scheduleHook.hooks[0].command).toContain(".wakeup_pending");
-    });
-
-    it("settings.json contains Stop hook that blocks when flag file exists", async () => {
-      const ws = await createAgentWorkspace("my-agent", "ma");
-      const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
-      const stopHooks = settings.hooks?.Stop;
-      expect(Array.isArray(stopHooks)).toBe(true);
-      const cmd: string = stopHooks[0].hooks[0].command;
-      expect(cmd).toContain(".wakeup_pending");
-      expect(cmd).toContain('"decision":"block"');
-    });
-
-    it("settings.json contains UserPromptSubmit hook that removes flag file", async () => {
-      const ws = await createAgentWorkspace("my-agent", "ma");
-      const settings = JSON.parse(readFileSync(join(ws.path, ".claude", "settings.json"), "utf8"));
-      const upHooks = settings.hooks?.UserPromptSubmit;
-      expect(Array.isArray(upHooks)).toBe(true);
-      expect(upHooks[0].hooks[0].command).toContain("rm -f");
-      expect(upHooks[0].hooks[0].command).toContain(".wakeup_pending");
+      expect(scheduleHook.hooks[0].command).toContain("time.sleep");
+      expect(scheduleHook.hooks[0].command).toContain("permissionDecision");
+      expect(scheduleHook.hooks[0].command).toContain("deny");
     });
   });
 

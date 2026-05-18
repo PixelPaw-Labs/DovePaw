@@ -11,37 +11,40 @@
  */
 export interface MemoryProvider {
   /**
-   * Prepare per-group state. Called once from makeInitGroupTool.
+   * Prepare per-workspace state. Called once from makeInitGroupTool.
    *
-   * @param groupContextId The group's A2A context ID (also used as `agent_id`).
-   * @param workspacePath  The shared group workspace directory on disk.
+   * @param contextId The A2A context ID (also used as `agent_id`).
+   * @param workspacePath  The shared workspace directory on disk.
    */
-  initGroup(groupContextId: string, workspacePath: string): Promise<void>;
+  init(contextId: string, workspacePath: string): Promise<void>;
 
   /**
-   * Tear down per-group state when the chat session is deleted. Must be
-   * idempotent — safe to call when the group never had any state, when
+   * Tear down per-workspace state when the chat session is deleted. Must be
+   * idempotent — safe to call when the workspace never had any state, when
    * the underlying backend is unreachable, or when the namespace has
    * already been removed.
    *
-   * @param groupContextId The group's A2A context ID (= the `agent_id`).
-   * @param workspacePath  The shared group workspace directory on disk.
+   * @param contextId The A2A context ID (= the `agent_id`).
+   * @param workspacePath  The shared workspace directory on disk.
    */
-  deleteGroup(groupContextId: string, workspacePath: string): Promise<void>;
+  delete(contextId: string, workspacePath: string): Promise<void>;
 
   /**
    * Build the body of the <reminder> block injected before each member's turn.
    * Includes the roster bullet and read/query instructions only — save instructions
    * are delivered via the PostToolUse hook (see makeGroupMomentSaveHook).
    */
-  buildReadReminder(workspacePath: string, groupContextId: string): string;
+  buildReadReminder(workspacePath: string, contextId: string): Promise<string>;
 
   /**
    * Build the save-moments prompt returned as `{ decision: "block", reason }` by the
    * PostToolUse hook (see makeGroupMomentSaveHook) when an await_script_* tool
    * completes with status "completed". Blocking ensures the agent must respond before continuing.
    */
-  buildSaveReminder(groupContextId: string, workspacePath: string): string;
+  buildSaveReminder(workspacePath: string): string;
+
+  /** Build the roster-reading preamble injected before the memory reminder in group chat. */
+  rosterReadReminder(workspacePath: string): string;
 
   /**
    * Optional graceful teardown. Implementations that own a child process

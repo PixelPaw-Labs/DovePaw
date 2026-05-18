@@ -41,7 +41,7 @@ export function makeStartScriptTool(
   onProgress?: (message: string, artifacts: Record<string, string>) => void,
   taskId?: string,
   registry?: PendingRegistry,
-  /** When set, appends the group-chat reminder using the supplied groupContextId. */
+  /** When set, uses the group workspace path and context ID for the memory read reminder. */
   groupChat?: GroupChatScriptOverrides,
   stateMachine?: AgentTaskStateMachine,
 ) {
@@ -55,12 +55,14 @@ export function makeStartScriptTool(
         .describe(`Instruction to pass to the ${agent.displayName} script`),
     },
     async ({ instruction = "" }) => {
-      const reminder = groupChat
-        ? (await getMemoryProvider()).buildReadReminder(
-            groupChat.groupMomentsPath,
-            groupChat.groupContextId,
-          )
-        : undefined;
+      const provider = await getMemoryProvider();
+      const workspacePath = groupChat ? groupChat.groupMomentsPath : config.workspacePath;
+      const memoryReminder =
+        (groupChat ? provider.rosterReadReminder(workspacePath) + "\n" : "") +
+        (await provider.buildReadReminder(
+          workspacePath,
+          groupChat?.groupContextId ?? taskId ?? "",
+        ));
       const clonedPaths = await recloneReposIntoWorkspace(
         config.workspacePath,
         repoSlugs,
@@ -69,7 +71,7 @@ export function makeStartScriptTool(
       );
       // Overwrite REPO_LIST with local paths so the agent script can do file I/O.
       // Inject DOVEPAW_TASK_ID so the script can POST progress to the A2A server.
-      // Pass the group-chat memory reminder via DOVE_MEMORY_REMINDER so the script's
+      // Pass the memory reminder via DOVE_MEMORY_REMINDER so the script's
       // argv stays pure JSON and AgentRunner can append it to the system prompt.
       const finalConfig = {
         ...config,
@@ -77,7 +79,7 @@ export function makeStartScriptTool(
           ...config.extraEnv,
           ...(taskId ? { DOVEPAW_TASK_ID: taskId } : {}),
           ...(clonedPaths.length > 0 ? { REPO_LIST: clonedPaths.join(",") } : {}),
-          ...(reminder ? { DOVE_MEMORY_REMINDER: reminder } : {}),
+          ...(memoryReminder ? { DOVE_MEMORY_REMINDER: memoryReminder } : {}),
         },
       };
       const { runId } = startScript(finalConfig, instruction, signal, taskId);

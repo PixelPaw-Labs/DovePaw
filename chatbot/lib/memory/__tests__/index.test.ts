@@ -53,24 +53,27 @@ describe("memory provider registry", () => {
   });
 
   it("with no override and no port file, the reminder is the .md variant (no ov commands)", async () => {
-    const reminder = (await getMemoryProvider()).buildReadReminder("/ws/x", "grp-1");
+    const reminder = await (await getMemoryProvider()).buildReadReminder("/ws/x", "grp-1");
     expect(reminder).toContain("/ws/x/moments/");
     expect(reminder).not.toContain("ov find");
     expect(reminder).not.toContain("ov add-resource");
     expect(reminder).not.toContain("viking://agent/");
   });
 
-  it("with port file present, the reminder is the OpenViking HTTP API variant", async () => {
+  it("with port file present, the reminder is the OpenViking script variant", async () => {
     writeFileSync(portFile, JSON.stringify({ port: 51234 }));
-    const provider = await getMemoryProvider();
-    const reminder = provider.buildReadReminder("/ws/x", "grp-1");
-    expect(reminder).toContain("http://localhost:51234");
-    expect(reminder).toContain("/api/v1/search/find");
-    expect(reminder).toContain("X-OpenViking-Agent: grp-1");
-    expect(reminder).not.toContain("ov find");
-    expect(reminder).not.toContain("ov add-memory");
-    expect(reminder).not.toContain("/ws/x/moments/");
-    const saveReminder = provider.buildSaveReminder("grp-1", "/ws/x");
-    expect(saveReminder).toContain("/api/v1/sessions");
+    const tmpWs = mkdtempSync(join(tmpdir(), "dovepaw-ov-ws-"));
+    try {
+      const provider = await getMemoryProvider();
+      const reminder = await provider.buildReadReminder(tmpWs, "grp-1");
+      expect(reminder).toContain(`bash ${tmpWs}/memory.sh read`);
+      expect(reminder).not.toContain("ov find");
+      expect(reminder).not.toContain("ov add-memory");
+      expect(reminder).not.toContain("moments/");
+      const saveReminder = provider.buildSaveReminder(tmpWs);
+      expect(saveReminder).toContain(`bash ${tmpWs}/memory.sh save`);
+    } finally {
+      rmSync(tmpWs, { recursive: true, force: true });
+    }
   });
 });

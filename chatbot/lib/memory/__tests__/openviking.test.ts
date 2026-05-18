@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { EventEmitter } from "node:events";
 import { join } from "node:path";
 import type { ChildProcess } from "node:child_process";
@@ -71,65 +71,62 @@ describe("OpenVikingMemoryProvider.boot — dev-mode config", () => {
 
 describe("OpenVikingMemoryProvider.buildReadReminder", () => {
   const provider = new OpenVikingMemoryProvider(51234);
+  const ws = join(TMP_OV_ROOT, "read-reminder-ws");
 
-  it("emits search curl pointing at the live sidecar port", () => {
-    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
-    expect(body).toContain("http://localhost:51234");
-    expect(body).toContain("/api/v1/search/find");
-    expect(body).toContain("X-OpenViking-Agent: grp-xyz");
-    expect(body).not.toContain("ov find");
-    expect(body).not.toContain("ov add-memory");
-    expect(body).not.toContain("ov add-resource");
-    expect(body).not.toContain("/api/v1/sessions");
+  beforeAll(() => {
+    mkdirSync(ws, { recursive: true });
   });
 
-  it("uses hard mandatory language — must, not suggestion", () => {
-    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
+  it("writes memory.sh referencing the live sidecar port", async () => {
+    await provider.buildReadReminder(ws, "grp-xyz");
+    const script = readFileSync(join(ws, "memory.sh"), "utf8");
+    expect(script).toContain("http://localhost:51234");
+    expect(script).toContain("/api/v1/search/find");
+    expect(script).toContain("X-OpenViking-Agent: ${AGENT_ID}");
+    expect(script).not.toContain("ov find");
+    expect(script).not.toContain("ov add-memory");
+    expect(script).not.toContain("ov add-resource");
+  });
+
+  it("uses hard mandatory language — must, not suggestion", async () => {
+    const body = await provider.buildReadReminder(ws, "grp-xyz");
     expect(body).toContain("MUST");
     expect(body).toContain("hard requirement");
     expect(body).not.toContain("Query past moments before acting via");
   });
 
-  it("uses the find endpoint's real request shape (target_uri + limit, not node_limit)", () => {
-    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
-    expect(body).toContain('"target_uri": "viking://agent/memories"');
-    expect(body).toContain('"limit": 10');
-    expect(body).not.toContain('"node_limit"');
+  it("memory.sh uses the find endpoint's real request shape (target_uri + limit, not node_limit)", async () => {
+    await provider.buildReadReminder(ws, "grp-xyz");
+    const script = readFileSync(join(ws, "memory.sh"), "utf8");
+    expect(script).toContain("target_uri");
+    expect(script).toContain("limit");
+    expect(script).not.toContain("node_limit");
   });
 
-  it("wraps the find curl in a fenced code block", () => {
-    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
-    const fence = body.match(/```[\s\S]*?\/api\/v1\/search\/find[\s\S]*?```/);
+  it("reminder body wraps bash invocation in a fenced code block", async () => {
+    const body = await provider.buildReadReminder(ws, "grp-xyz");
+    const fence = body.match(/```[\s\S]*?memory\.sh[\s\S]*?```/);
     expect(fence).not.toBeNull();
-  });
-
-  it("includes roster bullet with hard mandatory language", () => {
-    const body = provider.buildReadReminder("/ws/x", "grp-xyz");
-    expect(body).toContain("/ws/x/members/roster.md");
-    expect(body).toContain("MUST");
-    expect(body).toContain("hard requirement");
   });
 });
 
 describe("OpenVikingMemoryProvider.buildSaveReminder", () => {
   const provider = new OpenVikingMemoryProvider(51234);
 
-  it("uses the save-moment endpoint's real request shape and wraps in a code fence", () => {
-    const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
-    expect(body).toMatch(/POST [^\s]*\/api\/v1\/sessions(?:\s|\\\n)[\s\S]*?-d '\{\}'/);
-    expect(body).toContain('{"role": "user", "content": "<moment>"}');
-    expect(body).toMatch(/POST [^\s]*\/api\/v1\/sessions\/[^/\s]+\/commit[\s\S]*?-d '\{\}'/);
-    const fence = body.match(/```[\s\S]*?\/api\/v1\/sessions[\s\S]*?\/commit[\s\S]*?```/);
+  it("uses the memory.sh save command and wraps in a code fence", () => {
+    const body = provider.buildSaveReminder("/ws/x");
+    expect(body).toContain("bash /ws/x/memory.sh save");
+    const fence = body.match(/```[\s\S]*?memory\.sh save[\s\S]*?```/);
     expect(fence).not.toBeNull();
   });
 
   it("includes the writing pattern", () => {
-    const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
+    const body = provider.buildSaveReminder("/ws/x");
     expect(body).toContain("All substance stays. Only fluff dies.");
   });
 
   it("buildSaveReminder uses hard mandatory language", () => {
-    const body = provider.buildSaveReminder("grp-xyz", "/ws/x");
+    const body = provider.buildSaveReminder("/ws/x");
     expect(body).toContain("MUST");
     expect(body).toContain("hard requirement");
   });
@@ -187,7 +184,7 @@ describe("OpenVikingMemoryProvider.shutdown", () => {
   });
 });
 
-describe("OpenVikingMemoryProvider.initGroup", () => {
+describe("OpenVikingMemoryProvider.init", () => {
   it("POSTs /api/v1/fs/mkdir with the agent's viking URI and agent header", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -198,7 +195,7 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
         ),
       );
     const provider = new OpenVikingMemoryProvider(51234);
-    await provider.initGroup("grp-xyz", "/tmp");
+    await provider.init("grp-xyz", "/tmp");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
     expect(url).toBe("http://localhost:51234/api/v1/fs/mkdir");
@@ -220,7 +217,7 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
       ),
     );
     const provider = new OpenVikingMemoryProvider(51234);
-    await expect(provider.initGroup("grp-xyz", "/tmp")).resolves.toBeUndefined();
+    await expect(provider.init("grp-xyz", "/tmp")).resolves.toBeUndefined();
     fetchSpy.mockRestore();
   });
 
@@ -237,7 +234,7 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
       ),
     );
     const provider = new OpenVikingMemoryProvider(51234);
-    await expect(provider.initGroup("grp-xyz", "/tmp")).resolves.toBeUndefined();
+    await expect(provider.init("grp-xyz", "/tmp")).resolves.toBeUndefined();
     fetchSpy.mockRestore();
   });
 
@@ -252,16 +249,16 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
       ),
     );
     const provider = new OpenVikingMemoryProvider(51234);
-    await expect(provider.initGroup("grp-xyz", "/tmp")).rejects.toThrow(/server explosion/);
+    await expect(provider.init("grp-xyz", "/tmp")).rejects.toThrow(/server explosion/);
     fetchSpy.mockRestore();
   });
 });
 
-describe("OpenVikingMemoryProvider.deleteGroup", () => {
+describe("OpenVikingMemoryProvider.delete", () => {
   it("resolves without throwing even if the ov binary or sidecar is unreachable", async () => {
     // No live sidecar in tests — the shell-out should fail silently rather
     // than propagate, matching the "idempotent, best-effort" contract.
     const provider = new OpenVikingMemoryProvider(1);
-    await expect(provider.deleteGroup("grp-xyz", "/tmp")).resolves.toBeUndefined();
+    await expect(provider.delete("grp-xyz", "/tmp")).resolves.toBeUndefined();
   });
 });

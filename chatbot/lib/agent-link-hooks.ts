@@ -15,10 +15,7 @@ import { awaitRunScriptToolName } from "@/lib/agent-tools";
 import { getAwaitStatus } from "@/lib/hooks";
 import { getMemoryProvider } from "@/lib/memory";
 
-export function makeGroupMomentSaveHook(
-  groupContextId: string,
-  workspacePath: string,
-): HookCallbackMatcher {
+export function makeGroupMomentSaveHook(workspacePath: string): HookCallbackMatcher {
   return {
     matcher: `mcp__agents__${awaitRunScriptToolName(".*")}`,
     hooks: [
@@ -26,7 +23,7 @@ export function makeGroupMomentSaveHook(
         if (input.hook_event_name !== "PostToolUse") return { continue: true };
         if (getAwaitStatus(input.tool_response) !== "completed") return { continue: true };
         const provider = await getMemoryProvider();
-        const savePrompt = provider.buildSaveReminder(groupContextId, workspacePath);
+        const savePrompt = provider.buildSaveReminder(workspacePath);
         return {
           decision: "block",
           reason: `<reminder>\n${savePrompt}\n</reminder>`,

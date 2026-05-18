@@ -12,21 +12,23 @@ import type { MemoryProvider } from "./types";
 import { indentedMomentsPattern, rosterBullet } from "./types";
 
 export class MarkdownMemoryProvider implements MemoryProvider {
-  async initGroup(_groupContextId: string, workspacePath: string): Promise<void> {
+  async init(_contextId: string, workspacePath: string): Promise<void> {
     await mkdir(join(workspacePath, "moments"), { recursive: true });
   }
 
-  async deleteGroup(_groupContextId: string, workspacePath: string): Promise<void> {
+  async delete(_contextId: string, workspacePath: string): Promise<void> {
     await rm(join(workspacePath, "moments"), { recursive: true, force: true });
   }
 
-  buildReadReminder(workspacePath: string, _groupContextId: string): string {
-    return `You are participating in a group task. Before starting:
-${rosterBullet(workspacePath)}
-- You MUST read ${workspacePath}/moments/ before acting. This is a hard requirement — do not skip it.`;
+  async buildReadReminder(workspacePath: string, _contextId: string): Promise<string> {
+    return `- You MUST read ${workspacePath}/moments/ before acting. This is a hard requirement — do not skip it.`;
   }
 
-  buildSaveReminder(_groupContextId: string, workspacePath: string): string {
+  rosterReadReminder(workspacePath: string): string {
+    return `You are participating in a group task. Before starting:\n${rosterBullet(workspacePath)}`;
+  }
+
+  buildSaveReminder(workspacePath: string): string {
     return `You MUST save moments (decisions, artifacts, insights) to ${workspacePath}/moments/ when: decision reached, artifact complete, insight worth sharing. This is a hard requirement — do not skip it.
   Writing style:
 ${indentedMomentsPattern()}`;

@@ -169,9 +169,9 @@ describe("POST /api/openviking/config", () => {
     const fakeOverride = {
       port: 11111,
       proc: null,
-      initGroup: vi.fn().mockResolvedValue(undefined),
-      deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReadReminder: () => "",
+      init: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn().mockResolvedValue(undefined),
+      buildReadReminder: async () => "",
       buildSaveReminder: () => "",
       shutdown: shutdownSpy,
     };

@@ -893,28 +893,30 @@ describe("makeStartGroupTool", () => {
 
   it("delegates per-group bootstrap to the active memory provider", async () => {
     const { getMemoryProvider } = await import("@/lib/memory");
-    const initGroup = vi.fn().mockResolvedValue(undefined);
+    const init = vi.fn().mockResolvedValue(undefined);
     vi.mocked(getMemoryProvider).mockResolvedValue({
-      initGroup,
-      deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReadReminder: () => "",
+      init,
+      delete: vi.fn().mockResolvedValue(undefined),
+      buildReadReminder: async () => "",
       buildSaveReminder: () => "",
+      rosterReadReminder: () => "",
     });
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
     });
-    expect(initGroup).toHaveBeenCalledWith(expect.any(String), expect.any(String));
+    expect(init).toHaveBeenCalledWith(expect.any(String), expect.any(String));
   });
 
-  it("falls back to mkdir(moments) when the provider's initGroup rejects", async () => {
+  it("falls back to mkdir(moments) when the provider's init rejects", async () => {
     const { getMemoryProvider } = await import("@/lib/memory");
     vi.mocked(getMemoryProvider).mockResolvedValue({
-      initGroup: vi.fn().mockRejectedValue(new Error("provider down")),
-      deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReadReminder: () => "",
+      init: vi.fn().mockRejectedValue(new Error("provider down")),
+      delete: vi.fn().mockResolvedValue(undefined),
+      buildReadReminder: async () => "",
       buildSaveReminder: () => "",
+      rosterReadReminder: () => "",
     });
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];

@@ -42,7 +42,6 @@ export function buildSubAgentHooks(
    *  Only direct-chat sub-agents act as their own orchestrator and receive the links reminder. */
   isDirectChat?: boolean,
   behaviorReminder?: string,
-  groupContextId?: string,
   groupMomentsPath?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const notifHooks =
@@ -111,9 +110,7 @@ export function buildSubAgentHooks(
       ...(isGroupMode
         ? [
             makeGroupScriptAwaitToneHook(manifestKey),
-            ...(groupContextId && groupMomentsPath
-              ? [makeGroupMomentSaveHook(groupContextId, groupMomentsPath)]
-              : []),
+            ...(groupMomentsPath ? [makeGroupMomentSaveHook(groupMomentsPath)] : []),
           ]
         : []),
     ],

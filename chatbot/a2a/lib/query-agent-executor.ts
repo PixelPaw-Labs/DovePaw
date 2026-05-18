@@ -331,7 +331,6 @@ export class QueryAgentExecutor {
                   isAskMode,
                   isDirectChat,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
-                  groupOverrides?.groupContextId,
                   groupOverrides?.groupMomentsPath,
                 ),
                 abortController: this.abortController ?? undefined,

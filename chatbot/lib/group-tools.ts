@@ -126,9 +126,9 @@ export function makeStartGroupTool(
 
       try {
         const provider = await getMemoryProvider();
-        await provider.initGroup(groupContextId, groupMomentsPath);
+        await provider.init(groupContextId, groupMomentsPath);
       } catch (err) {
-        consola.warn("Memory provider initGroup failed; falling back to .md moments:", err);
+        consola.warn("Memory provider init failed; falling back to .md moments:", err);
         await mkdir(join(groupMomentsPath, "moments"), { recursive: true });
       }
 

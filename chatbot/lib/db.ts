@@ -72,19 +72,19 @@ type SessionDetailResult =
   | SessionDetail
   | (Omit<SessionDetail, "resumeSeq"> & { resumeSeq?: number });
 
-let _db: Database.Database | null = null;
+let dbInstance: Database.Database | null = null;
 
 export function closeDb(): void {
-  _db?.close();
-  _db = null;
+  dbInstance?.close();
+  dbInstance = null;
 }
 
 function getDb(): Database.Database {
-  if (_db) return _db;
+  if (dbInstance) return dbInstance;
   mkdirSync(DOVEPAW_DIR, { recursive: true });
-  _db = new Database(join(DOVEPAW_DIR, "dovepaw.db"));
-  _db.pragma("journal_mode = WAL");
-  _db.exec(`
+  dbInstance = new Database(join(DOVEPAW_DIR, "dovepaw.db"));
+  dbInstance.pragma("journal_mode = WAL");
+  dbInstance.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
       id                      TEXT PRIMARY KEY,
       agent_id                TEXT NOT NULL,
@@ -116,25 +116,25 @@ function getDb(): Database.Database {
       PRIMARY KEY (session_id, seq)
     );
   `);
-  const pragmaResult = _db.pragma("table_info(sessions)");
+  const pragmaResult = dbInstance.pragma("table_info(sessions)");
   const cols = Array.isArray(pragmaResult)
     ? pragmaResult.filter(
         (c): c is { name: string } => typeof c === "object" && c !== null && "name" in c,
       )
     : [];
   if (!cols.some((c) => c.name === "status")) {
-    _db.exec("ALTER TABLE sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'done'");
+    dbInstance.exec("ALTER TABLE sessions ADD COLUMN status TEXT NOT NULL DEFAULT 'done'");
   }
   if (!cols.some((c) => c.name === "resume_seq")) {
-    _db.exec("ALTER TABLE sessions ADD COLUMN resume_seq INTEGER NOT NULL DEFAULT 0");
+    dbInstance.exec("ALTER TABLE sessions ADD COLUMN resume_seq INTEGER NOT NULL DEFAULT 0");
   }
   if (!cols.some((c) => c.name === "sender_agent_id")) {
-    _db.exec("ALTER TABLE sessions ADD COLUMN sender_agent_id TEXT");
+    dbInstance.exec("ALTER TABLE sessions ADD COLUMN sender_agent_id TEXT");
   }
   if (!cols.some((c) => c.name === "group_message")) {
-    _db.exec("ALTER TABLE sessions ADD COLUMN group_message TEXT");
+    dbInstance.exec("ALTER TABLE sessions ADD COLUMN group_message TEXT");
   }
-  return _db;
+  return dbInstance;
 }
 
 function messageContentKey(m: SessionMessage): string {
@@ -443,7 +443,7 @@ export async function deleteSession(id: string): Promise<void> {
 
   if (row?.agent_id.startsWith("group:")) {
     const provider = await getMemoryProvider();
-    await provider.deleteGroup(id, row.workspace_path ?? "");
+    await provider.delete(id, row.workspace_path ?? "");
   }
 }
 

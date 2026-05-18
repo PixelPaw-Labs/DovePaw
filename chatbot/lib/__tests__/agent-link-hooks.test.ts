@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/memory", () => ({
   getMemoryProvider: vi.fn(async () => ({
-    buildSaveReminder: (_groupContextId: string, _workspacePath: string) =>
-      "Save to /ws/moments/ when: decision reached.",
+    buildSaveReminder: (_workspacePath: string) => "Save to /ws/moments/ when: decision reached.",
   })),
 }));
 
@@ -26,7 +25,7 @@ function callHook(handler: (...args: any[]) => unknown, input: unknown) {
 }
 
 describe("makeGroupMomentSaveHook", () => {
-  const hook = makeGroupMomentSaveHook("grp-123", "/ws");
+  const hook = makeGroupMomentSaveHook("/ws");
   const handler = hook.hooks[0];
 
   it("blocks with save prompt when status is completed", async () => {
