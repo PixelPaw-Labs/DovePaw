@@ -60,6 +60,7 @@ export function makeStartGroupTool(
   const inDeg = new Map<string, number>();
   for (const l of groupLinks) {
     if (l.group !== group.name) continue;
+    if (l.strategy !== "chat") continue; // escalation/review define runtime routing, not start topology
     outDeg.set(l.source, (outDeg.get(l.source) ?? 0) + 1);
     inDeg.set(l.target, (inDeg.get(l.target) ?? 0) + 1);
     if (l.direction === "dual") {

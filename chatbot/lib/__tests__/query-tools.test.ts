@@ -1208,6 +1208,40 @@ describe("makeStartGroupTool", () => {
     expect(desc).not.toContain("- beta:");
   });
 
+  it("ignores escalation/review group links for start topology — all members shown as fallback", () => {
+    const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
+    const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
+    const c: AgentDef = { ...AGENT, name: "gamma", manifestKey: "gamma", description: "C-desc" };
+    const links: AgentLink[] = [
+      {
+        source: "alpha",
+        target: "beta",
+        direction: "single",
+        strategy: "escalation",
+        group: "PixelPaw Labs",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
+      },
+      {
+        source: "alpha",
+        target: "gamma",
+        direction: "single",
+        strategy: "review",
+        group: "PixelPaw Labs",
+        handoffScoreMin: 80,
+        handoffScoreMax: 100,
+      },
+    ];
+    captureTools(() =>
+      makeStartGroupTool(GROUP_3, [a, b, c], undefined, undefined, undefined, links),
+    );
+    const desc = getMembersDescription(tool);
+    // escalation/review don't affect start topology → all 3 are isolated → shown as fallback
+    expect(desc).toContain("- alpha: A-desc");
+    expect(desc).toContain("- beta: B-desc");
+    expect(desc).toContain("- gamma: C-desc");
+  });
+
   it("ignores links belonging to a different group", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
