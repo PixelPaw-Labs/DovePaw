@@ -415,6 +415,51 @@ describe("buildDoveHooks — PreToolUse allowed directories", () => {
   });
 });
 
+// ─── buildDoveHooks — PreToolUse start_* instruction reminder ────────────────
+
+describe("buildDoveHooks — PreToolUse start_* instruction reminder", () => {
+  const agents = [
+    { name: "test-agent", manifestKey: "test_agent", toolName: "yolo_test_agent" },
+  ] as Parameters<typeof buildDoveHooks>[0];
+
+  function findReminderHook(hooks: ReturnType<typeof buildDoveHooks>) {
+    return hooks.PreToolUse?.find((h) => h.matcher === "mcp__agents__start_.*");
+  }
+
+  it("registers a PreToolUse hook with matcher mcp__agents__start_.*", () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", []);
+    expect(findReminderHook(hooks)).toBeDefined();
+  });
+
+  it("injects additionalContext on start_* tool calls", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", []);
+    const fn = findReminderHook(hooks)!.hooks[0]!;
+    const result = await callHook(fn, preToolUseInput("mcp__agents__start_test_agent", {}));
+    expect(result).toHaveProperty("hookSpecificOutput");
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain("instruction description");
+    expect(hookSpecificOutput.additionalContext).toContain("tool description");
+  });
+
+  it("injects additionalContext on start_group_* tool calls", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", []);
+    const fn = findReminderHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_group_pixelpaw_labs", {}),
+    );
+    const { hookSpecificOutput } = result as { hookSpecificOutput: { additionalContext: string } };
+    expect(hookSpecificOutput.additionalContext).toContain("instruction description");
+  });
+
+  it("passes through non-PreToolUse events", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", []);
+    const fn = findReminderHook(hooks)!.hooks[0]!;
+    const result = await callHook(fn, postToolUseInput({}));
+    expect(result).toEqual({ continue: true });
+  });
+});
+
 // ─── buildDoveHooks — PostToolUse await_* response reminder ──────────────────
 
 describe("buildDoveHooks — PostToolUse await_* response reminder", () => {

@@ -256,12 +256,12 @@ export function makeStartTool(
   const orchestratorName = orchestratorDisplayName ?? "Dove";
   return tool(
     doveStartToolName(agent),
-    `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion`,
+    `Start the ${agent.displayName} agent task and return a taskId immediately without waiting for completion. In group chat (groupContextId set): provide a short WHAT-only instruction (1–2 sentences).`,
     {
       instruction: z
         .string()
         .describe(
-          `Instruction to pass to the agent, synthesized from conversation context. Must open with a self-introduction of the orchestrator, e.g. 'I am ${orchestratorName}, your orchestrator. ' followed by the task instruction.`,
+          `Instruction to pass to the agent. In group chat (groupContextId set): 1–2 sentences of WHAT only — DO NOT name other group members, DO NOT prescribe tools or workflow, the agent's persona handles HOW. Outside group chat: open with 'I am ${orchestratorName}, your orchestrator. ' followed by the task.`,
         ),
       strategy: z
         .enum(AGENT_LINK_STRATEGIES)

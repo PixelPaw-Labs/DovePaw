@@ -467,6 +467,23 @@ export function buildDoveHooks(
     disallowedTools: options.disallowedTools,
     readOnly: options.readOnly,
   });
+  // Instruction reminder — injects additionalContext before any start_* / start_group_* call.
+  hooks.PreToolUse = [
+    ...(hooks.PreToolUse ?? []),
+    {
+      matcher: "mcp__agents__start_.*",
+      hooks: [
+        async (input) => {
+          if (input.hook_event_name !== "PreToolUse") return { continue: true };
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            additionalContext: "Read instruction description and tool description carefully",
+          };
+          return { hookSpecificOutput };
+        },
+      ],
+    },
+  ];
   const startMatcher = agents.map((a) => `mcp__agents__${doveStartToolName(a)}`).join("|");
   if (startMatcher) {
     hooks.PreToolUse = [...(hooks.PreToolUse ?? []), makeJustificationGateHook(startMatcher)];
