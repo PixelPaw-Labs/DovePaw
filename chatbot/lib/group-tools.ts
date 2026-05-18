@@ -87,7 +87,7 @@ export function makeStartGroupTool(
 
   return tool(
     doveStartGroupToolName(group.name),
-    `Initialize the "${group.name}" group and start the most relevant members, each with a tailored instruction. Returns groupContextId and memberTaskIds — call \`await_<memberManifestKey>\` for each, passing the matching taskId and the groupContextId.`,
+    `Initialize the "${group.name}" group and start the most relevant members. Each member gets a short WHAT-only instruction (1–2 sentences). Returns groupContextId and memberTaskIds — call \`await_<memberManifestKey>\` for each, passing the matching taskId and the groupContextId.`,
     {
       members: z
         .array(
@@ -104,7 +104,9 @@ export function makeStartGroupTool(
             instruction: z
               .string()
               .describe(
-                "Instruction scoped to THIS member's specialty — not the whole task. Must open with: 'Orchestrator:' followed by the slice this member should own.",
+                "One or two sentences: WHAT this member should produce or decide — nothing else. " +
+                  "DO NOT name other group members. DO NOT prescribe tools, search steps, or workflow. " +
+                  "DO NOT describe the group process. The agent's persona handles HOW; you only state WHAT.",
               ),
           }),
         )

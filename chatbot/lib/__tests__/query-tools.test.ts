@@ -848,6 +848,19 @@ describe("makeStartGroupTool", () => {
     );
   });
 
+  it("instruction field description forbids naming peers and prescribing tools", () => {
+    let capturedSchema: any;
+    vi.mocked(tool).mockImplementationOnce((_name, _desc, schema, _handler) => {
+      capturedSchema = schema;
+      return { name: _name } as any;
+    });
+    makeStartGroupTool(GROUP, [AGENT]);
+    const instrDesc: string = capturedSchema.members.element.shape.instruction.description;
+    expect(instrDesc).toContain("DO NOT name other group members");
+    expect(instrDesc).toContain("DO NOT prescribe tools");
+    expect(instrDesc).toContain("WHAT");
+  });
+
   it("generates groupContextId and groupMomentsPath internally", async () => {
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
