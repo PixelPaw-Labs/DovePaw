@@ -38,6 +38,9 @@ export function buildSubAgentHooks(
   env?: Record<string, string | undefined>,
   isGroupMode?: boolean,
   isAskMode?: boolean,
+  /** True when the user chatted directly with this sub-agent (no Dove orchestrator above it).
+   *  Only direct-chat sub-agents act as their own orchestrator and receive the links reminder. */
+  isDirectChat?: boolean,
   behaviorReminder?: string,
   groupContextId?: string,
   groupWorkspacePath?: string,
@@ -99,12 +102,12 @@ export function buildSubAgentHooks(
     PreToolUse: [
       ...(base.PreToolUse ?? []),
       ...(notifHooks.PreToolUse ?? []),
-      ...(!isGroupMode && !isAskMode ? [makeJustificationGateHook()] : []),
+      ...(!isGroupMode && !isAskMode && isDirectChat ? [makeJustificationGateHook()] : []),
     ],
     PostToolUse: [
       ...(base.PostToolUse ?? []),
       ...(notifHooks.PostToolUse ?? []),
-      ...(!isGroupMode && !isAskMode ? [linksReminderHook] : []),
+      ...(!isGroupMode && !isAskMode && isDirectChat ? [linksReminderHook] : []),
       ...(isGroupMode
         ? [
             makeGroupScriptAwaitToneHook(manifestKey),

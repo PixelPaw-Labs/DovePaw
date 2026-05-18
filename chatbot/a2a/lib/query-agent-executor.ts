@@ -218,12 +218,13 @@ export class QueryAgentExecutor {
 
       const registry = new PendingRegistry();
 
+      const isDirectChat = senderAgentId === undefined;
       const { tools: linkedAgentTools } = await this.agentConfigReader.resolveLinkedTools(
         this.def.name,
         this.abortController.signal,
         backgroundTasks,
         registry,
-        !!groupOverrides,
+        !!groupOverrides || !isDirectChat,
       );
       const allAgents = await readAgentsConfig();
 
@@ -322,6 +323,7 @@ export class QueryAgentExecutor {
                   { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
                   !!groupOverrides,
                   isAskMode,
+                  isDirectChat,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
                   groupOverrides?.groupContextId,
                   groupOverrides?.groupWorkspacePath,

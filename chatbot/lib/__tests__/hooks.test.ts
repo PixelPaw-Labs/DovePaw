@@ -578,6 +578,7 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       undefined,
       false,
       undefined,
+      undefined,
       "",
     );
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
@@ -599,6 +600,7 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
       undefined,
       false,
       undefined,
+      undefined,
       "Check memory before MCP tools.",
     );
     const fn = hooks.UserPromptSubmit![0]!.hooks[0]!;
@@ -609,6 +611,101 @@ describe("buildSubAgentHooks — UserPromptSubmit reminder", () => {
     expect(
       hookSpecificOutput.additionalContext.indexOf("ALWAYS call `start_*` first"),
     ).toBeLessThan(hookSpecificOutput.additionalContext.indexOf("Check memory before MCP tools."));
+  });
+});
+
+// ─── buildSubAgentHooks — isDirectChat ───────────────────────────────────────
+
+describe("buildSubAgentHooks — isDirectChat", () => {
+  it("adds linksReminderHook to PostToolUse when isDirectChat is true", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      true,
+    );
+    // PostToolUse has: base (1) + linksReminderHook (1)
+    expect(hooks.PostToolUse!.length).toBe(2);
+  });
+
+  it("omits linksReminderHook from PostToolUse when isDirectChat is false", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      false,
+    );
+    // PostToolUse has only base hook — no linksReminderHook
+    expect(hooks.PostToolUse!.length).toBe(1);
+  });
+
+  it("omits linksReminderHook when isDirectChat is undefined (default: not a direct chat)", () => {
+    const hooks = buildSubAgentHooks("/cwd", [], [], makeRegistry(), "test_agent");
+    expect(hooks.PostToolUse!.length).toBe(1);
+  });
+
+  it("adds justification gate to PreToolUse when isDirectChat is true", () => {
+    const hooks = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      true,
+    );
+    // PreToolUse has base hooks + justification gate
+    const hasGate = hooks.PreToolUse!.some((m) => m.hooks.length > 0);
+    expect(hasGate).toBe(true);
+    expect(hooks.PreToolUse!.length).toBeGreaterThan(0);
+  });
+
+  it("omits justification gate from PreToolUse when isDirectChat is false", () => {
+    const hooksWithGate = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      true,
+    );
+    const hooksWithoutGate = buildSubAgentHooks(
+      "/cwd",
+      [],
+      [],
+      makeRegistry(),
+      "test_agent",
+      undefined,
+      undefined,
+      undefined,
+      false,
+      false,
+      false,
+    );
+    expect(hooksWithGate.PreToolUse!.length).toBeGreaterThan(hooksWithoutGate.PreToolUse!.length);
   });
 });
 
