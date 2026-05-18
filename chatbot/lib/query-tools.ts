@@ -269,14 +269,26 @@ export function makeStartTool(
           `The link strategy for this call: "chat" for peer collaboration or task delegation, "review" for output sign-off (agent responds with JSON {decision, reason}), "escalation" for authority decision when blocked.`,
         ),
       justification: justificationField,
-      groupContextId: z
-        .string()
+      group: z
+        .object({
+          contextId: z
+            .string()
+            .describe(
+              "groupContextId returned by start_group_*. Publishes start/running status to the group context stream so the swimlane header shows the correct animation.",
+            ),
+          score: z
+            .number()
+            .min(0)
+            .max(1)
+            .describe(
+              "Confidence in your orchestration reasoning for this dispatch (0–1). Must be > 0.9. Reflects how well your decision aligns with the group-orchestrator-rules — high score means you have clear reasoning to dispatch, not that you should stop.",
+            ),
+        })
         .optional()
-        .describe(
-          "Provide when starting an additional member within a group task. Use the groupContextId returned by start_group_*. Publishes start/running status to the group context stream so the swimlane header shows the correct animation.",
-        ),
+        .describe("Provide when starting an additional member within a group task."),
     },
-    async ({ instruction, strategy, groupContextId }) => {
+    async ({ instruction, strategy, group }) => {
+      const groupContextId = group?.contextId;
       const wrappedInstruction = buildStrategyInstruction(instruction, strategy, orchestratorName);
       if (groupContextId) {
         publishSessionEvent(groupContextId, {

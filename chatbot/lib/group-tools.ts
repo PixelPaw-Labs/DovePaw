@@ -89,6 +89,13 @@ export function makeStartGroupTool(
     doveStartGroupToolName(group.name),
     `Initialize the "${group.name}" group and start the most relevant members. Each member gets a short WHAT-only instruction (1–2 sentences). Returns groupContextId and memberTaskIds — call \`await_<memberManifestKey>\` for each, passing the matching taskId and the groupContextId.`,
     {
+      score: z
+        .number()
+        .min(0)
+        .max(1)
+        .describe(
+          "Confidence in your orchestration reasoning for this dispatch (0–1). Must be > 0.9. Score reflects how well your decision aligns with the group-orchestrator-rules — high score means you have clear reasoning to dispatch, not that you should stop.",
+        ),
       members: z
         .array(
           z.object({

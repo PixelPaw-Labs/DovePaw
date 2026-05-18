@@ -1406,7 +1406,7 @@ describe("makeStartTool — group context status", () => {
   it("publishes agent_status:start then agent_status:running to groupContextId", async () => {
     const captured = captureTools(() => makeStartTool(AGENT));
     const h = captured[doveStartToolName(AGENT)];
-    await h({ instruction: "go", groupContextId: "grp-ctx" });
+    await h({ instruction: "go", group: { contextId: "grp-ctx", score: 0.95 } });
     const calls = vi.mocked(publishSessionEvent).mock.calls.filter(([id]) => id === "grp-ctx");
     const statuses = calls.map(([, ev]) => (ev as any).status);
     expect(statuses).toContain("start");

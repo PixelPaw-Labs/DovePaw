@@ -22,6 +22,7 @@ import type { AgentDef } from "@@/lib/agents";
 import { bashHasWriteOperation } from "@@/lib/security-policy";
 import {
   DOVE_RESPONSE_REMINDER,
+  GROUP_ORCHESTRATOR_REMINDER,
   buildDoveLeanReminder,
   buildDovePromptReminder,
 } from "@@/lib/dove-lean-reminder";
@@ -483,6 +484,33 @@ export function buildDoveHooks(
         },
       ],
     },
+    // Group orchestrator score gate — denies if score is absent or ≤ 0.9.
+    ...(options.includeGroupReminder
+      ? [
+          {
+            matcher: "mcp__agents__start_.*",
+            hooks: [
+              async (input: Parameters<HookCallbackMatcher["hooks"][number]>[0]) => {
+                if (input.hook_event_name !== "PreToolUse") return { continue: true };
+                if (typeof input.tool_input !== "object" || input.tool_input === null)
+                  return { continue: true };
+                const group: unknown = Reflect.get(input.tool_input, "group");
+                const score: unknown =
+                  typeof group === "object" && group !== null
+                    ? Reflect.get(group, "score")
+                    : Reflect.get(input.tool_input, "score"); // start_group_* keeps score at top level
+                if (typeof score === "number" && score > 0.9) return { continue: true };
+                const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+                  hookEventName: "PreToolUse",
+                  permissionDecision: "deny",
+                  permissionDecisionReason: `${GROUP_ORCHESTRATOR_REMINDER}\nProvide \`score\` (0–1) > 0.9 reflecting your confidence in the orchestration reasoning for this dispatch. Current score: ${typeof score === "number" ? score : "missing"}.`,
+                };
+                return { hookSpecificOutput };
+              },
+            ],
+          } satisfies HookCallbackMatcher,
+        ]
+      : []),
   ];
   const startMatcher = agents.map((a) => `mcp__agents__${doveStartToolName(a)}`).join("|");
   if (startMatcher) {

@@ -40,3 +40,11 @@ export function buildDoveLeanReminder(extra?: string): string {
 export function buildDovePromptReminder(extra?: string): string {
   return DOVE_PROMPT_REMINDER.replace("{{extra}}", extra?.trim() ? extra.trim() : "");
 }
+
+/** Injected as PreToolUse block before every start_* call in group mode to enforce correct orchestrator behaviour. */
+export const GROUP_ORCHESTRATOR_REMINDER = `<group-orchestrator-rules>
+- **Bad:** "All members gave independent outputs — no handoffs needed." **Correct:** Independent outputs mean the discussion hasn't converged yet. Keep going until the goal is genuinely met.
+- **Bad:** Tell a member in their instruction who to hand off to next. **Correct:** Never pre-assign handoffs inside member instructions — Dove decides who's next after each member completes, based on their output.
+- **Bad:** Stop after one round because everyone spoke. **Correct:** Continue until the goal is reached, the user asks to stop, or there is a genuine deadlock.
+- These rules do NOT bypass the confidence score — valid justification above the threshold is still required before every start_*.
+</group-orchestrator-rules>`;
