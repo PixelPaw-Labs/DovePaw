@@ -164,22 +164,22 @@ and `storage.workspace: ~/.dovepaw/openviking/data` so the sidecar's vector DB
 sequenceDiagram
   participant U as User
   participant D as Dove
-  participant I as makeInitGroupTool
+  participant SG as makeStartGroupTool
   participant M as MemoryProvider (active)
   participant S as makeStartScriptTool reminder
   participant Mem as members
 
   U->>D: start group task
-  D->>I: init_group_*
-  I->>M: initGroup(groupContextId, workspacePath)
+  D->>SG: start_group_*
+  SG->>M: initGroup(groupContextId, groupMomentsPath)
   alt OpenViking up
     M->>M: ov mkdir viking://agent/{id}/moments
   else fallback
-    M->>M: mkdir workspacePath/moments
+    M->>M: mkdir groupMomentsPath/moments
   end
 
-  D->>S: start_<agent> with groupChat overrides
-  S->>M: buildReminder(workspacePath, groupContextId)
+  SG->>S: start_<agent> with groupChat overrides
+  S->>M: buildReminder(groupMomentsPath, groupContextId)
   M-->>S: <reminder> text (ov OR md instructions)
   S->>Mem: instruction + <reminder> block
 
@@ -187,14 +187,14 @@ sequenceDiagram
     Mem->>Mem: ov find <topic> --agent-id {id}
     Mem->>Mem: ov add-resource viking://agent/{id}/moments/...
   else fallback
-    Mem->>Mem: read workspacePath/moments/*.md
-    Mem->>Mem: write workspacePath/moments/<name>.md
+    Mem->>Mem: read groupMomentsPath/moments/*.md
+    Mem->>Mem: write groupMomentsPath/moments/<name>.md
   end
 ```
 
 The branch is decided at the moment each member spawns: the reminder text the
 agent reads always matches the provider currently registered.
-`makeInitGroupTool` also catches errors from `initGroup` and falls back to
+`makeStartGroupTool` also catches errors from `initGroup` and falls back to
 `mkdir(moments/)` as a defence in depth — if a future provider fails partway
 through, the group still gets a usable workspace.
 

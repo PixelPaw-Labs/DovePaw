@@ -59,8 +59,7 @@ independent scripts into pipelines and parallel fan-outs without any script
 needing to know about the others. DovePaw implements three concrete composition
 patterns on top of this boundary: handoff (`start_chat_to_*` /
 `await_chat_to_*`), peer review (`start_review_with_*` /
-`await_review_with_*`), and group parallel execution (`init_group_*` /
-`start_group_*` / `await_group_*`). In each case the connection tools are
+`await_review_with_*`), and group parallel execution (`start_group_*` / `await_group_*`). In each case the connection tools are
 injected at runtime based on configured agent links — the scripts themselves
 have no imports or references to each other. Inline execution would require
 scripts to call each other's module exports directly, creating tight coupling
