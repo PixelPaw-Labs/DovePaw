@@ -46,10 +46,10 @@ function createDirectAnimation(onUpdate: (id: string, content: string) => void) 
   };
 }
 
-type AgentTaskStatus = "running" | "completed" | "failed" | "canceled" | "rejected";
+type AgentTaskStatus = "start" | "running" | "completed" | "failed" | "canceled" | "rejected";
 
 function isAgentTaskStatus(s: string): s is AgentTaskStatus {
-  return ["running", "completed", "failed", "canceled", "rejected"].includes(s);
+  return ["start", "running", "completed", "failed", "canceled", "rejected"].includes(s);
 }
 
 interface GroupPoolEvent {

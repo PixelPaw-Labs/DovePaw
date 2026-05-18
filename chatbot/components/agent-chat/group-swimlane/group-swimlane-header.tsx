@@ -7,7 +7,7 @@ import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { isDove } from "./swimlane-buckets";
 
-type AgentTaskStatus = "running" | "completed" | "failed" | "canceled" | "rejected";
+type AgentTaskStatus = "start" | "running" | "completed" | "failed" | "canceled" | "rejected";
 
 interface SwimlaneHeaderProps {
   groupName: string;
@@ -69,11 +69,20 @@ export function SwimlaneHeader({
             const { icon: Icon, iconBg, iconColor, displayName } = buildAgentDef(config);
             const isActive = activeAgentIds.has(agentId);
             const status = agentStatuses?.get(agentId);
+            const isStart = status === "start";
             const isRunning = status === "running";
             const isCompleted = status === "completed";
             const isError = status === "failed" || status === "canceled" || status === "rejected";
             return (
               <div key={agentId} className="relative shrink-0">
+                {isStart && (
+                  <motion.div
+                    className="absolute inset-0 rounded-md border-2 border-muted-foreground/40 pointer-events-none"
+                    animate={reduce ? {} : { opacity: [0.4, 1, 0.4] }}
+                    transition={{ duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                    aria-hidden="true"
+                  />
+                )}
                 {isRunning && (
                   <motion.div
                     className="absolute inset-0 rounded-md border-2 border-transparent border-t-primary pointer-events-none"

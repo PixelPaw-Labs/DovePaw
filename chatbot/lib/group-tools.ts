@@ -190,6 +190,15 @@ export function makeStartGroupTool(
             isSender: true,
           });
 
+          // Signal that this member has been dispatched — transitions to "running"
+          // once the A2A server accepts the task and returns a taskId.
+          publishSessionEvent(groupContextId, {
+            type: "agent_status",
+            agentKey: memberDef.manifestKey,
+            id: memberDef.manifestKey,
+            status: "start",
+          });
+
           const result = await new TaskPoller(
             memberDef.manifestKey,
             memberDef.displayName,

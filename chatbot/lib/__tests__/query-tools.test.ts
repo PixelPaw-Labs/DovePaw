@@ -1255,4 +1255,120 @@ describe("makeStartGroupTool", () => {
     expect(desc).toContain("- alpha: A-desc");
     expect(desc).toContain("- beta: B-desc");
   });
+
+  it("publishes agent_status:start then agent_status:running per dispatched member", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
+    });
+    const calls = vi.mocked(publishSessionEvent).mock.calls;
+    const statusCalls = calls.filter(([, ev]) => (ev as any).type === "agent_status");
+    const statuses = statusCalls.map(([, ev]) => (ev as any).status);
+    expect(statuses).toContain("start");
+    expect(statuses).toContain("running");
+    // start must precede running
+    expect(statuses.indexOf("start")).toBeLessThan(statuses.indexOf("running"));
+  });
+});
+
+// ─── makeAwaitTool — group agent_status relay ─────────────────────────────────
+
+describe("makeAwaitTool — group agent_status relay", () => {
+  function mockCompletedAwait(state: "completed" | "failed" = "completed") {
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          resubscribeTask: vi.fn().mockReturnValue(
+            asyncEvents(
+              {
+                kind: "artifact-update",
+                artifact: { name: "final-output", parts: [{ kind: "text", text: "done" }] },
+              },
+              { kind: "status-update", status: { state, timestamp: "" }, final: true },
+            ),
+          ),
+        }),
+      };
+    } as any);
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { groupMemberCounters } = await import("@/lib/group-member-counter");
+    groupMemberCounters.clear();
+  });
+
+  it("publishes agent_status:completed to groupContextId on success", async () => {
+    mockCompletedAwait("completed");
+    const { groupMemberCounters } = await import("@/lib/group-member-counter");
+    groupMemberCounters.set("grp-1", { started: 1, completed: 0 });
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-1", timeoutMs: 10000, groupContextId: "grp-1" });
+    expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
+      "grp-1",
+      expect.objectContaining({ type: "agent_status", status: "completed" }),
+    );
+  });
+
+  it("publishes agent_status:failed to groupContextId on task failure", async () => {
+    mockCompletedAwait("failed");
+    const { groupMemberCounters } = await import("@/lib/group-member-counter");
+    groupMemberCounters.set("grp-1", { started: 1, completed: 0 });
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-1", timeoutMs: 10000, groupContextId: "grp-1" });
+    expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
+      "grp-1",
+      expect.objectContaining({ type: "agent_status", status: "failed" }),
+    );
+  });
+
+  it("does not publish agent_status when groupContextId is omitted", async () => {
+    mockCompletedAwait("completed");
+    const captured = captureTools(() => makeAwaitTool(AGENT));
+    const h = captured[doveAwaitToolName(AGENT)];
+    await h({ taskId: "task-1", timeoutMs: 10000 });
+    const agentStatusCalls = vi
+      .mocked(publishSessionEvent)
+      .mock.calls.filter(([, ev]) => (ev as any).type === "agent_status");
+    expect(agentStatusCalls).toHaveLength(0);
+  });
+});
+
+// ─── makeStartTool — group context status ─────────────────────────────────────
+
+describe("makeStartTool — group context status", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
+    vi.mocked(ClientFactory).mockImplementation(function () {
+      return {
+        createFromUrl: vi.fn().mockResolvedValue({
+          sendMessageStream: () =>
+            asyncEvents({ kind: "task", id: "task-start-grp", status: { state: "submitted" } }),
+        }),
+      };
+    } as any);
+  });
+
+  it("publishes agent_status:start then agent_status:running to groupContextId", async () => {
+    const captured = captureTools(() => makeStartTool(AGENT));
+    const h = captured[doveStartToolName(AGENT)];
+    await h({ instruction: "go", groupContextId: "grp-ctx" });
+    const calls = vi.mocked(publishSessionEvent).mock.calls.filter(([id]) => id === "grp-ctx");
+    const statuses = calls.map(([, ev]) => (ev as any).status);
+    expect(statuses).toContain("start");
+    expect(statuses).toContain("running");
+    expect(statuses.indexOf("start")).toBeLessThan(statuses.indexOf("running"));
+  });
+
+  it("does not publish to group context when groupContextId is omitted", async () => {
+    const captured = captureTools(() => makeStartTool(AGENT));
+    const h = captured[doveStartToolName(AGENT)];
+    await h({ instruction: "go" });
+    expect(vi.mocked(publishSessionEvent)).not.toHaveBeenCalled();
+  });
 });

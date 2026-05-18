@@ -1,7 +1,7 @@
 import type { TaskCompletedContent } from "@/lib/task-poller";
 
-/** "running" plus all terminal A2A task statuses — single source of truth. */
-export type AgentTaskStatus = "running" | TaskCompletedContent["status"];
+/** "start" + "running" plus all terminal A2A task statuses — single source of truth. */
+export type AgentTaskStatus = "start" | "running" | TaskCompletedContent["status"];
 
 export type AgentStatusEvent = {
   type: "agent_status";
@@ -12,6 +12,7 @@ export type AgentStatusEvent = {
 
 /** Valid forward-only transitions. Terminal states have no outgoing edges. */
 const VALID: Record<AgentTaskStatus, AgentTaskStatus[]> = {
+  start: ["running", "failed", "canceled", "rejected"],
   running: ["completed", "failed", "canceled", "rejected"],
   completed: [],
   failed: [],

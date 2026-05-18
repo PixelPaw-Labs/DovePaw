@@ -269,9 +269,23 @@ export function makeStartTool(
           `The link strategy for this call: "chat" for peer collaboration or task delegation, "review" for output sign-off (agent responds with JSON {decision, reason}), "escalation" for authority decision when blocked.`,
         ),
       justification: justificationField,
+      groupContextId: z
+        .string()
+        .optional()
+        .describe(
+          "Provide when starting an additional member within a group task. Use the groupContextId returned by start_group_*. Publishes start/running status to the group context stream so the swimlane header shows the correct animation.",
+        ),
     },
-    async ({ instruction, strategy }) => {
+    async ({ instruction, strategy, groupContextId }) => {
       const wrappedInstruction = buildStrategyInstruction(instruction, strategy, orchestratorName);
+      if (groupContextId) {
+        publishSessionEvent(groupContextId, {
+          type: "agent_status",
+          agentKey: agent.manifestKey,
+          id: agent.manifestKey,
+          status: "start",
+        });
+      }
       const result = await new TaskPoller(
         agent.manifestKey,
         agent.displayName,
@@ -286,6 +300,14 @@ export function makeStartTool(
       });
       if (result.structuredContent) {
         stateMachine?.transition(result.structuredContent.taskId, agent.manifestKey, "running");
+        if (groupContextId) {
+          publishSessionEvent(groupContextId, {
+            type: "agent_status",
+            agentKey: agent.manifestKey,
+            id: result.structuredContent.taskId,
+            status: "running",
+          });
+        }
       }
       return result;
     },
@@ -344,11 +366,25 @@ export function makeAwaitTool(
         }
       }
 
-      // Group-mode cleanup: persist the member's output and tick the completion
-      // counter registered by start_group_*. When all dispatched members have
-      // resolved, publish `done` so the group SSE stream closes.
+      // Group-mode cleanup: persist the member's output, publish the agent status
+      // to the group context stream, and tick the completion counter registered by
+      // start_group_*. When all dispatched members have resolved, publish `done`
+      // so the group SSE stream closes.
       if (groupContextId) {
         const sc = result.structuredContent;
+        const agentStatus = !sc
+          ? "failed"
+          : sc.status === "still_running"
+            ? "running"
+            : sc.status === "completed" || sc.status === "canceled" || sc.status === "rejected"
+              ? sc.status
+              : "failed";
+        publishSessionEvent(groupContextId, {
+          type: "agent_status",
+          agentKey: agent.manifestKey,
+          id: taskId,
+          status: agentStatus,
+        });
         if (sc && sc.status === "completed" && "result" in sc) {
           setGroupMessage(taskId, sc.result.output ?? "");
           const counter = groupMemberCounters.get(groupContextId);
