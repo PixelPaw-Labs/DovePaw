@@ -348,7 +348,7 @@ describe("makeStartScriptTool", () => {
 
 describe("tool name helpers", () => {
   it("startRunScriptToolName", () => {
-    expect(startRunScriptToolName("fixer")).toBe("start_fixer");
+    expect(startRunScriptToolName("fixer")).toBe("start_script_fixer");
   });
 
   it("awaitRunScriptToolName", () => {

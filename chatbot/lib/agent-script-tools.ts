@@ -16,7 +16,8 @@ import { MGMT_TOOL } from "./agent-mgmt-tools";
 // ─── Script run tool name helpers ─────────────────────────────────────────────
 
 /** Tool name for firing the agent script in the background (start_run_script_* pattern). */
-export const startRunScriptToolName = (manifestKey: string): string => `start_${manifestKey}`;
+export const startRunScriptToolName = (manifestKey: string): string =>
+  `start_script_${manifestKey}`;
 /** Tool name for polling a previously started script run (await_run_script_* pattern). */
 export const awaitRunScriptToolName = (manifestKey: string): string =>
   `await_script_${manifestKey}`;
