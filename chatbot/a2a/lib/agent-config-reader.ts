@@ -59,8 +59,11 @@ export class AgentConfigReader {
     const resolvedLinks = resolveLinkedTargets(agentName, links);
     const tools: Parameters<typeof createSdkMcpServer>[0]["tools"] = [];
     const callerDisplayName = allAgents.find((a) => a.name === agentName)?.displayName;
+    const seenTargets = new Set<string>();
 
     for (const { targetName } of resolvedLinks) {
+      if (seenTargets.has(targetName)) continue;
+      seenTargets.add(targetName);
       const targetDef = allAgents.find((a) => a.name === targetName);
       if (!targetDef) continue;
 

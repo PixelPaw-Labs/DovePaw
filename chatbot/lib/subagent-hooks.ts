@@ -11,7 +11,12 @@ export * from "./agent-link-hooks";
 import type { HookCallbackMatcher, HookEvent } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
 import { makeGroupScriptAwaitToneHook, makeGroupMomentSaveHook } from "@/lib/agent-link-hooks";
-import { buildAgentHooks, buildLinksReminder, getAwaitStatus } from "@/lib/hooks";
+import {
+  buildAgentHooks,
+  buildLinksReminder,
+  getAwaitStatus,
+  makeJustificationGateHook,
+} from "@/lib/hooks";
 import { buildNotificationHooks } from "@/lib/notifications";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import type { AgentNotificationConfig } from "@@/lib/settings-schemas";
@@ -67,16 +72,21 @@ export function buildSubAgentHooks(
         // Resolve the agent whose work just completed:
         //   await_run_script_<self>   → the current sub-agent itself
         //   await_<otherKey>          → a linked agent we just orchestrated
+        const currentAgentName = agents.find((a) => a.manifestKey === manifestKey)?.name;
         let completedAgentName: string | undefined;
         if (input.tool_name === ownRunScriptAwaitName) {
-          completedAgentName = agents.find((a) => a.manifestKey === manifestKey)?.name;
+          completedAgentName = currentAgentName;
         } else {
           const otherKey = input.tool_name.replace(/^mcp__agents__await_/, "");
           completedAgentName = agents.find((a) => a.manifestKey === otherKey)?.name;
         }
         if (!completedAgentName) return { continue: true };
 
-        const linksReminder = await buildLinksReminder(completedAgentName, agents);
+        const linksReminder = await buildLinksReminder(
+          completedAgentName,
+          agents,
+          currentAgentName,
+        );
         if (!linksReminder) return { continue: true };
 
         return { decision: "block", reason: linksReminder };
@@ -86,7 +96,11 @@ export function buildSubAgentHooks(
 
   return {
     ...base,
-    PreToolUse: [...(base.PreToolUse ?? []), ...(notifHooks.PreToolUse ?? [])],
+    PreToolUse: [
+      ...(base.PreToolUse ?? []),
+      ...(notifHooks.PreToolUse ?? []),
+      ...(!isGroupMode && !isAskMode ? [makeJustificationGateHook()] : []),
+    ],
     PostToolUse: [
       ...(base.PostToolUse ?? []),
       ...(notifHooks.PostToolUse ?? []),

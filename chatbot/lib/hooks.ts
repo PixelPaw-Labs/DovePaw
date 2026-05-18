@@ -28,7 +28,7 @@ import {
 import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
 import type { AgentLinkStrategy } from "@@/lib/agent-links-schemas";
 import { HANDOFF_PATTERNS, REVIEW_PATTERNS, ESCALATE_PATTERNS } from "@/lib/agent-link-patterns";
-import { doveAwaitToolName } from "@/lib/query-tools";
+import { doveAwaitToolName, doveStartToolName, CONFIDENCE_THRESHOLD } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 import type { ChatSseEvent } from "@/lib/chat-sse";
 import { addPendingPermission, abortPendingPermissions } from "@/lib/pending-permissions";
@@ -103,9 +103,12 @@ const STRATEGY_PATTERNS: Record<AgentLinkStrategy, (name?: string) => string> = 
 export async function buildLinksReminder(
   completedAgentName: string,
   agents: AgentDef[],
+  excludeAgentName?: string,
 ): Promise<string | null> {
   const links = await readAgentLinks();
-  const outgoing = resolveLinkedTargets(completedAgentName, links);
+  const outgoing = resolveLinkedTargets(completedAgentName, links).filter(
+    (l) => l.targetName !== excludeAgentName,
+  );
   if (outgoing.length === 0) return null;
 
   const toolsXml = outgoing
@@ -116,7 +119,8 @@ export async function buildLinksReminder(
       return [
         `  <tool>`,
         `    <name>start_${key} / await_${key}</name>`,
-        `    <description>${link.targetName} (${link.strategy})</description>`,
+        `    <description>Call start_${key} with strategy="${link.strategy}" for ${link.targetName}</description>`,
+        `    <strategy>${link.strategy}</strategy>`,
         `    <handoff_range>[${link.handoffScoreMin}, ${link.handoffScoreMax}]</handoff_range>`,
         `    <patterns>${patterns}</patterns>`,
         `  </tool>`,
@@ -371,6 +375,72 @@ export function buildAgentHooks(
   };
 }
 
+// ─── Justification gate ───────────────────────────────────────────────────────
+
+/**
+ * PreToolUse hook that validates justification before any start_* call.
+ * Denies the call when justification is missing, impact is invalid, impact
+ * is "low" (never hand off), or confidence is below the impact threshold.
+ */
+export function makeJustificationGateHook(matcher = "mcp__agents__start_.*"): HookCallbackMatcher {
+  const impactKeys = Object.keys(CONFIDENCE_THRESHOLD).join("|");
+  return {
+    matcher,
+    hooks: [
+      async (input) => {
+        if (input.hook_event_name !== "PreToolUse") return { continue: true };
+        if (typeof input.tool_input !== "object" || input.tool_input === null)
+          return { continue: true };
+        const just: unknown = Reflect.get(input.tool_input, "justification");
+
+        if (typeof just !== "object" || just === null) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `justification is required before calling start_*. Provide: impact (${impactKeys}), confidence (0.0–1.0), pattern, handoff.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        const impact: unknown = Reflect.get(just, "impact");
+        const confidence: unknown = Reflect.get(just, "confidence");
+        const impactKey =
+          typeof impact === "string" && impact in CONFIDENCE_THRESHOLD ? impact : undefined;
+
+        if (!impactKey) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `impact "${String(impact)}" is invalid. Use: ${impactKeys}.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        const entry = CONFIDENCE_THRESHOLD[impactKey];
+        if (entry.threshold === Infinity) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Low-impact handoffs must not use start_*. Share via message instead, or raise the impact level if genuinely consequential.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        if (typeof confidence !== "number" || confidence < entry.threshold) {
+          const hookSpecificOutput: PreToolUseHookSpecificOutput = {
+            hookEventName: "PreToolUse",
+            permissionDecision: "deny",
+            permissionDecisionReason: `Confidence ${typeof confidence === "number" ? confidence : "missing"} is below the ${impactKey} threshold of ${entry.threshold}. Raise confidence or reconsider this handoff.`,
+          };
+          return { hookSpecificOutput };
+        }
+
+        return { continue: true };
+      },
+    ],
+  };
+}
+
 // ─── Convenience wrappers ─────────────────────────────────────────────────────
 
 /** Hooks for Dove's top-level query() in route.ts. */
@@ -397,7 +467,10 @@ export function buildDoveHooks(
     disallowedTools: options.disallowedTools,
     readOnly: options.readOnly,
   });
-
+  const startMatcher = agents.map((a) => `mcp__agents__${doveStartToolName(a)}`).join("|");
+  if (startMatcher) {
+    hooks.PreToolUse = [...(hooks.PreToolUse ?? []), makeJustificationGateHook(startMatcher)];
+  }
   const awaitMatcher = agents.map((a) => `mcp__agents__${doveAwaitToolName(a)}`).join("|");
   if (awaitMatcher) {
     hooks.PostToolUse = [

@@ -514,10 +514,12 @@ describe("buildLinksReminder", () => {
     expect(reminder).toContain("alpha completed");
     expect(reminder).toContain("start_beta / await_beta");
     expect(reminder).toContain("[70, 95]");
-    expect(reminder).toContain("beta (chat)");
+    expect(reminder).toContain(`Call start_beta with strategy="chat" for beta`);
+    expect(reminder).toContain("<strategy>chat</strategy>");
     expect(reminder).toContain("start_gamma / await_gamma");
     expect(reminder).toContain("[50, 90]");
-    expect(reminder).toContain("gamma (escalation)");
+    expect(reminder).toContain(`Call start_gamma with strategy="escalation" for gamma`);
+    expect(reminder).toContain("<strategy>escalation</strategy>");
   });
 
   it("selects per-strategy pattern text", async () => {
@@ -532,6 +534,23 @@ describe("buildLinksReminder", () => {
     const reminder = (await buildLinksReminder("alpha", agents))!;
     // REVIEW_PATTERNS contains "reviews finished output"
     expect(reminder).toContain("reviews finished output");
+  });
+
+  it("excludes the current orchestrator agent from the reminder (self-reference via dual back-link)", async () => {
+    vi.mocked(resolveLinkedTargets).mockReturnValueOnce([
+      { targetName: "beta", strategy: "chat" as const, handoffScoreMin: 0, handoffScoreMax: 100 },
+      { targetName: "alpha", strategy: "chat" as const, handoffScoreMin: 0, handoffScoreMax: 100 },
+    ]);
+    const reminder = (await buildLinksReminder("beta", agents, "alpha"))!;
+    expect(reminder).toContain("start_beta / await_beta");
+    expect(reminder).not.toContain("start_alpha / await_alpha");
+  });
+
+  it("returns null when all outgoing links are excluded", async () => {
+    vi.mocked(resolveLinkedTargets).mockReturnValueOnce([
+      { targetName: "alpha", strategy: "chat" as const, handoffScoreMin: 0, handoffScoreMax: 100 },
+    ]);
+    expect(await buildLinksReminder("beta", agents, "alpha")).toBeNull();
   });
 });
 
