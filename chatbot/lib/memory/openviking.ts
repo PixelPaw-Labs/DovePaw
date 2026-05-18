@@ -131,7 +131,7 @@ async function ensureNamespace(port: number, groupContextId: string): Promise<vo
   });
   const bodySchema = z.object({
     status: z.string().optional(),
-    error: z.object({ code: z.string().optional(), message: z.string().optional() }).optional(),
+    error: z.object({ code: z.string().optional(), message: z.string().optional() }).nullish(),
   });
   const raw: unknown = await response.json().catch(() => undefined);
   const body = bodySchema.safeParse(raw).data;

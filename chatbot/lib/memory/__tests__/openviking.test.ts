@@ -209,6 +209,23 @@ describe("OpenVikingMemoryProvider.initGroup", () => {
     fetchSpy.mockRestore();
   });
 
+  it("succeeds when sidecar returns status:ok with error:null (real sidecar response shape)", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          status: "ok",
+          result: { uri: "viking://agent/grp-xyz/memories" },
+          error: null,
+          telemetry: null,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const provider = new OpenVikingMemoryProvider(51234);
+    await expect(provider.initGroup("grp-xyz", "/tmp")).resolves.toBeUndefined();
+    fetchSpy.mockRestore();
+  });
+
   it("throws on any non-ALREADY_EXISTS error", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
