@@ -43,7 +43,7 @@ export function buildSubAgentHooks(
   isDirectChat?: boolean,
   behaviorReminder?: string,
   groupContextId?: string,
-  groupWorkspacePath?: string,
+  groupMomentsPath?: string,
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   const notifHooks =
     notifications && agentDisplayName
@@ -111,8 +111,8 @@ export function buildSubAgentHooks(
       ...(isGroupMode
         ? [
             makeGroupScriptAwaitToneHook(manifestKey),
-            ...(groupContextId && groupWorkspacePath
-              ? [makeGroupMomentSaveHook(groupContextId, groupWorkspacePath)]
+            ...(groupContextId && groupMomentsPath
+              ? [makeGroupMomentSaveHook(groupContextId, groupMomentsPath)]
               : []),
           ]
         : []),

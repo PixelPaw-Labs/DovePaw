@@ -91,12 +91,7 @@ import {
   doveStartToolName,
   doveAwaitToolName,
 } from "@/lib/query-tools";
-import {
-  makeInitGroupTool,
-  makeStartGroupTool,
-  doveInitGroupToolName,
-  doveStartGroupToolName,
-} from "@/lib/group-tools";
+import { makeStartGroupTool, doveStartGroupToolName } from "@/lib/group-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
 import { upsertSession, setActiveSession } from "@/lib/db";
@@ -807,142 +802,11 @@ describe("makeAwaitTool — group-done detection", () => {
   });
 });
 
-// ─── doveInitGroupToolName ────────────────────────────────────────────────────
-
-describe("doveInitGroupToolName", () => {
-  it("slugifies the group name", () => {
-    expect(doveInitGroupToolName("PixelPaw Labs")).toBe("init_group_pixelpaw_labs");
-    expect(doveInitGroupToolName("Review Chain!")).toBe("init_group_review_chain");
-    expect(doveInitGroupToolName("  spaced  ")).toBe("init_group_spaced");
-  });
-});
-
 // ─── doveStartGroupToolName ───────────────────────────────────────────────────
 
 describe("doveStartGroupToolName", () => {
   it("slugifies the group name", () => {
     expect(doveStartGroupToolName("PixelPaw Labs")).toBe("start_group_pixelpaw_labs");
-  });
-});
-
-// ─── makeInitGroupTool ────────────────────────────────────────────────────────
-
-describe("makeInitGroupTool", () => {
-  const GROUP = {
-    name: "PixelPaw Labs",
-    description: "Simulates Envato's business",
-    members: ["agent-a", "agent-b", "agent-c"],
-  };
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    vi.mocked(readPortsManifest).mockReturnValue({ openviking: 51234 } as any);
-    const { getMemoryProvider } = await import("@/lib/memory");
-    const { MarkdownMemoryProvider } = await import("@/lib/memory/markdown");
-    vi.mocked(getMemoryProvider).mockResolvedValue(new MarkdownMemoryProvider());
-  });
-
-  it("registers a tool named init_group_<slug>", () => {
-    captureTools(() => makeInitGroupTool(GROUP, []));
-    expect(vi.mocked(tool)).toHaveBeenCalledWith(
-      doveInitGroupToolName(GROUP.name),
-      expect.any(String),
-      expect.any(Object),
-      expect.any(Function),
-    );
-  });
-
-  it("description embeds group description and member names", () => {
-    captureTools(() => makeInitGroupTool(GROUP, []));
-    const desc = vi.mocked(tool).mock.calls[0][1] as string;
-    expect(desc).toContain(GROUP.description);
-    expect(desc).toContain("agent-a");
-  });
-
-  it("returns groupWorkspacePath, groupContextId, and groupName", async () => {
-    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
-    const handler = captured[doveInitGroupToolName(GROUP.name)];
-    const result = await handler({});
-    const sc = result.structuredContent as {
-      groupWorkspacePath: string;
-      groupContextId: string;
-      groupName: string;
-    };
-    expect(sc.groupName).toBe(GROUP.name);
-    expect(typeof sc.groupWorkspacePath).toBe("string");
-    expect(typeof sc.groupContextId).toBe("string");
-  });
-
-  it("calls upsertSession and setActiveSession with group agentId", async () => {
-    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
-    const handler = captured[doveInitGroupToolName(GROUP.name)];
-    const result = await handler({});
-    const sc = result.structuredContent as { groupContextId: string };
-    expect(vi.mocked(upsertSession)).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: sc.groupContextId,
-        agentId: `group:${GROUP.name}`,
-        status: "running",
-      }),
-    );
-    expect(vi.mocked(setActiveSession)).toHaveBeenCalledWith(
-      `group:${GROUP.name}`,
-      sc.groupContextId,
-    );
-  });
-
-  it("delegates per-group bootstrap to the active memory provider", async () => {
-    const { getMemoryProvider } = await import("@/lib/memory");
-    const initGroup = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(getMemoryProvider).mockResolvedValue({
-      initGroup,
-      deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReadReminder: () => "",
-      buildSaveReminder: () => "",
-    });
-    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
-    const handler = captured[doveInitGroupToolName(GROUP.name)];
-    const result = await handler({});
-    const sc = result.structuredContent as {
-      groupContextId: string;
-      groupWorkspacePath: string;
-    };
-    expect(initGroup).toHaveBeenCalledWith(sc.groupContextId, sc.groupWorkspacePath);
-  });
-
-  it("falls back to mkdir(moments) when the provider's initGroup rejects", async () => {
-    const { getMemoryProvider } = await import("@/lib/memory");
-    vi.mocked(getMemoryProvider).mockResolvedValue({
-      initGroup: vi.fn().mockRejectedValue(new Error("provider down")),
-      deleteGroup: vi.fn().mockResolvedValue(undefined),
-      buildReadReminder: () => "",
-      buildSaveReminder: () => "",
-    });
-    const captured = captureTools(() => makeInitGroupTool(GROUP, []));
-    const handler = captured[doveInitGroupToolName(GROUP.name)];
-    const result = await handler({});
-    const { groupWorkspacePath } = result.structuredContent as { groupWorkspacePath: string };
-    const { existsSync } = await import("node:fs");
-    expect(existsSync(`${groupWorkspacePath}/moments`)).toBe(true);
-  });
-
-  it("writes members/roster.md listing each member's displayName and description", async () => {
-    const memberDefs = [
-      { name: "agent-a", displayName: "Agent A", description: "Does A things" },
-      { name: "agent-b", displayName: "Agent B", description: "Does B things" },
-    ];
-    const captured = captureTools(() => makeInitGroupTool(GROUP, memberDefs as any));
-    const handler = captured[doveInitGroupToolName(GROUP.name)];
-    const result = await handler({});
-    const { groupWorkspacePath } = result.structuredContent as { groupWorkspacePath: string };
-
-    const { readFile } = await import("node:fs/promises");
-    const roster = await readFile(`${groupWorkspacePath}/members/roster.md`, "utf8");
-    expect(roster).toContain("Agent A");
-    expect(roster).toContain("Does A things");
-    expect(roster).toContain("Agent B");
-    expect(roster).toContain("Does B things");
-    expect(roster).toContain("Do not involve any agent outside this list.");
   });
 });
 
@@ -984,14 +848,100 @@ describe("makeStartGroupTool", () => {
     );
   });
 
-  it("forwards isGroupChat metadata to each member", async () => {
+  it("generates groupContextId and groupMomentsPath internally", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    const result = await handler({
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
+    });
+    const sc = result.structuredContent as { groupContextId: string };
+    expect(typeof sc.groupContextId).toBe("string");
+  });
+
+  it("calls upsertSession and setActiveSession with group agentId", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    const result = await handler({
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
+    });
+    const sc = result.structuredContent as { groupContextId: string };
+    expect(vi.mocked(upsertSession)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: sc.groupContextId,
+        agentId: `group:${GROUP.name}`,
+        status: "running",
+      }),
+    );
+    expect(vi.mocked(setActiveSession)).toHaveBeenCalledWith(
+      `group:${GROUP.name}`,
+      sc.groupContextId,
+    );
+  });
+
+  it("delegates per-group bootstrap to the active memory provider", async () => {
+    const { getMemoryProvider } = await import("@/lib/memory");
+    const initGroup = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(getMemoryProvider).mockResolvedValue({
+      initGroup,
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
+    });
     const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
+    });
+    expect(initGroup).toHaveBeenCalledWith(expect.any(String), expect.any(String));
+  });
+
+  it("falls back to mkdir(moments) when the provider's initGroup rejects", async () => {
+    const { getMemoryProvider } = await import("@/lib/memory");
+    vi.mocked(getMemoryProvider).mockResolvedValue({
+      initGroup: vi.fn().mockRejectedValue(new Error("provider down")),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      buildReadReminder: () => "",
+      buildSaveReminder: () => "",
+    });
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
+    });
+    // upsertSession is still called (session row created before dispatch)
+    expect(vi.mocked(upsertSession)).toHaveBeenCalledWith(
+      expect.objectContaining({ agentId: `group:${GROUP.name}` }),
+    );
+  });
+
+  it("writes members/roster.md listing each member's displayName and description", async () => {
+    const memberDef = {
+      ...AGENT,
+      name: "test-agent",
+      displayName: "Test Agent",
+      description: "A test agent for unit tests",
+    };
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [memberDef as any]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
+    });
+    // upsertSession receives workspacePath = groupMomentsPath
+    const sessionCall = vi.mocked(upsertSession).mock.calls[0][0];
+    const groupMomentsPath = sessionCall.workspacePath as string;
+
+    const { readFile } = await import("node:fs/promises");
+    const roster = await readFile(`${groupMomentsPath}/members/roster.md`, "utf8");
+    expect(roster).toContain("Test Agent");
+    expect(roster).toContain("A test agent for unit tests");
+    expect(roster).toContain("Do not involve any agent outside this list.");
+  });
+
+  it("forwards isGroupChat metadata and groupMomentsPath to each member", async () => {
+    const captured = captureTools(() => makeStartGroupTool(GROUP, [AGENT]));
+    const handler = captured[doveStartGroupToolName(GROUP.name)];
+    await handler({
+      members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
     });
     const client =
       await vi.mocked(ClientFactory).mock.results[0].value.createFromUrl.mock.results[0].value;
@@ -1000,7 +950,7 @@ describe("makeStartGroupTool", () => {
       unknown
     >;
     expect(sentMetadata.isGroupChat).toBe(true);
-    expect(sentMetadata.groupWorkspacePath).toBe("/ws/group");
+    expect(typeof sentMetadata.groupMomentsPath).toBe("string");
   });
 
   it("returns memberTaskIds in structuredContent", async () => {
@@ -1008,16 +958,13 @@ describe("makeStartGroupTool", () => {
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
       members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
     });
     const sc = result.structuredContent as {
       memberTaskIds: Record<string, string>;
       groupContextId: string;
     };
     expect(sc.memberTaskIds).toEqual({ test_agent: "task-grp-1" });
-    expect(sc.groupContextId).toBe("gc-1");
+    expect(typeof sc.groupContextId).toBe("string");
   });
 
   it("publishes a sender event per member, prefixed with the member's displayName", async () => {
@@ -1034,19 +981,18 @@ describe("makeStartGroupTool", () => {
       displayName: "Bob",
     };
     vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
-    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
+    const captured = captureTools(() =>
+      makeStartGroupTool({ ...GROUP, members: ["agent-a", "agent-b"] }, [a, b]),
+    );
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       members: [
         { name: "agent-a", relevanceScore: 95, instruction: "do A" },
         { name: "agent-b", relevanceScore: 95, instruction: "do B" },
       ],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
     });
     expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
-      "gc-1",
+      expect.any(String),
       expect.objectContaining({
         type: "group_member",
         agentId: "dove",
@@ -1056,7 +1002,7 @@ describe("makeStartGroupTool", () => {
       }),
     );
     expect(vi.mocked(publishSessionEvent)).toHaveBeenCalledWith(
-      "gc-1",
+      expect.any(String),
       expect.objectContaining({
         type: "group_member",
         agentId: "dove",
@@ -1071,16 +1017,15 @@ describe("makeStartGroupTool", () => {
     const a: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
     const b: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
     vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
-    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
+    const captured = captureTools(() =>
+      makeStartGroupTool({ ...GROUP, members: ["agent-a", "agent-b"] }, [a, b]),
+    );
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       members: [
         { name: "agent-a", relevanceScore: 95, instruction: "investigate logs" },
         { name: "agent-b", relevanceScore: 95, instruction: "check the dashboard" },
       ],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
     });
     // Collect all sendMessageStream calls across both client instances and assert
     // each tailored instruction made it into exactly one dispatched message.
@@ -1103,14 +1048,11 @@ describe("makeStartGroupTool", () => {
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     await handler({
       members: [{ name: "test-agent", relevanceScore: 100, instruction: "do something" }],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
     });
     // Flush microtasks so any drain .then() callbacks fire
     await new Promise((r) => setTimeout(r, 0));
     expect(vi.mocked(publishSessionEvent)).not.toHaveBeenCalledWith(
-      "gc-1",
+      expect.any(String),
       expect.objectContaining({ type: "group_member", agentId: "test-agent", done: true }),
     );
   });
@@ -1124,7 +1066,9 @@ describe("makeStartGroupTool", () => {
       agent_b: 9002,
       agent_c: 9003,
     } as any);
-    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b, c]));
+    const captured = captureTools(() =>
+      makeStartGroupTool({ ...GROUP, members: ["agent-a", "agent-b", "agent-c"] }, [a, b, c]),
+    );
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
       members: [
@@ -1132,9 +1076,6 @@ describe("makeStartGroupTool", () => {
         { name: "agent-b", relevanceScore: 85, instruction: "task B" },
         { name: "agent-c", relevanceScore: 92, instruction: "task C" },
       ],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
     });
     const sc = result.structuredContent as { memberTaskIds: Record<string, string> };
     expect(Object.keys(sc.memberTaskIds).toSorted()).toEqual(["agent_a", "agent_c"]);
@@ -1144,16 +1085,15 @@ describe("makeStartGroupTool", () => {
     const a: AgentDef = { ...AGENT, name: "agent-a", manifestKey: "agent_a" };
     const b: AgentDef = { ...AGENT, name: "agent-b", manifestKey: "agent_b" };
     vi.mocked(readPortsManifest).mockReturnValue({ agent_a: 9001, agent_b: 9002 } as any);
-    const captured = captureTools(() => makeStartGroupTool(GROUP, [a, b]));
+    const captured = captureTools(() =>
+      makeStartGroupTool({ ...GROUP, members: ["agent-a", "agent-b"] }, [a, b]),
+    );
     const handler = captured[doveStartGroupToolName(GROUP.name)];
     const result = await handler({
       members: [
         { name: "agent-a", relevanceScore: 50, instruction: "task A" },
         { name: "agent-b", relevanceScore: 70, instruction: "task B" },
       ],
-      groupWorkspacePath: "/ws/group",
-      groupContextId: "gc-1",
-      groupName: "PixelPaw Labs",
     });
     const sc = result.structuredContent as { memberTaskIds: Record<string, string> };
     expect(Object.keys(sc.memberTaskIds)).toEqual([]);
@@ -1171,9 +1111,9 @@ describe("makeStartGroupTool", () => {
       .mocked(captured)
       .mock.calls.find((c) => c[0] === doveStartGroupToolName("PixelPaw Labs"));
     const schema = call?.[2] as unknown as {
-      members: { description?: string; _def?: { description?: string } };
+      members: { description?: string };
     };
-    return schema.members.description ?? schema.members._def?.description ?? "";
+    return schema.members.description ?? "";
   }
 
   const GROUP_3 = {

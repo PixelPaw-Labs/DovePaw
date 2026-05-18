@@ -70,7 +70,7 @@ const LABEL_MAX_LEN = 60;
 
 interface GroupChatOverrides {
   groupContextId: string;
-  groupWorkspacePath: string;
+  groupMomentsPath: string;
   groupName: string;
 }
 
@@ -82,14 +82,14 @@ function resolveGroupChatOverrides(
   metadata: Record<string, unknown> | undefined,
 ): GroupChatOverrides | null {
   if (!metadata?.isGroupChat) return null;
-  const { groupContextId, groupWorkspacePath, groupName } = metadata;
+  const { groupContextId, groupMomentsPath, groupName } = metadata;
   if (
     typeof groupContextId !== "string" ||
-    typeof groupWorkspacePath !== "string" ||
+    typeof groupMomentsPath !== "string" ||
     typeof groupName !== "string"
   )
     return null;
-  return { groupContextId, groupWorkspacePath, groupName };
+  return { groupContextId, groupMomentsPath, groupName };
 }
 
 export { SessionInfo };
@@ -187,8 +187,10 @@ export class QueryAgentExecutor {
       if (existingState) {
         // Resume existing session — reuse workspace and Claude session.
         workspace = existingState.workspace;
-      } else if (!groupOverrides) {
+      } else {
         // First message in this context — create a fresh workspace.
+        // Group members each get their own isolated workspace; shared state
+        // lives in groupMomentsPath injected via env vars / memory reminder.
         workspace = await createAgentWorkspace(
           this.def.name,
           this.def.alias,
@@ -198,8 +200,7 @@ export class QueryAgentExecutor {
         );
       }
 
-      // In group mode: cwd = shared group workspace; member has no own workspace
-      const cwd = groupOverrides?.groupWorkspacePath ?? workspace!.path;
+      const cwd = workspace.path;
 
       const agentConfig = buildAgentConfig(
         this.def,
@@ -238,7 +239,12 @@ export class QueryAgentExecutor {
             publishProgress,
             taskId,
             registry,
-            groupOverrides ? { groupContextId: groupOverrides.groupContextId } : undefined,
+            groupOverrides
+              ? {
+                  groupContextId: groupOverrides.groupContextId,
+                  groupMomentsPath: groupOverrides.groupMomentsPath,
+                }
+              : undefined,
           ),
           makeAwaitScriptTool(this.def, registry),
           ...this.mgmtTools,
@@ -326,7 +332,7 @@ export class QueryAgentExecutor {
                   isDirectChat,
                   effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
                   groupOverrides?.groupContextId,
-                  groupOverrides?.groupWorkspacePath,
+                  groupOverrides?.groupMomentsPath,
                 ),
                 abortController: this.abortController ?? undefined,
                 ...(canUseTool ? { canUseTool } : {}),

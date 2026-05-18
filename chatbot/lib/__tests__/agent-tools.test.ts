@@ -279,7 +279,7 @@ describe("makeStartScriptTool", () => {
       undefined,
       undefined,
       undefined,
-      { groupContextId: "grp-xyz-123" },
+      { groupContextId: "grp-xyz-123", groupMomentsPath: "/ws/ta-abc123" },
     ) as any;
 
     await handler({ instruction: "do work" });
@@ -314,7 +314,7 @@ describe("makeStartScriptTool", () => {
       undefined,
       undefined,
       undefined,
-      { groupContextId: "grp-xyz-123" },
+      { groupContextId: "grp-xyz-123", groupMomentsPath: "/ws/ta-abc123" },
     ) as any;
 
     await handler({ instruction: "do work" });

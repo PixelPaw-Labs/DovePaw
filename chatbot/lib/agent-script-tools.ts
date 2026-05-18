@@ -27,6 +27,8 @@ export const awaitRunScriptToolName = (manifestKey: string): string =>
 export interface GroupChatScriptOverrides {
   /** Group context ID — used as the memory provider's per-group namespace. */
   groupContextId: string;
+  /** Shared moments/roster directory path for this group. */
+  groupMomentsPath: string;
 }
 
 /** Fires the agent script in the background and returns a runId immediately. */
@@ -54,7 +56,7 @@ export function makeStartScriptTool(
     async ({ instruction = "" }) => {
       const reminder = groupChat
         ? (await getMemoryProvider()).buildReadReminder(
-            config.workspacePath,
+            groupChat.groupMomentsPath,
             groupChat.groupContextId,
           )
         : undefined;

@@ -35,12 +35,7 @@ import {
   doveStartToolName,
   doveAwaitToolName,
 } from "@/lib/query-tools";
-import {
-  makeInitGroupTool,
-  makeStartGroupTool,
-  doveInitGroupToolName,
-  doveStartGroupToolName,
-} from "@/lib/group-tools";
+import { makeStartGroupTool, doveStartGroupToolName } from "@/lib/group-tools";
 import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
@@ -161,25 +156,17 @@ export async function POST(request: Request) {
       const eligibleGroups = linksFile.groups.filter((g) => g.members.length >= 2);
       const groupTools =
         eligibleGroups.length > 0
-          ? [
-              ...eligibleGroups.map((group) =>
-                makeInitGroupTool(
-                  group,
-                  agents.filter((a) => group.members.includes(a.name)),
-                ),
-              ),
-              ...eligibleGroups.map((group) => {
-                const memberDefs = agents.filter((a) => group.members.includes(a.name));
-                return makeStartGroupTool(
-                  group,
-                  memberDefs,
-                  subprocessController.signal,
-                  backgroundTasks,
-                  doveRegistry,
-                  linksFile.links,
-                );
-              }),
-            ]
+          ? eligibleGroups.map((group) => {
+              const memberDefs = agents.filter((a) => group.members.includes(a.name));
+              return makeStartGroupTool(
+                group,
+                memberDefs,
+                subprocessController.signal,
+                backgroundTasks,
+                doveRegistry,
+                linksFile.links,
+              );
+            })
           : [];
 
       const tools = [
@@ -258,10 +245,7 @@ export async function POST(request: Request) {
                       `mcp__agents__${doveAwaitToolName(a)}`,
                     ]),
                     ...(eligibleGroups.length > 0
-                      ? eligibleGroups.flatMap((g) => [
-                          `mcp__agents__${doveInitGroupToolName(g.name)}`,
-                          `mcp__agents__${doveStartGroupToolName(g.name)}`,
-                        ])
+                      ? eligibleGroups.map((g) => `mcp__agents__${doveStartGroupToolName(g.name)}`)
                       : []),
                     ...(doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
                   ],

@@ -3,6 +3,6 @@ export interface GroupMeta {
   [key: string]: unknown;
   isGroupChat: boolean;
   groupContextId: string;
-  groupWorkspacePath: string;
+  groupMomentsPath: string;
   groupName: string;
 }
