@@ -519,13 +519,29 @@ export function buildDoveHooks(
                     : Reflect.get(input.tool_input, "groupOrchestrationScore"); // start_group_* keeps score at top level
                 if (typeof groupOrchestrationScore === "number" && groupOrchestrationScore >= 80)
                   return { continue: true };
+                const isMissing = typeof groupOrchestrationScore !== "number";
                 const hookSpecificOutput: PreToolUseHookSpecificOutput = {
                   hookEventName: "PreToolUse",
                   permissionDecision: "deny",
-                  permissionDecisionReason:
-                    `${GROUP_ORCHESTRATOR_REMINDER}\n` +
-                    `\`groupOrchestrationScore\` — orchestration behaviour score (0–100, >= 80 required): is dispatching this agent NOW the right decision per the rules above?\n` +
-                    `Not a handoff justification score (justification.confidence measures handoff quality). Current: ${typeof groupOrchestrationScore === "number" ? groupOrchestrationScore : "missing"}.`,
+                  permissionDecisionReason: isMissing
+                    ? [
+                        "`groupOrchestrationScore` is missing from your tool call.",
+                        "Before recalling — ask yourself: are you currently orchestrating a group, team chat, or team task? Have you already called `start_group_*` in this session?",
+                        "If YES — **HARD RULE, NO EXCEPTIONS:** you MUST recall this tool with the `group` field populated including `groupOrchestrationScore`.",
+                        "NEVER omit it. NEVER claim you are not in group context to skip it. NEVER invent a separate score outside the `group` field.",
+                        "If NO — you are making a plain single-agent call. Recall the tool without the `group` field.",
+                        "",
+                        GROUP_ORCHESTRATOR_REMINDER,
+                      ].join("\n")
+                    : [
+                        GROUP_ORCHESTRATOR_REMINDER,
+                        "",
+                        `Your \`groupOrchestrationScore\` is ${groupOrchestrationScore} (must be >= 80 to proceed).`,
+                        "First — ask yourself: are you currently orchestrating a group, team chat, or team task? Have you already called `start_group_*` in this session?",
+                        "If NO — you are making a plain single-agent call. Recall the tool without the `group` field.",
+                        "If YES — this is an orchestration behaviour score: are you stopping too early, and is the instruction free of pre-assigned handoffs?",
+                        "Re-read the rules above, fix any issues in your approach, then recall the tool with a score that honestly reflects your behaviour.",
+                      ].join("\n"),
                 };
                 return { hookSpecificOutput };
               },

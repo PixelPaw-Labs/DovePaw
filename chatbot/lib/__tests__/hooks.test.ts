@@ -521,7 +521,7 @@ describe("buildDoveHooks — groupOrchestrationScore gate (includeGroupReminder)
     expect(hookSpecificOutput.permissionDecisionReason).toContain("79");
   });
 
-  it("denies start_* when groupOrchestrationScore is missing", async () => {
+  it("denies start_* when groupOrchestrationScore is missing with self-reflection prompt", async () => {
     const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
       includeGroupReminder: true,
     });
@@ -535,6 +535,29 @@ describe("buildDoveHooks — groupOrchestrationScore gate (includeGroupReminder)
     };
     expect(hookSpecificOutput.permissionDecision).toBe("deny");
     expect(hookSpecificOutput.permissionDecisionReason).toContain("missing");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("start_group_*");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("HARD RULE");
+  });
+
+  it("denial for low score includes self-reflection prompt, not hard rule", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", {
+        instruction: "go",
+        group: { contextId: "ctx", groupOrchestrationScore: 50 },
+      }),
+    );
+    const { hookSpecificOutput } = result as {
+      hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string };
+    };
+    expect(hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("50");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("start_group_*");
+    expect(hookSpecificOutput.permissionDecisionReason).not.toContain("HARD RULE");
   });
 
   it("score gate is absent when includeGroupReminder is false", () => {

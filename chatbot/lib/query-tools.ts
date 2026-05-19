@@ -287,7 +287,11 @@ export function makeStartTool(
             ),
         })
         .optional()
-        .describe("Provide when starting an additional member within a group task."),
+        .describe(
+          "REQUIRED when starting a member within an active group task (you have already called start_group_* and have a groupContextId). " +
+            "NEVER omit this field in a group context — omitting it breaks the group swimlane and bypasses the orchestration score gate. " +
+            "Only omit when this is a plain single-agent call with no group context.",
+        ),
     },
     async ({ instruction, strategy, group }) => {
       const groupContextId = group?.contextId;
