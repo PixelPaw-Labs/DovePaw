@@ -12,6 +12,7 @@ import {
   buildLinksReminder,
   buildSubagentCanUseTool,
   getAwaitStatus,
+  makeJustificationGateHook,
 } from "../hooks";
 import { buildSubAgentHooks } from "../subagent-hooks";
 import { GROUP_PROMPT_REMINDER } from "@@/lib/subagent-reminder";
@@ -861,6 +862,13 @@ describe("buildSubAgentHooks — isDirectChat", () => {
       false,
     );
     expect(hooksWithGate.PreToolUse!.length).toBeGreaterThan(hooksWithoutGate.PreToolUse!.length);
+  });
+
+  it("default matcher excludes start_script_* tools", () => {
+    const gate = makeJustificationGateHook();
+    const matcher = new RegExp(gate.matcher!);
+    expect(matcher.test("mcp__agents__start_memory_dream")).toBe(true);
+    expect(matcher.test("mcp__agents__start_script_memory_dream")).toBe(false);
   });
 });
 

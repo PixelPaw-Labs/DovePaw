@@ -397,11 +397,14 @@ export function buildAgentHooks(
 // ─── Justification gate ───────────────────────────────────────────────────────
 
 /**
- * PreToolUse hook that validates justification before any start_* call.
+ * PreToolUse hook that validates justification before any start_* agent delegation call.
+ * Does not apply to start_script_* tools (those have no justification field in their schema).
  * Denies the call when justification is missing, impact is invalid, impact
  * is "low" (never hand off), or confidence is below the impact threshold.
  */
-export function makeJustificationGateHook(matcher = "mcp__agents__start_.*"): HookCallbackMatcher {
+export function makeJustificationGateHook(
+  matcher = "mcp__agents__start_(?!script_).*",
+): HookCallbackMatcher {
   const impactKeys = Object.keys(CONFIDENCE_THRESHOLD).join("|");
   return {
     matcher,
