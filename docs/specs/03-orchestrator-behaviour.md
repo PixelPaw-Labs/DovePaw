@@ -218,7 +218,7 @@ stateDiagram-v2
   Saved --> [*]
 ```
 
-Important: `cancelTask` deletes the workspace, but `STOP` (the user-facing pause) preserves it for session resume — see [MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_cancel_task_no_workspace_delete.md).
+**STOP vs DELETE workspace policy is contested.** The stated rule is _cancelTask must not delete workspace; STOP preserves for resume; only trash-icon delete wipes_. The actual code path through `QueryAgentExecutor.cancelTask → sessionManager.delete → workspace.cleanup` deletes the workspace on every cancel, including STOP. See [Spec 11 Concern 1](11-abort-pipeline.md#concern-1--★★★--stop-deletes-sub-agent-workspaces) for the full trace.
 
 ## Related
 
@@ -226,4 +226,5 @@ Important: `cancelTask` deletes the workspace, but `STOP` (the user-facing pause
 - [Spec 04 — Handoff pattern](04-handoff-pattern.md) — what the links reminder triggers next
 - [Spec 05 — A2A spawn](05-a2a-spawn.md) — the layer below `start_script_*`
 - [Spec 07 — Group vs single mode](07-group-vs-single.md) — when orchestration is delegated to `start_group_*`
+- [Spec 11 — Abort pipeline](11-abort-pipeline.md) — full STOP/DELETE/SIGTERM cascade end-to-end
 - [ADR-0009](../adr/0009-orchestrator-owned-await-chain.md) — the rationale

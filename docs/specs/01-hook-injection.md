@@ -42,7 +42,7 @@ flowchart LR
   TOOL --> POST[PostToolUse additionalContext<br/>= links / response / moments reminders]
 ```
 
-The reminder bullets all use **Bad/Correct** style ([see `MEMORY.md`](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/feedback_reminder_bad_correct_style.md)), e.g.:
+The reminder bullets all use **Bad/Correct** style — specific scenarios with backtick tool globs, never vague descriptions, e.g.:
 
 ```text
 - **Bad:** Answer from memory when an agent can provide the information.
@@ -224,7 +224,7 @@ The fresh workspace itself also gets a tiny `.claude/settings.json` containing *
 
 ## 9. MCP `structuredContent` parsing
 
-PostToolUse hooks read `tool_response` to determine `status`. SDK serialises in-process MCP `structuredContent` as a **JSON string**, while external MCP servers return objects. `getMcpStructured()` in `chatbot/lib/hooks.ts` handles both shapes — used by every await-status check (see [MEMORY.md entry](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_mcp_tool_response_json_string.md)).
+PostToolUse hooks read `tool_response` to determine `status`. SDK serialises in-process MCP `structuredContent` as a **JSON string**, while external MCP servers return objects. `getMcpStructured()` in `chatbot/lib/hooks.ts` handles both shapes — used by every await-status check.
 
 ## Related
 

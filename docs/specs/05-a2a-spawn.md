@@ -120,6 +120,75 @@ sequenceDiagram
 
 `buildSubAgentPrompt()` produces the inner system prompt — embeds persona, agent's file boundaries, and the per-agent management tool table (install/uninstall/load/unload/status/logs).
 
+## 4.1 Full chain — A2A request → agent script's first line
+
+The §4 and §5 diagrams cover the executor and the spawn separately. This one stitches them with every filesystem side effect called out in order, so a reader can answer "what exactly was written to disk between Dove's `start_<key>` and `tsx main.ts` starting?" without cross-referencing.
+
+```mermaid
+sequenceDiagram
+  participant Dove
+  participant A2A as A2A server
+  participant E as QueryAgentExecutor
+  participant WS as createAgentWorkspace
+  participant Prov as MemoryProvider
+  participant SDK as Sub-agent query()
+  participant SS as start_script_self tool
+  participant Clone as recloneReposIntoWorkspace
+  participant FS as filesystem
+  participant Proc as child tsx main.ts
+
+  Dove->>A2A: start_key — sendMessageStream with senderAgentId, extraMetadata
+  A2A->>E: execute(reqCtx, eventBus)
+  E->>WS: createAgentWorkspace(name, alias, taskId)
+  WS->>FS: mkdir workspaces/.agent/alias-id8/
+  WS->>FS: write workspace/.claude/settings.json — ScheduleWakeup → sleep + deny (NO Karpathy here)
+  WS->>FS: cp dovepaw-browser skill into workspace/.claude/skills/
+
+  alt group mode (extraMetadata.isGroupChat)
+    E->>Prov: provider.init(groupContextId, groupMomentsPath)
+    Prov->>FS: OpenViking: HTTP mkdir viking://agent/id/memories<br/>OR Markdown: mkdir groupMomentsPath/moments/
+    Note over E,FS: roster.md + members/ dir written by makeStartGroupTool BEFORE this point
+  end
+
+  E->>E: buildAgentConfig (extraEnv = security + DOVEPAW_A2A_PORT + AGENT_WORKSPACE + REPO_LIST)
+  E->>E: resolveLinkedTools (empty in group OR worker mode)
+  E->>SDK: query({ cwd=workspace, env, hooks: buildSubAgentHooks, systemPrompt: buildSubAgentPrompt })
+
+  SDK->>SS: start_script_self(instruction)
+  SS->>Prov: buildReadReminder(workspacePath OR groupMomentsPath, contextId)
+  alt OpenViking active
+    Prov->>FS: write workspacePath/memory.sh (mode 0755) — curl wrapper around HTTP API
+    Prov-->>SS: reminder = "bash workspacePath/memory.sh read topic"
+  else Markdown active
+    Prov-->>SS: reminder = "read workspacePath/moments/"
+  end
+
+  SS->>Clone: recloneReposIntoWorkspace(workspace, repoSlugs)
+  loop per repo
+    Clone->>FS: rm -rf workspace/repo (idempotent)
+    Clone->>FS: gh repo clone slug workspace/repo
+    Clone->>FS: write workspace/repo/.claude/settings.local.json<br/>permissions + UserPromptSubmit Karpathy (base64-inlined) + PermissionRequest auto-allow
+    Clone->>FS: cp dovepaw-browser skill into workspace/repo/.claude/skills/
+  end
+
+  SS->>SS: extraEnv += DOVEPAW_TASK_ID, REPO_LIST=cloned paths, DOVE_MEMORY_REMINDER=reminder text
+  SS->>Proc: spawn(tsx, [scriptPath, instruction], { cwd: workspace, env, detached:true })
+  Note over Proc: AgentRunner reads DOVE_MEMORY_REMINDER and appends to system prompt of any nested Claude CLI invocation
+```
+
+The disk-write order, top to bottom, on a fresh group-mode invocation with OpenViking active and one repo to clone:
+
+1. `workspace/` (mkdir)
+2. `workspace/.claude/settings.json` (ScheduleWakeup hook only)
+3. `workspace/.claude/skills/dovepaw-browser/` (skill seed)
+4. OpenViking namespace `viking://agent/<contextId>/memories` (HTTP, not disk)
+5. `workspace/memory.sh` (OpenViking provider only)
+6. `workspace/<repo>/` (gh clone)
+7. `workspace/<repo>/.claude/settings.local.json` (Karpathy + permissions + PermissionRequest)
+8. `workspace/<repo>/.claude/skills/dovepaw-browser/` (skill seed)
+
+The group-only artifacts (`groupMomentsPath/members/roster.md`, `groupMomentsPath/moments/`) live in a _separate_ directory — the group moments workspace — written by `makeStartGroupTool` before any member's `QueryAgentExecutor.execute()` runs. See [Spec 07 §4](07-group-vs-single.md).
+
 ## 5. `start_script_<self>` → spawn.ts
 
 ```mermaid
@@ -240,9 +309,23 @@ stateDiagram-v2
 
 `STOP` (user-pause) does **not** delete the workspace — only the trash-icon delete cascades to `SessionManager.delete()`.
 
-## 10. Workspace hooks (every clone)
+## 10. Workspace hooks — two distinct surfaces
 
-Inside the workspace's `.claude/settings.json`:
+The per-task workspace dir and the repo clones inside it get **different** `.claude/` configs. Confusing the two is a common reading error, so this section keeps them strictly separated.
+
+```mermaid
+flowchart TB
+  ws["Per-task workspace dir<br/>~/.dovepaw/workspaces/.&lt;agent&gt;/&lt;alias&gt;-&lt;id8&gt;/<br/>(created by createAgentWorkspace → writeWorkspaceSettings)"]
+  ws --> wssettings[".claude/settings.json<br/>outputStyle: Sub-agent<br/>PreToolUse ScheduleWakeup → python sleep + deny<br/>NO Karpathy hook here"]
+  ws --> clone1["repo clone 1/<br/>(written by recloneReposIntoWorkspace → writeWorkspacePermissions)"]
+  ws --> clone2["repo clone 2/<br/>(same)"]
+  clone1 --> c1settings[".claude/settings.local.json<br/>permissions.allow: Write/**, Edit/**, Bash(*)<br/>UserPromptSubmit → base64-inlined Karpathy script<br/>PermissionRequest Edit|Write → auto-allow"]
+  clone2 --> c2settings[".claude/settings.local.json<br/>same as clone 1"]
+```
+
+### Workspace dir — `<workspace>/.claude/settings.json`
+
+Written once at workspace creation by `writeWorkspaceSettings(workspacePath)`:
 
 ```text
 {
@@ -259,13 +342,21 @@ Inside the workspace's `.claude/settings.json`:
 }
 ```
 
-Inside each cloned **repo's** `.claude/settings.local.json` (written by `writeWorkspacePermissions`):
+This is the **only** hook the workspace itself owns. The Karpathy `UserPromptSubmit` hook is **not** present at this layer.
+
+### Repo clone — `<workspace>/<repo-name>/.claude/settings.local.json`
+
+Written by `writeWorkspacePermissions(clonePath)` after each `gh repo clone`:
 
 - `permissions.allow`: `Write(/**)`, `Edit(/**)`, `Bash(*)`
-- `UserPromptSubmit` → base64-embedded Karpathy script (no relative path)
-- `PermissionRequest Edit|Write` → auto-allow (bypass `.claude/` self-edit protection)
+- `UserPromptSubmit` → Karpathy script inlined as `echo <base64> | base64 -d | bash` (path-independent, survives the clone being copied anywhere)
+- `PermissionRequest` matching `Edit|Write` → auto-allow (the only way to bypass Claude Code's hardcoded `.claude/` self-edit block — see [upstream issue 37765](https://github.com/anthropics/claude-code/issues/37765))
 
-These are why nested Claude CLI invocations inside an agent script's repo clones can write freely without per-call prompts.
+These settings exist so nested Claude CLI invocations the agent script makes inside its clones can write freely without per-call permission prompts, _and_ still get the Karpathy reminder at every user turn inside that nested session.
+
+### Sub-agent's own `query()` call — neither
+
+The outer sub-agent SDK call inside `QueryAgentExecutor` reads neither of the above. Its hooks come from `buildSubAgentHooks` directly (see [Spec 01](01-hook-injection.md)). `DOVEPAW_SUBAGENT=1` is set in the spawn env, which short-circuits the Karpathy shell script even if it ran.
 
 ## 11. Cancellation
 

@@ -44,7 +44,7 @@ flowchart TB
 - **`DovePaw/CLAUDE.md`** is a symlink to `AGENTS.md` — the architecture overview that every Dove session loads automatically (Dove's `query()` is invoked with `cwd: AGENTS_ROOT`). Editing the file propagates to every future session at next start, no code change required. This is the cheapest "memory" channel in the system.
 - **Sub-agent sessions do not inherit `DovePaw/CLAUDE.md` by default** because their cwd is the per-task workspace dir, not `AGENTS_ROOT`. The agent's persona, file boundaries, and management tool table are baked into the system prompt explicitly by `buildSubAgentPrompt()` ([Spec 03 §6](03-orchestrator-behaviour.md)). The user's `~/.claude/CLAUDE.md` is still loaded because it is cwd-independent.
 - **Workspace clones get a per-clone `.claude/settings.local.json`** written by `writeWorkspacePermissions` ([Spec 05 §10](05-a2a-spawn.md)). It inlines the Karpathy `SessionStart` hook as a base64-embedded shell script — so the harness-level reminder is preserved inside isolated repo clones too, where the repo's own `CLAUDE.md` may differ from DovePaw's.
-- **Sub-agent session continuity** uses `subagentSessionId` stored in `SessionManager` and passed to `query({ resume })`. The Claude Agent SDK's session log is the load-bearing primitive — DovePaw only stores the pointer, not the turn content. Restoring the workspace dir on the same OS path is what makes resume work; see [MEMORY.md note](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_claude_cli_continue_cwd.md).
+- **Sub-agent session continuity** uses `subagentSessionId` stored in `SessionManager` and passed to `query({ resume })`. The Claude Agent SDK's session log is the load-bearing primitive — DovePaw only stores the pointer, not the turn content. Restoring the workspace dir on the same OS path is what makes resume work — `claude -c` only resumes when both invocations share the same cwd.
 - **The `MemoryProvider` interface is intentionally narrow.** It owns **only** the multi-agent shared scratch that has no Claude Code equivalent. Single-agent recall is `--resume` + auto-memory; cross-session knowledge is project `CLAUDE.md` + auto-memory; behavioural guardrails are `SessionStart` `additionalContext`. None of these belong in `MemoryProvider`.
 
 ## 2. Three storage classes
@@ -84,16 +84,34 @@ classDiagram
     -proc?: ChildProcess
     boot(port) Promise~OpenVikingMemoryProvider~$
     shutdown(): SIGTERM child + await exit
-    init: ov mkdir viking://agent/<id>/moments
-    delete: ov delete-resource viking://agent/<id>
-    buildReadReminder: "ov find <topic> --agent-id <id>"
-    buildSaveReminder: "ov add-resource viking://agent/<id>/moments/<slug>"
-    rosterReadReminder: "MUST read workspace/members/roster.md"
+    init: HTTP mkdir viking://agent/contextId/memories
+    delete: HTTP DELETE viking://agent/contextId
+    buildReadReminder: SIDE EFFECT writes workspace/memory.sh, then reminder = bash memory.sh read topic
+    buildSaveReminder: bash memory.sh save name moment
+    rosterReadReminder: MUST read workspace/members/roster.md
   }
 
   MemoryProvider <|.. MarkdownMemoryProvider
   MemoryProvider <|.. OpenVikingMemoryProvider
 ```
+
+### `memory.sh` — the OpenViking-only workspace wrapper
+
+When `buildReadReminder` runs on `OpenVikingMemoryProvider`, it has a **side effect**: it writes a small `bash` script to `<workspacePath>/memory.sh` (mode `0755`). The script wraps two OpenViking HTTP endpoints — `read` → `POST /api/v1/search/find`, `save` → open session, post message, commit. The reminder text the agent reads is `bash <workspacePath>/memory.sh read <topic>` (and `save`).
+
+| Active provider            | What's written into the workspace                                 | Reminder the agent sees                                                                                 |
+| -------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `MarkdownMemoryProvider`   | nothing (no script) — `moments/` dir already exists from `init()` | "read `<workspace>/moments/`" / "write `.md` files to `<workspace>/moments/`"                           |
+| `OpenVikingMemoryProvider` | `<workspace>/memory.sh` (regenerated on every script invocation)  | "bash `<workspace>/memory.sh` read `<topic>`" / "bash `<workspace>/memory.sh` save `<name>` `<moment>`" |
+
+**The script is written for both solo and group sub-agents** — anywhere `makeStartScriptTool` runs and calls `provider.buildReadReminder`. The only difference is _where_ the script lands:
+
+| Mode                | `workspacePath` passed in                                                         | `memory.sh` location                           |
+| ------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Solo agent script   | `config.workspacePath` (per-task `~/.dovepaw/workspaces/.<agent>/<alias>-<id8>/`) | per-task workspace cwd                         |
+| Group member script | `groupChat.groupMomentsPath` (`~/.dovepaw/workspaces/<group-slug>-<id8>/`)        | group moments workspace, shared by all members |
+
+So `memory.sh` is not a group artifact — it's a provider artifact. Switching the active provider to Markdown means no `memory.sh` exists in either mode.
 
 ## 4. `getMemoryProvider()` resolution (per-call)
 
@@ -194,7 +212,7 @@ Core rules:
 Preferred pattern: [thing] [action] [reason]. [next step].
 ```
 
-Trigger condition (when to write) lives in the per-call reminder — the constant itself owns only the _style_ rules ([MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_pattern_constant_style_only.md)).
+Trigger condition (when to write) lives in the per-call reminder — the constant itself owns only the _style_ rules.
 
 ## 8. Failure modes & defence in depth
 

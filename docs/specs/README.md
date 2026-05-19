@@ -20,6 +20,8 @@ End-to-end specifications for the major runtime flows in DovePaw. Each spec cove
 | 7   | [Group vs single agent mode](07-group-vs-single.md)           | `start_group_*`, topology fallback (ADR-0010), shared workspace, member completion counter                      |
 | 8   | [Plugin lifecycle & agent registry](08-plugin-lifecycle.md)   | `dovepaw-plugin.json`, symlinked agent.json, fresh-install seeding, sync/update, scheduler                      |
 | 9   | [Agent links & canvas routing](09-agent-links-canvas.md)      | Link topology storage, transitive BFS, the canvas geometry helpers                                              |
+| 10  | [UI surfaces](10-ui-surfaces.md)                              | Chat page, settings pages, dialogs, swimlane, SSE event taxonomy — **includes Bugs / flaws / open concerns**    |
+| 11  | [Abort pipeline](11-abort-pipeline.md)                        | STOP vs DELETE end-to-end, SIGTERM/exit, group cascade — **includes Bugs / flaws / open concerns**              |
 
 ---
 

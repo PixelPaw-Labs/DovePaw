@@ -155,7 +155,7 @@ sequenceDiagram
   Pub-->>U: closes group session
 ```
 
-**Never filter group pool events by `event.text` truthiness** — `done:true` may carry empty text and must pass through to clear bubble IDs ([MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_group_chat_done_event_filter.md)).
+**Never filter group pool events by `event.text` truthiness** — `done:true` may carry empty text and must pass through to clear bubble IDs.
 
 ## 8. Group-orchestrator score gate (Spec 01 cross-ref)
 

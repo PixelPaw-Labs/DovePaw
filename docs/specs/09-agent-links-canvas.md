@@ -33,7 +33,7 @@ classDiagram
 - Read/write in [`lib/agent-links.ts`](../../lib/agent-links.ts).
 - Synced via `pushConfig()` on every write.
 - Legacy string-only group entries are migrated on read by the union schema (`agentGroupInputSchema`).
-- **Identity** for a link is the `(source, target, strategy)` tuple — the same pair can have multiple strategies. PATCH/DELETE must include strategy ([MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_agent_link_strategy_identity.md)).
+- **Identity** for a link is the `(source, target, strategy)` tuple — the same pair can have multiple strategies. PATCH/DELETE must include strategy.
 
 ## 2. Link resolution
 
@@ -164,7 +164,7 @@ Edits are **whole-file** writes (no per-link PATCH currently). The UI assembles 
 
 ## 8. Inter-agent link reachability + heartbeat
 
-For direct-chat mini-orchestrator mode ([Spec 03](03-orchestrator-behaviour.md)), `resolveLinkedTools` filters to currently-online agents only. Online is checked via `resolveAgentPort(manifestKey) !== null`. Optionally a heartbeat server can be consulted (per [MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_agent_links_global_file.md)). The links file itself is the source of truth for _topology_; runtime port lookup determines _availability_.
+For direct-chat mini-orchestrator mode ([Spec 03](03-orchestrator-behaviour.md)), `resolveLinkedTools` filters to currently-online agents only. Online is checked via `resolveAgentPort(manifestKey) !== null`; optionally a heartbeat server can be consulted. The links file itself is the source of truth for _topology_; runtime port lookup determines _availability_.
 
 ## Related
 

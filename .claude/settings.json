@@ -17,6 +17,13 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Bash(*git commit*)",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-commit-spec.sh",
+            "timeout": 30,
+            "statusMessage": "Checking spec drift..."
+          },
+          {
+            "type": "command",
             "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-commit.sh",
             "timeout": 180,
             "statusMessage": "Checking format and lint..."

@@ -145,7 +145,7 @@ Only enabled when `userMessage.metadata.directUserChat === true`. Worker-mode su
 
 ## 7. Notes on `canUseTool` reliability
 
-`canUseTool` is **not** invoked for every tool call — the SDK skips it when `permissionMode` permits the action. This means `canUseTool` cannot be relied on as a security gate. **PreToolUse hooks are the only reliable gate** (see [MEMORY.md entry](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/feedback_cantoolusecall_unreliable.md)). All deny decisions for security live in `buildAgentHooks`, never in `canUseTool`.
+`canUseTool` is **not** invoked for every tool call — the SDK skips it when `permissionMode` permits the action. This means `canUseTool` cannot be relied on as a security gate. **PreToolUse hooks are the only reliable gate.** All deny decisions for security live in `buildAgentHooks`, never in `canUseTool`.
 
 ## 8. Always-disallowed tools (every mode, every agent)
 

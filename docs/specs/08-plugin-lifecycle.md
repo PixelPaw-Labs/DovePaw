@@ -136,7 +136,7 @@ Three classes of agent in this scheme:
 | **Tmp / session** | `~/.dovepaw/tmp/<name>/agent.json`                                                  | Dove at runtime (via `/sub-agent-builder` skill) |
 | **Local-dev**     | `agent-local/` symlinked into `~/.dovepaw/plugins/` by `npm install`                | Developer                                        |
 
-`readAllAgentConfigEntries()` combines permanent + tmp (tmp wins on duplicate name) — that's what every UI list uses ([MEMORY.md entry](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_read_all_agent_config_entries.md)).
+`readAllAgentConfigEntries()` combines permanent + tmp (tmp wins on duplicate name) — that's what every UI list uses.
 
 ## 6. Scheduler integration
 
@@ -162,7 +162,7 @@ sequenceDiagram
 
 The trigger script (`a2a-trigger.mjs`) sends an A2A message — same path as a user-initiated invocation ([ADR-0006](../adr/0006-orchestrate-agents-via-a2a-server-not-direct-script-spawn.md)).
 
-Tool-triggered runs (from chat) use **tsx + TypeScript source**, not the compiled `.mjs` — so launchd issues don't affect them ([MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/feedback_tsx_not_mjs_for_a2a.md)).
+Tool-triggered runs (from chat) use **tsx + TypeScript source**, not the compiled `.mjs` — so launchd issues don't affect them.
 
 ## 7. Skill linking
 
@@ -174,7 +174,7 @@ flowchart LR
 
 - `linkPluginSkills(pluginDir, skillNames)` is idempotent and called on every `addPlugin`/`updatePlugin`/`syncPlugin`.
 - `unlinkPluginSkills` removes symlinks for skills no longer in the manifest.
-- DovePaw's own skills live in `skills/` at repo root and are symlinked into `~/.claude/skills/` by `npm run install` ([MEMORY.md](../../.claude/projects/-Users-yang-liu-Envato-others-DovePaw/memory/project_skills_location.md)).
+- DovePaw's own skills live in `skills/` at repo root and are symlinked into `~/.claude/skills/` by `npm run install`.
 
 ## 8. Failure surfaces
 
