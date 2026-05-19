@@ -1194,7 +1194,7 @@ describe("makeStartGroupTool", () => {
     expect(desc).not.toContain("- beta:");
   });
 
-  it("excludes agents touched by a dual edge (dual counts as in-degree)", () => {
+  it("includes both agents when only a dual edge exists: reachability fallback picks both", () => {
     const a: AgentDef = { ...AGENT, name: "alpha", manifestKey: "alpha", description: "A-desc" };
     const b: AgentDef = { ...AGENT, name: "beta", manifestKey: "beta", description: "B-desc" };
     const links: AgentLink[] = [
@@ -1219,9 +1219,11 @@ describe("makeStartGroupTool", () => {
       ),
     );
     const desc = getMembersDescription(tool);
-    // Both have in-degree ≥ 1 via the dual edge → neither preferred, neither isolated
-    expect(desc).not.toContain("- alpha:");
-    expect(desc).not.toContain("- beta:");
+    // Both have inDeg ≥ 1 via the dual edge → neither is a preferred DAG root.
+    // Reachability fallback: both score 1 (each reaches the other), so both appear
+    // as candidates. The old code produced an empty bucket here — see ADR-0010.
+    expect(desc).toContain("- alpha:");
+    expect(desc).toContain("- beta:");
   });
 
   it("ignores escalation/review group links for start topology — all members shown as fallback", () => {

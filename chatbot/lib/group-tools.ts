@@ -12,6 +12,7 @@ import { TaskPoller } from "@/lib/task-poller";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { doveAwaitToolName } from "@/lib/query-tools";
 import { withStartReminder } from "@@/lib/subagent-reminder";
+import { GroupStartTopology } from "@/lib/group-topology";
 import { getMemoryProvider } from "@/lib/memory";
 import { publishSessionEvent } from "@/lib/session-events";
 import { upsertSession, setActiveSession } from "@/lib/db";
@@ -53,33 +54,10 @@ export function makeStartGroupTool(
   registry?: PendingRegistry,
   groupLinks: AgentLink[] = [],
 ) {
-  // Eligibility from the group's link subgraph: only links where the link's
-  // `group` matches this group count. A dual-direction edge contributes both
-  // out-degree and in-degree to each endpoint.
-  const outDeg = new Map<string, number>();
-  const inDeg = new Map<string, number>();
-  for (const l of groupLinks) {
-    if (l.group !== group.name) continue;
-    if (l.strategy !== "chat") continue; // escalation/review define runtime routing, not start topology
-    outDeg.set(l.source, (outDeg.get(l.source) ?? 0) + 1);
-    inDeg.set(l.target, (inDeg.get(l.target) ?? 0) + 1);
-    if (l.direction === "dual") {
-      outDeg.set(l.target, (outDeg.get(l.target) ?? 0) + 1);
-      inDeg.set(l.source, (inDeg.get(l.source) ?? 0) + 1);
-    }
-  }
-  const preferred = memberDefs.filter(
-    (d) => (outDeg.get(d.name) ?? 0) > 0 && (inDeg.get(d.name) ?? 0) === 0,
-  );
-  const fallback = memberDefs.filter(
-    (d) => (outDeg.get(d.name) ?? 0) === 0 && (inDeg.get(d.name) ?? 0) === 0,
-  );
-  const buckets =
-    preferred.length > 0
-      ? renderMembers(preferred)
-      : fallback.length > 0
-        ? renderMembers(fallback)
-        : "";
+  const topology = new GroupStartTopology(group.name, groupLinks);
+  const preferred = topology.preferred(memberDefs);
+  const candidates = preferred.length > 0 ? preferred : topology.fallback(memberDefs);
+  const buckets = renderMembers(candidates);
   const candidateRule =
     preferred.length > 0
       ? "Pick only from the agents listed above. Do not use any other agents."
