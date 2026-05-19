@@ -2,6 +2,7 @@
 
 import { Paperclip, SendHorizonal, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   PromptInput,
   PromptInputBody,
@@ -90,7 +91,10 @@ export function ChatInputBar({
 
           {/* Textarea — full width, padded for buttons */}
           <PromptInputTextarea
-            className="py-[20px] pl-13 pr-40 text-sm placeholder:text-muted-foreground/50 resize-none"
+            className={cn(
+              "py-[20px] pl-13 text-sm placeholder:text-muted-foreground/50 resize-none",
+              isLoading ? "pr-56" : "pr-40",
+            )}
             placeholder="Meow… what do you need, Yang?"
           />
 
