@@ -68,37 +68,26 @@ try {
   process.exit(1);
 }
 
-// Collect triggered and skipped results, grouped by strategy for triggered ones.
+// Collect triggered results, grouped by strategy.
 const triggered = new Map<string, string[]>(); // strategy → agent names
-const skipped: string[] = [];
 
 for (const pair of scorePairs) {
   const eqIdx = pair.lastIndexOf("=");
-  if (eqIdx === -1) {
-    console.log(`INVALID  ${pair} — expected scoreKey=score`);
-    continue;
-  }
+  if (eqIdx === -1) continue;
   const scoreKey = pair.slice(0, eqIdx);
   const score = parseInt(pair.slice(eqIdx + 1), 10);
-  if (isNaN(score)) {
-    console.log(`INVALID  ${scoreKey} — score must be a number 0–100`);
-    continue;
-  }
+  if (isNaN(score)) continue;
   const link = ctx.links.find((l) => l.scoreKey === scoreKey);
-  if (!link) {
-    console.log(`UNKNOWN  ${scoreKey} — not found in context file`);
-    continue;
-  }
+  if (!link) continue;
 
-  const inRange = score >= link.handoffScoreMin && score <= link.handoffScoreMax;
-  if (inRange) {
+  if (score >= link.handoffScoreMin && score <= link.handoffScoreMax) {
     const group = triggered.get(link.strategy) ?? [];
     group.push(link.name);
     triggered.set(link.strategy, group);
-  } else {
-    skipped.push(`Skip ${link.name} because the score is outside the range`);
   }
 }
+
+if (triggered.size > 0) console.log("**You MUST follow:**");
 
 let idx = 1;
 for (const [strategy, names] of triggered) {
@@ -106,10 +95,6 @@ for (const [strategy, names] of triggered) {
   console.log(
     `${idx++}. **${callSentence(strategy, names.join(", "))}**, read \`${resolve(GUIDANCE_DIR, file)}\` to understand when and how to proceed`,
   );
-}
-
-for (const line of skipped) {
-  console.log(`~~${line}~~`);
 }
 
 if (triggered.size === 0) {
