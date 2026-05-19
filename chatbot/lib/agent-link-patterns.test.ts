@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "./agent-link-patterns";
+import { ESCALATE_PATTERNS, HANDOFF_PATTERNS, REVIEW_PATTERNS } from "@@/lib/agent-link-patterns";
 
 describe("HANDOFF_PATTERNS", () => {
   it("includes sequential delegation patterns", () => {

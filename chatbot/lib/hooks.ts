@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { realpath } from "node:fs/promises";
+import { realpath, mkdir, writeFile } from "node:fs/promises";
 import path from "path";
 import type {
   UserPromptSubmitHookSpecificOutput,
@@ -27,8 +27,7 @@ import {
   buildDovePromptReminder,
 } from "@@/lib/dove-lean-reminder";
 import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
-import type { AgentLinkStrategy } from "@@/lib/agent-links-schemas";
-import { HANDOFF_PATTERNS, REVIEW_PATTERNS, ESCALATE_PATTERNS } from "@/lib/agent-link-patterns";
+import { DOVEPAW_TMP_DIR, DOVEPAW_SCRIPTS_DIR, handoffContextFile } from "@@/lib/paths";
 import { doveAwaitToolName, doveStartToolName, CONFIDENCE_THRESHOLD } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -88,18 +87,14 @@ export function getAwaitStatus(tool_response: unknown): AwaitToolStatus | undefi
 
 // ─── Links reminder ──────────────────────────────────────────────────────────
 
-const STRATEGY_PATTERNS: Record<AgentLinkStrategy, (name?: string) => string> = {
-  chat: HANDOFF_PATTERNS,
-  review: REVIEW_PATTERNS,
-  escalation: ESCALATE_PATTERNS,
-};
-
 /**
- * Builds a PostToolUse reminder listing the completed agent's outgoing links.
- * The orchestrator scores each linked agent 0–100; only links whose score
- * falls within [handoffScoreMin, handoffScoreMax] should be started next.
- * Returns null when the agent has no outgoing links (caller should fall back
- * to a generic reminder or skip the block).
+ * Builds a PostToolUse reminder for the completed agent's outgoing links.
+ *
+ * Writes a compact JSON context file to ~/.dovepaw/tmp/handoff-{id}.json and
+ * returns a short XML reminder. The handoff-check.ts script imports pattern
+ * text directly from lib/agent-link-patterns.ts at eval time — no copy in JSON.
+ *
+ * Returns null when the agent has no outgoing links.
  */
 export async function buildLinksReminder(
   completedAgentName: string,
@@ -112,31 +107,52 @@ export async function buildLinksReminder(
   );
   if (outgoing.length === 0) return null;
 
-  const toolsXml = outgoing
-    .map((link) => {
-      const targetDef = agents.find((a) => a.name === link.targetName);
-      const key = targetDef?.manifestKey ?? link.targetName.replace(/-/g, "_");
-      const patterns = STRATEGY_PATTERNS[link.strategy](link.targetName);
-      return [
+  // Build compact link definitions — scoreKey is unique per (agent, strategy) pair;
+  // toolKey is the manifestKey used in start_* / await_* tool names.
+  const linkDefs = outgoing.map((link) => {
+    const targetDef = agents.find((a) => a.name === link.targetName);
+    const toolKey = targetDef?.manifestKey ?? link.targetName.replace(/-/g, "_");
+    const scoreKey = link.strategy === "chat" ? toolKey : `${toolKey}__${link.strategy}`;
+    return {
+      scoreKey,
+      toolKey,
+      name: link.targetName,
+      strategy: link.strategy,
+      handoffScoreMin: link.handoffScoreMin,
+      handoffScoreMax: link.handoffScoreMax,
+    };
+  });
+
+  // Write context file so the script can read link definitions without inline verbosity.
+  const contextId = randomUUID().slice(0, 8);
+  const contextPath = handoffContextFile(contextId);
+  await mkdir(DOVEPAW_TMP_DIR, { recursive: true });
+  await writeFile(
+    contextPath,
+    JSON.stringify({ completedAgent: completedAgentName, links: linkDefs }, null, 2),
+  );
+
+  const scriptPath = path.join(DOVEPAW_SCRIPTS_DIR, "handoff-check.ts");
+  const toolsXml = linkDefs
+    .map((l) =>
+      [
         `  <tool>`,
-        `    <name>start_${key} / await_${key}</name>`,
-        `    <description>Call start_${key} with strategy="${link.strategy}" for ${link.targetName}</description>`,
-        `    <strategy>${link.strategy}</strategy>`,
-        `    <handoff_range>[${link.handoffScoreMin}, ${link.handoffScoreMax}]</handoff_range>`,
-        `    <patterns>${patterns}</patterns>`,
+        `    <scoreKey>${l.scoreKey}</scoreKey>`,
+        `    <toolKey>${l.toolKey}</toolKey>`,
+        `    <strategy>${l.strategy}</strategy>`,
         `  </tool>`,
-      ].join("\n");
-    })
+      ].join("\n"),
+    )
     .join("\n");
 
   return [
     `<links>`,
-    `${completedAgentName} completed. Score your handoff likelihood (0–100) for each linked agent below:`,
-    `<handoff_tools>`,
+    `<tools>`,
     toolsXml,
-    `</handoff_tools>`,
-    `If a tool's score falls within its handoff_range, call \`start_*\` then \`await_*\` for that agent now.`,
-    `If no score falls within its range, continue without handing off.`,
+    `</tools>`,
+    `<check>MUST Score each agent 0–100, then run:`,
+    `npx tsx ${scriptPath} ${contextPath} scoreKey=score [scoreKey=score ...]`,
+    `CALL result includes full handoff guidance to decide next handoff. SKIP = no action.</check>`,
     `</links>`,
   ].join("\n");
 }

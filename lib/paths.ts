@@ -118,6 +118,11 @@ export const DOVEPAW_TMP_DIR = join(DOVEPAW_DIR, "tmp");
 /** ~/.dovepaw/tmp/<agentName>/agent.json — session agent definition */
 export const tmpAgentDefinitionFile = (agentName: string) =>
   join(DOVEPAW_TMP_DIR, agentName, "agent.json");
+/** ~/.dovepaw/tmp/handoff-{id}.json — per-completion handoff context for the range-checker script */
+export const handoffContextFile = (id: string): string =>
+  join(DOVEPAW_TMP_DIR, `handoff-${id}.json`);
+/** ~/.dovepaw/scripts/ — deployed utility scripts (e.g. handoff-check.mjs) */
+export const DOVEPAW_SCRIPTS_DIR = join(DOVEPAW_DIR, "scripts");
 /** DovePaw/.claude/hooks/karpathy-guidelines.sh — UserPromptSubmit hook injected into agent workspaces */
 export const KARPATHY_HOOK_SRC = join(AGENTS_ROOT, ".claude/hooks/karpathy-guidelines.sh");
 

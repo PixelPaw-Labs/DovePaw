@@ -35,6 +35,7 @@ import {
   CLAUDE_OUTPUT_STYLES_ROOT,
   CLAUDE_RULES_ROOT,
   CODEX_SKILLS_ROOT,
+  DOVEPAW_SCRIPTS_DIR,
   DOVEPAW_TMP_DIR,
   PLUGINS_DIR,
   SCHEDULER_ROOT,
@@ -48,10 +49,10 @@ import {
 const execAsync = promisify(exec);
 
 /** Deduplicates concurrent deployTriggerScript calls; reset after each run so the next install re-deploys. */
-let _deployTriggerScriptOnce: Promise<void> | null = null;
+let deployTriggerScriptOnce: Promise<void> | null = null;
 
 /** Deduplicates concurrent copyNativePackages calls per-package; reset after each run. */
-const _copyNativeOnce = new Map<string, Promise<void>>();
+const copyNativeOnceMap = new Map<string, Promise<void>>();
 
 /** Copy compiled .mjs to ~/.dovepaw/cron and make it executable.
  *  Triggers a full build first if the compiled output is missing.
@@ -74,16 +75,25 @@ export async function deployAgentScript(agentName: string): Promise<void> {
   await chmod(schedulerScript(agentName), 0o755);
 }
 
+/** Symlink scripts/handoff-check.mjs into ~/.dovepaw/scripts/ so edits to the source are live immediately. */
+export async function deployHandoffScript(): Promise<void> {
+  await mkdir(DOVEPAW_SCRIPTS_DIR, { recursive: true });
+  const src = join(AGENTS_ROOT, "scripts", "handoff-check.ts");
+  const dest = join(DOVEPAW_SCRIPTS_DIR, "handoff-check.ts");
+  await rm(dest, { force: true });
+  await symlink(src, dest);
+}
+
 /** Copy compiled a2a-trigger.mjs to ~/.dovepaw/cron and make it executable.
  *  Concurrent calls share one run; the promise is cleared after each run. */
 export async function deployTriggerScript(): Promise<void> {
-  _deployTriggerScriptOnce ??= _doDeployTriggerScript().finally(() => {
-    _deployTriggerScriptOnce = null;
+  deployTriggerScriptOnce ??= doDeployTriggerScript().finally(() => {
+    deployTriggerScriptOnce = null;
   });
-  return _deployTriggerScriptOnce;
+  return deployTriggerScriptOnce;
 }
 
-async function _doDeployTriggerScript(): Promise<void> {
+async function doDeployTriggerScript(): Promise<void> {
   await mkdir(SCHEDULER_ROOT, { recursive: true });
   const src = join(AGENTS_DIST, "a2a-trigger.mjs");
   try {
@@ -103,18 +113,18 @@ async function _doDeployTriggerScript(): Promise<void> {
 export async function copyNativePackages(packages: string[]): Promise<void> {
   await Promise.all(
     packages.map((pkg) => {
-      if (!_copyNativeOnce.has(pkg)) {
-        _copyNativeOnce.set(
+      if (!copyNativeOnceMap.has(pkg)) {
+        copyNativeOnceMap.set(
           pkg,
-          _doCopyNativePackage(pkg).finally(() => _copyNativeOnce.delete(pkg)),
+          doCopyNativePackage(pkg).finally(() => copyNativeOnceMap.delete(pkg)),
         );
       }
-      return _copyNativeOnce.get(pkg)!;
+      return copyNativeOnceMap.get(pkg)!;
     }),
   );
 }
 
-async function _doCopyNativePackage(pkg: string): Promise<void> {
+async function doCopyNativePackage(pkg: string): Promise<void> {
   const src = `${AGENTS_ROOT}/node_modules/${pkg}`;
   try {
     await access(src);

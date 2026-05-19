@@ -13,6 +13,7 @@ import { SCHEDULER_ROOT } from "../lib/paths.js";
 import {
   copyNativePackages,
   deployAgentSdk,
+  deployHandoffScript,
   linkAgents,
   linkAgentSdkToAgentLocal,
   linkAgentSdkToPlugin,
@@ -50,6 +51,7 @@ if (uninstall) {
 
 await linkAgents();
 await deployAgentSdk();
+await deployHandoffScript();
 await linkAgentSdkToAgentLocal();
 const plugins = await listPlugins();
 await Promise.all([

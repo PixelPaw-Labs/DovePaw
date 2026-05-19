@@ -520,9 +520,9 @@ describe("buildDoveHooks — PostToolUse await_* response reminder", () => {
     };
     expect(result.decision).toBe("block");
     expect(result.reason).toContain("<links>");
-    expect(result.reason).toContain("support-agent completed");
-    expect(result.reason).toContain("start_fixer");
-    expect(result.reason).toContain("[80, 100]");
+    expect(result.reason).toContain("<scoreKey>fixer</scoreKey>");
+    expect(result.reason).toContain("<toolKey>fixer</toolKey>");
+    expect(result.reason).toContain("handoff-check.ts");
   });
 });
 
@@ -556,15 +556,13 @@ describe("buildLinksReminder", () => {
       },
     ]);
     const reminder = (await buildLinksReminder("alpha", agents))!;
-    expect(reminder).toContain("alpha completed");
-    expect(reminder).toContain("start_beta / await_beta");
-    expect(reminder).toContain("[70, 95]");
-    expect(reminder).toContain(`Call start_beta with strategy="chat" for beta`);
+    expect(reminder).toContain("<scoreKey>beta</scoreKey>");
+    expect(reminder).toContain("<toolKey>beta</toolKey>");
     expect(reminder).toContain("<strategy>chat</strategy>");
-    expect(reminder).toContain("start_gamma / await_gamma");
-    expect(reminder).toContain("[50, 90]");
-    expect(reminder).toContain(`Call start_gamma with strategy="escalation" for gamma`);
+    expect(reminder).toContain("<scoreKey>gamma__escalation</scoreKey>");
+    expect(reminder).toContain("<toolKey>gamma</toolKey>");
     expect(reminder).toContain("<strategy>escalation</strategy>");
+    expect(reminder).toContain("handoff-check.ts");
   });
 
   it("selects per-strategy pattern text", async () => {
@@ -577,8 +575,10 @@ describe("buildLinksReminder", () => {
       },
     ]);
     const reminder = (await buildLinksReminder("alpha", agents))!;
-    // REVIEW_PATTERNS contains "reviews finished output"
-    expect(reminder).toContain("reviews finished output");
+    // pattern text is now loaded by the script at eval time, not inlined in the reminder
+    expect(reminder).toContain("<scoreKey>beta__review</scoreKey>");
+    expect(reminder).toContain("<strategy>review</strategy>");
+    expect(reminder).toContain("handoff-check.ts");
   });
 
   it("excludes the current orchestrator agent from the reminder (self-reference via dual back-link)", async () => {
@@ -587,8 +587,8 @@ describe("buildLinksReminder", () => {
       { targetName: "alpha", strategy: "chat" as const, handoffScoreMin: 0, handoffScoreMax: 100 },
     ]);
     const reminder = (await buildLinksReminder("beta", agents, "alpha"))!;
-    expect(reminder).toContain("start_beta / await_beta");
-    expect(reminder).not.toContain("start_alpha / await_alpha");
+    expect(reminder).toContain("<toolKey>beta</toolKey>");
+    expect(reminder).not.toContain("<toolKey>alpha</toolKey>");
   });
 
   it("returns null when all outgoing links are excluded", async () => {

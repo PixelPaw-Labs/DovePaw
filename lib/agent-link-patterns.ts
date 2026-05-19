@@ -85,8 +85,13 @@ When not:
   a look". If you cannot write a specific, complete instruction, you are not
   ready to hand off.
 
-❌ Calling would duplicate work ${agentName} is already doing or just did in
-  this session. Check context before chaining.`;
+❌ Calling would duplicate **execution work** ${agentName} already completed
+  this session — e.g. the agent already fixed the bug, ran the migration, or
+  produced the same report. Do not re-run identical work.
+  Exception: in discussion, brainstorming, or collaborative prediction tasks,
+  calling ${agentName} again to react to other members' output is NOT
+  duplication — it advances the conversation. Only skip if the task and input
+  are genuinely identical to what was already done.`;
 }
 
 /**
