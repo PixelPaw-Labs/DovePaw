@@ -19,6 +19,15 @@ function resolveEnvVar(envVar: EnvVar): string | undefined {
   return secret !== null && secret !== "" ? secret : undefined;
 }
 
+export function resolveEnvVarList(envVars: EnvVar[]): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const envVar of envVars) {
+    const value = resolveEnvVar(envVar);
+    if (value !== undefined) env[envVar.key] = value;
+  }
+  return env;
+}
+
 export function resolveSettingsEnv(
   settings: GlobalSettings,
   agentEnvVars: AgentSettings["envVars"] = [],

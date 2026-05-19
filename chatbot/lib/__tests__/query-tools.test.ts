@@ -50,7 +50,7 @@ vi.mock("@@/lib/settings", () => ({
 }));
 
 vi.mock("@@/lib/group-config", () => ({
-  readOrCreateGroupConfig: vi.fn().mockReturnValue({ repos: [], envVars: {} }),
+  readOrCreateGroupConfig: vi.fn().mockReturnValue({ repos: [], envVars: [] }),
 }));
 
 vi.mock("@/a2a/lib/workspace", () => ({

@@ -12,6 +12,8 @@ import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { agentConfigDir } from "@@/lib/paths";
 import { readAgentSettings, readSettings } from "@@/lib/settings";
+import { readGroupConfig } from "@@/lib/group-config";
+import { resolveEnvVarList } from "@/lib/env-resolver";
 import {
   ALWAYS_DISALLOWED_TOOLS,
   buildSecurityEnv,
@@ -176,12 +178,33 @@ export class QueryAgentExecutor {
     this.persistence?.setActive(this.def.name, contextId);
     publishProgress("Starting…");
 
-    const [{ extraEnv, repoSlugs }, agentSettings, globalSettings] = await Promise.all([
-      this.agentConfigReader.resolveAgentSettings(this.def.name),
-      readAgentSettings(this.def.name),
-      readSettings(),
-    ]);
+    const [{ extraEnv, repoSlugs: agentRepoSlugs }, agentSettings, globalSettings] =
+      await Promise.all([
+        this.agentConfigReader.resolveAgentSettings(this.def.name),
+        readAgentSettings(this.def.name),
+        readSettings(),
+      ]);
     const defaultModel = effectiveDoveSettings(globalSettings).defaultModel.trim();
+
+    // In group mode, merge group repos and env vars into the agent's own settings.
+    // Group values are applied last so they take precedence over per-agent values.
+    let repoSlugs = agentRepoSlugs;
+    let groupExtraEnv: Record<string, string> = {};
+    if (groupOverrides) {
+      const groupConfig = readGroupConfig(groupOverrides.groupName);
+      if (groupConfig) {
+        if (groupConfig.repos.length > 0) {
+          const groupRepoSlugs = groupConfig.repos
+            .map((id) => globalSettings.repositories.find((r) => r.id === id))
+            .filter((r): r is NonNullable<typeof r> => r !== undefined)
+            .map((r) => r.githubRepo);
+          repoSlugs = [...new Set([...agentRepoSlugs, ...groupRepoSlugs])];
+        }
+        if (groupConfig.envVars.length > 0) {
+          groupExtraEnv = resolveEnvVarList(groupConfig.envVars);
+        }
+      }
+    }
 
     try {
       if (existingState) {
@@ -207,6 +230,7 @@ export class QueryAgentExecutor {
         cwd,
         {
           ...extraEnv,
+          ...groupExtraEnv,
           ...buildSecurityEnv(
             effectiveDoveSettings(globalSettings).securityMode,
             agentSettings.allowScriptWebTools,
