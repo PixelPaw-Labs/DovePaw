@@ -82,7 +82,7 @@ export function ChatInputBar({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="absolute left-3 bottom-3 z-10"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-10"
             title="Attach file"
           >
             <Paperclip className="w-4 h-4" />
@@ -90,20 +90,14 @@ export function ChatInputBar({
 
           {/* Textarea — full width, padded for buttons */}
           <PromptInputTextarea
-            className="py-[22px] pl-13 pr-40 text-sm placeholder:text-muted-foreground/50 resize-none"
+            className="py-[20px] pl-13 pr-40 text-sm placeholder:text-muted-foreground/50 resize-none"
             placeholder="Meow… what do you need, Yang?"
           />
 
           {/* Stop + Send — absolute right, always both visible when loading */}
-          <div className="absolute right-3 bottom-3 flex items-center gap-2 z-10">
+          <div className="absolute right-3 bottom-4 flex items-center gap-2 z-10">
             {isLoading && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={onCancel}
-                className="text-primary hover:bg-primary/10"
-              >
+              <Button type="button" variant="destructive" size="sm" onClick={onCancel}>
                 STOP <Square className="w-3 h-3 fill-current" />
               </Button>
             )}
