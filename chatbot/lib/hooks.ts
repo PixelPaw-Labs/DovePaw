@@ -154,7 +154,7 @@ export async function buildLinksReminder(
     `<tools>`,
     toolsXml,
     `</tools>`,
-    `<check>For each tool: read its guidance file, score 0–100. If the score falls within the stated range, you MUST call the agent immediately using start_* or ask_* — no exceptions, no reasoning about whether to skip.</check>`,
+    `<check>For each tool: read its guidance file, score 0–100. If the score falls within the stated range, you MUST START the agent immediately using start_* — no exceptions, no reasoning about whether to skip.</check>`,
     `</links>`,
   ].join("\n");
 }
