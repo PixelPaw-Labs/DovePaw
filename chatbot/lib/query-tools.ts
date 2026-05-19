@@ -29,7 +29,8 @@ import { taskRuntime } from "@/lib/task-runtime";
 import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
 import { groupMemberCounters } from "@/lib/group-member-counter";
 import { publishSessionEvent } from "@/lib/session-events";
-import { setGroupMessage, setSessionStatus } from "@/lib/db";
+import { setGroupMessage, setSessionStatus, getGroupSessionInfo } from "@/lib/db";
+import type { GroupMeta } from "@/lib/group-meta";
 
 // ─── Justification gate ───────────────────────────────────────────────────────
 
@@ -291,7 +292,26 @@ export function makeStartTool(
     async ({ instruction, strategy, group }) => {
       const groupContextId = group?.contextId;
       const wrappedInstruction = buildStrategyInstruction(instruction, strategy, orchestratorName);
+
+      let groupMeta: GroupMeta | undefined;
       if (groupContextId) {
+        const sessionInfo = getGroupSessionInfo(groupContextId);
+        if (sessionInfo) {
+          const groupName = sessionInfo.agentId.replace(/^group:/, "");
+          groupMeta = {
+            isGroupChat: true,
+            groupContextId,
+            groupMomentsPath: sessionInfo.workspacePath,
+            groupName,
+          };
+          publishSessionEvent(groupContextId, {
+            type: "group_member",
+            agentId: "dove",
+            text: `@${agent.displayName}\n\n${instruction}`,
+            done: true,
+            isSender: true,
+          });
+        }
         publishSessionEvent(groupContextId, {
           type: "agent_status",
           agentKey: agent.manifestKey,
@@ -309,7 +329,7 @@ export function makeStartTool(
       ).start(withStartReminder(wrappedInstruction, agent.manifestKey), {
         backgroundTasks,
         senderAgentId,
-        extraMetadata: { mode: AgentCallMode.Start },
+        extraMetadata: { mode: AgentCallMode.Start, ...groupMeta },
       });
       if (result.structuredContent) {
         stateMachine?.transition(result.structuredContent.taskId, agent.manifestKey, "running");

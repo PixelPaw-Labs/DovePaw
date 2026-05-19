@@ -72,6 +72,7 @@ vi.mock("@/lib/db", () => ({
   setActiveSession: vi.fn(),
   setGroupMessage: vi.fn(),
   setSessionStatus: vi.fn(),
+  getGroupSessionInfo: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("@/lib/session-events", () => ({
@@ -94,7 +95,7 @@ import {
 import { makeStartGroupTool, doveStartGroupToolName } from "@/lib/group-tools";
 import { noAgentOutput } from "@/lib/a2a-client";
 import { MGMT_TOOL } from "@/lib/agent-tools";
-import { upsertSession, setActiveSession } from "@/lib/db";
+import { upsertSession, setActiveSession, getGroupSessionInfo } from "@/lib/db";
 import { publishSessionEvent } from "@/lib/session-events";
 import type { AgentDef } from "@@/lib/agents";
 import type { AgentLink } from "@@/lib/agent-links-schemas";
@@ -1419,5 +1420,26 @@ describe("makeStartTool — group context status", () => {
     const h = captured[doveStartToolName(AGENT)];
     await h({ instruction: "go" });
     expect(vi.mocked(publishSessionEvent)).not.toHaveBeenCalled();
+  });
+
+  it("publishes group_member sender bubble when group session info is found", async () => {
+    vi.mocked(getGroupSessionInfo).mockReturnValue({
+      agentId: "group:my-team",
+      workspacePath: "/tmp/moments",
+    });
+    const captured = captureTools(() => makeStartTool(AGENT));
+    const h = captured[doveStartToolName(AGENT)];
+    await h({
+      instruction: "do the thing",
+      group: { contextId: "grp-ctx", groupOrchestrationScore: 95 },
+    });
+    const calls = vi.mocked(publishSessionEvent).mock.calls.filter(([id]) => id === "grp-ctx");
+    expect(
+      calls.some(([, ev]) => (ev as any).type === "group_member" && (ev as any).isSender === true),
+    ).toBe(true);
+    const senderCall = calls.find(([, ev]) => (ev as any).isSender === true);
+    expect((senderCall![1] as any).text).toBe(`@${AGENT.displayName}\n\ndo the thing`);
+    expect((senderCall![1] as any).agentId).toBe("dove");
+    expect((senderCall![1] as any).done).toBe(true);
   });
 });

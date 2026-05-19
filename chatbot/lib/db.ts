@@ -417,6 +417,16 @@ export function getSessionWorkspacePath(id: string): string | null {
   return row?.workspace_path ?? null;
 }
 
+export function getGroupSessionInfo(id: string): { agentId: string; workspacePath: string } | null {
+  const row = getDb()
+    .prepare<[string], { agent_id: string; workspace_path: string | null }>(
+      "SELECT agent_id, workspace_path FROM sessions WHERE id = ?",
+    )
+    .get(id);
+  if (!row?.workspace_path) return null;
+  return { agentId: row.agent_id, workspacePath: row.workspace_path };
+}
+
 export function getAllSessionWorkspacePaths(): string[] {
   const rows = getDb()
     .prepare<[], { workspace_path: string | null }>("SELECT workspace_path FROM sessions")
