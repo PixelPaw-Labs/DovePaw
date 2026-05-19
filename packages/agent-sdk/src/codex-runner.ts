@@ -33,6 +33,7 @@ export interface CodexRunOpts {
   webSearchEnabled?: boolean;
   webSearchMode?: WebSearchMode;
   sandboxMode?: SandboxMode;
+  networkAccessEnabled?: boolean;
   approvalPolicy?: ApprovalMode;
 }
 
@@ -98,6 +99,9 @@ export class CodexRunner {
       ...(opts.webSearchEnabled !== undefined ? { webSearchEnabled: opts.webSearchEnabled } : {}),
       ...(opts.webSearchMode !== undefined ? { webSearchMode: opts.webSearchMode } : {}),
       ...(opts.sandboxMode !== undefined ? { sandboxMode: opts.sandboxMode } : {}),
+      ...(opts.networkAccessEnabled !== undefined
+        ? { networkAccessEnabled: opts.networkAccessEnabled }
+        : {}),
     };
     this.thread = opts.resumeSession
       ? this.codex.resumeThread(opts.resumeSession, threadOptions)

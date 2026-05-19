@@ -117,6 +117,7 @@ interface CodexOpts {
   webSearchEnabled?: boolean;
   webSearchMode?: WebSearchMode;
   sandboxMode?: SandboxMode;
+  networkAccessEnabled?: boolean;
 }
 
 /** Union of all opts supported across runners. Claude-specific fields are ignored for Codex and vice versa. */
@@ -196,6 +197,7 @@ export class AgentRunner {
         skipGitRepoCheck: opts.codexOpts?.skipGitRepoCheck,
         webSearchMode: opts.codexOpts?.webSearchMode,
         sandboxMode: resolveCodexSandboxMode(opts.codexOpts),
+        networkAccessEnabled: opts.codexOpts?.networkAccessEnabled,
         approvalPolicy,
         webSearchEnabled: resolveCodexWebSearchEnabled(opts.codexOpts),
       } satisfies CodexRunOpts);

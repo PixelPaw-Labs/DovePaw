@@ -264,6 +264,21 @@ describe("AgentRunner", () => {
       }
     });
 
+    it("passes codexOpts.networkAccessEnabled to Codex runner without error", async () => {
+      const err = await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gpt-5.4-mini",
+          timeoutMs: 100,
+          codexOpts: { sandboxMode: "workspace-write", networkAccessEnabled: true },
+        })
+        .catch((e: Error) => e);
+      if (err instanceof Error) {
+        expect(err.message).not.toContain("Unknown model");
+      }
+    });
+
     it("passes codexOpts.config to Codex runner without error", async () => {
       const err = await runner
         .run("prompt", {

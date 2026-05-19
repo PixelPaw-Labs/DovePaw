@@ -69,6 +69,21 @@ describe("CodexRunner", () => {
     });
   });
 
+  describe("networkAccessEnabled option", () => {
+    it("is accepted in CodexRunOpts", async () => {
+      const runner = new CodexRunner(TMP_DIR);
+      await runner
+        .run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "test",
+          timeoutMs: 100,
+          sandboxMode: "workspace-write",
+          networkAccessEnabled: true,
+        })
+        .catch(() => {}); // fails at connect with no API key — expected
+    });
+  });
+
   describe("config option", () => {
     it("is accepted in CodexRunOpts with service_tier fast", async () => {
       const runner = new CodexRunner(TMP_DIR);
