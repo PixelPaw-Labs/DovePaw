@@ -75,7 +75,7 @@ export function StepDetail({ step, agentConfig, onClose }: StepDetailProps) {
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="text-sm leading-relaxed text-foreground/90 max-h-72 overflow-y-auto">
+            <div className="text-sm leading-relaxed text-foreground/90 max-h-[32rem] overflow-y-auto">
               {step.fullText ? (
                 <MessageResponse className={MESSAGE_RESPONSE_SPACING}>
                   {step.fullText}
