@@ -1223,6 +1223,7 @@ interface AddLinkDialogProps {
   agentConfigs: AgentConfigEntry[];
   initialSource?: string;
   initialTarget?: string;
+  group?: string;
   existingEdges: AgentFlowEdge[];
   onSuccess: (edge: AgentFlowEdge) => void;
 }
@@ -1233,6 +1234,7 @@ function AddLinkDialog({
   agentConfigs,
   initialSource,
   initialTarget,
+  group,
   existingEdges,
   onSuccess,
 }: AddLinkDialogProps) {
@@ -1288,6 +1290,7 @@ function AddLinkDialog({
           target,
           direction,
           strategy,
+          group,
           handoffScoreMin: handoffMin,
           handoffScoreMax: handoffMax,
         }),
@@ -1874,6 +1877,7 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogInitialSource, setDialogInitialSource] = useState<string | undefined>();
   const [dialogInitialTarget, setDialogInitialTarget] = useState<string | undefined>();
+  const [dialogInitialGroup, setDialogInitialGroup] = useState<string | undefined>();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editEdgeId, setEditEdgeId] = useState("");
   const [editEdgeData, setEditEdgeData] = useState<AgentEdgeData>({
@@ -1929,12 +1933,22 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
   }, []);
 
   // Intercept drag-to-connect: open dialog pre-filled, do NOT add edge yet
-  const onConnect = useCallback((connection: Connection) => {
-    if (!connection.source || !connection.target) return;
-    setDialogInitialSource(connection.source);
-    setDialogInitialTarget(connection.target);
-    setDialogOpen(true);
-  }, []);
+  const onConnect = useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+      const sourceParent = nodes.find((n) => n.id === connection.source)?.parentId;
+      const targetParent = nodes.find((n) => n.id === connection.target)?.parentId;
+      const sharedGroup =
+        sourceParent && sourceParent === targetParent
+          ? sourceParent.replace(/^group:/, "")
+          : undefined;
+      setDialogInitialSource(connection.source);
+      setDialogInitialTarget(connection.target);
+      setDialogInitialGroup(sharedGroup);
+      setDialogOpen(true);
+    },
+    [nodes],
+  );
 
   // Optimistic edge delete with rollback on failure
   const handleEdgeDelete = useCallback(
@@ -2246,11 +2260,16 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
     setSelectedNodeId((prev) => (prev === nodeId ? null : prev));
   }, []);
 
-  const openAddDialog = useCallback((source?: string) => {
-    setDialogInitialSource(source);
-    setDialogInitialTarget(undefined);
-    setDialogOpen(true);
-  }, []);
+  const openAddDialog = useCallback(
+    (source?: string) => {
+      const parentId = source ? nodes.find((n) => n.id === source)?.parentId : undefined;
+      setDialogInitialSource(source);
+      setDialogInitialTarget(undefined);
+      setDialogInitialGroup(parentId ? parentId.replace(/^group:/, "") : undefined);
+      setDialogOpen(true);
+    },
+    [nodes],
+  );
 
   const selectedConfig = selectedNodeId
     ? agentConfigs.find((c) => c.name === selectedNodeId)
@@ -2390,12 +2409,14 @@ function AgentLinksCanvasInner({ agentConfigs, linksFile }: AgentLinksCanvasProp
                     if (!open) {
                       setDialogInitialSource(undefined);
                       setDialogInitialTarget(undefined);
+                      setDialogInitialGroup(undefined);
                     }
                     setDialogOpen(open);
                   }}
                   agentConfigs={agentConfigs}
                   initialSource={dialogInitialSource}
                   initialTarget={dialogInitialTarget}
+                  group={dialogInitialGroup}
                   existingEdges={edges}
                   onSuccess={handleAddLinkSuccess}
                 />

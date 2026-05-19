@@ -5,8 +5,11 @@ import type { AgentLink } from "@@/lib/agent-links-schemas";
  * Computes the startable candidate set for a group from its chat-strategy link subgraph.
  *
  * Selection order:
- * 1. **Preferred** — DAG roots: outDeg > 0 and inDeg = 0 (hand off to others, nobody hands off to them).
- * 2. **Fallback** — when no preferred exists, pick members with the highest transitive reachability.
+ * 1. **Preferred** — strict DAG roots: outDeg > 0 and inDeg = 0 (no node points to them at all).
+ *    Only applies when the graph has no cycles. Groups with dual links will have cycles, so
+ *    preferred() returns empty and the fallback takes over.
+ * 2. **Fallback** — pick members with the highest transitive reachability (direct + indirect targets).
+ *    Dual links count in both directions — each side of A↔B has the other as a target.
  *    Ties are kept. All-zero scores (no links configured) returns the full roster.
  *
  * See ADR-0010 for full rationale.
