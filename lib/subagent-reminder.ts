@@ -16,7 +16,7 @@ function buildMemoryBullet(memoryDir: string, startToolName?: string): string {
   return (
     `<reminder>\n` +
     `- **Bad:** Answer a question without reading memory first. **Correct:** NEVER skip the memory read — ALWAYS read \`${memoryDir}/memory/MEMORY.md\` and, if a relevant entry exists, read that file before answering.\n` +
-    `- **Bad:** Answer when memory is missing, incomplete, or doesn't fully cover the question. **Correct:** Your ENTIRE response MUST be this exact sentence — no other words: "Memory insufficient — you MUST call \`${escalate}\` to answer this question."\n` +
+    `- **Bad:** Answer when memory is missing, incomplete, or doesn't fully cover the question. **Correct:** Your ENTIRE response MUST be this exact sentence — no other words: "Memory insufficient — you MUST call \`${escalate}\` to answer this question." - no exceptions, no reasoning about whether to skip.\n` +
     `- **Bad:** Add or infer details beyond what memory says. **Correct:** Reply using only what memory contains.\n` +
     `</reminder>`
   );

@@ -502,7 +502,7 @@ export function buildDoveHooks(
         },
       ],
     },
-    // Group orchestrator score gate — denies if groupOrchestrationScore is absent or ≤ 90.
+    // Group orchestrator score gate — denies if groupOrchestrationScore is absent or < 80.
     ...(options.includeGroupReminder
       ? [
           {
@@ -517,14 +517,14 @@ export function buildDoveHooks(
                   typeof group === "object" && group !== null
                     ? Reflect.get(group, "groupOrchestrationScore")
                     : Reflect.get(input.tool_input, "groupOrchestrationScore"); // start_group_* keeps score at top level
-                if (typeof groupOrchestrationScore === "number" && groupOrchestrationScore > 90)
+                if (typeof groupOrchestrationScore === "number" && groupOrchestrationScore >= 80)
                   return { continue: true };
                 const hookSpecificOutput: PreToolUseHookSpecificOutput = {
                   hookEventName: "PreToolUse",
                   permissionDecision: "deny",
                   permissionDecisionReason:
                     `${GROUP_ORCHESTRATOR_REMINDER}\n` +
-                    `\`groupOrchestrationScore\` — orchestration behaviour score (0–100, > 90 required): is dispatching this agent NOW the right decision per the rules above?\n` +
+                    `\`groupOrchestrationScore\` — orchestration behaviour score (0–100, >= 80 required): is dispatching this agent NOW the right decision per the rules above?\n` +
                     `Not a handoff justification score (justification.confidence measures handoff quality). Current: ${typeof groupOrchestrationScore === "number" ? groupOrchestrationScore : "missing"}.`,
                 };
                 return { hookSpecificOutput };

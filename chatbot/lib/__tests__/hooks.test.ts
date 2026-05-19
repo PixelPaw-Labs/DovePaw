@@ -460,6 +460,91 @@ describe("buildDoveHooks — PreToolUse start_* instruction reminder", () => {
   });
 });
 
+// ─── buildDoveHooks — groupOrchestrationScore gate ───────────────────────────
+
+describe("buildDoveHooks — groupOrchestrationScore gate (includeGroupReminder)", () => {
+  const agents = [
+    { name: "test-agent", manifestKey: "test_agent", toolName: "yolo_test_agent" },
+  ] as Parameters<typeof buildDoveHooks>[0];
+
+  function findScoreGateHook(hooks: ReturnType<typeof buildDoveHooks>) {
+    // The score gate is the second PreToolUse hook with matcher mcp__agents__start_.*
+    return hooks.PreToolUse?.filter((h) => h.matcher === "mcp__agents__start_.*")[1];
+  }
+
+  it("allows start_* when groupOrchestrationScore is exactly 80", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", {
+        instruction: "go",
+        group: { contextId: "ctx", groupOrchestrationScore: 80 },
+      }),
+    );
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("allows start_* when groupOrchestrationScore is 90", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", {
+        instruction: "go",
+        group: { contextId: "ctx", groupOrchestrationScore: 90 },
+      }),
+    );
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("denies start_* when groupOrchestrationScore is 79", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", {
+        instruction: "go",
+        group: { contextId: "ctx", groupOrchestrationScore: 79 },
+      }),
+    );
+    const { hookSpecificOutput } = result as {
+      hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string };
+    };
+    expect(hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("79");
+  });
+
+  it("denies start_* when groupOrchestrationScore is missing", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", { instruction: "go" }),
+    );
+    const { hookSpecificOutput } = result as {
+      hookSpecificOutput: { permissionDecision: string; permissionDecisionReason: string };
+    };
+    expect(hookSpecificOutput.permissionDecision).toBe("deny");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("missing");
+  });
+
+  it("score gate is absent when includeGroupReminder is false", () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: false,
+    });
+    expect(findScoreGateHook(hooks)).toBeUndefined();
+  });
+});
+
 // ─── buildDoveHooks — PostToolUse await_* response reminder ──────────────────
 
 describe("buildDoveHooks — PostToolUse await_* response reminder", () => {

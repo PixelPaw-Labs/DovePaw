@@ -94,7 +94,7 @@ export function makeStartGroupTool(
         .min(0)
         .max(100)
         .describe(
-          "Orchestration behaviour score (0–100, must be > 90): is dispatching this agent NOW the right decision per group-orchestrator-rules?\n" +
+          "Orchestration behaviour score (0–100, must be >= 80): is dispatching this agent NOW the right decision per group-orchestrator-rules?\n" +
             "Not a handoff justification score (justification.confidence measures handoff quality).",
         ),
       members: z
