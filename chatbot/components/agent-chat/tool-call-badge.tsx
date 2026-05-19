@@ -84,6 +84,22 @@ function DiffBlock({
   );
 }
 
+export function EditDiff({ tool }: { tool: ToolCall }) {
+  if (
+    tool.name !== "Edit" ||
+    tool.input.old_string === undefined ||
+    tool.input.new_string === undefined
+  )
+    return null;
+  return (
+    <DiffBlock
+      filePath={typeof tool.input.file_path === "string" ? tool.input.file_path : ""}
+      oldStr={typeof tool.input.old_string === "string" ? tool.input.old_string : ""}
+      newStr={typeof tool.input.new_string === "string" ? tool.input.new_string : ""}
+    />
+  );
+}
+
 export function EditDiffList({ toolCalls }: { toolCalls: ToolCall[] }) {
   const edits = toolCalls.filter(
     (t) =>

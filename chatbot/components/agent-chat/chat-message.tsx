@@ -12,7 +12,7 @@ import type { ChatMessage } from "@/components/hooks/use-messages";
 import { messageText } from "@/components/hooks/use-messages";
 import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";
-import { EditDiffList, ToolCallItem } from "./tool-call-badge";
+import { EditDiff, ToolCallItem } from "./tool-call-badge";
 
 // Width of avatar (w-8 = 2rem) + gap (gap-2 = 0.5rem) → pl-10 (2.5rem)
 const AVATAR_OFFSET = "pl-10";
@@ -145,14 +145,12 @@ export function ChatMessageItem({
                   <ToolCallItem key={i} tool={seg.tool} isActive={!isCompleted} />
                 );
               })()
-            ) : null,
+            ) : (
+              <EditDiff key={i} tool={seg.tool} />
+            ),
           )}
         </MessageContent>
       )}
-
-      <EditDiffList
-        toolCalls={msg.segments.filter((s) => s.type === "tool_call").map((s) => s.tool)}
-      />
       {msg.isCancelled && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-destructive/10 border border-destructive/20 text-destructive text-sm font-medium">
           <Ban className="w-3.5 h-3.5 shrink-0" />
