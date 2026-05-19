@@ -35,13 +35,13 @@ import { setGroupMessage, setSessionStatus } from "@/lib/db";
 
 export const CONFIDENCE_THRESHOLD: Record<string, { threshold: number; description: string }> = {
   high: {
-    threshold: 0.7,
+    threshold: 70,
     description:
       "your output is pivotal — the recipient cannot meaningfully proceed, decide, or respond without it. " +
       "The handoff has clear directionality: there is an obvious and immediate action the recipient takes from what you are giving them.",
   },
   medium: {
-    threshold: 0.85,
+    threshold: 85,
     description:
       "your output is complete and self-contained — the recipient can engage with it fully, build on it, or use it as a foundation for their own contribution. " +
       "Use this for the normal progression of work: your analysis is ready, your prediction is formed, your part of a collaborative task is done.",
@@ -79,9 +79,9 @@ export const justificationField = z
     confidence: z
       .number()
       .min(0)
-      .max(1)
+      .max(100)
       .describe(
-        `Confidence score as a decimal fraction 0.0–1.0 (e.g. 0.9 = 90% confident). Threshold is impact-gated: ${thresholdClause}.`,
+        `Confidence score 0–100 (e.g. 90 = 90% confident). Threshold is impact-gated: ${thresholdClause}.`,
       ),
   })
   .describe("Required on every delegation call. Fill this out before handing off.");
@@ -276,12 +276,13 @@ export function makeStartTool(
             .describe(
               "groupContextId returned by start_group_*. Publishes start/running status to the group context stream so the swimlane header shows the correct animation.",
             ),
-          score: z
+          groupOrchestrationScore: z
             .number()
             .min(0)
-            .max(1)
+            .max(100)
             .describe(
-              "Confidence in your orchestration reasoning for this dispatch (0–1). Must be > 0.9. Reflects how well your decision aligns with the group-orchestrator-rules — high score means you have clear reasoning to dispatch, not that you should stop.",
+              "Orchestration behaviour score (0–100, must be > 90): is dispatching this agent NOW the right decision per group-orchestrator-rules?\n" +
+                "Not a handoff justification score (justification.confidence measures handoff quality).",
             ),
         })
         .optional()

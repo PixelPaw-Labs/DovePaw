@@ -416,7 +416,7 @@ export function makeJustificationGateHook(matcher = "mcp__agents__start_.*"): Ho
           const hookSpecificOutput: PreToolUseHookSpecificOutput = {
             hookEventName: "PreToolUse",
             permissionDecision: "deny",
-            permissionDecisionReason: `justification is required before calling start_*. Provide: impact (${impactKeys}), confidence (0.0–1.0), pattern, handoff.`,
+            permissionDecisionReason: `justification is required before calling start_*. Provide: impact (${impactKeys}), confidence (0–100), pattern, handoff.`,
           };
           return { hookSpecificOutput };
         }
@@ -502,7 +502,7 @@ export function buildDoveHooks(
         },
       ],
     },
-    // Group orchestrator score gate — denies if score is absent or ≤ 0.9.
+    // Group orchestrator score gate — denies if groupOrchestrationScore is absent or ≤ 90.
     ...(options.includeGroupReminder
       ? [
           {
@@ -513,15 +513,19 @@ export function buildDoveHooks(
                 if (typeof input.tool_input !== "object" || input.tool_input === null)
                   return { continue: true };
                 const group: unknown = Reflect.get(input.tool_input, "group");
-                const score: unknown =
+                const groupOrchestrationScore: unknown =
                   typeof group === "object" && group !== null
-                    ? Reflect.get(group, "score")
-                    : Reflect.get(input.tool_input, "score"); // start_group_* keeps score at top level
-                if (typeof score === "number" && score > 0.9) return { continue: true };
+                    ? Reflect.get(group, "groupOrchestrationScore")
+                    : Reflect.get(input.tool_input, "groupOrchestrationScore"); // start_group_* keeps score at top level
+                if (typeof groupOrchestrationScore === "number" && groupOrchestrationScore > 90)
+                  return { continue: true };
                 const hookSpecificOutput: PreToolUseHookSpecificOutput = {
                   hookEventName: "PreToolUse",
                   permissionDecision: "deny",
-                  permissionDecisionReason: `${GROUP_ORCHESTRATOR_REMINDER}\nProvide \`score\` (0–1) > 0.9 reflecting your confidence in the orchestration reasoning for this dispatch. Current score: ${typeof score === "number" ? score : "missing"}.`,
+                  permissionDecisionReason:
+                    `${GROUP_ORCHESTRATOR_REMINDER}\n` +
+                    `\`groupOrchestrationScore\` — orchestration behaviour score (0–100, > 90 required): is dispatching this agent NOW the right decision per the rules above?\n` +
+                    `Not a handoff justification score (justification.confidence measures handoff quality). Current: ${typeof groupOrchestrationScore === "number" ? groupOrchestrationScore : "missing"}.`,
                 };
                 return { hookSpecificOutput };
               },
