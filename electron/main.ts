@@ -80,7 +80,7 @@ function pipeToLog(proc: ChildProcess, name: string): void {
 // ── Icons ─────────────────────────────────────────────────────────────────────
 
 function makeIcon(active: boolean): Electron.NativeImage {
-  const file = active ? "icon.png" : "iconError.png";
+  const file = active ? "app-icon.icns" : "iconError.png";
   const path = resolve(ASSETS_DIR, file);
   if (!existsSync(path)) return nativeImage.createEmpty();
   const img = nativeImage.createFromPath(path);
