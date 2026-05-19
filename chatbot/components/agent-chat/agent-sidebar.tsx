@@ -256,7 +256,7 @@ export function AgentSidebar({
       </nav>
 
       {/* Settings nav links — always pinned at bottom */}
-      <div className="pb-2 flex flex-col gap-0.5 border-t border-border/20 bg-background/80 backdrop-blur-xl shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.06)] pt-1">
+      <div className="pb-2 flex flex-col gap-0.5 border-t border-border/20 bg-primary/10 backdrop-blur-xl shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.06)] pt-1">
         {onClearAllHistory && (
           <button
             onClick={handleClearAllClick}
@@ -265,7 +265,7 @@ export function AgentSidebar({
               "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
               confirming
                 ? "text-destructive bg-destructive/10"
-                : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+                : "text-destructive/70 bg-destructive/5 hover:bg-destructive/10 hover:text-destructive hover:translate-x-0.5 duration-200",
               isClearing && "cursor-not-allowed opacity-70",
             )}
           >
@@ -289,7 +289,7 @@ export function AgentSidebar({
             "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
             isAgentCanvas
               ? "bg-primary/10 text-primary border-l-4 border-primary"
-              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+              : "text-muted-foreground hover:bg-muted-foreground/10 hover:translate-x-0.5 duration-200",
           )}
         >
           <Network className={cn("w-4 h-4 shrink-0", isAgentCanvas ? "text-primary" : "")} />
@@ -305,7 +305,7 @@ export function AgentSidebar({
             "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
             isPlugins
               ? "bg-primary/10 text-primary border-l-4 border-primary"
-              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+              : "text-muted-foreground hover:bg-muted-foreground/10 hover:translate-x-0.5 duration-200",
           )}
         >
           <Package className={cn("w-4 h-4 shrink-0", isPlugins ? "text-primary" : "")} />
@@ -321,7 +321,7 @@ export function AgentSidebar({
             "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
             isSettings
               ? "bg-primary/10 text-primary border-l-4 border-primary"
-              : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
+              : "text-muted-foreground hover:bg-muted-foreground/10 hover:translate-x-0.5 duration-200",
           )}
         >
           <Settings className={cn("w-4 h-4 shrink-0", isSettings ? "text-primary" : "")} />
@@ -334,8 +334,8 @@ export function AgentSidebar({
       </div>
 
       {/* Bottom branding */}
-      <div className="p-2 md:p-4">
-        <div className="p-2 md:p-3 rounded-xl bg-muted border border-border/40">
+      <div className="p-2 md:p-4 bg-primary/10">
+        <div className="p-2 md:p-3 rounded-xl border border-border/40">
           <p className="text-[11px] font-bold text-primary tracking-tight mb-1">DovePaw</p>
           <div className="flex items-center gap-1.5">
             <span
