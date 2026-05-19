@@ -3,18 +3,30 @@
  * Handoff range checker for DovePaw agent links.
  *
  * Usage: npx tsx handoff-check.ts <context-file> scoreKey=score [scoreKey=score ...]
- *
- * For each agent: if score falls within [handoffScoreMin, handoffScoreMax],
- * prints CALL + the full pattern guidance (sourced directly from
- * lib/agent-link-patterns.ts). If out of range, prints SKIP only.
  */
 import { readFileSync } from "node:fs";
-import { HANDOFF_PATTERNS, REVIEW_PATTERNS, ESCALATE_PATTERNS } from "../lib/agent-link-patterns";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const STRATEGY_PATTERNS: Record<string, (name?: string) => string> = {
-  chat: HANDOFF_PATTERNS,
-  review: REVIEW_PATTERNS,
-  escalation: ESCALATE_PATTERNS,
+const GUIDANCE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../lib/handoff-guidance");
+
+function callSentence(strategy: string, name: string): string {
+  switch (strategy) {
+    case "chat":
+      return `Delegate to ${name}`;
+    case "review":
+      return `Send your output to ${name} for peer review`;
+    case "escalation":
+      return `Escalate to ${name}`;
+    default:
+      return `Call ${name}`;
+  }
+}
+
+const STRATEGY_FILES: Record<string, string> = {
+  chat: "chat.md",
+  review: "review.md",
+  escalation: "escalate.md",
 };
 
 const [, , contextFile, ...scorePairs] = process.argv;
@@ -23,7 +35,6 @@ if (!contextFile || scorePairs.length === 0) {
   console.error(
     "Usage: npx tsx handoff-check.ts <context-file> scoreKey=score [scoreKey=score ...]",
   );
-  console.error("Score each agent 0–100. CALL result includes full handoff guidance.");
   process.exit(1);
 }
 
@@ -57,7 +68,9 @@ try {
   process.exit(1);
 }
 
-let anyCalled = false;
+// Collect triggered and skipped results, grouped by strategy for triggered ones.
+const triggered = new Map<string, string[]>(); // strategy → agent names
+const skipped: string[] = [];
 
 for (const pair of scorePairs) {
   const eqIdx = pair.lastIndexOf("=");
@@ -78,21 +91,27 @@ for (const pair of scorePairs) {
   }
 
   const inRange = score >= link.handoffScoreMin && score <= link.handoffScoreMax;
-
   if (inRange) {
-    anyCalled = true;
-    const patternFn = STRATEGY_PATTERNS[link.strategy] ?? HANDOFF_PATTERNS;
-    console.log(
-      `\nCALL  ${scoreKey}  (score=${score}, handoffScoreMin=${link.handoffScoreMin}, handoffScoreMax=${link.handoffScoreMax})`,
-    );
-    console.log(patternFn(link.name));
+    const group = triggered.get(link.strategy) ?? [];
+    group.push(link.name);
+    triggered.set(link.strategy, group);
   } else {
-    console.log(
-      `SKIP  ${scoreKey}  (score=${score}, outside [${link.handoffScoreMin}, ${link.handoffScoreMax}])`,
-    );
+    skipped.push(`Skip ${link.name} because the score is outside the range`);
   }
 }
 
-if (!anyCalled) {
+let idx = 1;
+for (const [strategy, names] of triggered) {
+  const file = STRATEGY_FILES[strategy] ?? "chat.md";
+  console.log(
+    `${idx++}. **${callSentence(strategy, names.join(", "))}**, read \`${resolve(GUIDANCE_DIR, file)}\` to understand when and how to proceed`,
+  );
+}
+
+for (const line of skipped) {
+  console.log(`~~${line}~~`);
+}
+
+if (triggered.size === 0) {
   console.log("\nNo handoffs triggered. Continue without calling any linked agent.");
 }
