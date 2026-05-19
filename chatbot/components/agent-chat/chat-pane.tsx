@@ -99,7 +99,7 @@ export function ChatPane({
   // Stable browser session ID: use currentSessionId when available, otherwise a per-instance fallback
   const instanceId = React.useId();
   const browserSessionId = currentSessionId ?? instanceId;
-  const mainRef = React.useRef<HTMLElement>(null);
+  const mainRef = React.useRef<HTMLDivElement>(null);
   React.useEffect(() => {
     if (!window.electron?.isElectron) return;
     setIsElectron(true);
@@ -137,7 +137,7 @@ export function ChatPane({
   // Keep active index in bounds when questions are resolved
   const clampedQuestionIdx = Math.min(activeQuestionIdx, Math.max(0, pendingQuestions.length - 1));
 
-  const [panelWidth, setPanelWidth] = React.useState(480);
+  const [panelWidth, setPanelWidth] = React.useState(260);
   const isResizing = React.useRef(false);
 
   const onResizeStart = React.useCallback(
@@ -149,7 +149,7 @@ export function ChatPane({
       const onMove = (ev: MouseEvent) => {
         if (!isResizing.current) return;
         const delta = startX - ev.clientX;
-        setPanelWidth(Math.max(260, startWidth + delta));
+        setPanelWidth(Math.max(220, startWidth + delta));
       };
       const onUp = () => {
         isResizing.current = false;
@@ -163,221 +163,222 @@ export function ChatPane({
   );
 
   return (
-    <>
-      <main ref={mainRef} className="flex-1 flex flex-col bg-background relative min-w-0">
-        {/* Glass header */}
-        <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex justify-between items-center w-full px-6 py-2.5 shrink-0">
-          <div className="flex items-center gap-3">
-            <AgentIcon className="w-4 h-4 text-primary" />
-            <h1 className="text-base font-bold text-foreground tracking-tight">{agentName}</h1>
-            {isLoading ? (
-              <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-bold text-primary tracking-wider uppercase">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                Processing
-              </span>
-            ) : (
-              <span className="px-2.5 py-0.5 rounded-full bg-accent text-[10px] font-bold text-accent-foreground tracking-wider uppercase">
-                Active Session
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setHistoryOpen((v) => !v)}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${historyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-              title="Session history"
-            >
-              <Clock className="w-4 h-4" />
-            </button>
-            {messages.some((msg) =>
-              msg.segments.some(
-                (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
-              ),
-            ) && (
-              <button
-                onClick={newSession}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-                title="Clear chat"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-            {isElectron && (
-              <button
-                onClick={() => {
-                  console.log(
-                    "[DovePaw] browser toggle clicked, window.electron=",
-                    window.electron,
-                  );
-                  window
-                    .electron!.browser.toggle(browserSessionId)
-                    .then((r) => {
-                      console.log("[DovePaw] browser:toggle result", r);
-                      setBrowserPanelActive(r.visible);
-                    })
-                    .catch((err: unknown) => {
-                      console.error("[DovePaw] browser:toggle error", err);
-                    });
-                }}
-                className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${browserPanelActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
-                title={browserPanelActive ? "Hide browser" : "Open browser"}
-              >
-                <Globe className="w-4 h-4" />
-              </button>
-            )}
-            <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
-              <Bell className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => router.push("/about")}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-              title="About DovePaw"
-            >
-              <Info className="w-4 h-4" />
-            </button>
-            <OpenVikingStatusButton />
-            <button
-              onClick={() => router.push("/settings")}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-              title="Settings"
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-            <div className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-primary/10">
-              <img src={USER_AVATAR} alt="User" className="w-full h-full object-cover" />
-            </div>
-          </div>
-        </header>
-
-        {/* Chat area */}
-        <Conversation className="flex-1 bg-background">
-          <ConversationContent className={showAllAgents ? "max-w-none" : ""}>
-            {messages.filter((msg) =>
-              msg.segments.some(
-                (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
-              ),
-            ).length === 0 ? (
-              <ConversationEmptyState className="justify-start pt-8">
-                {!isLoading && (
-                  <IntroCard
-                    key={agentId}
-                    agentConfigs={agentConfigs}
-                    onSelect={sendMessage}
-                    agentId={agentId}
-                    showAllAgents={showAllAgents}
-                    onShowAllAgentsChange={setShowAllAgents}
-                  />
-                )}
-              </ConversationEmptyState>
-            ) : (
-              messages.map((msg) => (
-                <ChatMessageItem
-                  key={msg.id}
-                  msg={msg}
-                  agentConfigs={agentConfigs}
-                  doveDisplayName={doveDisplayName}
-                />
-              ))
-            )}
-            {isLoading && <ProcessingBar />}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
-
-        <footer className="px-6 pb-4 pt-0 w-full max-w-5xl mx-auto shrink-0">
-          {(pendingPermissions.length > 0 || pendingQuestions.length > 0) && (
-            <div className="mb-3 space-y-2">
-              {pendingPermissions.map((req) => (
-                <PermissionBanner
-                  key={req.requestId}
-                  request={req}
-                  onAllow={() => void resolvePermission(req.requestId, true)}
-                  onDeny={() => void resolvePermission(req.requestId, false)}
-                />
-              ))}
-              {pendingQuestions.length > 0 &&
-                (() => {
-                  const req = pendingQuestions[clampedQuestionIdx];
-                  return (
-                    <div className="space-y-1">
-                      {pendingQuestions.length > 1 && (
-                        <div className="flex items-center justify-between px-1">
-                          <span className="text-xs font-medium text-foreground">
-                            Question <span className="text-primary">{clampedQuestionIdx + 1}</span>
-                            <span className="text-muted-foreground">
-                              {" "}
-                              / {pendingQuestions.length}
-                            </span>
-                          </span>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setActiveQuestionIdx((i) => Math.max(0, i - 1))}
-                              disabled={clampedQuestionIdx === 0}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md border border-border/60 bg-muted/60 text-xs font-medium text-foreground hover:bg-muted hover:border-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              <ChevronLeft className="size-3.5" />
-                              Prev
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setActiveQuestionIdx((i) =>
-                                  Math.min(pendingQuestions.length - 1, i + 1),
-                                )
-                              }
-                              disabled={clampedQuestionIdx === pendingQuestions.length - 1}
-                              className="flex items-center gap-1 px-2 py-1 rounded-md border border-border/60 bg-muted/60 text-xs font-medium text-foreground hover:bg-muted hover:border-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                            >
-                              Next
-                              <ChevronRight className="size-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                      <QuestionBanner
-                        key={req.requestId}
-                        request={req}
-                        onSubmit={(answers) => {
-                          void resolveQuestion(req.requestId, answers);
-                        }}
-                      />
-                    </div>
-                  );
-                })()}
-            </div>
+    <main className="flex-1 flex flex-col bg-background relative min-w-0">
+      {/* Glass header */}
+      <header className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/20 flex justify-between items-center w-full px-6 py-2.5 shrink-0">
+        <div className="flex items-center gap-3">
+          <AgentIcon className="w-4 h-4 text-primary" />
+          <h1 className="text-base font-bold text-foreground tracking-tight">{agentName}</h1>
+          {isLoading ? (
+            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-bold text-primary tracking-wider uppercase">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              Processing
+            </span>
+          ) : (
+            <span className="px-2.5 py-0.5 rounded-full bg-accent text-[10px] font-bold text-accent-foreground tracking-wider uppercase">
+              Active Session
+            </span>
           )}
-          <ChatInputBar
-            onSubmit={sendMessage}
-            onCancel={cancelMessage}
-            isLoading={isLoading}
-            pendingQueue={pendingQueue}
-            onRemoveFromQueue={removeFromQueue}
-          />
-          <p className="text-center mt-3 text-[10px] text-muted-foreground/40 font-medium tracking-widest uppercase">
-            Secured by {doveDisplayName}&apos;s whiskers
-          </p>
-        </footer>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setHistoryOpen((v) => !v)}
+            className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${historyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+            title="Session history"
+          >
+            <Clock className="w-4 h-4" />
+          </button>
+          {messages.some((msg) =>
+            msg.segments.some(
+              (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
+            ),
+          ) && (
+            <button
+              onClick={newSession}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+              title="Clear chat"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+          {isElectron && (
+            <button
+              onClick={() => {
+                console.log("[DovePaw] browser toggle clicked, window.electron=", window.electron);
+                window
+                  .electron!.browser.toggle(browserSessionId)
+                  .then((r) => {
+                    console.log("[DovePaw] browser:toggle result", r);
+                    setBrowserPanelActive(r.visible);
+                  })
+                  .catch((err: unknown) => {
+                    console.error("[DovePaw] browser:toggle error", err);
+                  });
+              }}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${browserPanelActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
+              title={browserPanelActive ? "Hide browser" : "Open browser"}
+            >
+              <Globe className="w-4 h-4" />
+            </button>
+          )}
+          <button className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors">
+            <Bell className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => router.push("/about")}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+            title="About DovePaw"
+          >
+            <Info className="w-4 h-4" />
+          </button>
+          <OpenVikingStatusButton />
+          <button
+            onClick={() => router.push("/settings")}
+            className="w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <div className="w-9 h-9 rounded-full overflow-hidden ring-2 ring-primary/10">
+            <img src={USER_AVATAR} alt="User" className="w-full h-full object-cover" />
+          </div>
+        </div>
+      </header>
 
-        {/* Background gradient overlays */}
-        <div className="fixed top-0 right-0 w-1/3 h-full bg-linear-to-l from-primary/5 to-transparent pointer-events-none z-0" />
-        <div className="fixed bottom-0 left-0 w-1/2 h-1/2 bg-linear-to-tr from-accent/10 to-transparent pointer-events-none z-0" />
-      </main>
+      {/* Content row — chat + history panel, both below the header */}
+      <div className="flex-1 flex min-h-0">
+        <div ref={mainRef} className="flex-1 flex flex-col min-w-0">
+          {/* Chat area */}
+          <Conversation className="flex-1 bg-background">
+            <ConversationContent className={showAllAgents ? "max-w-none" : ""}>
+              {messages.filter((msg) =>
+                msg.segments.some(
+                  (s) => (s.type === "text" && s.content.trim()) || s.type === "tool_call",
+                ),
+              ).length === 0 ? (
+                <ConversationEmptyState className="justify-start pt-8">
+                  {!isLoading && (
+                    <IntroCard
+                      key={agentId}
+                      agentConfigs={agentConfigs}
+                      onSelect={sendMessage}
+                      agentId={agentId}
+                      showAllAgents={showAllAgents}
+                      onShowAllAgentsChange={setShowAllAgents}
+                    />
+                  )}
+                </ConversationEmptyState>
+              ) : (
+                messages.map((msg) => (
+                  <ChatMessageItem
+                    key={msg.id}
+                    msg={msg}
+                    agentConfigs={agentConfigs}
+                    doveDisplayName={doveDisplayName}
+                  />
+                ))
+              )}
+              {isLoading && <ProcessingBar />}
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
 
-      {/* Right sidebar — session history */}
-      {historyOpen && historyPanel && (
-        <aside
-          style={{ width: panelWidth }}
-          className="relative shrink-0 h-screen border-l border-border/20 bg-background/60 backdrop-blur-xl flex flex-col overflow-hidden"
-        >
-          {/* Horizontal resize handle (left edge) */}
-          <div
-            onMouseDown={onResizeStart}
-            className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
-          />
-          {historyPanel}
-        </aside>
-      )}
-    </>
+          <footer className="px-6 pb-4 pt-0 w-full max-w-5xl mx-auto shrink-0">
+            {(pendingPermissions.length > 0 || pendingQuestions.length > 0) && (
+              <div className="mb-3 space-y-2">
+                {pendingPermissions.map((req) => (
+                  <PermissionBanner
+                    key={req.requestId}
+                    request={req}
+                    onAllow={() => void resolvePermission(req.requestId, true)}
+                    onDeny={() => void resolvePermission(req.requestId, false)}
+                  />
+                ))}
+                {pendingQuestions.length > 0 &&
+                  (() => {
+                    const req = pendingQuestions[clampedQuestionIdx];
+                    return (
+                      <div className="space-y-1">
+                        {pendingQuestions.length > 1 && (
+                          <div className="flex items-center justify-between px-1">
+                            <span className="text-xs font-medium text-foreground">
+                              Question{" "}
+                              <span className="text-primary">{clampedQuestionIdx + 1}</span>
+                              <span className="text-muted-foreground">
+                                {" "}
+                                / {pendingQuestions.length}
+                              </span>
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setActiveQuestionIdx((i) => Math.max(0, i - 1))}
+                                disabled={clampedQuestionIdx === 0}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md border border-border/60 bg-muted/60 text-xs font-medium text-foreground hover:bg-muted hover:border-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                <ChevronLeft className="size-3.5" />
+                                Prev
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setActiveQuestionIdx((i) =>
+                                    Math.min(pendingQuestions.length - 1, i + 1),
+                                  )
+                                }
+                                disabled={clampedQuestionIdx === pendingQuestions.length - 1}
+                                className="flex items-center gap-1 px-2 py-1 rounded-md border border-border/60 bg-muted/60 text-xs font-medium text-foreground hover:bg-muted hover:border-border transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                Next
+                                <ChevronRight className="size-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <QuestionBanner
+                          key={req.requestId}
+                          request={req}
+                          onSubmit={(answers) => {
+                            void resolveQuestion(req.requestId, answers);
+                          }}
+                        />
+                      </div>
+                    );
+                  })()}
+              </div>
+            )}
+            <ChatInputBar
+              onSubmit={sendMessage}
+              onCancel={cancelMessage}
+              isLoading={isLoading}
+              pendingQueue={pendingQueue}
+              onRemoveFromQueue={removeFromQueue}
+            />
+            <p className="text-center mt-3 text-[10px] text-muted-foreground/40 font-medium tracking-widest uppercase">
+              Secured by {doveDisplayName}&apos;s whiskers
+            </p>
+          </footer>
+        </div>
+
+        {/* Right sidebar — session history, starts below the header */}
+        {historyOpen && historyPanel && (
+          <aside
+            style={{ width: `min(${panelWidth}px, max(220px, 28vw))` }}
+            className="relative shrink-0 border-l border-border/20 bg-background/60 backdrop-blur-xl flex flex-col overflow-hidden"
+          >
+            {/* Horizontal resize handle (left edge) */}
+            <div
+              onMouseDown={onResizeStart}
+              className="absolute left-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-10"
+            />
+            {historyPanel}
+          </aside>
+        )}
+      </div>
+
+      {/* Background gradient overlays */}
+      <div className="fixed top-0 right-0 w-1/3 h-full bg-linear-to-l from-primary/5 to-transparent pointer-events-none z-0" />
+      <div className="fixed bottom-0 left-0 w-1/2 h-1/2 bg-linear-to-tr from-accent/10 to-transparent pointer-events-none z-0" />
+    </main>
   );
 }

@@ -140,7 +140,7 @@ export function AgentSidebar({
 
   return (
     <aside
-      style={{ width: sidebarWidth }}
+      style={{ width: `min(${sidebarWidth}px, max(180px, 35vw))` }}
       className="h-screen shrink-0 flex flex-col bg-background border-r border-border/30 relative"
     >
       <div
@@ -148,9 +148,9 @@ export function AgentSidebar({
         className="absolute right-0 top-0 h-full w-1 cursor-col-resize hover:bg-primary/30 transition-colors z-50"
       />
       {/* Logo header */}
-      <div className="px-5 py-5">
+      <div className="px-3 py-3 md:px-5 md:py-5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
+          <div className="w-7 h-7 md:w-8 md:h-8 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/20">
             <PawPrint className="w-4 h-4" />
           </div>
           <div>
@@ -170,7 +170,7 @@ export function AgentSidebar({
         <button
           onClick={() => onSelectAgent?.("dove")}
           className={cn(
-            "relative overflow-hidden shrink-0 my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+            "relative overflow-hidden shrink-0 my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 text-left transition-all w-full",
             isDoveSelected
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -189,7 +189,7 @@ export function AgentSidebar({
           )}
           <div
             className={cn(
-              "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
+              "w-5 h-5 md:w-6 md:h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
               doveSettings.iconBg,
               doveSettings.iconColor,
             )}
@@ -197,7 +197,12 @@ export function AgentSidebar({
             <DoveIcon className="w-3 h-3" />
           </div>
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-            <span className={cn("text-sm font-medium", !isDoveSelected && "text-foreground/80")}>
+            <span
+              className={cn(
+                "text-xs md:text-sm font-medium",
+                !isDoveSelected && "text-foreground/80",
+              )}
+            >
               {doveSettings.displayName}
             </span>
             <span className="text-[9px] text-muted-foreground/70 uppercase tracking-wide">
@@ -210,7 +215,7 @@ export function AgentSidebar({
         {/* Named group chats (from agent-links.json) */}
         {chatGroups.length > 0 && (
           <div className="flex flex-col gap-0 mt-3 shrink-0">
-            <div className="flex items-center gap-2 px-4 py-2 w-full text-left border-t border-border/40 bg-muted/40 shrink-0">
+            <div className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 w-full text-left border-t border-border/40 bg-muted/40 shrink-0">
               <Users2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
               <span className="flex-1 text-[11px] uppercase tracking-widest font-bold text-muted-foreground truncate">
                 Group Chats
@@ -257,7 +262,7 @@ export function AgentSidebar({
             onClick={handleClearAllClick}
             disabled={isClearing}
             className={cn(
-              "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+              "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
               confirming
                 ? "text-destructive bg-destructive/10"
                 : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -269,7 +274,7 @@ export function AgentSidebar({
             ) : (
               <Trash2 className="w-4 h-4 shrink-0" />
             )}
-            <span className="text-sm font-medium text-foreground/80">
+            <span className="text-xs md:text-sm font-medium text-foreground/80">
               {isClearing
                 ? "Clearing history…"
                 : confirming
@@ -281,50 +286,56 @@ export function AgentSidebar({
         <Link
           href="/settings/agent-links/canvas"
           className={cn(
-            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+            "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
             isAgentCanvas
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
           <Network className={cn("w-4 h-4 shrink-0", isAgentCanvas ? "text-primary" : "")} />
-          <span className={cn("text-sm font-medium", !isAgentCanvas && "text-foreground/80")}>
+          <span
+            className={cn("text-xs md:text-sm font-medium", !isAgentCanvas && "text-foreground/80")}
+          >
             Agent Links
           </span>
         </Link>
         <Link
           href="/settings/plugins"
           className={cn(
-            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+            "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
             isPlugins
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
           <Package className={cn("w-4 h-4 shrink-0", isPlugins ? "text-primary" : "")} />
-          <span className={cn("text-sm font-medium", !isPlugins && "text-foreground/80")}>
+          <span
+            className={cn("text-xs md:text-sm font-medium", !isPlugins && "text-foreground/80")}
+          >
             Plugins
           </span>
         </Link>
         <Link
           href="/settings"
           className={cn(
-            "my-0.5 px-4 py-2.5 flex items-center gap-3 transition-all w-full",
+            "my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 transition-all w-full",
             isSettings
               ? "bg-primary/10 text-primary border-l-4 border-primary"
               : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
           )}
         >
           <Settings className={cn("w-4 h-4 shrink-0", isSettings ? "text-primary" : "")} />
-          <span className={cn("text-sm font-medium", !isSettings && "text-foreground/80")}>
+          <span
+            className={cn("text-xs md:text-sm font-medium", !isSettings && "text-foreground/80")}
+          >
             Settings
           </span>
         </Link>
       </div>
 
       {/* Bottom branding */}
-      <div className="p-4">
-        <div className="p-3 rounded-xl bg-muted border border-border/40">
+      <div className="p-2 md:p-4">
+        <div className="p-2 md:p-3 rounded-xl bg-muted border border-border/40">
           <p className="text-[11px] font-bold text-primary tracking-tight mb-1">DovePaw</p>
           <div className="flex items-center gap-1.5">
             <span
@@ -402,7 +413,7 @@ function PluginGroup({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="flex flex-col mt-3">
-      <CollapsibleTrigger className="flex items-center gap-2 px-4 py-2 w-full text-left border-t border-border/40 bg-muted/40 hover:bg-muted/70 transition-colors group">
+      <CollapsibleTrigger className="flex items-center gap-2 px-3 py-1.5 md:px-4 md:py-2 w-full text-left border-t border-border/40 bg-muted/40 hover:bg-muted/70 transition-colors group">
         <GroupIcon className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
         <span className="flex-1 text-[11px] uppercase tracking-widest font-bold text-muted-foreground truncate">
           {group.pluginName}

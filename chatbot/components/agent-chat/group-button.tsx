@@ -28,7 +28,7 @@ export function GroupButton({
     <button
       onClick={onClick}
       className={cn(
-        "group relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+        "group relative overflow-hidden my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 text-left transition-all w-full",
         isSelected
           ? "bg-primary/10 text-primary border-l-4 border-primary"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -45,7 +45,7 @@ export function GroupButton({
           }}
         />
       )}
-      <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-primary/10">
+      <div className="w-5 h-5 md:w-6 md:h-6 rounded-md flex items-center justify-center shrink-0 bg-primary/10">
         <Users2 className="w-3 h-3 text-primary" />
       </div>
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">

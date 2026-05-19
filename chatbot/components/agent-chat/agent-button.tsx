@@ -151,7 +151,7 @@ export function AgentButton({
     <button
       onClick={onClick}
       className={cn(
-        "group relative overflow-hidden my-0.5 px-4 py-2.5 flex items-center gap-3 text-left transition-all w-full",
+        "group relative overflow-hidden my-0.5 px-3 py-2 md:px-4 md:py-2.5 flex items-center gap-3 text-left transition-all w-full",
         isSelected
           ? "bg-primary/10 text-primary border-l-4 border-primary"
           : "text-muted-foreground hover:bg-muted hover:translate-x-0.5 duration-200",
@@ -170,7 +170,7 @@ export function AgentButton({
       )}
       <div
         className={cn(
-          "w-6 h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
+          "w-5 h-5 md:w-6 md:h-6 rounded-md flex items-center justify-center shrink-0 transition-colors",
           agent.iconBg,
           agent.iconColor,
         )}
