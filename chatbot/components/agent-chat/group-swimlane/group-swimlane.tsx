@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { buildAgentDef } from "@@/lib/agents";
@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { MessageResponse } from "@/components/ai-elements/message";
 import { MESSAGE_RESPONSE_SPACING } from "@/components/agent-chat/chat-message";
 import { SwimlaneLane } from "./group-swimlane-lane";
-import { HandoffOverlay } from "./group-swimlane-handoff";
 import type { NarratorPill, SwimlaneModel } from "./use-swimlane-steps";
 
 interface GroupSwimlaneProps {
@@ -28,8 +27,7 @@ export function GroupSwimlane({
   selectedStepId,
   onSelectStep,
 }: GroupSwimlaneProps) {
-  const gridRef = useRef<HTMLDivElement>(null);
-  const { lanes, handoffs, narratorPills } = model;
+  const { lanes, narratorPills } = model;
 
   const configByName = React.useMemo(
     () => new Map(agentConfigs.map((a) => [a.name, a])),
@@ -49,11 +47,7 @@ export function GroupSwimlane({
         <NarratorStrip pills={narratorPills} configByName={configByName} />
       )}
       <div className="relative flex-1 overflow-y-auto overflow-x-hidden px-4 py-4">
-        <div
-          ref={gridRef}
-          className="relative grid gap-y-2 w-full"
-          style={{ gridTemplateColumns: "180px 1fr" }}
-        >
+        <div className="relative grid gap-y-2 w-full" style={{ gridTemplateColumns: "180px 1fr" }}>
           {lanes.map((lane) => (
             <SwimlaneLane
               key={lane.agentId}
@@ -65,7 +59,6 @@ export function GroupSwimlane({
               totalSlots={totalSlots}
             />
           ))}
-          <HandoffOverlay containerRef={gridRef} handoffs={handoffs} />
         </div>
       </div>
     </div>
