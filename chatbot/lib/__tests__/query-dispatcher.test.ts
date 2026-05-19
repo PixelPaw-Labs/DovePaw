@@ -23,7 +23,7 @@ describe("MessageAccumulator.buildMessage", () => {
     expect(msg.processContent).toBeUndefined();
   });
 
-  it("excludes tool_call segments from both segments and processContent", () => {
+  it("includes tool_call segments in segments alongside text", () => {
     const acc = new MessageAccumulator();
     acc.onTextDelta("before ");
     acc.onToolCall("Bash");
@@ -32,6 +32,7 @@ describe("MessageAccumulator.buildMessage", () => {
     const msg = acc.buildMessage();
     expect(msg.segments).toEqual([
       { type: "text", content: "before " },
+      { type: "tool_call", tool: { name: "Bash", input: { cmd: "ls" } } },
       { type: "text", content: "after" },
     ]);
     expect(msg.processContent).toBeUndefined();
@@ -46,14 +47,17 @@ describe("MessageAccumulator.buildMessage", () => {
     expect(msg.processContent).toContain("reasoning...");
   });
 
-  it("saves only thinking in processContent, not tool calls", () => {
+  it("saves thinking in processContent and tool_call segments in segments", () => {
     const acc = new MessageAccumulator();
     acc.onThinking("thought");
     acc.onToolCall("Read");
     acc.onToolInput('{"path":"/x"}');
     acc.onTextDelta("result");
     const msg = acc.buildMessage();
-    expect(msg.segments).toEqual([{ type: "text", content: "result" }]);
+    expect(msg.segments).toEqual([
+      { type: "tool_call", tool: { name: "Read", input: { path: "/x" } } },
+      { type: "text", content: "result" },
+    ]);
     expect(msg.processContent).toBe("thought");
   });
 
@@ -351,7 +355,7 @@ describe("A2AQueryDispatcher", () => {
     });
   });
 
-  it("buildAssistantMessage returns text-only segments and thinking in processContent", () => {
+  it("buildAssistantMessage returns text and tool_call segments with thinking in processContent", () => {
     const dispatcher = new A2AQueryDispatcher(makePublisher());
     dispatcher.onTextDelta("Hello ");
     dispatcher.onToolCall("ToolSearch");
@@ -363,10 +367,10 @@ describe("A2AQueryDispatcher", () => {
 
     expect(typeof msg.id).toBe("string");
     expect(msg.role).toBe("assistant");
-    expect(msg.segments.every((s) => s.type === "text")).toBe(true);
-    expect(msg.segments.map((s) => (s as { type: "text"; content: string }).content)).toEqual([
-      "Hello ",
-      "World",
+    expect(msg.segments).toEqual([
+      { type: "text", content: "Hello " },
+      { type: "tool_call", tool: { name: "ToolSearch", input: { query: "foo" } } },
+      { type: "text", content: "World" },
     ]);
     expect(msg.processContent).toBe("inner reasoning");
   });

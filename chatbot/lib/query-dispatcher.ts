@@ -60,7 +60,7 @@ import { relaySessionEvent } from "@/lib/relay-to-chatbot";
  * Any segment type NOT listed here is treated as process content (stored in processContent).
  * When adding a new MessageSegment type, opt it in here only if it belongs in the message body.
  */
-const MESSAGE_SEGMENT_TYPES = new Set<MessageSegment["type"]>(["text"]);
+const MESSAGE_SEGMENT_TYPES = new Set<MessageSegment["type"]>(["text", "tool_call"]);
 
 // ─── Tool label helpers ───────────────────────────────────────────────────────
 

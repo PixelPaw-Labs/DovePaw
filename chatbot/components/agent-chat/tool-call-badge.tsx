@@ -1,6 +1,15 @@
 import { diffLines } from "diff";
 import { FileEdit } from "lucide-react";
+import type { BundledLanguage } from "shiki";
 import { cn } from "@/lib/utils";
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockCopyButton,
+  CodeBlockFilename,
+  CodeBlockHeader,
+  CodeBlockTitle,
+} from "@/components/ai-elements/code-block";
 import { Sources, SourcesContent, SourcesTrigger } from "@/components/ai-elements/sources";
 import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
 import type { DynamicToolUIPart } from "ai";
@@ -56,11 +65,13 @@ function DiffBlock({
   );
 
   return (
-    <div className="rounded-md border border-border overflow-hidden text-xs font-mono">
-      <div className="px-3 py-1.5 bg-muted border-b border-border text-muted-foreground truncate">
-        {filePath}
-      </div>
-      <pre className="overflow-x-auto bg-background p-0 m-0">
+    <div className="group relative w-full overflow-hidden rounded-md border bg-background text-foreground text-xs font-mono">
+      <CodeBlockHeader>
+        <CodeBlockTitle>
+          <CodeBlockFilename>{filePath}</CodeBlockFilename>
+        </CodeBlockTitle>
+      </CodeBlockHeader>
+      <pre className="overflow-x-auto p-0 m-0">
         {lines.map((line, i) => (
           <div
             key={i}
@@ -97,6 +108,51 @@ export function EditDiff({ tool }: { tool: ToolCall }) {
       oldStr={typeof tool.input.old_string === "string" ? tool.input.old_string : ""}
       newStr={typeof tool.input.new_string === "string" ? tool.input.new_string : ""}
     />
+  );
+}
+
+const EXT_LANG: Partial<Record<string, BundledLanguage>> = {
+  ts: "typescript",
+  tsx: "tsx",
+  js: "javascript",
+  jsx: "jsx",
+  py: "python",
+  rb: "ruby",
+  rs: "rust",
+  go: "go",
+  json: "json",
+  yaml: "yaml",
+  yml: "yaml",
+  md: "markdown",
+  css: "css",
+  html: "html",
+  sh: "bash",
+};
+
+function extLang(filePath: string): BundledLanguage {
+  const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
+  return EXT_LANG[ext] ?? "markdown";
+}
+
+export function WriteDiff({ tool }: { tool: ToolCall }) {
+  if (
+    tool.name !== "Write" ||
+    typeof tool.input.file_path !== "string" ||
+    typeof tool.input.content !== "string"
+  )
+    return null;
+  const filePath = tool.input.file_path;
+  return (
+    <CodeBlock code={tool.input.content} language={extLang(filePath)}>
+      <CodeBlockHeader>
+        <CodeBlockTitle>
+          <CodeBlockFilename>{shortPath(filePath)}</CodeBlockFilename>
+        </CodeBlockTitle>
+        <CodeBlockActions>
+          <CodeBlockCopyButton />
+        </CodeBlockActions>
+      </CodeBlockHeader>
+    </CodeBlock>
   );
 }
 

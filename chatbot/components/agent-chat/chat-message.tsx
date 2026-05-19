@@ -12,7 +12,7 @@ import type { ChatMessage } from "@/components/hooks/use-messages";
 import { messageText } from "@/components/hooks/use-messages";
 import { AnimatedMessage } from "./animated-message";
 import { CopyAction } from "./copy-action";
-import { EditDiff, ToolCallItem } from "./tool-call-badge";
+import { EditDiff, WriteDiff, ToolCallItem } from "./tool-call-badge";
 
 // Width of avatar (w-8 = 2rem) + gap (gap-2 = 0.5rem) → pl-10 (2.5rem)
 const AVATAR_OFFSET = "pl-10";
@@ -145,9 +145,11 @@ export function ChatMessageItem({
                   <ToolCallItem key={i} tool={seg.tool} isActive={!isCompleted} />
                 );
               })()
-            ) : (
+            ) : seg.tool.name === "Edit" ? (
               <EditDiff key={i} tool={seg.tool} />
-            ),
+            ) : seg.tool.name === "Write" ? (
+              <WriteDiff key={i} tool={seg.tool} />
+            ) : null,
           )}
         </MessageContent>
       )}
