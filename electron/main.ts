@@ -339,6 +339,12 @@ process.title = SERVICE_NAME;
 void app.whenReady().then(async () => {
   await linkAgents();
 
+  // Set dock icon on macOS (dev mode doesn't pick up the bundled icns automatically)
+  if (process.platform === "darwin" && app.dock) {
+    const dockIconPath = resolve(ASSETS_DIR, "icon.png");
+    if (existsSync(dockIconPath)) app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
+  }
+
   // ── Main window ──
   const windowState = loadWindowState();
   win = new BrowserWindow({
@@ -346,6 +352,7 @@ void app.whenReady().then(async () => {
     minWidth: 1200,
     minHeight: 700,
     title: SERVICE_NAME,
+    icon: resolve(ASSETS_DIR, "icon.png"),
     webPreferences: {
       preload: resolve(__dirname, "preload.cjs"),
       contextIsolation: true,
