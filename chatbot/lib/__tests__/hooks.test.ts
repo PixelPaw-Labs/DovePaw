@@ -522,7 +522,7 @@ describe("buildDoveHooks — PostToolUse await_* response reminder", () => {
     expect(result.reason).toContain("<links>");
     expect(result.reason).toContain("<scoreKey>fixer</scoreKey>");
     expect(result.reason).toContain("<toolKey>fixer</toolKey>");
-    expect(result.reason).toContain("handoff-check.ts");
+    expect(result.reason).toContain('<guidance strategy="');
   });
 });
 
@@ -559,10 +559,12 @@ describe("buildLinksReminder", () => {
     expect(reminder).toContain("<scoreKey>beta</scoreKey>");
     expect(reminder).toContain("<toolKey>beta</toolKey>");
     expect(reminder).toContain("<strategy>chat</strategy>");
+    expect(reminder).toContain("<range>70–95</range>");
     expect(reminder).toContain("<scoreKey>gamma__escalation</scoreKey>");
     expect(reminder).toContain("<toolKey>gamma</toolKey>");
     expect(reminder).toContain("<strategy>escalation</strategy>");
-    expect(reminder).toContain("handoff-check.ts");
+    expect(reminder).toContain("<range>50–90</range>");
+    expect(reminder).toContain('<guidance strategy="');
   });
 
   it("selects per-strategy pattern text", async () => {
@@ -575,10 +577,10 @@ describe("buildLinksReminder", () => {
       },
     ]);
     const reminder = (await buildLinksReminder("alpha", agents))!;
-    // pattern text is now loaded by the script at eval time, not inlined in the reminder
     expect(reminder).toContain("<scoreKey>beta__review</scoreKey>");
     expect(reminder).toContain("<strategy>review</strategy>");
-    expect(reminder).toContain("handoff-check.ts");
+    expect(reminder).toContain("<range>80–100</range>");
+    expect(reminder).toContain('<guidance strategy="');
   });
 
   it("excludes the current orchestrator agent from the reminder (self-reference via dual back-link)", async () => {

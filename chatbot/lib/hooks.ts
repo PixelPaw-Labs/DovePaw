@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
-import { realpath, mkdir, writeFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import path from "path";
 import type {
   UserPromptSubmitHookSpecificOutput,
@@ -27,7 +27,7 @@ import {
   buildDovePromptReminder,
 } from "@@/lib/dove-lean-reminder";
 import { readAgentLinks, resolveLinkedTargets } from "@@/lib/agent-links";
-import { DOVEPAW_TMP_DIR, DOVEPAW_SCRIPTS_DIR, handoffContextFile } from "@@/lib/paths";
+import { AGENTS_ROOT } from "@@/lib/paths";
 import { doveAwaitToolName, doveStartToolName, CONFIDENCE_THRESHOLD } from "@/lib/query-tools";
 import { PendingRegistry, type PendingEntry } from "@/lib/pending-registry";
 import type { ChatSseEvent } from "@/lib/chat-sse";
@@ -87,12 +87,19 @@ export function getAwaitStatus(tool_response: unknown): AwaitToolStatus | undefi
 
 // ─── Links reminder ──────────────────────────────────────────────────────────
 
+const HANDOFF_GUIDANCE_DIR = path.join(AGENTS_ROOT, "lib", "handoff-guidance");
+const STRATEGY_GUIDANCE_FILES: Record<string, string> = {
+  chat: "chat.md",
+  review: "review.md",
+  escalation: "escalate.md",
+};
+
 /**
  * Builds a PostToolUse reminder for the completed agent's outgoing links.
  *
- * Writes a compact JSON context file to ~/.dovepaw/tmp/handoff-{id}.json and
- * returns a short XML reminder. The handoff-check.ts script imports pattern
- * text directly from lib/agent-link-patterns.ts at eval time — no copy in JSON.
+ * Returns a compact XML block listing each linked agent with its score range
+ * and a path to the relevant handoff guidance. The agent reads the guidance,
+ * scores each target, and calls the ones in range — no external script needed.
  *
  * Returns null when the agent has no outgoing links.
  */
@@ -107,8 +114,7 @@ export async function buildLinksReminder(
   );
   if (outgoing.length === 0) return null;
 
-  // Build compact link definitions — scoreKey is unique per (agent, strategy) pair;
-  // toolKey is the manifestKey used in start_* / await_* tool names.
+  // scoreKey is unique per (agent, strategy) pair; toolKey maps to start_*/ask_* tool names.
   const linkDefs = outgoing.map((link) => {
     const targetDef = agents.find((a) => a.name === link.targetName);
     const toolKey = targetDef?.manifestKey ?? link.targetName.replace(/-/g, "_");
@@ -123,16 +129,12 @@ export async function buildLinksReminder(
     };
   });
 
-  // Write context file so the script can read link definitions without inline verbosity.
-  const contextId = randomUUID().slice(0, 8);
-  const contextPath = handoffContextFile(contextId);
-  await mkdir(DOVEPAW_TMP_DIR, { recursive: true });
-  await writeFile(
-    contextPath,
-    JSON.stringify({ completedAgent: completedAgentName, links: linkDefs }, null, 2),
-  );
+  const strategies = [...new Set(linkDefs.map((l) => l.strategy))];
+  const guidanceLines = strategies.map((strategy) => {
+    const file = STRATEGY_GUIDANCE_FILES[strategy] ?? "chat.md";
+    return `<guidance strategy="${strategy}">MUST read \`${path.join(HANDOFF_GUIDANCE_DIR, file)}\` to understand the pattern before scoring</guidance>`;
+  });
 
-  const scriptPath = path.join(DOVEPAW_SCRIPTS_DIR, "handoff-check.ts");
   const toolsXml = linkDefs
     .map((l) =>
       [
@@ -140,6 +142,7 @@ export async function buildLinksReminder(
         `    <scoreKey>${l.scoreKey}</scoreKey>`,
         `    <toolKey>${l.toolKey}</toolKey>`,
         `    <strategy>${l.strategy}</strategy>`,
+        `    <range>${l.handoffScoreMin}–${l.handoffScoreMax}</range>`,
         `  </tool>`,
       ].join("\n"),
     )
@@ -147,12 +150,11 @@ export async function buildLinksReminder(
 
   return [
     `<links>`,
+    ...guidanceLines,
     `<tools>`,
     toolsXml,
     `</tools>`,
-    `<check>MUST Score each agent 0–100, then run:`,
-    `npx tsx ${scriptPath} ${contextPath} scoreKey=score [scoreKey=score ...]`,
-    `CALL result includes full handoff guidance to decide next handoff. SKIP = no action.</check>`,
+    `<check>For each tool: read its guidance file, score 0–100, call using start_* or ask_* if score is within range.</check>`,
     `</links>`,
   ].join("\n");
 }

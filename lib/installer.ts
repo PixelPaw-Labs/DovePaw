@@ -35,7 +35,6 @@ import {
   CLAUDE_OUTPUT_STYLES_ROOT,
   CLAUDE_RULES_ROOT,
   CODEX_SKILLS_ROOT,
-  DOVEPAW_SCRIPTS_DIR,
   DOVEPAW_TMP_DIR,
   PLUGINS_DIR,
   SCHEDULER_ROOT,
@@ -73,15 +72,6 @@ export async function deployAgentScript(agentName: string): Promise<void> {
   }
   await copyFile(src, schedulerScript(agentName));
   await chmod(schedulerScript(agentName), 0o755);
-}
-
-/** Symlink scripts/handoff-check.mjs into ~/.dovepaw/scripts/ so edits to the source are live immediately. */
-export async function deployHandoffScript(): Promise<void> {
-  await mkdir(DOVEPAW_SCRIPTS_DIR, { recursive: true });
-  const src = join(AGENTS_ROOT, "scripts", "handoff-check.ts");
-  const dest = join(DOVEPAW_SCRIPTS_DIR, "handoff-check.ts");
-  await rm(dest, { force: true });
-  await symlink(src, dest);
 }
 
 /** Copy compiled a2a-trigger.mjs to ~/.dovepaw/cron and make it executable.
