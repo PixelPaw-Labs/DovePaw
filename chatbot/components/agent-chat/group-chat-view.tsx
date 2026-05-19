@@ -62,6 +62,10 @@ export function GroupChatView({
         activeAgentIds={model.activeAgentIds}
         totalSteps={model.stepById.size}
         agentStatuses={agentStatuses}
+        onNew={() => {
+          clearMessages();
+          setSelectedStepId(null);
+        }}
       />
       <GroupSwimlane
         model={model}

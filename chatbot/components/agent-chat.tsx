@@ -124,7 +124,6 @@ function AgentChatSession({
           activeSessionId={session.currentSessionId}
           runningSessionIds={runningSessionIds}
           onSelect={(id) => void session.setSessionId(id)}
-          onNew={session.newSession}
           onDelete={async (id) => {
             await session.deleteSession(id);
             await refresh();

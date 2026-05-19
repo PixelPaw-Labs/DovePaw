@@ -1,8 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Clock, Loader2, PlusCircle, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Clock, Loader2, Trash2 } from "lucide-react";
 import type { AgentSession } from "@/components/hooks/use-agent-sessions";
 import { formatRelativeTime } from "@/lib/utils";
 import { useButtonShimmer } from "@/components/hooks/use-button-shimmer";
@@ -84,7 +83,6 @@ interface SessionHistoryPanelProps {
   activeSessionId: string | null;
   runningSessionIds?: Set<string>;
   onSelect: (contextId: string) => void;
-  onNew: () => void;
   onDelete: (contextId: string) => void | Promise<void>;
 }
 
@@ -93,26 +91,14 @@ export function SessionHistoryPanel({
   activeSessionId,
   runningSessionIds,
   onSelect,
-  onNew,
   onDelete,
 }: SessionHistoryPanelProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border/20 bg-muted/10 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onNew}
-          className="rounded-full text-primary hover:bg-primary/10"
-          title="New session"
-        >
-          <PlusCircle size={16} />
-          New session
-        </Button>
-        <span className="flex-1" />
-        <Clock className="w-4 h-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground">Session History</span>
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/20 bg-muted/10 shrink-0">
+        <Clock className="w-3.5 h-3.5 text-primary shrink-0" />
+        <span className="text-xs font-semibold text-foreground">History</span>
       </div>
 
       {/* Session list */}

@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Users2 } from "lucide-react";
+import { SquarePen, Users2 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { Button } from "@/components/ui/button";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { isDove } from "./swimlane-buckets";
@@ -16,6 +17,7 @@ interface SwimlaneHeaderProps {
   activeAgentIds: Set<string>;
   totalSteps: number;
   agentStatuses?: Map<string, AgentTaskStatus>;
+  onNew?: () => void;
 }
 
 export function SwimlaneHeader({
@@ -25,6 +27,7 @@ export function SwimlaneHeader({
   activeAgentIds,
   totalSteps,
   agentStatuses,
+  onNew,
 }: SwimlaneHeaderProps) {
   const reduce = useReducedMotion();
   const configByName = React.useMemo(
@@ -45,6 +48,11 @@ export function SwimlaneHeader({
       </span>
 
       <div className="ml-auto flex items-center gap-3">
+        {onNew && (
+          <Button size="sm" onClick={onNew}>
+            NEW <SquarePen className="w-3.5 h-3.5" />
+          </Button>
+        )}
         <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <span>
             <span className="text-foreground tabular-nums">{totalSteps}</span> steps

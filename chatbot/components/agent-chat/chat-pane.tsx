@@ -11,8 +11,10 @@ import {
   Globe,
   Info,
   Settings,
+  SquarePen,
   Trash2,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { buildAgentDef } from "@@/lib/agents";
 import type { AgentConfigEntry } from "@@/lib/agents-config-schemas";
 import { USER_AVATAR } from "@/lib/avatars";
@@ -181,6 +183,9 @@ export function ChatPane({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" onClick={newSession}>
+            NEW <SquarePen className="w-3.5 h-3.5" />
+          </Button>
           <button
             onClick={() => setHistoryOpen((v) => !v)}
             className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors ${historyOpen ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"}`}
