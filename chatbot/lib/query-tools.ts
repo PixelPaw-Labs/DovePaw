@@ -286,11 +286,11 @@ export function makeStartTool(
                 "Not a handoff justification score (justification.confidence measures handoff quality).",
             ),
         })
-        .optional()
+        .nullish()
         .describe(
           "REQUIRED when starting a member within an active group task (you have already called start_group_* and have a groupContextId). " +
             "NEVER omit this field in a group context — omitting it breaks the group swimlane and bypasses the orchestration score gate. " +
-            "Only omit when this is a plain single-agent call with no group context.",
+            "Pass null (or omit) when this is a plain single-agent call with no group context.",
         ),
     },
     async ({ instruction, strategy, group }) => {
