@@ -90,6 +90,10 @@ export async function GET(req: Request) {
   const stream = new ReadableStream({
     start(controller) {
       let closed = false;
+      // Prevent concurrent tick() executions. If checkAll() (which spawns launchctl
+      // and opens agent HTTP connections) takes longer than INTERVAL_MS, skipping
+      // the next tick is better than stacking concurrent child processes / FDs.
+      let ticking = false;
 
       function send(agents: Record<string, AgentStatus>) {
         const msg: StatusMessage = { type: "status", agents };
@@ -97,9 +101,14 @@ export async function GET(req: Request) {
       }
 
       async function tick() {
-        if (closed) return;
-        const agents = await checkAll();
-        if (!closed) send(agents);
+        if (closed || ticking) return;
+        ticking = true;
+        try {
+          const agents = await checkAll();
+          if (!closed) send(agents);
+        } finally {
+          ticking = false;
+        }
       }
 
       void tick();

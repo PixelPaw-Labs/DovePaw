@@ -110,10 +110,14 @@ describe("useAgentHeartbeat", () => {
     renderHook(() => useAgentHeartbeat());
     await act(async () => await Promise.resolve());
 
-    const first = MockEventSource.last;
+    const first = MockEventSource.last!;
     expect(first).not.toBeNull();
 
-    act(() => first!.emit("error", new Event("error")));
+    act(() => first.emit("error", new Event("error")));
+
+    // Old EventSource must be closed immediately on error so the browser
+    // does not auto-reconnect it in parallel with our own reconnect timer.
+    expect(first.closed).toBe(true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_100);
@@ -121,6 +125,30 @@ describe("useAgentHeartbeat", () => {
 
     expect(MockEventSource.last).not.toBe(first);
     expect(MockEventSource.last!.url).toBe("/api/heartbeat");
+
+    vi.useRealTimers();
+  });
+
+  it("does not leak EventSource objects across multiple reconnects", async () => {
+    vi.useFakeTimers();
+    renderHook(() => useAgentHeartbeat());
+    await act(async () => await Promise.resolve());
+
+    // Simulate two successive server restarts / errors
+    for (let i = 0; i < 2; i++) {
+      const current = MockEventSource.last!;
+      act(() => current.emit("error", new Event("error")));
+      expect(current.closed).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_100);
+      });
+    }
+
+    // 3 EventSource objects created total (initial + 2 reconnects); all prior ones closed
+    expect(MockEventSource.instances).toHaveLength(3);
+    expect(MockEventSource.instances[0].closed).toBe(true);
+    expect(MockEventSource.instances[1].closed).toBe(true);
+    expect(MockEventSource.instances[2].closed).toBe(false);
 
     vi.useRealTimers();
   });

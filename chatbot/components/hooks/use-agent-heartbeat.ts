@@ -15,6 +15,11 @@ export function useAgentHeartbeat(): Record<string, AgentStatus> {
     let cancelled = false;
 
     function connect() {
+      // Close any existing connection first — prevents orphaned EventSource objects when
+      // called on reconnect. Without this, the old EventSource's built-in auto-reconnect
+      // and our own reconnect timer both race to open new connections, leaking one slot
+      // from Chromium's 6-connection-per-origin limit on each server restart / HMR event.
+      es?.close();
       es = new EventSource("/api/heartbeat");
 
       es.addEventListener("message", (event) => {
@@ -28,6 +33,9 @@ export function useAgentHeartbeat(): Record<string, AgentStatus> {
       });
 
       es.addEventListener("error", () => {
+        // Close immediately so the browser does not auto-reconnect this EventSource;
+        // our own timer below will create a fresh one after the delay.
+        es?.close();
         if (!cancelled) {
           reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS);
         }

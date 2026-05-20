@@ -73,10 +73,15 @@ export async function unloadJobPlist(
   );
 }
 
+// launchctl list can occasionally hang (e.g., during system sleep/wake or launchd
+// being busy). A 5-second timeout ensures child processes don't accumulate and
+// exhaust file descriptors when called repeatedly from the heartbeat server.
+const LAUNCHCTL_TIMEOUT_MS = 5_000;
+
 /** Returns true if the given launchd label is currently loaded. */
 export async function isAgentLoaded(label: string): Promise<boolean> {
   try {
-    const { stdout } = await execAsync("launchctl list");
+    const { stdout } = await execAsync("launchctl list", { timeout: LAUNCHCTL_TIMEOUT_MS });
     return stdout.includes(label);
   } catch {
     return false;
@@ -90,7 +95,7 @@ export async function isAgentLoaded(label: string): Promise<boolean> {
  */
 export async function areAgentsLoaded(labels: string[]): Promise<Record<string, boolean>> {
   try {
-    const { stdout } = await execAsync("launchctl list");
+    const { stdout } = await execAsync("launchctl list", { timeout: LAUNCHCTL_TIMEOUT_MS });
     return Object.fromEntries(labels.map((label) => [label, stdout.includes(label)]));
   } catch {
     return Object.fromEntries(labels.map((label) => [label, false]));
