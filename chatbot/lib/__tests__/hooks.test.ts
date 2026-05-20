@@ -538,6 +538,31 @@ describe("buildDoveHooks — groupOrchestrationScore gate (includeGroupReminder)
     expect(hookSpecificOutput.permissionDecisionReason).toContain("missing");
     expect(hookSpecificOutput.permissionDecisionReason).toContain("start_group_*");
     expect(hookSpecificOutput.permissionDecisionReason).toContain("HARD RULE");
+    expect(hookSpecificOutput.permissionDecisionReason).toContain("group: null");
+  });
+
+  it("allows start_* when group is null (explicit non-group signal)", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", { instruction: "go", group: null }),
+    );
+    expect(result).toEqual({ continue: true });
+  });
+
+  it("allows start_* when group is empty object (explicit non-group signal)", async () => {
+    const hooks = buildDoveHooks(agents, new PendingRegistry(), "/cwd", [], {
+      includeGroupReminder: true,
+    });
+    const fn = findScoreGateHook(hooks)!.hooks[0]!;
+    const result = await callHook(
+      fn,
+      preToolUseInput("mcp__agents__start_test_agent", { instruction: "go", group: {} }),
+    );
+    expect(result).toEqual({ continue: true });
   });
 
   it("denial for low score includes self-reflection prompt, not hard rule", async () => {

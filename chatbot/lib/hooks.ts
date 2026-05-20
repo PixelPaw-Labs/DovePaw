@@ -516,6 +516,12 @@ export function buildDoveHooks(
                 if (typeof input.tool_input !== "object" || input.tool_input === null)
                   return { continue: true };
                 const group: unknown = Reflect.get(input.tool_input, "group");
+                // group: null or group: {} → explicit non-group signal, allow through
+                if (
+                  group === null ||
+                  (typeof group === "object" && group !== null && Object.keys(group).length === 0)
+                )
+                  return { continue: true };
                 const groupOrchestrationScore: unknown =
                   typeof group === "object" && group !== null
                     ? Reflect.get(group, "groupOrchestrationScore")
@@ -532,7 +538,7 @@ export function buildDoveHooks(
                         "Before recalling — ask yourself: are you currently orchestrating a group, team chat, or team task? Have you already called `start_group_*` in this session?",
                         "If YES — **HARD RULE, NO EXCEPTIONS:** you MUST recall this tool with the `group` field populated including `groupOrchestrationScore`.",
                         "NEVER omit it. NEVER claim you are not in group context to skip it. NEVER invent a separate score outside the `group` field.",
-                        "If NO — you are making a plain single-agent call. Recall the tool without the `group` field.",
+                        "If NO — you are making a plain single-agent call. Recall the tool with `group: null` to confirm you are not in group context.",
                         "",
                         GROUP_ORCHESTRATOR_REMINDER,
                       ].join("\n")
@@ -541,7 +547,7 @@ export function buildDoveHooks(
                         "",
                         `Your \`groupOrchestrationScore\` is ${groupOrchestrationScore} (must be >= 80 to proceed).`,
                         "First — ask yourself: are you currently orchestrating a group, team chat, or team task? Have you already called `start_group_*` in this session?",
-                        "If NO — you are making a plain single-agent call. Recall the tool without the `group` field.",
+                        "If NO — recall the tool with `group: null` to confirm you are not in group context.",
                         "If YES — this is an orchestration behaviour score: are you stopping too early, and is the instruction free of pre-assigned handoffs?",
                         "Re-read the rules above, fix any issues in your approach, then recall the tool with a score that honestly reflects your behaviour.",
                       ].join("\n"),
