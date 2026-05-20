@@ -163,12 +163,12 @@ The PreToolUse `start_*` gate is registered on Dove **whenever at least one elig
 
 The gate logic (in `buildDoveHooks`, group branch):
 
-| Tool input shape                      | Decision                                                                                                                                                                                             |
-| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `group === null` or `group === {}`    | allow — explicit non-group signal; the model passes `group: null` to confirm it is making a plain single-agent call with no group context                                                            |
-| `group.groupOrchestrationScore >= 80` | allow                                                                                                                                                                                                |
-| `group.groupOrchestrationScore < 80`  | deny — "score is X, must be >= 80" + group-orchestrator rules; model told to pass `group: null` if not in group context                                                                              |
-| `group` field missing entirely        | deny — asks the model whether it is in a group; if YES recall with the field, if NO recall with `group: null` to confirm non-group context (passing `group: null` is the working recovery path here) |
+| Tool input shape                      | Decision                                                                                                                                                                                                                                                                               |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `group === null` or `group === {}`    | allow — explicit non-group signal; the model passes `group: null` to confirm it is making a plain single-agent call with no group context                                                                                                                                              |
+| `group.groupOrchestrationScore >= 80` | allow                                                                                                                                                                                                                                                                                  |
+| `group.groupOrchestrationScore < 80`  | deny — "score is X, must be >= 80" + group-orchestrator rules; model told to pass `group: null` if not in group context                                                                                                                                                                |
+| `group` field missing entirely        | deny — asks the model whether it is in a group; explicitly states that having already called `start_group_*` in the same session means the answer is YES and the model IS the orchestrator; if YES recall with the field, if NO recall with `group: null` to confirm non-group context |
 
 Reminders verbatim from `GROUP_ORCHESTRATOR_REMINDER`:
 

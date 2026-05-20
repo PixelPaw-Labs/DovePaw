@@ -536,6 +536,7 @@ export function buildDoveHooks(
                     ? [
                         "`groupOrchestrationScore` is missing from your tool call.",
                         "Before recalling — ask yourself: are you currently orchestrating a group, team chat, or team task? Have you already called `start_group_*` in this session?",
+                        "**IMPORTANT:** If you have already called `start_group_*` in this session, the answer is YES — you ARE the group orchestrator. Every `start_*` call in this session is a group dispatch.",
                         "If YES — **HARD RULE, NO EXCEPTIONS:** you MUST recall this tool with the `group` field populated including `groupOrchestrationScore`.",
                         "NEVER omit it. NEVER claim you are not in group context to skip it. NEVER invent a separate score outside the `group` field.",
                         "If NO — you are making a plain single-agent call. Recall the tool with `group: null` to confirm you are not in group context.",
