@@ -145,7 +145,7 @@ export function useChatSession(agentId: AgentId) {
           if (!response.ok || !response.body) return;
           await readSseStream(response.body, (event) => {
             if (abort.signal.aborted) return;
-            const seq = (event as Record<string, unknown>)._seq;
+            const seq = (event as Record<string, unknown>).seq;
             if (typeof seq === "number") lastSeqRef.current = seq;
 
             if (event.type === "session") {
@@ -249,7 +249,7 @@ export function useChatSession(agentId: AgentId) {
 
         await readSseStream(response.body!, (event) => {
           if (abort.signal.aborted) return;
-          const seq = (event as Record<string, unknown>)._seq;
+          const seq = (event as Record<string, unknown>).seq;
           if (typeof seq === "number") lastSeqRef.current = seq;
 
           if (event.type === "session") {
@@ -310,6 +310,8 @@ export function useChatSession(agentId: AgentId) {
       clearTimeout(pollTimeoutRef.current);
       pollTimeoutRef.current = null;
     }
+    pendingQueueRef.current = [];
+    setPendingQueue([]);
     animation.flush(assistantIdRef.current ?? "");
     setMessages((prev) =>
       prev.map((m) =>
@@ -320,10 +322,15 @@ export function useChatSession(agentId: AgentId) {
     );
     setIsLoading(false);
     if (sessionId) {
-      void fetch(agentChatUrl(agentId), {
+      // Non-blocking: the UI cancel has already happened. But surface failures
+      // so server-side state inconsistency (subprocess still running because
+      // the DELETE never reached the route) is observable.
+      fetch(agentChatUrl(agentId), {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId, method: "stop" }),
+      }).catch((err) => {
+        console.warn("[cancelMessage] DELETE failed — server-side cancel may not have run:", err);
       });
     }
   }, [agentId, animation]);

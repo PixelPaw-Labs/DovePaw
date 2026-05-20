@@ -403,6 +403,46 @@ describe("spawnAndCollect — OpenViking env injection", () => {
   });
 });
 
+describe("spawnAndCollect — SIGTERM → SIGKILL escalation", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    vi.mocked(existsSync).mockReturnValue(true);
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("sends SIGKILL after KILL_ESCALATION_MS if the process does not exit after SIGTERM", () => {
+    const proc = makeProc();
+    const controller = new AbortController();
+    spawnAndCollect(BASE_CONFIG, "run", controller.signal);
+
+    controller.abort();
+
+    // SIGTERM fires immediately. The first kill happens via process.kill(-pid)
+    // wrapped in try/catch; in tests proc.kill is only called via the catch
+    // fallback. We assert on its eventual SIGKILL call.
+    vi.advanceTimersByTime(1_000);
+    expect(proc.kill).toHaveBeenCalledWith("SIGKILL");
+  });
+
+  it("does NOT send SIGKILL if the process exits within the escalation window", () => {
+    const proc = makeProc();
+    const controller = new AbortController();
+    const { promise } = spawnAndCollect(BASE_CONFIG, "run", controller.signal);
+
+    controller.abort();
+    // Process exits cleanly before SIGKILL would fire
+    proc.emit("close", 0);
+
+    vi.advanceTimersByTime(5_000);
+    expect(proc.kill).not.toHaveBeenCalledWith("SIGKILL");
+    return promise;
+  });
+});
+
 describe("AbortSignal pre-abort semantics (justifies signal.aborted pre-check in spawnAndCollect)", () => {
   it("addEventListener does NOT fire for a signal that was already aborted", () => {
     // This is why the signal.aborted pre-check is necessary: if abort() fires

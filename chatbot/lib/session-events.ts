@@ -33,7 +33,7 @@ export function publishSessionEvent(sessionId: string, event: ChatSseEvent): voi
   const b = getOrCreate(sessionId); // auto-create bucket on first publish
 
   // Stamp seq number on event (mutable but non-enumerable to avoid polluting JSON)
-  (event as Record<string, unknown>)._seq = ++b.seq;
+  (event as Record<string, unknown>).seq = ++b.seq;
 
   // Durable log so reconnects after buffer eviction / process restart can replay.
   insertSessionEvent(sessionId, b.seq, event);

@@ -167,6 +167,73 @@ describe("useChatSession", () => {
     resolveStream(makeSseResponse([]));
   });
 
+  it("cancelMessage clears pending queue so drain does not auto-send next message", async () => {
+    let resolveFirst!: (v: Response) => void;
+    const firstPending = new Promise<Response>((r) => {
+      resolveFirst = r;
+    });
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
+      .mockReturnValueOnce(firstPending)
+      .mockResolvedValueOnce(new Response("{}", { status: 200 })); // DELETE
+
+    const { result } = renderHook(() => useChatSession("dove"));
+
+    act(() => {
+      void result.current.sendMessage("first");
+    });
+    await waitFor(() => result.current.isLoading);
+
+    act(() => {
+      void result.current.sendMessage("queued");
+    });
+    expect(result.current.pendingQueue).toHaveLength(1);
+
+    act(() => {
+      result.current.cancelMessage();
+    });
+
+    await waitFor(() => !result.current.isLoading);
+    expect(result.current.pendingQueue).toHaveLength(0);
+
+    // No further SSE fetch should have been made for "queued"
+    const sseCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter((c) => !c[1]?.method || c[1]?.method === "POST");
+    // First two POST/GET calls are: active-session GET, sendMessage POST. No third.
+    expect(sseCalls.length).toBeLessThanOrEqual(2);
+
+    resolveFirst(makeSseResponse([]));
+  });
+
+  it("cancelMessage logs a warning when the DELETE network call fails", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))
+      .mockResolvedValueOnce(
+        makeSseResponse([{ type: "session", sessionId: "cancel-fail" }, { type: "done" }]),
+      )
+      .mockRejectedValueOnce(new Error("network down"));
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const { result } = renderHook(() => useChatSession("dove"));
+
+      await act(async () => {
+        await result.current.sendMessage("hello");
+      });
+
+      await act(async () => {
+        result.current.cancelMessage();
+        // Let the DELETE promise settle
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("cancelMessage sends DELETE to agent endpoint when sessionId is set", async () => {
     vi.mocked(fetch)
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: null }), { status: 200 }))

@@ -282,55 +282,6 @@ Per the project convention, every component that reads `localStorage` must use a
 
 ## 10. Bugs / flaws / open concerns
 
-### Concern 1 · ★★★ — STOP doesn't stop the message queue
-
-`cancelMessage()` aborts the current fetch and sets `setIsLoading(false)`. The drain `useEffect` fires immediately on the `isLoading` transition and sends the next queued message. From the user's perspective: I click STOP, the current response stops, and the _next queued message starts running_. Intent was almost certainly to stop everything.
-
-Fix shape: `cancelMessage` should also clear `pendingQueueRef` (or the drain effect should check a "cancel requested" flag and bail). Three lines.
-
-### Concern 2 · ★★ — `cancelMessage` server call is fire-and-forget
-
-```ts
-void fetch(agentChatUrl(agentId), {
-  method: "DELETE",
-  ...
-  body: JSON.stringify({ sessionId, method: "stop" }),
-});
-```
-
-No `await`, no error handling. If the network call fails (Next.js process restart between client abort and DELETE arriving), the server-side `sessionRunner.abort(sessionId)` never runs. The subprocess keeps going. The UI shows "cancelled" but the next user turn will see the previous PendingRegistry blocking, ghost SSE events flowing in, etc.
-
-Fix shape: await the DELETE, surface a banner on failure with a retry button. Or at least log the failure to the console so server-side state inconsistency is observable.
-
-### Concern 3 · ★★ — `clearAllHistory` doesn't abort running sessions
-
-```ts
-const handleClearAllHistory = React.useCallback(async () => {
-  await fetch("/api/sessions/all", { method: "DELETE" });
-  newSessionRef.current?.();
-}, []);
-```
-
-`DELETE /api/sessions/all` clears the DB. If a Dove session was running, its subprocess keeps running with no DB row, no UI representation, no way to stop it short of restarting the Next.js process. Orphan subprocess until natural completion or SIGTERM.
-
-Fix shape: server side, iterate `sessionRunner.getRunningSessionIds()` and `sessionRunner.abort()` each before `deleteAllSessions()`. Cross-link: [Spec 11 Concern 1](11-abort-pipeline.md#concern-1--★★★--stop-deletes-sub-agent-workspaces) compounds this — every "running" session's workspace gets wiped on the cascade.
-
-### Concern 4 · ★★ — `cancelled` clears banners, `error` does not
-
-In `processActiveStreamEvent`, the `cancelled` branch does `setPendingPermissions([])` + `setPendingQuestions([])`. The `error` branch does not. After an error:
-
-- Permission banner stays visible
-- User clicks Allow → POST `/api/chat/permission` → server-side map already cleared by `abortPendingPermissions` from route.ts catch → 404
-- The Hook's `resolvePermission` catch path "leaves the banner visible so the user can retry" — so the user clicks again, same 404, banner stays forever
-
-Fix shape: clear pending permissions/questions on `error` too. Or change `resolvePermission` to remove the banner on 404 specifically.
-
-### Concern 5 · ★★ — `processActiveStreamEvent` silently drops `agent_status` and `group_member`
-
-The function dispatches on `event.type` for 9 known types, and ignores anything else. `agent_status` and `group_member` arrive on the active SSE stream when Dove dispatches members in a group — but neither is handled in the single-agent hook. They're handled by `useGroupChatSession`'s separate group SSE stream subscription, so the loss is OK in practice — but if a single-agent session ever received an `agent_status` event (e.g. through some accidental relay), it would be silently swallowed with no log.
-
-Fix shape: log unknown event types in development. Add an exhaustiveness check on the discriminated union (the existing `ChatSseEvent` union has these as members, so TS won't catch the omission).
-
 ### Concern 6 · ★ — `removeFromQueue(index)` is index-based and racey
 
 ```ts

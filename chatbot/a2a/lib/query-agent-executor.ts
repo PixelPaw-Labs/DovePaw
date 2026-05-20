@@ -98,7 +98,6 @@ export { SessionInfo };
 
 export class QueryAgentExecutor {
   private abortController: AbortController | null = null;
-  private currentContextId: string | null = null;
   private readonly agentConfigReader = new AgentConfigReader();
 
   constructor(
@@ -134,7 +133,6 @@ export class QueryAgentExecutor {
     // Restore session early so publishProgress can use the correct label from the start.
     // Without this, the first upsertSession call would create the DB row with label:"",
     // and since ON CONFLICT does not update label, it would stay empty in history.
-    this.currentContextId = contextId;
     this.sessionManager.restore(contextId, this.def.name);
     // Group-mode members always start fresh — no resume across group tasks
     const existingState = groupOverrides ? null : this.sessionManager.get(contextId);
@@ -463,7 +461,9 @@ export class QueryAgentExecutor {
   }
 
   async cancelTask(): Promise<void> {
+    // STOP must NOT wipe the workspace — that breaks session resume. Workspace
+    // cleanup is owned by the explicit DELETE path (POST /session/clear in
+    // base-server.ts), invoked only when the user removes the session.
     this.abortController?.abort();
-    if (this.currentContextId) await this.sessionManager.delete(this.currentContextId);
   }
 }

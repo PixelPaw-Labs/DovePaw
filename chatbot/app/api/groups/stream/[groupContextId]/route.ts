@@ -23,7 +23,7 @@ function encodeAgentStatus(event: ChatSseAgentStatus): string {
 }
 
 function encodeGroupMember(event: ChatSseGroupMember): string {
-  const rawSeq = (event as Record<string, unknown>)._seq;
+  const rawSeq = (event as Record<string, unknown>).seq;
   return `data: ${JSON.stringify({
     agentId: event.agentId,
     text: event.text,

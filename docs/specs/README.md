@@ -22,6 +22,8 @@ End-to-end specifications for the major runtime flows in DovePaw. Each spec cove
 | 9   | [Agent links & canvas routing](09-agent-links-canvas.md)      | Link topology storage, transitive BFS, the canvas geometry helpers                                              |
 | 10  | [UI surfaces](10-ui-surfaces.md)                              | Chat page, settings pages, dialogs, swimlane, SSE event taxonomy — **includes Bugs / flaws / open concerns**    |
 | 11  | [Abort pipeline](11-abort-pipeline.md)                        | STOP vs DELETE end-to-end, SIGTERM/exit, group cascade — **includes Bugs / flaws / open concerns**              |
+| 12  | [Scheduler (launchd / cron)](12-scheduler.md)                 | Scheduled-run lifecycle, `a2a-trigger.mjs`, platform strategy, abort gaps, onetime cleanup                      |
+| 13  | [Sub-agent builder skill](13-sub-agent-builder.md)            | `/sub-agent-builder` phases, agent.json fields, spawning patterns, Kiln group, publish flow                     |
 
 ---
 

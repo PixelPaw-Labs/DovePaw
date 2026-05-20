@@ -278,7 +278,7 @@ export class SseQueryDispatcher implements QueryResponseDispatcher {
    */
   readonly publish = (event: ChatSseEvent): void => {
     try {
-      // Spread so publishSessionEvent's _seq stamp doesn't appear in the primary stream
+      // Spread so publishSessionEvent's seq stamp doesn't appear in the primary stream
       this.rawSend({ ...event });
     } catch {
       // SSE stream closed — subprocess continues as background session

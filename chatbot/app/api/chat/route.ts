@@ -42,7 +42,7 @@ import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { AgentTaskStateMachine } from "@/lib/agent-task-state";
 import { deleteSession, setSessionStatus } from "@/lib/db";
-import { enablePersistence } from "@/lib/persistence";
+import { enablePersistence, gracefulShutdown } from "@/lib/persistence";
 import { SessionManager } from "@/lib/session-manager";
 import { agentContextRegistry } from "@/lib/agent-context-registry";
 import { clearSessionBuffer } from "@/lib/session-events";
@@ -66,7 +66,9 @@ export const maxDuration = 86400; // 24 hours for long-running agents
 // One-time server startup: close any sessions left running from a previous process.
 enablePersistence();
 
-process.on("SIGTERM", () => sessionRunner.abortAll());
+// SIGTERM gets a brief async-cleanup window before forcing exit; `exit` is
+// fundamentally sync-only in Node, so it can only fire the synchronous abort.
+process.on("SIGTERM", () => gracefulShutdown());
 process.on("exit", () => sessionRunner.abortAll());
 
 // ─── System prompt ─────────────────────────────────────────────────────────────

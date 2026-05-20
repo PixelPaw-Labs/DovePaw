@@ -289,7 +289,7 @@ describe("subscribe-then-snapshot ordering", () => {
 // ─── Monotonic seq stamping ───────────────────────────────────────────────────
 
 describe("seq counter", () => {
-  it("stamps incrementing _seq on each event", () => {
+  it("stamps incrementing seq on each event", () => {
     const ac = new AbortController();
     subscribeSession(sessionId, () => {}, ac.signal);
 
@@ -301,9 +301,9 @@ describe("seq counter", () => {
     publishSessionEvent(sessionId, e3);
     ac.abort();
 
-    expect((e1 as Record<string, unknown>)._seq).toBe(1);
-    expect((e2 as Record<string, unknown>)._seq).toBe(2);
-    expect((e3 as Record<string, unknown>)._seq).toBe(3);
+    expect((e1 as Record<string, unknown>).seq).toBe(1);
+    expect((e2 as Record<string, unknown>).seq).toBe(2);
+    expect((e3 as Record<string, unknown>).seq).toBe(3);
   });
 });
 

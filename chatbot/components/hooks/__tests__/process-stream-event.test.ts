@@ -105,3 +105,57 @@ describe("processActiveStreamEvent — cancelled", () => {
     expect(ctx.updateActiveMessages).toHaveBeenCalled();
   });
 });
+
+describe("processActiveStreamEvent — error", () => {
+  it("clears both pendingPermissions and pendingQuestions on error", () => {
+    // Bug: previously banners stayed after an error, leading to a 404 loop when
+    // the user clicked Allow because the server-side permission map was already
+    // cleared by the route's catch path.
+    const ctx = makeCtx();
+    processActiveStreamEvent({ type: "error", content: "boom" }, "a1", ctx);
+
+    expect(ctx.setPendingPermissions).toHaveBeenCalledWith([]);
+    expect(ctx.setPendingQuestions).toHaveBeenCalledWith([]);
+  });
+});
+
+describe("processActiveStreamEvent — unknown event types", () => {
+  it("warns once per type in development for an unrecognized event", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const ctx = makeCtx();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- intentional type violation
+      processActiveStreamEvent({ type: "totally-bogus" } as any, "a1", ctx);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("does not warn for known pass-through types (group_member, agent_status, session, progress)", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const ctx = makeCtx();
+      processActiveStreamEvent({ type: "session", sessionId: "s" }, "a1", ctx);
+      processActiveStreamEvent(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal stub
+        { type: "agent_status" } as any,
+        "a1",
+        ctx,
+      );
+      processActiveStreamEvent(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- minimal stub
+        { type: "group_member" } as any,
+        "a1",
+        ctx,
+      );
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+});

@@ -82,8 +82,7 @@ sequenceDiagram
     Stream->>A2A: client.cancelTask({id: taskId}) — one per dispatched member
     A2A->>EXE: executor.cancelTask()
     EXE->>EXE: abortController.abort()
-    EXE->>EXE: await sessionManager.delete(contextId)
-    Note over EXE: workspace.cleanup() runs — rm -rf the workspace<br/>This deletes even on STOP — see Concern 1
+    Note over EXE: workspace preserved — cancelTask() does NOT delete it<br/>Cleanup belongs to the DELETE path only
     EXE->>Q: inner sub-agent query unwinds
     Q->>Proc: SDK abort cascades to script's start_script tool<br/>spawn.ts: process.kill(-pid, SIGTERM)
     Proc-->>Q: exit
@@ -138,8 +137,8 @@ Source-of-truth for "what does each operation touch?"
 | **SIGTERM / exit**                      | ✅ best-effort (`abortAll`)   | status untouched here³    | ❌ untouched  | ❌ untouched    | untouched             | untouched             | untouched                  | untouched                  |
 | **Next.js boot — `closeStaleSessions`** | (n/a)                         | every `running` → `done`⁴ | untouched     | untouched       | untouched             | gone (new process)    | untouched                  | gone (new process)         |
 
-¹ **Stated intent.** Not what the code actually does — see Concern 1.
-² Workspace cleanup runs as a side effect of `QueryAgentExecutor.cancelTask` → `sessionManager.delete` regardless of method. The DB-side `deleteSession` does **not** touch the workspace directly.
+¹ `cancelTask()` aborts the controller only — workspace is **not** deleted. Resume path is intact.
+² `deleteSession` in the DB layer does not touch the workspace directly; workspace cleanup is handled separately per provider (group workspaces only, via `provider.delete`).
 ³ `closeStaleSessions()` flips them later, not the SIGTERM handler.
 ⁴ `done`, not `cancelled` — see Concern 2.
 
@@ -200,64 +199,6 @@ So group cascade works **by accident** of every member having been started throu
 
 The previous sections describe what the code **does**. This section flags things that look wrong, contradictory, or under-defended. Confidence is graded ★★★ (confirmed bug) → ★ (worth a second look).
 
-### Concern 1 · ★★★ — STOP deletes sub-agent workspaces
-
-**`QueryAgentExecutor.cancelTask` deletes the workspace on every cancel**, including the STOP path. This directly contradicts the stated invariant: _"cancelTask() must not delete workspace; STOP preserves workspace for session resume; only trash-icon delete does full cleanup."_
-
-Trace:
-
-1. User clicks STOP → `PATCH /api/chat`
-2. `sessionRunner.abort(sessionId)` → `subprocessController.abort()`
-3. Signal flows into TaskPoller streams → `client.cancelTask({id})` to every dispatched A2A task
-4. A2A server `cancelTask(taskId)` → `activeExecutors.get(taskId)?.cancelTask()`
-5. `QueryAgentExecutor.cancelTask`: `await this.sessionManager.delete(this.currentContextId)`
-6. `SessionManager.delete` → `await state.workspace.cleanup()` → `rm -rf workspace`
-
-Effect: the workspace is gone, so the "resume from history" path can't restore the session — `SessionManager.restore` checks `existsSync(resumable.workspacePath)` and returns silently if missing.
-
-Fix shape: `cancelTask` should NOT call `sessionManager.delete` on STOP. Either pass a `{preserve: true}` flag through the A2A protocol metadata, or split into `cancelTask` (abort only) and `terminateTask` (abort + cleanup), and route DELETE through the latter.
-
-### Concern 2 · ★★ — `closeStaleSessions` rewrites every crashed session as `done`
-
-```ts
-export function closeStaleSessions(): void {
-  getDb().prepare("UPDATE sessions SET status = 'done' WHERE status = 'running'").run();
-}
-```
-
-After a hard crash (SIGKILL, OOM, Electron force-quit, etc.) the next Next.js boot flips every orphan `running` row to **`done`**. A user opening history sees these sessions as successfully completed when they were actually killed mid-flight. The actual outcome is lost.
-
-Fix shape: introduce a `crashed` (or reuse `cancelled`) status for these rows. Also, calling `closeStaleSessions` at first `route.ts` module load (not at server boot proper) means the window between Next.js process start and the first chat POST shows stale `running` rows in any history UI request. Consider invoking from `instrumentation.ts` instead.
-
-### Concern 3 · ★★ — `onAbort` fires before the SDK has actually unwound
-
-`sessionRunner.abort(sessionId)`:
-
-```ts
-entry.controller.abort();
-this.sessions.delete(sessionId);
-this.callbacks.onAbort?.(sessionId);
-```
-
-`onAbort` runs synchronously immediately after `controller.abort()`. `setSessionStatus(cancelled)` writes to DB now. But the SDK is still unwinding asynchronously — events may still be relayed to SSE for a brief window. A user reloading mid-abort will see `status='cancelled'` while the live stream is still emitting tool events.
-
-The window is short in practice (milliseconds), but the DB and the live stream are inconsistent during it. Strict fix: wait until the SDK callback's catch block has run, then update status. Pragmatic fix: document it.
-
-### Concern 4 · ★★ — `process.on('exit', ...)` can't await async cleanup
-
-```ts
-process.on("SIGTERM", () => sessionRunner.abortAll());
-process.on("exit", () => sessionRunner.abortAll());
-```
-
-`abortAll()` itself is synchronous (just `controller.abort()` per entry). But the downstream cleanup — A2A `cancelTask` round-trips, workspace `rm -rf`, child process SIGTERM cascade — is all async. Node will not wait for any of it before exiting. Possible orphans:
-
-- Workspace dirs left behind on disk (slowly accumulating)
-- Child `tsx` processes still running after the parent A2A server exits — only reaped when the OS notices the parent gone
-- A2A server processes may keep running after Next.js exits (different lifecycle, owned by Electron / launchd)
-
-`exit` handler is fundamentally sync-only — this is a Node limitation. SIGTERM handler can do async with a short delay if we add an `async` wrapper that schedules a hard exit via `setTimeout`. Currently not done.
-
 ### Concern 5 · ★ — `enablePersistence()` is deferred to first POST
 
 `enablePersistence()` is called at module-load time of `chatbot/app/api/chat/route.ts`. Next.js compiles routes lazily; in dev mode, the first POST is when the module loads and `closeStaleSessions` runs. Between server start and the first chat request, the DB still holds the previous process's `running` rows. Any `/api/sessions` list call in that window shows them as running. Click STOP and `sessionRunner.abort(sessionId)` no-ops (the Map is empty in this process), the row stays as 'running' forever — until eventually a POST triggers `closeStaleSessions`.
@@ -286,58 +227,6 @@ Combined effect of Concerns 1 + 7: STOP → resume of Dove session → ask\_\* w
 - Intended for an unimplemented "kill all tasks for agent X" UI affordance.
 
 If kept, document the intent; if not, remove (single-purpose utilities tend to bit-rot).
-
-### Concern 10 · ★★★ — `spawn.ts` SIGTERM has no SIGKILL escalation
-
-The kill path for every agent script process:
-
-```ts
-const killProc = () => {
-  try {
-    process.kill(-proc.pid!, "SIGTERM");
-  } catch {
-    proc.kill("SIGTERM");
-  }
-};
-```
-
-Single SIGTERM, no follow-up. If the script process:
-
-- Registers its own `SIGTERM` handler that does cleanup work (and takes time)
-- Is stuck in an uninterruptible system call
-- Has a child process that ignores SIGTERM and the script waits on it
-- Holds the event loop in a tight CPU-bound block
-
-…then the script never dies. The user clicked STOP, the UI shows "cancelled", but the OS still has a tsx process running, possibly still making Anthropic API calls and incurring cost.
-
-The codebase already has a working pattern for SIGKILL escalation in [`chatbot/lib/memory/openviking.ts`](../../chatbot/lib/memory/openviking.ts) `shutdown()`:
-
-```ts
-proc.kill("SIGTERM");
-const sigkillTimer = setTimeout(() => proc.kill("SIGKILL"), KILL_ESCALATION_MS);
-await exited;
-clearTimeout(sigkillTimer);
-```
-
-`spawn.ts` should adopt the same pattern.
-
-### Concern 11 · ★★ — `ClaudeRunner` / `CodexRunner` ignore external abort signals
-
-Inside the tsx script process, `AgentRunner.run()` dispatches to `ClaudeRunner` or `CodexRunner`. Each runner creates its own `AbortController`, but the only firing path is the local `timeoutMs` timeout:
-
-```ts
-this.abortController = new AbortController();
-const timeoutId = setTimeout(() => this.abortController?.abort(), timeoutMs);
-```
-
-There is no `process.on("SIGTERM", () => this.abortController?.abort())`, no constructor parameter for an external signal, and no env-var-driven cancellation. Practical effect of a STOP cascade reaching this layer:
-
-- The OS sends SIGTERM to the script process.
-- The runner's HTTPS request to Anthropic / OpenAI keeps writing until the OS reaps the socket as the process terminates.
-- Tokens generated by the model in the gap between "user clicks STOP" and "OS closes the socket" are billed but never reach the user.
-- If `claude` CLI was spawned (it isn't currently — both runners use SDK in-process — but if a future runner did), it would escape the cooperative cancel entirely.
-
-Fix shape: have `AgentRunner` install a one-shot SIGTERM handler that aborts the runner's controller, OR thread an external `AbortSignal` through `run()` and wire it. Either gives a brief cooperative-cancel window before the process is forcibly terminated.
 
 ### Concern 12 · ★ — Process-group descendants can escape
 

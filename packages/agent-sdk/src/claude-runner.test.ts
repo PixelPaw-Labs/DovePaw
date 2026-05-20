@@ -43,6 +43,31 @@ describe("ClaudeRunner", () => {
       }
     });
   });
+
+  describe("SIGTERM/SIGINT handler lifecycle", () => {
+    it("registers handlers during run and removes them after", async () => {
+      const runner = new ClaudeRunner(TMP_DIR, "");
+
+      const before = process.listenerCount("SIGTERM");
+
+      // No ANTHROPIC_API_KEY → SDK throws during connect, run returns quickly.
+      const runPromise = runner.run("test prompt", {
+        cwd: TMP_DIR,
+        taskName: "test",
+        timeoutMs: 100,
+      });
+
+      // Handler should be registered while run is in progress
+      const during = process.listenerCount("SIGTERM");
+      expect(during).toBe(before + 1);
+
+      await runPromise.catch(() => {});
+
+      // Handler should be removed after run completes
+      const after = process.listenerCount("SIGTERM");
+      expect(after).toBe(before);
+    });
+  });
 });
 
 describe("ensureWorktree", () => {

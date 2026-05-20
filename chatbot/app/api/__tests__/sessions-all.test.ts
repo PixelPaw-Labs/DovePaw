@@ -6,16 +6,26 @@ const {
   mockClearAll,
   mockDeleteAllSessions,
   mockGetAllSessionWorkspacePaths,
+  mockGetRunningSessions,
   mockWorkspaceCleanup,
   mockDeletedSessionIds,
+  mockReadAgentsConfig,
+  mockResolveAgentPort,
+  mockCancelTask,
+  mockCreateAgentClient,
 } = vi.hoisted(() => ({
   mockAbortAll: vi.fn(),
   mockGetRunningSessionIds: vi.fn(() => [] as string[]),
   mockClearAll: vi.fn(),
   mockDeleteAllSessions: vi.fn(),
   mockGetAllSessionWorkspacePaths: vi.fn(() => [] as string[]),
+  mockGetRunningSessions: vi.fn(() => [] as Array<{ id: string; agentId: string }>),
   mockWorkspaceCleanup: vi.fn(),
   mockDeletedSessionIds: new Set<string>(),
+  mockReadAgentsConfig: vi.fn(),
+  mockResolveAgentPort: vi.fn(),
+  mockCancelTask: vi.fn().mockResolvedValue({}),
+  mockCreateAgentClient: vi.fn(),
 }));
 
 vi.mock("@/lib/session-runner", () => ({
@@ -32,6 +42,16 @@ vi.mock("@/lib/agent-context-registry", () => ({
 vi.mock("@/lib/db", () => ({
   deleteAllSessions: mockDeleteAllSessions,
   getAllSessionWorkspacePaths: mockGetAllSessionWorkspacePaths,
+  getRunningSessions: mockGetRunningSessions,
+}));
+
+vi.mock("@@/lib/agents-config", () => ({
+  readAgentsConfig: mockReadAgentsConfig,
+}));
+
+vi.mock("@/lib/a2a-client", () => ({
+  resolveAgentPort: mockResolveAgentPort,
+  createAgentClient: mockCreateAgentClient,
 }));
 
 vi.mock("@/lib/deleted-session-ids", () => ({
@@ -50,6 +70,9 @@ describe("DELETE /api/sessions/all", () => {
     mockDeletedSessionIds.clear();
     mockGetRunningSessionIds.mockReturnValue([]);
     mockGetAllSessionWorkspacePaths.mockReturnValue([]);
+    mockGetRunningSessions.mockReturnValue([]);
+    mockReadAgentsConfig.mockResolvedValue([]);
+    mockCreateAgentClient.mockResolvedValue({ cancelTask: mockCancelTask });
   });
 
   it("returns ok: true", async () => {
@@ -115,5 +138,24 @@ describe("DELETE /api/sessions/all", () => {
     await DELETE();
 
     expect(order).toEqual(["read-paths", "delete"]);
+  });
+
+  it("calls A2A cancelTask for every running session — covers launchd-spawned tasks not in sessionRunner", async () => {
+    mockGetRunningSessions.mockReturnValueOnce([
+      { id: "sess-launchd-1", agentId: "scheduler-agent" },
+      { id: "sess-chat-2", agentId: "test-agent" },
+    ]);
+    mockReadAgentsConfig.mockResolvedValueOnce([
+      { name: "scheduler-agent", manifestKey: "scheduler_agent" },
+      { name: "test-agent", manifestKey: "test_agent" },
+    ]);
+    mockResolveAgentPort.mockImplementation((key: string) =>
+      key === "scheduler_agent" ? 5001 : key === "test_agent" ? 5002 : null,
+    );
+
+    await DELETE();
+
+    expect(mockCancelTask).toHaveBeenCalledWith({ id: "sess-launchd-1" });
+    expect(mockCancelTask).toHaveBeenCalledWith({ id: "sess-chat-2" });
   });
 });

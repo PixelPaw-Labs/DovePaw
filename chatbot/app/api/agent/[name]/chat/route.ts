@@ -14,7 +14,12 @@ import { readAgentsConfig } from "@@/lib/agents-config";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { makeProgressSender, buildStreamSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
-import { startAgentStream, streamCollect, resolveAgentPort } from "@/lib/a2a-client";
+import {
+  startAgentStream,
+  streamCollect,
+  resolveAgentPort,
+  createAgentClient,
+} from "@/lib/a2a-client";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { subscribeSession } from "@/lib/session-events";
 import { deleteSession, setSessionStatus, getSessionWorkspacePath } from "@/lib/db";
@@ -167,8 +172,27 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
     .object({ sessionId: z.string(), method: z.enum(["stop", "delete"]).default("delete") })
     .parse(await request.json());
 
-  // Abort in-flight session subprocess (if currently running)
+  // Abort in-flight session subprocess (if currently running in THIS Next.js process).
+  // Misses for launchd-triggered scheduled runs — those tasks live on the A2A server
+  // but never registered an AbortController with the chat route. Fall through to the
+  // A2A cancelTask call below so STOP works for both origins.
   activeControllers.get(sessionId)?.abort();
+
+  // Cancel the task on the A2A server directly. For chat-POST sessions this is a
+  // duplicate of the abort cascade above (idempotent). For launchd-triggered sessions
+  // it is the ONLY path that actually aborts the in-flight executor.
+  const agentForCancel = (await readAgentsConfig()).find((a) => a.name === name);
+  if (agentForCancel) {
+    const portValue = resolveAgentPort(agentForCancel.manifestKey);
+    if (portValue !== null) {
+      try {
+        const client = await createAgentClient(portValue);
+        await client.cancelTask({ id: sessionId });
+      } catch {
+        /* server unreachable or task already finished — STOP is best-effort */
+      }
+    }
+  }
 
   if (method === "stop") {
     // User-initiated cancel: keep session in history, mark as cancelled

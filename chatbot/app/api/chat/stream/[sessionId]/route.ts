@@ -131,7 +131,7 @@ function makeLiveResponse(
         // Skip permission events whose requestId is no longer in the pending map
         // (stale prompts from a restarted/aborted subprocess would 404 on Allow).
         for (const e of snapshot) {
-          const seq = (e as Record<string, unknown>)._seq;
+          const seq = (e as Record<string, unknown>).seq;
           if (typeof seq === "number" && seq > after) {
             if (e.type === "permission" && !hasPendingPermission(e.requestId)) continue;
             write(e);

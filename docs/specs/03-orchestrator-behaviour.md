@@ -218,7 +218,7 @@ stateDiagram-v2
   Saved --> [*]
 ```
 
-**STOP vs DELETE workspace policy is contested.** The stated rule is _cancelTask must not delete workspace; STOP preserves for resume; only trash-icon delete wipes_. The actual code path through `QueryAgentExecutor.cancelTask → sessionManager.delete → workspace.cleanup` deletes the workspace on every cancel, including STOP. See [Spec 11 Concern 1](11-abort-pipeline.md#concern-1--★★★--stop-deletes-sub-agent-workspaces) for the full trace.
+**STOP vs DELETE workspace policy.** `cancelTask` only aborts the in-flight controller — it does **not** delete the workspace. Workspace cleanup is owned exclusively by the explicit DELETE path (`POST /session/clear` in `base-server.ts`), invoked when the user removes the session from history. STOP therefore preserves the workspace and the session can be resumed.
 
 ## Related
 

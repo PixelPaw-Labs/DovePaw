@@ -100,7 +100,7 @@ function stubSubscribe(snapshot: ChatSseEvent[] = []): void {
 }
 
 function seqEvent<T extends ChatSseEvent>(event: T, seq: number): T {
-  return Object.assign({}, event, { _seq: seq });
+  return Object.assign({}, event, { seq });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

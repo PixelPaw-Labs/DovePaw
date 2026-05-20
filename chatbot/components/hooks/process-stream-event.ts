@@ -157,6 +157,11 @@ export function processActiveStreamEvent(
   }
 
   if (event.type === "error" && event.content) {
+    // The route's catch path already cleared the server-side permission/question
+    // maps via abortPendingPermissions. Mirror that on the client so stale
+    // banners can't trigger 404 retries.
+    setPendingPermissions([]);
+    setPendingQuestions([]);
     animation.flush(assistantId);
     updateActiveMessages((prev) =>
       prev.map((m) => {
@@ -177,6 +182,26 @@ export function processActiveStreamEvent(
           isProcessStreaming: false,
         });
       }),
+    );
+    return;
+  }
+
+  // Known types intentionally handled elsewhere:
+  //   session/progress         → use-chat-session reads these directly
+  //   group_member/agent_status → useGroupChatSession owns the group SSE bus
+  if (
+    event.type === "session" ||
+    event.type === "progress" ||
+    event.type === "group_member" ||
+    event.type === "agent_status"
+  ) {
+    return;
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.warn(
+      "[processActiveStreamEvent] Unknown event type:",
+      (event as { type: string }).type,
     );
   }
 }

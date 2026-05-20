@@ -46,7 +46,7 @@ vi.mock("@a2a-js/sdk/client", () => ({
 }));
 
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
-import { POST } from "../agent/[name]/chat/route";
+import { POST, DELETE } from "../agent/[name]/chat/route";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -250,5 +250,30 @@ describe("POST /api/agent/[name]/chat — SSE streaming", () => {
     await drainStream(response);
 
     expect(mockCreateFromUrl).toHaveBeenCalledWith("http://localhost:5001");
+  });
+});
+
+describe("DELETE /api/agent/[name]/chat — STOP for launchd-triggered sessions", () => {
+  beforeEach(() => {
+    vi.mocked(readPortsManifest).mockReturnValue({
+      updatedAt: "2025-01-01",
+      test_agent: 5001,
+    } as unknown as ReturnType<typeof readPortsManifest>);
+  });
+
+  it("calls A2A cancelTask for a sessionId that was not started via this Next.js process", async () => {
+    // No prior POST → activeControllers is empty. The launchd-triggered task
+    // is running on the A2A server but the chatbot has no local AbortController.
+    const sessionId = "sched-task-uuid";
+    const request = new Request(`http://localhost/api/agent/test-agent/chat`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId, method: "stop" }),
+    });
+    const params = Promise.resolve({ name: "test-agent" });
+
+    const response = await DELETE(request, { params });
+    expect(response.status).toBe(200);
+    expect(mockCancelTask).toHaveBeenCalledWith({ id: sessionId });
   });
 });

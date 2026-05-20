@@ -239,7 +239,19 @@ export function setSessionStatus(id: string, status: SessionStatus): void {
 }
 
 export function closeStaleSessions(): void {
-  getDb().prepare("UPDATE sessions SET status = 'done' WHERE status = 'running'").run();
+  // Mark orphans as cancelled — they were killed mid-flight by a crash or
+  // hard restart; relabelling them as 'done' would falsely report success.
+  getDb().prepare("UPDATE sessions SET status = 'cancelled' WHERE status = 'running'").run();
+}
+
+/** Returns all sessions currently in 'running' status, as { id, agentId } pairs. */
+export function getRunningSessions(): Array<{ id: string; agentId: string }> {
+  return getDb()
+    .prepare<[], { id: string; agent_id: string }>(
+      "SELECT id, agent_id FROM sessions WHERE status = 'running'",
+    )
+    .all()
+    .map((r) => ({ id: r.id, agentId: r.agent_id }));
 }
 
 /**

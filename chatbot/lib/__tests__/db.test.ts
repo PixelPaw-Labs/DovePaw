@@ -26,6 +26,8 @@ const {
   setSessionStatus,
   insertSessionEvent,
   readSessionEventsAfter,
+  closeStaleSessions,
+  getRunningSessions,
   closeDb,
 } = await import("../db");
 
@@ -160,6 +162,35 @@ describe("db", () => {
 
   it("listSessions returns empty for unknown agent", () => {
     expect(listSessions("nobody")).toEqual([]);
+  });
+
+  it("closeStaleSessions marks running rows as cancelled, not done", () => {
+    // After a hard crash the next boot must not relabel killed sessions as
+    // successful — that loses the actual outcome and confuses history UI.
+    upsertSession({ ...base, id: "running-1" });
+    setSessionStatus("running-1", "running");
+    upsertSession({ ...base, id: "done-1" });
+    setSessionStatus("done-1", "done");
+
+    closeStaleSessions();
+
+    expect(getSessionDetail("running-1")?.status).toBe("cancelled");
+    expect(getSessionDetail("done-1")?.status).toBe("done");
+  });
+
+  it("getRunningSessions returns sessions in running status with agent id", () => {
+    upsertSession({ ...base, id: "live-1", agentId: "agent-A" });
+    setSessionStatus("live-1", "running");
+    upsertSession({ ...base, id: "live-2", agentId: "agent-B" });
+    setSessionStatus("live-2", "running");
+    upsertSession({ ...base, id: "finished", agentId: "agent-A" });
+    setSessionStatus("finished", "done");
+
+    const out = getRunningSessions().toSorted((a, b) => a.id.localeCompare(b.id));
+    expect(out).toEqual([
+      { id: "live-1", agentId: "agent-A" },
+      { id: "live-2", agentId: "agent-B" },
+    ]);
   });
 
   it("deleteSession removes row and clears active_sessions", async () => {

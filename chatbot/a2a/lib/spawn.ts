@@ -12,6 +12,7 @@ import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN, OPENVIKING_CLI_CONFIG, OPENVIKING_PORT_FILE } from "@/lib/paths";
 import { stripStartReminder } from "@@/lib/subagent-reminder";
+import { KILL_ESCALATION_MS } from "@@/lib/process-constants";
 import type { AgentConfig } from "./agent-config-builder";
 export type {
   ScriptCompletedContent,
@@ -107,12 +108,28 @@ export function spawnAndCollect(
     detached: true,
   });
 
+  let sigkillTimer: ReturnType<typeof setTimeout> | undefined;
   const killProc = () => {
     try {
       process.kill(-proc.pid!, "SIGTERM");
     } catch {
-      proc.kill("SIGTERM");
+      try {
+        proc.kill("SIGTERM");
+      } catch {}
     }
+    // Backstop: if the script ignores SIGTERM (custom handler stuck,
+    // uninterruptible syscall, tight CPU loop), escalate to SIGKILL so
+    // the OS reaps the process — otherwise it can keep making billable
+    // API calls long after the user clicked STOP.
+    sigkillTimer = setTimeout(() => {
+      try {
+        process.kill(-proc.pid!, "SIGKILL");
+      } catch {
+        try {
+          proc.kill("SIGKILL");
+        } catch {}
+      }
+    }, KILL_ESCALATION_MS);
   };
 
   if (signal?.aborted) {
@@ -135,6 +152,7 @@ export function spawnAndCollect(
     });
 
     proc.on("close", (code) => {
+      if (sigkillTimer) clearTimeout(sigkillTimer);
       resolve(
         lines.length > 0
           ? lines.join("\n")
@@ -143,6 +161,7 @@ export function spawnAndCollect(
     });
 
     proc.on("error", (err) => {
+      if (sigkillTimer) clearTimeout(sigkillTimer);
       resolve(`Spawn error: ${err.message}`);
     });
   });
