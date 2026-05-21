@@ -77,10 +77,11 @@ describe("OpenVikingMemoryProvider.buildReadReminder", () => {
     mkdirSync(ws, { recursive: true });
   });
 
-  it("writes memory.sh referencing the live sidecar port", async () => {
+  it("writes memory.sh that reads port dynamically from port file", async () => {
     await provider.buildReadReminder(ws, "grp-xyz");
     const script = readFileSync(join(ws, "memory.sh"), "utf8");
-    expect(script).toContain("http://localhost:51234");
+    expect(script).toContain(".openviking-port.json");
+    expect(script).not.toContain("http://localhost:51234");
     expect(script).toContain("/api/v1/search/find");
     expect(script).toContain("X-OpenViking-Agent: ${AGENT_ID}");
     expect(script).not.toContain("ov find");
