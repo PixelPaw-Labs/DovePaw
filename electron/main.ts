@@ -741,7 +741,7 @@ void app.whenReady().then(async () => {
       browserPanelVisible = true;
       browserCompact = false;
       browserWin.setBounds(browserWinBounds(win));
-      browserWin.show();
+      browserWin.showInactive();
     }
     switchToTab(sessionId);
     notifyVisibility(true);
