@@ -68,6 +68,20 @@ import { markProcessing, markIdle } from "./processing-registry";
  */
 const LABEL_MAX_LEN = 60;
 
+/** Builds the allowedTools list for a sub-agent query. Exported for testing. */
+export function buildAllowedTools(
+  manifestKey: string,
+  isAskMode: boolean,
+  linkedAgentTools: Array<{ name: string }> | null | undefined,
+): string[] {
+  return [
+    `mcp__agents__${startRunScriptToolName(manifestKey)}`,
+    `mcp__agents__${awaitRunScriptToolName(manifestKey)}`,
+    ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
+    ...(!isAskMode ? (linkedAgentTools ?? []).map((t) => `mcp__agents__${t.name}`) : []),
+  ];
+}
+
 // ─── Group chat mode ──────────────────────────────────────────────────────────
 
 interface GroupChatOverrides {
@@ -323,16 +337,7 @@ export class QueryAgentExecutor {
                   ),
                 },
                 additionalDirectories,
-                allowedTools: [
-                  ...(!isAskMode
-                    ? [`mcp__agents__${startRunScriptToolName(this.def.manifestKey)}`]
-                    : []),
-                  `mcp__agents__${awaitRunScriptToolName(this.def.manifestKey)}`,
-                  ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
-                  ...(!isAskMode
-                    ? (linkedAgentTools ?? []).map((t) => `mcp__agents__${t.name}`)
-                    : []),
-                ],
+                allowedTools: buildAllowedTools(this.def.manifestKey, isAskMode, linkedAgentTools),
                 disallowedTools: [
                   ...getSecurityModeStrategy(effectiveDoveSettings(globalSettings).securityMode)
                     .disallowedTools,
