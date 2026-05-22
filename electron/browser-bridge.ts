@@ -39,6 +39,7 @@ async function handleCommand(
   getTabCdp: (sessionId: string) => CdpSend,
   listTabs: () => TabInfo[],
   onShow: (sessionId: string) => void,
+  onClose: (sessionId: string) => void,
 ): Promise<unknown> {
   const raw: unknown = JSON.parse(body);
   if (!raw || typeof raw !== "object" || !("action" in raw)) {
@@ -153,8 +154,7 @@ async function handleCommand(
       return { ok: true, tabs: listTabs() };
 
     case "close_session": {
-      // Callers should call close_session when done with a session to free the tab
-      // Main process handles actual cleanup via the closeTab callback
+      onClose(session);
       return { ok: true, session };
     }
 
@@ -175,6 +175,7 @@ export async function startBrowserBridge(
   listTabs: () => TabInfo[],
   onShow: (sessionId: string) => void,
   onToggle: () => void,
+  onClose: (sessionId: string) => void,
 ): Promise<BrowserBridge> {
   const server = createServer((req, res) => {
     void (async () => {
@@ -203,7 +204,7 @@ export async function startBrowserBridge(
 
         if (method === "POST" && url === "/command") {
           const body = await readBody(req);
-          const result = await handleCommand(body, getTabCdp, listTabs, onShow);
+          const result = await handleCommand(body, getTabCdp, listTabs, onShow, onClose);
           return json(res, 200, result);
         }
 

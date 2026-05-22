@@ -795,7 +795,7 @@ void app.whenReady().then(async () => {
   });
 
   try {
-    const bridge = await startBrowserBridge(getTabCdp, listTabs, showPanel, togglePanel);
+    const bridge = await startBrowserBridge(getTabCdp, listTabs, showPanel, togglePanel, closeTab);
     console.log(`✓ Browser bridge listening on port ${bridge.port}`);
   } catch (err) {
     console.warn(
