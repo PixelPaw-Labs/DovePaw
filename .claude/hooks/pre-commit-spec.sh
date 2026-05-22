@@ -8,6 +8,11 @@
 set -uo pipefail
 
 HOOK_INPUT=$(cat)
+
+# Only run for git commit commands (same guard pattern as pre-commit.sh)
+COMMAND=$(printf '%s' "$HOOK_INPUT" | jq -r '.tool_input.command // ""')
+[[ "$COMMAND" != *"git commit"* ]] && exit 0
+
 SESSION_ID=$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // ""')
 FLAG_FILE="/tmp/dovepaw-spec-confirmed${SESSION_ID:+-$SESSION_ID}"
 
