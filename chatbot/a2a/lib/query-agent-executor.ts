@@ -10,7 +10,7 @@ import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
-import { agentConfigDir } from "@@/lib/paths";
+import { agentConfigDir, pluginSkillsDir } from "@@/lib/paths";
 import { readAgentSettings, readSettings } from "@@/lib/settings";
 import { readGroupConfig } from "@@/lib/group-config";
 import { resolveEnvVarList } from "@/lib/env-resolver";
@@ -293,6 +293,8 @@ export class QueryAgentExecutor {
             agentPersistentStateDir(this.def.name),
             agentConfigDir(this.def.name),
             agentSourceDir,
+            // Plugin skills folder — gives the agent access to edit its own skills.
+            ...(this.def.pluginPath ? [pluginSkillsDir(this.def.pluginPath)] : []),
           ];
           const dispatcher = new A2AQueryDispatcher(
             publisher,

@@ -82,6 +82,8 @@ export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
 /** Resolve an agent's entry point to an absolute path. Absolute paths (e.g. tmp agents) pass through unchanged. */
 export const agentEntryPath = (entryPath: string) =>
   isAbsolute(entryPath) ? entryPath : join(AGENTS_ROOT, entryPath);
+/** <pluginRoot>/skills — skills folder for a plugin repo */
+export const pluginSkillsDir = (pluginPath: string) => join(pluginPath, "skills");
 /** DovePaw/agent-local/ — locally developed agents (auto-linked on install/electron:dev) */
 export const AGENT_LOCAL_DIR = join(AGENTS_ROOT, "agent-local");
 /** DovePaw/node_modules/<pkg> */

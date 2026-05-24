@@ -71,7 +71,7 @@ sequenceDiagram
 Allowed dirs:
 
 - **Dove**: `AGENTS_ROOT` + `getLaunchdAdditionalDirs()` + `DOVEPAW_TMP_DIR` + `DOVEPAW_DIR`
-- **Sub-agent**: `cwd` (workspace) + scheduler dirs + `agentPersistentLogDir/StateDir/ConfigDir` + `agentSourceDir`
+- **Sub-agent**: `cwd` (workspace) + scheduler dirs + `agentPersistentLogDir/StateDir/ConfigDir` + `agentSourceDir` + `pluginSkillsDir` (plugin agents only)
 
 The hook resolves both stored and requested paths with `realpath` — handles macOS case-insensitivity and symlinks. New writes (file doesn't exist yet) fall back to `path.resolve`.
 
