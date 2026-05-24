@@ -216,6 +216,12 @@ export async function startBrowserBridge(
     })();
   });
 
+  // Disable all server-side timeouts so long-running commands (image downloads,
+  // multi-minute evaluate calls) are never cut short by Node's defaults.
+  server.headersTimeout = 0;
+  server.requestTimeout = 0;
+  server.timeout = 0;
+
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 
   const rawAddr = server.address();
