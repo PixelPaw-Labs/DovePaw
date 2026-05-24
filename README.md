@@ -38,6 +38,14 @@ At the centre is **Dove**: a Claude Agent SDK orchestrator that knows all your i
 - Composing multi-agent workflows where agents invoke and hand off to each other
 - Keeping your agent code in private repos — you install what you trust, nothing else runs
 
+**Why a dedicated app instead of running Claude Code directly?**
+
+- **Settings UI** — manage repos, env vars, agent schedules, and agent links from a browser tab instead of editing JSON files under `~/.dovepaw/` by hand
+- **Persistent sidebar** — all your agents in one place; click any agent to open its conversation without hunting for a terminal session
+- **Embedded browser panel** — quick look-ups and UI verification in a dedicated Chromium panel; agents can drive it via the `dovepaw-browser` skill without touching your Chrome browser or interrupting your personal tabs
+- **Background daemons stay alive** — the Electron menubar process keeps all A2A servers running; close the chatbot tab and agents keep going
+- **Session history** — every agent run is stored and resumable; pick up a long-running job from where it left off
+
 > Full background: [Building DovePaw — A Personal Engineering Blog Series](https://medium.com/@ywian/building-dovepaw-a-personal-engineering-blog-series-3634f3185b90)
 
 ---
