@@ -5,8 +5,8 @@
 <h1 align="center">DovePaw</h1>
 
 <p align="center">
-  <strong>Personal multi-agent orchestration runtime for the Claude Agent SDK.</strong><br/>
-  Write your workflow in TypeScript. Let Claude handle the judgment. Agents run in the background — scheduled, autonomous, yours.
+  <strong>Personal AI agent orchestration runtime for Claude Code and the Claude Agent SDK.</strong><br/>
+  Build private TypeScript agents, connect them with A2A, and run autonomous engineering workflows in the background on macOS.
 </p>
 
 <p align="center">
@@ -23,20 +23,30 @@
 
 ---
 
+## What is DovePaw?
+
+**DovePaw** is a macOS desktop app for building, scheduling, and orchestrating private Claude Code agents. It gives you a personal runtime for TypeScript-based AI agent workflows, powered by the Claude Agent SDK, A2A protocol, launchd scheduling, and an Electron UI.
+
+Instead of running one-off prompts in a terminal, DovePaw lets you turn repeat engineering work into reusable agents: triaging Dependabot PRs, patching security vulnerabilities, reviewing pull requests, generating engineering digests, checking UI changes in an embedded browser, and handing work between specialized agents.
+
+The goal is simple: keep your agents private, keep the deterministic parts in code, and let Claude handle the judgment-heavy parts.
+
+---
+
 <p align="center">
-  <img src="example1.png" width="720" alt="DovePaw chatbot UI — Dove orchestrates agents via MCP tools" />
+  <img src="example1.png" width="720" alt="DovePaw chatbot UI for orchestrating Claude Code agents" />
 </p>
 
 ---
 
-At the centre is **Dove**: a Claude Agent SDK orchestrator that knows all your installed agents, their boundaries, and when to hand off. You talk to Dove. Dove routes to the right agent. The agents do the work — in the background, on a schedule, or triggered from the chat.
+At the centre is **Dove**: a Claude Agent SDK orchestrator for personal AI agent automation. Dove knows which agents are installed, what each one is responsible for, and when to hand work off. You talk to Dove; Dove routes the request to the right Claude Code agent; the agent runs the workflow in the background, on a schedule, or from chat.
 
-**What DovePaw is for:**
+**What DovePaw helps you automate:**
 
-- Automating repeat engineering work (Dependabot triage, security patching, ticket implementation, doc writing)
-- Running agents on a schedule via macOS launchd — unattended, background, fully autonomous
-- Composing multi-agent workflows where agents invoke and hand off to each other
-- Keeping your agent code in private repos — you install what you trust, nothing else runs
+- Repeat software engineering tasks such as Dependabot triage, security patching, pull request review, ticket implementation, and documentation writing
+- Scheduled Claude Code workflows that run unattended through macOS launchd
+- Multi-agent handoffs where one agent can invoke, await, or delegate work to another agent over A2A
+- Private engineering automation that stays in your own repos, with only the agents you install allowed to run
 
 **Why a dedicated app instead of running Claude Code directly?**
 
@@ -52,7 +62,7 @@ At the centre is **Dove**: a Claude Agent SDK orchestrator that knows all your i
 
 ## Agent Script Workflows
 
-Each agent is a `main.ts` that defines a **workflow** — anything from a single skill call to a full multi-step pipeline. You decide the shape. The pattern is always the same: **TypeScript for the deterministic parts, Claude CLI for the judgment.**
+Each Claude Code agent is a `main.ts` file that defines a workflow — anything from a single skill call to a multi-step pipeline across several repositories. You decide the shape. The pattern is always the same: **TypeScript for the deterministic parts, Claude CLI for the judgment.**
 
 Simple workflow — just invoke a skill:
 
@@ -123,7 +133,7 @@ main();
 
 ## Why A2A?
 
-Each agent runs as an independent Express process connected to Dove via the [A2A protocol](https://a2a-protocol.org/) over SSE. Three tools, one agent:
+Each agent runs as an independent Express process connected to Dove via the [A2A protocol](https://a2a-protocol.org/) over SSE. This gives DovePaw a clean orchestration layer for multi-agent workflows without coupling agents directly together. Three tools, one agent:
 
 | Tool           | Behaviour                                          |
 | -------------- | -------------------------------------------------- |
@@ -147,7 +157,7 @@ This trio gives Dove fine-grained control over pacing. A quick lookup uses `ask_
 
 ## Scheduled Agents — Run Autonomously on a Cron
 
-Every agent can run on a schedule. The easiest way is through the **Settings UI** — open any agent's settings page, toggle scheduling on, and set the time. DovePaw handles the rest.
+Every Claude Code agent can run on a schedule. The easiest way is through the **Settings UI** — open any agent's settings page, toggle scheduling on, and set the time. DovePaw turns that schedule into a macOS launchd job and triggers the agent through A2A.
 
 For manual setup, add a `schedule` field to `agent.json`:
 
@@ -249,7 +259,7 @@ Typical use cases: verifying a UI change before a PR, scraping a page as part of
 
 ## Plugin System — Your Agents, Your Repos
 
-Agents are packaged as **plugin repos** — ordinary git repos with a `dovepaw-plugin.json` manifest. DovePaw clones them into `~/.dovepaw/plugins/` and wires everything at startup. Adding or removing an agent is install or uninstall — no changes to DovePaw itself.
+Agents are packaged as **plugin repos** — ordinary git repos with a `dovepaw-plugin.json` manifest. DovePaw clones them into `~/.dovepaw/plugins/` and wires everything at startup. Adding or removing a Claude Code agent is just install or uninstall — no changes to DovePaw itself.
 
 ```bash
 npm run plugin:add owner/my-agents        # GitHub slug, uses gh CLI auth
