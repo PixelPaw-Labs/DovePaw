@@ -133,6 +133,6 @@ curl -s -X POST "${BRIDGE}/browser/toggle"
 
 ## Known limitations
 
-- **CSS selectors only** — `click` and `fill` require valid CSS selectors. `@e` ref support (kimi-webbridge style) is not yet implemented.
+- **CSS selectors only** — `click` and `fill` require valid CSS selectors. `@e` ref support is not yet implemented.
 - **Sites checking `event.isTrusted`** — synthetic click/fill events have `isTrusted=false`. Banking portals and captchas may reject them.
 - **Cross-origin iframes** — `evaluate`, `snapshot`, `click`, and `fill` operate on the top frame only.
