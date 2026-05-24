@@ -135,12 +135,47 @@ This trio gives Dove fine-grained control over pacing. A quick lookup uses `ask_
 
 **Why a protocol instead of direct function calls?**
 
+- **Cron/launchd just fires an HTTP trigger** — the scheduler doesn't need to manage processes, env vars, or Claude CLI; it posts one A2A message and the server handles the rest
 - Each agent is a separate OS process — isolated, independently restartable, no shared memory
 - Ports are OS-assigned at startup and published to `~/.dovepaw/` — no port config, no conflicts
 - Any agent can invoke any other agent the same way — the same A2A call whether Dove or another agent is the caller
 - Agents can be added, removed, or restarted without touching DovePaw itself
 
 → See [docs/architecture.md](docs/architecture.md) for the full three-layer runtime diagram.
+
+---
+
+## Scheduled Agents — Run Autonomously on a Cron
+
+Every agent can run on a schedule. The easiest way is through the **Settings UI** — open any agent's settings page, toggle scheduling on, and set the time. DovePaw handles the rest.
+
+For manual setup, add a `schedule` field to `agent.json`:
+
+```json
+{
+  "name": "my-agent",
+  "schedulingEnabled": true,
+  "schedule": { "type": "calendar", "hour": 9, "minute": 0 }
+}
+```
+
+```bash
+npm run build
+npm run electron:dev
+```
+
+The scheduler fires one A2A HTTP trigger. The A2A server picks it up, spawns the agent script, and the workflow runs exactly as it would from the chatbot — same code, same dual-mode entry, no special path.
+
+**Real examples running on this setup:**
+
+| Schedule      | Example agent   | What it does                                                  |
+| ------------- | --------------- | ------------------------------------------------------------- |
+| Daily 9am     | `pr-triager`    | Reviews and merges safe Dependabot PRs across all repos       |
+| Daily 8am     | `vuln-scanner`  | Scans for new CVEs, patches, opens fix PRs                    |
+| Weekly Monday | `digest-writer` | Drafts a weekly engineering summary from recent commits       |
+| Nightly       | `repo-janitor`  | Cleans stale branches, closes resolved issues, updates labels |
+
+Scheduled runs are unattended — no terminal, no human in the loop. Results land in session history; open the agent's conversation in Dove to review what ran overnight.
 
 ---
 
@@ -224,6 +259,16 @@ npm run plugin:add ../my-agents           # local path during development
 
 Your agent code stays in your repos, under your access control. Private infrastructure, private APIs, private repos — nothing sensitive has to go public.
 
+**Try it now** — install the test agents plugin to verify your setup end-to-end:
+
+```bash
+npm run plugin:add PixelPaw-Labs/DovePaw-Test-Agents
+npm run build
+npm run electron:dev
+```
+
+[DovePaw-Test-Agents](https://github.com/PixelPaw-Labs/DovePaw-Test-Agents) is a reference plugin with simple agents you can poke at to confirm the full stack is wired correctly before building your own.
+
 Use the built-in `/sub-agent-builder` skill in Claude Code to scaffold a new agent end-to-end from a description. It generates `agent.json`, `main.ts`, and the plugin manifest. You write the logic.
 
 ---
@@ -235,13 +280,13 @@ Use the built-in `/sub-agent-builder` skill in Claude Code to scaffold a new age
 
 ```bash
 npm install
-npm run install    # build, generate launchd plists, link skills to ~/.claude/skills/
+npm run build
 npm run electron:dev
 ```
 
 Click the menubar icon to open Dove.
 
-`npm run install` is only needed on first setup or after adding/removing agents. Day-to-day:
+`npm run build` is only needed on first setup or after adding/removing agents. Day-to-day:
 
 ```bash
 npm run electron:dev
@@ -251,7 +296,7 @@ npm run electron:dev
 
 ```bash
 npm run plugin:add owner/my-plugin
-npm run install
+npm run build
 npm run electron:dev
 ```
 
