@@ -160,6 +160,48 @@ mcp__claude_ai_(HubSpot|Jira|Confluence|Slack|Slack_Workato|Envato_Creative_Comp
 
 These are claude.ai-side remote MCP integrations that DovePaw chose not to expose. They are blocked unconditionally by the hook regex matcher.
 
+## 9. Agent-script enforcement (inside the child process)
+
+Sections 1–8 describe Dove's enforcement in the Next.js process. Once Dove spawns a sub-agent via A2A, the child process re-applies the same mode independently via `@dovepaw/agent-sdk` ([`packages/agent-sdk/src/agent-runner.ts`](../../packages/agent-sdk/src/agent-runner.ts)). This is a separate layer — if Dove forgot to pass an option down, the agent script would still self-restrict from `DOVEPAW_SECURITY_MODE` alone.
+
+```mermaid
+flowchart LR
+  env["DOVEPAW_SECURITY_MODE<br/>DOVEPAW_ALLOW_WEB_TOOLS"]
+  env --> rs{"resolveClaudeSecurityOpts"}
+  rs --> pm["permissionMode (from getSecurityModeStrategy)"]
+  rs --> dt["disallowedTools<br/>= READ_ONLY_DISALLOWED_TOOLS<br/>+ WebFetch/WebSearch (unless opted in)<br/>+ caller's extras"]
+  rs --> hk{"strategy.readOnly?"}
+  hk -- yes --> bh["PreToolUse Bash hook<br/>denies bashHasWriteOperation"]
+  hk -- no --> none["(no hook added)"]
+  pm & dt & bh --> claude["ClaudeRunner.run query()"]
+```
+
+Two practical consequences:
+
+- The Bash write-op hook from section 4 runs **twice** for any tool call inside a sub-agent: once on Dove's gate (catches `start_*`/`ask_*` invocation itself), once inside the agent's own `query()` (catches nested tool calls the script makes). Both gates share the same `bashHasWriteOperation` regex via the duplicated `security-policy.ts` (see section 11).
+- `WebFetch`/`WebSearch` are added to `disallowedTools` by default in **every** mode unless `DOVEPAW_ALLOW_WEB_TOOLS=1` is set. The mode strategy itself doesn't restrict web tools — that lives in `resolveClaudeSecurityOpts` as a separate concern.
+
+## 10. Codex security mapping
+
+When `AgentRunner` routes to `CodexRunner` (model starts with `gpt` or is literally `codex`), the Claude-shaped strategy doesn't apply — Codex has its own knobs. Four resolvers translate `DOVEPAW_SECURITY_MODE` into Codex SDK options:
+
+| Resolver                       | read-only            | supervised      | autonomous      | Source of truth                                                            |
+| ------------------------------ | -------------------- | --------------- | --------------- | -------------------------------------------------------------------------- |
+| `resolveCodexSandboxMode`      | forced `"read-only"` | passthrough     | passthrough     | env mode wins over `codexOpts.sandboxMode` in read-only                    |
+| `resolveCodexApprovalPolicy`   | `"on-request"`       | `"on-request"`  | `"never"`       | env-only — `codexOpts` cannot override the policy                          |
+| `resolveCodexWebSearchEnabled` | env opt-in only      | env opt-in only | env opt-in only | `DOVEPAW_ALLOW_WEB_TOOLS=1` overrides `codexOpts.webSearchEnabled = false` |
+| `deriveApprovalsReviewer`      | from policy          | from policy     | `undefined`     | derived: `untrusted → user`, others → `auto_review`                        |
+
+Why `"on-request"` for both read-only and supervised: it lets Codex operate inside its sandbox freely but ask before crossing the boundary (write ops). `"never"` would skip every prompt, defeating the constraint. Autonomous gets `"never"` because there's no constraint to enforce.
+
+The Codex path has **no PreToolUse hook equivalent** — Codex SDK doesn't expose one. Enforcement is entirely sandbox + approval-policy driven. This is a real asymmetry with the Claude path: the Bash write-op hook does not run for Codex agents in read-only mode; the sandbox must catch it instead.
+
+## 11. Two parallel copies of the policy
+
+`lib/security-policy.ts` (Dove side) and `packages/agent-sdk/src/security-policy.ts` (agent-script side) carry duplicate definitions of `getSecurityModeStrategy`, `READ_ONLY_DISALLOWED_TOOLS`, and `bashHasWriteOperation`. The duplication exists because the agent-sdk package is published independently and cannot import from `lib/` — plugin agents installed from external repos only have access to the published package.
+
+Invariant: **the two copies must agree.** A read-only disallow-list entry added on one side but not the other lets a tool through inside the agent process even though Dove rejects it (or vice versa). There is no compile-time link between the two files; the only safeguard is the test suite in `packages/agent-sdk/src/agent-runner.test.ts` plus the matching assertions in chatbot tests. If you change either file, search the codebase for the other constant name and apply the same change.
+
 ## Related
 
 - [Spec 01 — Hook injection](01-hook-injection.md) (the disallow + path hooks are part of `buildAgentHooks`)
