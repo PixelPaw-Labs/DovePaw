@@ -261,6 +261,22 @@ Typical use cases: verifying a UI change before a PR, scraping a page as part of
 
 ---
 
+## Security Modes — Choose How Much Trust You Give Dove
+
+Dove runs in one of three modes, configured in Settings → Dove. The mode controls what tools Dove and its sub-agents can use, and whether the user has to approve actions before they happen.
+
+| Mode                       | SDK permission mode | Effect                                                                                                                                                 |
+| -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **read-only**              | `default`           | Blocks every write tool via SDK `disallowedTools` + PreToolUse hooks. Write-capable `Bash` patterns (redirects, `rm`, `mv`, interpreters) also denied. |
+| **supervised** _(default)_ | `acceptEdits`       | File edits auto-approved; `Bash` and other tool calls prompt the user in the browser before executing.                                                 |
+| **autonomous**             | `bypassPermissions` | All tool use auto-approved. For fully-trusted local use only.                                                                                          |
+
+Sub-agents inherit the mode via `DOVEPAW_SECURITY_MODE` in their environment. Two enforcement gates run on every tool call: SDK `disallowedTools` first, then PreToolUse hooks that catch write-shaped `Bash` commands and any path outside the agent's `allowedDirectories`.
+
+→ See [docs/security.md](docs/security.md) for the full permission-flow diagram, PreToolUse hook details, `canUseTool` browser approval flow, and sub-agent isolation.
+
+---
+
 ## Plugin System — Your Agents, Your Repos
 
 Agents are packaged as **plugin repos** — ordinary git repos with a `dovepaw-plugin.json` manifest. DovePaw clones them into `~/.dovepaw/plugins/` and wires everything at startup. Adding or removing a Claude Code agent is just install or uninstall — no changes to DovePaw itself.
@@ -325,6 +341,7 @@ npm run electron:dev
 | [docs/architecture.md](docs/architecture.md)       | Three-layer runtime, tech stack, design decisions             |
 | [docs/agent-workflows.md](docs/agent-workflows.md) | Workflow spectrum: single skill to full pipeline, SDK helpers |
 | [docs/agent-links.md](docs/agent-links.md)         | Wiring agents together, handoff graph                         |
+| [docs/security.md](docs/security.md)               | Security modes, permission flow, sub-agent isolation          |
 | [docs/getting-started.md](docs/getting-started.md) | Step-by-step setup with screenshots                           |
 
 ---
