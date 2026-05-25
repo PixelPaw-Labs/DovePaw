@@ -353,3 +353,16 @@ This is a personal project — built on nights and weekends, shaped by real prob
 If it sparks ideas for your own setup, feel free to fork it. The plugin system is designed for that — your agents, your repos, your rules.
 
 If you find it useful, a ⭐ goes a long way.
+
+---
+
+## License
+
+DovePaw is licensed under the **MIT License with Commons Clause**.
+
+- **Permitted:** personal use, research, non-commercial projects, forks for private use
+- **Not permitted:** selling DovePaw, offering it as a hosted/SaaS product, or building a commercial service primarily based on it
+
+> **🚫 Commercial use is not permitted.**  
+> You may use, fork, and modify DovePaw for personal, research, or non-commercial purposes. **Selling DovePaw, building a commercial product or service on top of it, or offering it as a hosted service requires a separate commercial licence.**  
+> To discuss commercial licensing, open an issue on this repository.
