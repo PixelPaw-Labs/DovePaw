@@ -41,7 +41,18 @@ Beyond the description, you can declare directional connections between agents i
 
 Links are stored in `~/.dovepaw/agent-links.json` and managed through the Settings UI or directly in the file. The file lives outside the repo — links are runtime wiring, not source configuration.
 
+**Links guide; they do not force.** A link declares that a handoff path is _available_ between two agents — it shapes the boundary of who _can_ talk to whom. It does not force the source agent to invoke the target. At runtime, the source agent decides whether to hand off based on its own handoff rule: the target's `description` (the MCP tool contract — what it does, when to invoke, what to exclude) plus the strategy on the link (`ask`, `start`). If the source's current task doesn't match the target's description, the agent skips the link even though it exists. If multiple links could apply, the agent picks the one whose description best fits the work in hand.
+
+Two consequences worth being explicit about:
+
+- **The description is the soft gate.** A vague or overly broad `description` will cause unwanted handoffs even when the link itself looks reasonable on the graph. Tighten the description, not the link list.
+- **The heartbeat is the only hard gate.** If the target's A2A server is offline, the link is inactive and the source cannot route to it regardless of intent. This is the one place where links _do_ restrict — everything else is guidance the agent interprets per task.
+
 From the Settings UI: open any agent's settings page → Agent Links tab → add or remove links.
+
+The canvas view shows every agent and the strategies wired between them — individual agents at the top, groups (with their members and intra-group links) below.
+
+![Agent links canvas](images/agent-links-canvas.png)
 
 ## The Handoff Pattern
 

@@ -222,6 +222,8 @@ blog-writer → pr-reviewer
 
 This keeps each agent focused on one thing. The links define the flow — not Dove's code, not the agent scripts.
 
+![Agent links canvas](docs/images/agent-links-canvas.png)
+
 → See [docs/agent-links.md](docs/agent-links.md) for the full agent links reference.
 
 ---
