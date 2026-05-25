@@ -234,6 +234,8 @@ DovePaw runs as an Electron app. Alongside the chatbot window, there's an embedd
 
 Any agent can drive it via the `dovepaw-browser` skill. No switching apps. No external browser automation setup.
 
+![Embedded browser running alongside chat](docs/images/embedded-browser-shopping.png)
+
 ```bash
 # From inside an agent or skill:
 PORT=$(python3 -c "import json; d=json.load(open('$HOME/.dovepaw/.browser-bridge-port.json')); print(d['port'])")
