@@ -58,7 +58,7 @@
     "@streamdown/code": "^1.1.1",
     "@streamdown/math": "^1.0.2",
     "@streamdown/mermaid": "^1.0.2",
-    "@uiw/react-codemirror": "^4.25.9",
+    "@uiw/react-codemirror": "^4.25.10",
     "@xyflow/react": "^12.10.2",
     "ai": "^6.0.185",
     "animejs": "^4.4.1",
