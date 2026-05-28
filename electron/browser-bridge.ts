@@ -33,6 +33,14 @@ function stringArg(args: Record<string, unknown>, key: string): string {
   return typeof v === "string" ? v : "";
 }
 
+export function parseFilesArg(args: Record<string, unknown>): string[] {
+  const raw = args.files;
+  if (!Array.isArray(raw) || raw.length === 0 || !raw.every((f) => typeof f === "string")) {
+    throw new Error("args.files must be a non-empty array of absolute paths");
+  }
+  return raw;
+}
+
 /* oxlint-disable typescript-eslint/no-unsafe-type-assertion -- CDP sendCommand returns unknown; no type definitions available without a full CDP type library */
 async function handleCommand(
   body: string,
@@ -67,38 +75,87 @@ async function handleCommand(
       const selector = stringArg(args, "selector");
       if (!selector) throw new Error("args.selector is required");
 
-      const docResult = await cdp("DOM.getDocument", { depth: 0 });
-      const { nodeId: rootId } = docResult as { nodeId: number };
-      const qResult = await cdp("DOM.querySelector", { nodeId: rootId, selector });
-      const { nodeId } = qResult as { nodeId: number };
-      if (!nodeId) throw new Error(`No element found for selector: ${selector}`);
-
-      const boxResult = await cdp("DOM.getBoxModel", { nodeId });
-      const { model } = boxResult as { model: { content: number[] } };
-      const [x1, y1, , , x3, y3] = model.content;
-      const cx = (x1 + x3) / 2;
-      const cy = (y1 + y3) / 2;
+      // Look up coordinates via JS (cheaper + more robust than the DOM.getDocument
+      // → querySelector → getBoxModel chain, which throws CDP "Invalid parameters"
+      // when the DOM domain isn't enabled or nodeIds get invalidated by SPA re-renders).
+      // Also scrolls the element into view first so the click hits the right pixel.
+      const coordResult = await cdp("Runtime.evaluate", {
+        expression: `(() => {
+          const el = document.querySelector(${JSON.stringify(selector)});
+          if (!el) return JSON.stringify({error: "not-found"});
+          el.scrollIntoView({block: "center", inline: "center"});
+          const r = el.getBoundingClientRect();
+          if (r.width === 0 && r.height === 0) return JSON.stringify({error: "zero-size", rect: [r.left, r.top, r.width, r.height]});
+          return JSON.stringify({
+            x: r.left + r.width / 2,
+            y: r.top + r.height / 2,
+            tag: el.tagName,
+            text: (el.innerText || "").slice(0, 80),
+          });
+        })()`,
+        returnByValue: true,
+      });
+      const coordValue: unknown = (coordResult as { result: { value: unknown } }).result.value;
+      const info: {
+        error?: string;
+        rect?: number[];
+        x?: number;
+        y?: number;
+        tag?: string;
+        text?: string;
+      } =
+        typeof coordValue === "string"
+          ? (JSON.parse(coordValue) as {
+              error?: string;
+              rect?: number[];
+              x?: number;
+              y?: number;
+              tag?: string;
+              text?: string;
+            })
+          : {};
+      if (info.error) {
+        throw new Error(`click ${selector}: ${info.error} ${JSON.stringify(info.rect ?? "")}`);
+      }
 
       /* oxlint-disable eslint/no-await-in-loop -- mouse events must fire sequentially: move → press → release */
       for (const type of ["mouseMoved", "mousePressed", "mouseReleased"] as const) {
         await cdp("Input.dispatchMouseEvent", {
           type,
-          x: cx,
-          y: cy,
+          x: info.x,
+          y: info.y,
           button: "left",
           clickCount: type === "mousePressed" || type === "mouseReleased" ? 1 : 0,
         });
       }
       /* oxlint-enable eslint/no-await-in-loop */
 
-      const tagResult = await cdp("Runtime.evaluate", {
-        expression: `(() => { const el = document.querySelector(${JSON.stringify(selector)}); return el ? JSON.stringify({tag: el.tagName, text: el.innerText?.slice(0,80)}) : null })()`,
-        returnByValue: true,
+      return { ok: true, tag: info.tag, text: info.text };
+    }
+
+    case "set_input_files": {
+      // Upload files to an <input type="file"> via CDP DOM.setFileInputFiles.
+      // This is how Playwright/Puppeteer do it — fires the native change event
+      // from inside the renderer's input layer so React/Vue accept it.
+      // Uses objectId from Runtime.evaluate (more reliable than nodeId across SPA re-renders).
+      const selector = stringArg(args, "selector");
+      if (!selector) throw new Error("args.selector is required");
+      const files = parseFilesArg(args);
+
+      const evalResult = await cdp("Runtime.evaluate", {
+        expression: `document.querySelector(${JSON.stringify(selector)})`,
+        returnByValue: false,
       });
-      const tagRaw: unknown = (tagResult as { result: { value: unknown } }).result.value;
-      const info: { tag?: string; text?: string } =
-        typeof tagRaw === "string" ? (JSON.parse(tagRaw) as { tag?: string; text?: string }) : {};
-      return { ok: true, ...info };
+      const { result } = evalResult as { result: { subtype?: string; objectId?: string } };
+      if (!result || result.subtype === "null" || !result.objectId) {
+        throw new Error(`No element found for selector: ${selector}`);
+      }
+      try {
+        await cdp("DOM.setFileInputFiles", { files, objectId: result.objectId });
+        return { ok: true, count: files.length };
+      } finally {
+        await cdp("Runtime.releaseObject", { objectId: result.objectId }).catch(() => {});
+      }
     }
 
     case "fill": {
