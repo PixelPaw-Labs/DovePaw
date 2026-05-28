@@ -173,22 +173,6 @@
         border-color: rgba(99, 102, 241, 0.5);
         box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
       }
-      .url-input.has-error {
-        border-color: rgba(220, 53, 53, 0.6);
-        background: rgba(220, 53, 53, 0.04);
-      }
-      .error-msg {
-        color: #c62828;
-        font-size: 11px;
-        padding: 0 4px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        max-width: 240px;
-      }
-      .error-msg:empty {
-        display: none;
-      }
     </style>
   </head>
   <body>
@@ -255,7 +239,6 @@
           spellcheck="false"
         />
       </form>
-      <span class="error-msg" id="error-msg" title=""></span>
     </div>
 
     <script>
@@ -279,23 +262,11 @@
         urlInput.blur();
       };
 
-      const errorMsg = document.getElementById("error-msg");
-
       window.addEventListener("toolbar:state", (e) => {
         const state = e.detail;
         if (document.activeElement !== urlInput) urlInput.value = state.url || "";
         backBtn.disabled = !state.canGoBack;
         fwdBtn.disabled = !state.canGoForward;
-        // Error indicator
-        if (state.error) {
-          errorMsg.textContent = "⚠ " + state.error;
-          errorMsg.title = state.error;
-          urlInput.classList.add("has-error");
-        } else {
-          errorMsg.textContent = "";
-          errorMsg.title = "";
-          urlInput.classList.remove("has-error");
-        }
 
         tabsRow.innerHTML = "";
         if (state.tabs && state.tabs.length > 0) {

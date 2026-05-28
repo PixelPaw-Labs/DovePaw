@@ -36,6 +36,7 @@ import { getAvailablePort } from "../lib/get-available-port";
 import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 import { startBrowserBridge } from "./browser-bridge";
 import { computeLoadFailureMessage } from "./lib/load-error";
+import { renderErrorPage } from "./lib/error-page";
 import { animate } from "animejs";
 
 // Prevent Google/sites from detecting Electron's Chromium as a bot
@@ -474,7 +475,10 @@ void app.whenReady().then(async () => {
     view: WebContentsView;
     cdp: import("./browser-bridge").CdpSend;
     lastError: string | null;
+    failedURL: string | null;
+    pendingErrorPage: string | null;
   }
+
   const tabs = new Map<string, BrowserTab>();
   let activeSessionId = "default";
 
@@ -514,24 +518,40 @@ void app.whenReady().then(async () => {
       const result: unknown = await view.webContents.debugger.sendCommand(method, params);
       return result;
     };
-    const tab: BrowserTab = { sessionId, view, cdp, lastError: null };
-    view.webContents.on("did-navigate", () => {
+    const tab: BrowserTab = {
+      sessionId,
+      view,
+      cdp,
+      lastError: null,
+      failedURL: null,
+      pendingErrorPage: null,
+    };
+    view.webContents.on("did-navigate", (_e, navUrl) => {
+      // Suppress error-clear when our own error-page data URL just finished loading.
+      if (tab.pendingErrorPage && navUrl === tab.pendingErrorPage) {
+        tab.pendingErrorPage = null;
+        notifyToolbarState();
+        return;
+      }
       tab.lastError = null;
+      tab.failedURL = null;
       notifyToolbarState();
     });
     view.webContents.on("did-navigate-in-page", () => notifyToolbarState());
     view.webContents.on("page-title-updated", () => notifyToolbarState());
-    view.webContents.on("did-start-loading", () => {
-      tab.lastError = null;
-      notifyToolbarState();
-    });
     view.webContents.on(
       "did-fail-load",
-      (_e, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+      (_e, errorCode, errorDescription, validatedURL, isMainFrame) => {
         const message = computeLoadFailureMessage(errorCode, errorDescription, isMainFrame);
         if (message === null) return;
         tab.lastError = message;
+        tab.failedURL = validatedURL;
+        const dataUrl =
+          "data:text/html;charset=utf-8," +
+          encodeURIComponent(renderErrorPage(validatedURL, message));
+        tab.pendingErrorPage = dataUrl;
         notifyToolbarState();
+        view.webContents.loadURL(dataUrl).catch(() => {});
       },
     );
     tabs.set(sessionId, tab);
@@ -546,8 +566,10 @@ void app.whenReady().then(async () => {
     const tabCount = tabs.size;
     console.log(`[toolbar:state] tabs=${tabCount} active=${activeSessionId.slice(0, 8)}`);
     try {
+      // While showing the error page, surface the failed URL (not the data: URL) in the bar.
+      const displayURL = tab?.lastError ? (tab.failedURL ?? "") : (wc?.getURL() ?? "");
       toolbarView.webContents.send("toolbar:state", {
-        url: wc?.getURL() ?? "",
+        url: displayURL,
         title: wc?.getTitle() ?? "",
         canGoBack: wc?.navigationHistory?.canGoBack() ?? false,
         canGoForward: wc?.navigationHistory?.canGoForward() ?? false,
