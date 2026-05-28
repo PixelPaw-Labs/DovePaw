@@ -23,6 +23,7 @@ export default defineConfig({
   test: {
     include: [
       "lib/**/*.test.ts",
+      "electron/**/*.test.ts",
       "scripts/**/*.test.ts",
       "packages/agent-sdk/src/**/*.test.ts",
       ".claude/skills/**/*.test.js",

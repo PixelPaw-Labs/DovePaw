@@ -14,6 +14,8 @@ ipcRenderer.on("toolbar:state", (_e, state) => {
 contextBridge.exposeInMainWorld("browserToolbar", {
   back: () => ipcRenderer.invoke("toolbar:back"),
   forward: () => ipcRenderer.invoke("toolbar:forward"),
+  reload: () => ipcRenderer.invoke("toolbar:reload"),
+  stop: () => ipcRenderer.invoke("toolbar:stop"),
   navigate: (url: string) => ipcRenderer.invoke("toolbar:navigate", url),
   close: () => ipcRenderer.invoke("toolbar:close"),
   switchTab: (sessionId: string) => ipcRenderer.invoke("toolbar:switch-tab", sessionId),

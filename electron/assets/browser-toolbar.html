@@ -26,13 +26,42 @@
       path {
         -webkit-app-region: no-drag;
       }
+      /* ── Top row (macOS-style close + tabs) ── */
+      .top-row {
+        height: 30px;
+        display: flex;
+        align-items: center;
+        padding-top: 4px;
+      }
+      .mac-close {
+        width: 12px;
+        height: 12px;
+        margin: 0 8px 0 10px;
+        border-radius: 50%;
+        background: #ff5f57;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        cursor: pointer;
+        padding: 0;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: transparent;
+        font-size: 9px;
+        line-height: 1;
+        -webkit-app-region: no-drag;
+      }
+      .mac-close:hover {
+        color: rgba(0, 0, 0, 0.55);
+      }
       /* ── Tabs row ── */
       .tabs-row {
+        flex: 1;
         height: 30px;
         display: flex;
         align-items: flex-end;
         gap: 2px;
-        padding: 4px 6px 0;
+        padding: 0 6px 0 4px;
         overflow-x: auto;
         overflow-y: hidden;
         scrollbar-width: none;
@@ -144,10 +173,29 @@
         border-color: rgba(99, 102, 241, 0.5);
         box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.12);
       }
+      .url-input.has-error {
+        border-color: rgba(220, 53, 53, 0.6);
+        background: rgba(220, 53, 53, 0.04);
+      }
+      .error-msg {
+        color: #c62828;
+        font-size: 11px;
+        padding: 0 4px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 240px;
+      }
+      .error-msg:empty {
+        display: none;
+      }
     </style>
   </head>
   <body>
-    <div class="tabs-row" id="tabs-row"></div>
+    <div class="top-row">
+      <button class="mac-close" id="close" title="Close browser">×</button>
+      <div class="tabs-row" id="tabs-row"></div>
+    </div>
     <div class="nav-row">
       <button class="btn" id="back" title="Back" disabled>
         <svg
@@ -173,6 +221,31 @@
           <path d="M9 18l6-6-6-6" />
         </svg>
       </button>
+      <button class="btn" id="reload" title="Reload">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M21 12a9 9 0 1 1-3-6.7" />
+          <path d="M21 3v6h-6" />
+        </svg>
+      </button>
+      <button class="btn" id="stop" title="Stop loading">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2.5"
+        >
+          <path d="M18 6L6 18M6 6l12 12" />
+        </svg>
+      </button>
       <form class="url-form" id="url-form">
         <input
           class="url-input"
@@ -182,18 +255,7 @@
           spellcheck="false"
         />
       </form>
-      <button class="btn" id="close" title="Close browser">
-        <svg
-          width="12"
-          height="12"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2.5"
-        >
-          <path d="M18 6L6 18M6 6l12 12" />
-        </svg>
-      </button>
+      <span class="error-msg" id="error-msg" title=""></span>
     </div>
 
     <script>
@@ -205,6 +267,8 @@
 
       backBtn.onclick = () => window.browserToolbar.back();
       fwdBtn.onclick = () => window.browserToolbar.forward();
+      document.getElementById("reload").onclick = () => window.browserToolbar.reload();
+      document.getElementById("stop").onclick = () => window.browserToolbar.stop();
       document.getElementById("close").onclick = () => window.browserToolbar.close();
 
       urlForm.onsubmit = (e) => {
@@ -215,11 +279,23 @@
         urlInput.blur();
       };
 
+      const errorMsg = document.getElementById("error-msg");
+
       window.addEventListener("toolbar:state", (e) => {
         const state = e.detail;
         if (document.activeElement !== urlInput) urlInput.value = state.url || "";
         backBtn.disabled = !state.canGoBack;
         fwdBtn.disabled = !state.canGoForward;
+        // Error indicator
+        if (state.error) {
+          errorMsg.textContent = "⚠ " + state.error;
+          errorMsg.title = state.error;
+          urlInput.classList.add("has-error");
+        } else {
+          errorMsg.textContent = "";
+          errorMsg.title = "";
+          urlInput.classList.remove("has-error");
+        }
 
         tabsRow.innerHTML = "";
         if (state.tabs && state.tabs.length > 0) {

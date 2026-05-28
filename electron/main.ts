@@ -35,6 +35,7 @@ import { bootOpenViking } from "../lib/openviking-spawner";
 import { getAvailablePort } from "../lib/get-available-port";
 import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 import { startBrowserBridge } from "./browser-bridge";
+import { computeLoadFailureMessage } from "./lib/load-error";
 import { animate } from "animejs";
 
 // Prevent Google/sites from detecting Electron's Chromium as a bot
@@ -472,6 +473,7 @@ void app.whenReady().then(async () => {
     sessionId: string;
     view: WebContentsView;
     cdp: import("./browser-bridge").CdpSend;
+    lastError: string | null;
   }
   const tabs = new Map<string, BrowserTab>();
   let activeSessionId = "default";
@@ -503,9 +505,6 @@ void app.whenReady().then(async () => {
         "Object.defineProperty(navigator,'webdriver',{get:()=>undefined})",
       );
     });
-    view.webContents.on("did-navigate", () => notifyToolbarState());
-    view.webContents.on("did-navigate-in-page", () => notifyToolbarState());
-    view.webContents.on("page-title-updated", () => notifyToolbarState());
     try {
       view.webContents.debugger.attach("1.3");
     } catch {
@@ -515,7 +514,26 @@ void app.whenReady().then(async () => {
       const result: unknown = await view.webContents.debugger.sendCommand(method, params);
       return result;
     };
-    const tab: BrowserTab = { sessionId, view, cdp };
+    const tab: BrowserTab = { sessionId, view, cdp, lastError: null };
+    view.webContents.on("did-navigate", () => {
+      tab.lastError = null;
+      notifyToolbarState();
+    });
+    view.webContents.on("did-navigate-in-page", () => notifyToolbarState());
+    view.webContents.on("page-title-updated", () => notifyToolbarState());
+    view.webContents.on("did-start-loading", () => {
+      tab.lastError = null;
+      notifyToolbarState();
+    });
+    view.webContents.on(
+      "did-fail-load",
+      (_e, errorCode, errorDescription, _validatedURL, isMainFrame) => {
+        const message = computeLoadFailureMessage(errorCode, errorDescription, isMainFrame);
+        if (message === null) return;
+        tab.lastError = message;
+        notifyToolbarState();
+      },
+    );
     tabs.set(sessionId, tab);
     void view.webContents.loadURL("about:blank"); // initialize the view
     notifyTabsChanged();
@@ -533,6 +551,7 @@ void app.whenReady().then(async () => {
         title: wc?.getTitle() ?? "",
         canGoBack: wc?.navigationHistory?.canGoBack() ?? false,
         canGoForward: wc?.navigationHistory?.canGoForward() ?? false,
+        error: tab?.lastError ?? "",
         tabs: Array.from(tabs.values()).map((t) => {
           const tabUrl = t.view.webContents.getURL();
           const tabTitle = t.view.webContents.getTitle();
@@ -689,6 +708,12 @@ void app.whenReady().then(async () => {
   });
   ipcMain.handle("toolbar:forward", () => {
     tabs.get(activeSessionId)?.view.webContents.goForward();
+  });
+  ipcMain.handle("toolbar:reload", () => {
+    tabs.get(activeSessionId)?.view.webContents.reload();
+  });
+  ipcMain.handle("toolbar:stop", () => {
+    tabs.get(activeSessionId)?.view.webContents.stop();
   });
   ipcMain.handle("toolbar:navigate", async (_event, url: string) => {
     const normalized = /^https?:\/\//i.test(url) ? url : `https://${url}`;
