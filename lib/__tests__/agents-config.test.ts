@@ -21,7 +21,7 @@ vi.mock("../paths.js", () => ({
   tmpAgentDefinitionFile: (name: string) => join(TMP, "tmp", name, "agent.json"),
 }));
 
-import { readAgentFile } from "../agents-config.js";
+import { readAgentFile, readAgentConfigEntries } from "../agents-config.js";
 
 const VALID_AGENT = {
   version: 1,
@@ -64,5 +64,26 @@ describe("readAgentFile — broken symlink recovery", () => {
     const stat = await lstat(agentJson);
     expect(stat.isSymbolicLink()).toBe(false);
     expect(stat.isFile()).toBe(true);
+  });
+});
+
+describe("readAgentConfigEntries — deterministic ordering", () => {
+  it("returns agents sorted by name regardless of directory creation order", async () => {
+    // Create dirs in non-alphabetical order; sorting must normalise to a stable order
+    // so the MCP tool list and system-prompt agent list keep a byte-stable cache prefix.
+    for (const name of ["zebra", "alpha", "mango"]) {
+      const dir = join(AGENT_SETTINGS_DIR, name);
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(
+        join(dir, "agent.json"),
+        JSON.stringify({ ...VALID_AGENT, name }, null, 2) + "\n",
+      );
+    }
+
+    const entries = await readAgentConfigEntries();
+    const names = entries.map((e) => e.name);
+
+    // "test-agent" is created by beforeEach with no agent.json, so it is filtered out.
+    expect(names).toEqual(["alpha", "mango", "zebra"]);
   });
 });

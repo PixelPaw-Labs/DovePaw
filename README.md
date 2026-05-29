@@ -342,6 +342,7 @@ npm run electron:dev
 | [docs/agent-workflows.md](docs/agent-workflows.md) | Workflow spectrum: single skill to full pipeline, SDK helpers |
 | [docs/agent-links.md](docs/agent-links.md)         | Wiring agents together, handoff graph                         |
 | [docs/security.md](docs/security.md)               | Security modes, permission flow, sub-agent isolation          |
+| [docs/prompt-caching.md](docs/prompt-caching.md)   | SDK auto-caching, prefix stability, hitting the cache         |
 | [docs/getting-started.md](docs/getting-started.md) | Step-by-step setup with screenshots                           |
 
 ---

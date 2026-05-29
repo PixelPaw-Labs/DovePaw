@@ -102,9 +102,10 @@ async function readAllAgentFiles(): Promise<AgentFile[]> {
   if (!(await fileExists(AGENT_SETTINGS_DIR))) return [];
   try {
     const entries = await readdir(AGENT_SETTINGS_DIR, { withFileTypes: true });
-    const results = await Promise.all(
-      entries.filter((d) => d.isDirectory()).map((d) => readAgentFile(d.name)),
-    );
+    const dirs = entries
+      .filter((d) => d.isDirectory())
+      .toSorted((a, b) => a.name.localeCompare(b.name));
+    const results = await Promise.all(dirs.map((d) => readAgentFile(d.name)));
     return results.filter((e): e is AgentFile => e !== null);
   } catch {
     return [];
