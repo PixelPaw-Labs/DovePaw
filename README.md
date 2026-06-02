@@ -21,6 +21,8 @@
   <a href="https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan">⚠️ <strong>Pricing change — June 15, 2026:</strong> Agent SDK usage moves to separate monthly credits (Pro $20 · Max $100–200 · Team/Enterprise $20–200). Credits require opt-in and drain first; once exhausted, requests charge usage credits or stop.</a>
 </p>
 
+<p align="center">I am planning to decouple the Dove orchestrator and subagent arrangments from Claude Agent SDK due to the pricing change</p>
+
 ---
 
 ## What is DovePaw?
