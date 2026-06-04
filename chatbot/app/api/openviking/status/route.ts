@@ -1,24 +1,22 @@
 /**
  * GET /api/openviking/status — lightweight liveness probe for the chat header
- * status button. Returns whether the sidecar port file exists and whether
- * the user has launched the console process. Polled every few seconds.
+ * status button. Returns whether the sidecar is running and, if so, the URL of
+ * its built-in Web Studio (`/studio`). Polled every few seconds.
  */
 
-import { access } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
+import { z } from "zod";
 import { OPENVIKING_PORT_FILE } from "@@/lib/paths";
-import { getConsoleUrl } from "@/lib/openviking/console";
+
+const portFileSchema = z.object({ port: z.number().int().positive() });
 
 export async function GET(): Promise<Response> {
-  const sidecarRunning = await fileExists(OPENVIKING_PORT_FILE);
-  const consoleUrl = getConsoleUrl();
-  return Response.json({ sidecarRunning, consoleUrl: consoleUrl ?? undefined });
-}
-
-async function fileExists(path: string): Promise<boolean> {
   try {
-    await access(path);
-    return true;
+    const { port } = portFileSchema.parse(
+      JSON.parse(await readFile(OPENVIKING_PORT_FILE, "utf-8")),
+    );
+    return Response.json({ sidecarRunning: true, studioUrl: `http://127.0.0.1:${port}/studio` });
   } catch {
-    return false;
+    return Response.json({ sidecarRunning: false });
   }
 }

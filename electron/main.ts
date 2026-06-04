@@ -362,6 +362,23 @@ void app.whenReady().then(async () => {
     },
   });
 
+  // Open web URLs (e.g. the OpenViking console) in a child window inside the
+  // app. Without a handler Electron silently drops window.open() calls, so the
+  // console launcher button appears to do nothing.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      return {
+        action: "allow",
+        overrideBrowserWindowOptions: {
+          width: 1200,
+          height: 800,
+          webPreferences: { contextIsolation: true, nodeIntegration: false },
+        },
+      };
+    }
+    return { action: "deny" };
+  });
+
   // Hide to tray on close instead of quitting
   win.on("close", (e) => {
     if (!isQuitting) {

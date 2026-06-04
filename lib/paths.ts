@@ -106,8 +106,6 @@ export const OPENVIKING_CLI_CONFIG = join(OPENVIKING_CONFIG_DIR, "ovcli.conf");
 export const OPENVIKING_PORT_FILE = join(DOVEPAW_DIR, ".openviking-port.json");
 /** ~/.dovepaw/.openviking-sidecar.pid — PID of the live OpenViking sidecar; used to clean up orphans on next boot */
 export const OPENVIKING_SIDECAR_PID_FILE = join(DOVEPAW_DIR, ".openviking-sidecar.pid");
-/** ~/.dovepaw/.openviking-console.pid — PID of the live OpenViking console; used to clean up orphans on next boot */
-export const OPENVIKING_CONSOLE_PID_FILE = join(DOVEPAW_DIR, ".openviking-console.pid");
 /** ~/.dovepaw/openviking/data — OpenViking storage workspace (vector DB + queue). Used as the default `storage.workspace` when generating ov.conf, so the sidecar never writes to the repo cwd. */
 export const OPENVIKING_DATA_DIR = join(DOVEPAW_DIR, "openviking", "data");
 /** ~/.dovepaw/group-tasks/ — per-group async task state (running/done) keyed strictly by groupContextId */

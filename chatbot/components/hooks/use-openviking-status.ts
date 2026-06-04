@@ -5,25 +5,22 @@ import { z } from "zod";
 
 const statusSchema = z.object({
   sidecarRunning: z.boolean(),
-  consoleUrl: z.string().optional(),
+  studioUrl: z.string().optional(),
 });
 
 export interface OpenVikingStatus {
   sidecarRunning: boolean;
-  consoleUrl: string | null;
-  launching: boolean;
-  /** Spawn the console (if needed) and return the URL. */
-  launchConsole: () => Promise<string | null>;
+  /** URL of the sidecar's built-in Web Studio, or `null` when not running. */
+  studioUrl: string | null;
 }
 
 const POLL_MS = 5000;
 
 export function useOpenVikingStatus(): OpenVikingStatus {
-  const [state, setState] = React.useState<{ sidecarRunning: boolean; consoleUrl: string | null }>({
+  const [state, setState] = React.useState<OpenVikingStatus>({
     sidecarRunning: false,
-    consoleUrl: null,
+    studioUrl: null,
   });
-  const [launching, setLaunching] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -35,7 +32,7 @@ export function useOpenVikingStatus(): OpenVikingStatus {
         if (cancelled || !parsed.success) return;
         setState({
           sidecarRunning: parsed.data.sidecarRunning,
-          consoleUrl: parsed.data.consoleUrl ?? null,
+          studioUrl: parsed.data.studioUrl ?? null,
         });
       } catch {
         // network hiccup — keep last known state
@@ -49,21 +46,5 @@ export function useOpenVikingStatus(): OpenVikingStatus {
     };
   }, []);
 
-  const launchConsole = React.useCallback(async (): Promise<string | null> => {
-    setLaunching(true);
-    try {
-      const res = await fetch("/api/openviking/console", { method: "POST" });
-      if (!res.ok) return null;
-      const body = z.object({ url: z.string() }).safeParse(await res.json());
-      if (!body.success) return null;
-      setState((prev) => ({ ...prev, consoleUrl: body.data.url }));
-      return body.data.url;
-    } catch {
-      return null;
-    } finally {
-      setLaunching(false);
-    }
-  }, []);
-
-  return { ...state, launching, launchConsole };
+  return state;
 }

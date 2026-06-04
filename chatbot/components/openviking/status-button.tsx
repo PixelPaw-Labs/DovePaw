@@ -1,49 +1,41 @@
 "use client";
 
-import * as React from "react";
 import { Database } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useOpenVikingStatus } from "@/components/hooks/use-openviking-status";
 
 /**
- * Top-banner OpenViking status indicator + console launcher.
+ * Top-banner OpenViking status indicator + Web Studio launcher.
  *
- * - Sidecar down → grey dot; click routes to /settings?tab=openviking.
- * - Sidecar up → green pulsing dot; click launches the console (if needed)
- *   and opens it in a new tab.
+ * - Sidecar down → grey dot; click routes to /settings?tab=memory.
+ * - Sidecar up → green pulsing dot; click opens the sidecar's built-in Web
+ *   Studio (served at /studio) in a new window.
  *
  * Visual matches the other right-side icon buttons in chat-pane.tsx
  * (Bell / Info / Settings).
  */
 export function OpenVikingStatusButton() {
   const router = useRouter();
-  const { sidecarRunning, consoleUrl, launching, launchConsole } = useOpenVikingStatus();
+  const { sidecarRunning, studioUrl } = useOpenVikingStatus();
 
   const title = sidecarRunning
-    ? launching
-      ? "Starting OpenViking console…"
-      : consoleUrl
-        ? `Open OpenViking console (${consoleUrl})`
-        : "Open OpenViking console"
+    ? studioUrl
+      ? `Open OpenViking Studio (${studioUrl})`
+      : "Open OpenViking Studio"
     : "OpenViking is not running — click to configure";
 
-  const handleClick = async (): Promise<void> => {
+  const handleClick = (): void => {
     if (!sidecarRunning) {
       router.push("/settings?tab=memory");
       return;
     }
-    if (consoleUrl) {
-      window.open(consoleUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    const url = await launchConsole();
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+    if (studioUrl) window.open(studioUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
     <button
       type="button"
-      onClick={() => void handleClick()}
+      onClick={handleClick}
       title={title}
       aria-label={title}
       className="relative w-9 h-9 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
