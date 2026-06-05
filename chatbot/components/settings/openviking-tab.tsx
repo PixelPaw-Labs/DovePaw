@@ -56,6 +56,11 @@ const postResponseSchema = z.object({
   error: z.string().optional(),
 });
 
+const versionSchema = z.object({
+  current: z.string().nullable(),
+  latest: z.string().nullable(),
+});
+
 type Config = z.infer<typeof configShape>;
 
 const EMPTY: Config = {
@@ -72,6 +77,10 @@ export function OpenVikingTab() {
   const [saving, setSaving] = React.useState(false);
   const [successMessage, setSuccessMessage] = React.useState<string | null>(null);
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
+  const [versions, setVersions] = React.useState<{
+    current: string | null;
+    latest: string | null;
+  } | null>(null);
 
   React.useEffect(() => {
     void (async () => {
@@ -82,6 +91,18 @@ export function OpenVikingTab() {
         if (parsed.config) setConfig(parsed.config);
       } catch {
         setSource("empty");
+      }
+    })();
+  }, []);
+
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch("/api/openviking/version");
+        const parsed = versionSchema.safeParse(await res.json());
+        if (parsed.success) setVersions(parsed.data);
+      } catch {
+        // version display is best-effort — leave it blank on failure
       }
     })();
   }, []);
@@ -118,7 +139,21 @@ export function OpenVikingTab() {
 
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
-      <h2 className="text-2xl font-bold text-accent-foreground">OpenViking</h2>
+      <div className="flex flex-col gap-1">
+        <h2 className="text-2xl font-bold text-accent-foreground">OpenViking</h2>
+        <p className="text-xs text-muted-foreground">
+          Version <span className="text-primary">{versions?.current ?? "—"}</span>
+          {versions?.latest ? (
+            <>
+              {" · latest "}
+              <span className="text-green-600 dark:text-green-400">{versions.latest}</span>
+            </>
+          ) : null}
+          {versions?.current && versions.latest && versions.current !== versions.latest ? (
+            <span className="text-amber-600 dark:text-amber-400"> (update available)</span>
+          ) : null}
+        </p>
+      </div>
       <SourceBanner source={source} />
 
       <Section title="Dense embedding">
