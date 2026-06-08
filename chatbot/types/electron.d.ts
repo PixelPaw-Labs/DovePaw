@@ -22,6 +22,8 @@ interface Window {
       onVisibilityChange: (cb: (visible: boolean) => void) => void;
       listTabs: () => Promise<BrowserTabInfo[]>;
       switchTab: (sessionId: string) => Promise<{ activeTabId: string }>;
+      closeTab: (sessionId: string) => Promise<void>;
+      closeAllTabs: () => Promise<void>;
       onTabsChanged: (cb: (tabs: BrowserTabInfo[]) => void) => void;
     };
   };

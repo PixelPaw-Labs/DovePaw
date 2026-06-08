@@ -126,6 +126,8 @@ function AgentChatSession({
           onSelect={(id) => void session.setSessionId(id)}
           onDelete={async (id) => {
             await session.deleteSession(id);
+            // Reclaim the embedded-browser renderer keyed by this session, if any.
+            void window.electron?.browser.closeTab(id);
             await refresh();
           }}
         />

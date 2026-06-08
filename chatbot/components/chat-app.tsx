@@ -31,6 +31,8 @@ export function ChatApp({
 
   const handleClearAllHistory = React.useCallback(async () => {
     await fetch("/api/sessions/all", { method: "DELETE" });
+    // Reclaim every embedded-browser renderer left over from the cleared sessions.
+    void window.electron?.browser.closeAllTabs();
     newSessionRef.current?.();
   }, []);
 

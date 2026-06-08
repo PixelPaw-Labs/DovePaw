@@ -247,7 +247,7 @@ The swimlane uses `useSwimlaneSteps` to group bubbles into per-member lanes, and
 - Shows the active session ID highlighted
 - Shows `runningSessionIds` (from DB + live `isLoading`) with a spinner
 - Click → `session.setSessionId(id)` → reconnect flow ([§4](#4-usechatsession--the-central-client-hook))
-- Trash icon → `session.deleteSession(id)` → DELETE `/api/chat` → DB row + workspace deleted (Spec 11 Concern 1)
+- Trash icon → `session.deleteSession(id)` → DELETE `/api/chat` → DB row + workspace deleted (Spec 11 Concern 1). Under Electron it then calls `window.electron.browser.closeTab(id)`: embedded-browser tabs are keyed by chat session id, so deleting a session closes its `WebContentsView` and reclaims the renderer (tens of MB) instead of leaving it resident for the app's lifetime. Clearing all history (`ChatApp`) calls `closeAllTabs()` for the same reason.
 
 ```mermaid
 sequenceDiagram

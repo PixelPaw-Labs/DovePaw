@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("electron", {
     listTabs: (): Promise<{ tabId: string; url: string; title: string; active: boolean }[]> =>
       ipcRenderer.invoke("browser:list-tabs"),
     switchTab: (sessionId: string) => ipcRenderer.invoke("browser:switch-tab", sessionId),
+    closeTab: (sessionId: string) => ipcRenderer.invoke("browser:close-tab-for-session", sessionId),
+    closeAllTabs: () => ipcRenderer.invoke("browser:close-all-tabs"),
     onTabsChanged: (
       cb: (tabs: { tabId: string; url: string; title: string; active: boolean }[]) => void,
     ) => {

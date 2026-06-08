@@ -37,6 +37,7 @@ import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 import { startBrowserBridge } from "./browser-bridge";
 import { computeLoadFailureMessage } from "./lib/load-error";
 import { renderErrorPage } from "./lib/error-page";
+import { teardownTab } from "./lib/tab-teardown";
 import { animate } from "animejs";
 
 // Prevent Google/sites from detecting Electron's Chromium as a bot
@@ -618,16 +619,10 @@ void app.whenReady().then(async () => {
   function closeTab(sessionId: string): void {
     const tab = tabs.get(sessionId);
     if (!tab) return;
-    try {
-      tab.view.webContents.debugger.detach();
-    } catch {
-      /* already detached */
-    }
-    try {
-      browserWin.contentView.removeChildView(tab.view);
-    } catch {
-      /* not attached */
-    }
+    // Tear down the renderer process. removeChildView + dropping the map
+    // reference only lets GC eventually reclaim the WebContentsView; closing the
+    // webContents reclaims the renderer (tens of MB) promptly.
+    teardownTab(tab.view, (v) => browserWin.contentView.removeChildView(v));
     tabs.delete(sessionId);
     if (activeSessionId === sessionId) {
       const remaining = Array.from(tabs.keys());
@@ -641,6 +636,11 @@ void app.whenReady().then(async () => {
     } else {
       notifyToolbarState();
     }
+  }
+
+  function closeAllTabs(): void {
+    // Snapshot keys first — closeTab mutates the map while iterating.
+    for (const sessionId of Array.from(tabs.keys())) closeTab(sessionId);
   }
 
   function switchToTab(sessionId: string): void {
@@ -779,6 +779,14 @@ void app.whenReady().then(async () => {
     browserWin.hide();
     notifyVisibility(false);
     return { visible: false };
+  });
+  // Close the browser tab whose key matches a deleted chat session so its
+  // renderer is reclaimed instead of lingering for the app's lifetime.
+  ipcMain.handle("browser:close-tab-for-session", (_event, sessionId: string) => {
+    closeTab(sessionId);
+  });
+  ipcMain.handle("browser:close-all-tabs", () => {
+    closeAllTabs();
   });
 
   // Dim: shrink to mini window in bottom-right corner so the chatbot is usable but browser stays visible
