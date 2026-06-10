@@ -9,8 +9,8 @@ import { exec } from "./exec.js";
 export const WORKSPACE_BASE_BRANCH = "dovepaw-base";
 
 /**
- * Ensure the workspace base branch exists, contains the given patterns in both
- * .gitignore and .worktreeinclude, and HEAD is on it.
+ * Ensure the workspace base branch exists, contains the given patterns in
+ * .gitignore, and HEAD is on it.
  *
  * - If absent: creates from main, writes patterns, commits, stays on branch.
  * - If present: checks it out (idempotent — patterns already committed).
@@ -25,12 +25,7 @@ export async function ensureBaseBranch(repoPath: string, patterns: string[]): Pr
   }
   await exec("git", ["checkout", "-b", WORKSPACE_BASE_BRANCH, "main"], { cwd: repoPath });
   appendPatterns(repoPath, ".gitignore", patterns);
-  writeFileSync(join(repoPath, ".worktreeinclude"), patterns.join("\n") + "\n");
-  await commitFiles(
-    repoPath,
-    [".gitignore", ".worktreeinclude"],
-    "chore: configure workspace patterns",
-  );
+  await commitFiles(repoPath, [".gitignore"], "chore: configure workspace patterns");
 }
 
 /**

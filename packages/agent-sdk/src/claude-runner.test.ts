@@ -70,6 +70,34 @@ describe("ClaudeRunner", () => {
   });
 });
 
+describe("worktreeCopy", () => {
+  afterAll(() => {
+    rmSync(TMP_DIR, { recursive: true, force: true });
+  });
+
+  it("copies given paths into the worktree before the run starts", async () => {
+    const repo = makeRepo("wt-copy");
+    const srcDir = join(TMP_DIR, "copy-src");
+    mkdirSync(srcDir, { recursive: true });
+    writeFileSync(join(srcDir, "file.txt"), "payload");
+    const wtPath = join(repo, ".claude", "worktrees", "fix/copy-test");
+
+    const runner = new ClaudeRunner(TMP_DIR, "");
+    // No ANTHROPIC_API_KEY → SDK throws during connect, but the copy runs first.
+    await runner
+      .run("test prompt", {
+        cwd: repo,
+        taskName: "copy-test",
+        worktree: "fix/copy-test",
+        worktreeCopy: [{ src: srcDir, dst: join(wtPath, "nested", "dest") }],
+        timeoutMs: 100,
+      })
+      .catch(() => {});
+
+    expect(readFileSync(join(wtPath, "nested", "dest", "file.txt"), "utf8")).toBe("payload");
+  });
+});
+
 describe("ensureWorktree", () => {
   afterAll(() => {
     rmSync(TMP_DIR, { recursive: true, force: true });

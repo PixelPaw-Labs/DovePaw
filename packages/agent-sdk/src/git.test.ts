@@ -105,8 +105,6 @@ describe("ensureBaseBranch", () => {
       expect(commitLog(repo)[0]).toBe("chore: configure workspace patterns");
       const gitignore = readFileSync(join(repo, ".gitignore"), "utf8");
       for (const p of patterns) expect(gitignore).toContain(p);
-      const worktreeinclude = readFileSync(join(repo, ".worktreeinclude"), "utf8");
-      for (const p of patterns) expect(worktreeinclude).toContain(p);
     } finally {
       rmSync(TMP_BASE, { recursive: true, force: true });
     }

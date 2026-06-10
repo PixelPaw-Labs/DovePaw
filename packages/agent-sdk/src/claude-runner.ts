@@ -1,7 +1,7 @@
 import { query, type HookEvent, type HookCallbackMatcher } from "@anthropic-ai/claude-agent-sdk";
 import { createWriteStream, writeFileSync } from "node:fs";
-import { access, mkdir, rm, symlink } from "node:fs/promises";
-import { join } from "node:path";
+import { access, cp, mkdir, rm, symlink } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { exec } from "./exec.js";
 import { claudeSettingsLocalPath } from "./paths.js";
 
@@ -29,6 +29,8 @@ export interface RunOpts {
   apiKey?: string;
   /** Additional instructions appended to the claude_code preset system prompt. */
   appendSystemPrompt?: string;
+  /** Paths to copy into the worktree after it is created. Only used when `worktree` is set. */
+  worktreeCopy?: Array<{ src: string; dst: string }>;
 }
 
 /**
@@ -57,6 +59,7 @@ export async function ensureWorktree(repoPath: string, branch: string): Promise<
   } catch {
     // settings.local.json absent — skip
   }
+
   return wtPath;
 }
 
@@ -88,6 +91,14 @@ export class ClaudeRunner {
     // claudeWorktreePath(cwd, name) resolves correctly and retry loops reuse the
     // same branch rather than creating a new auto-named one.
     const cwd = opts.worktree ? await ensureWorktree(opts.cwd, opts.worktree) : opts.cwd;
+    if (opts.worktreeCopy?.length) {
+      await Promise.all(
+        opts.worktreeCopy.map(async ({ src, dst }) => {
+          await mkdir(dirname(dst), { recursive: true });
+          await cp(src, dst, { recursive: true, force: true }).catch(() => {});
+        }),
+      );
+    }
 
     this.abortController = new AbortController();
     const timeoutMs = opts.timeoutMs ?? 24 * 60 * 60 * 1000;

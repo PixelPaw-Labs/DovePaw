@@ -14,6 +14,8 @@ interface ClaudeRunOpts {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
   disallowedTools?: string[];
   worktree?: string;
+  /** Paths to copy into the worktree after it is created. Only used when `worktree` is set. */
+  worktreeCopy?: Array<{ src: string; dst: string }>;
   sessionId?: string;
   agent?: string;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
@@ -217,6 +219,7 @@ export class AgentRunner {
       ...(disallowedTools.length > 0 ? { disallowedTools } : {}),
       ...(Object.keys(hooks).length > 0 ? { hooks } : {}),
       worktree: opts.claudeOpts?.worktree,
+      worktreeCopy: opts.claudeOpts?.worktreeCopy,
       sessionId: opts.claudeOpts?.sessionId,
       resumeSession: opts.resumeSession,
       agent: opts.claudeOpts?.agent,
