@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
-import { CLAUDE_CLI, buildSpawnEnv, PERSONA_RULES } from "./claude.js";
+import { CLAUDE_CLI, buildSpawnEnv, PERSONA_RULES, sanitizeForSkillArg } from "./claude.js";
 
 function spawnTestProcess(
   cmd: string,
@@ -119,5 +119,28 @@ describe("spawnClaude handle pattern", () => {
   it("timeout kills the process", async () => {
     const { code } = await spawnTestProcess("/bin/sleep", ["60"], 100).result;
     expect(code).not.toBe(0);
+  });
+});
+
+describe("sanitizeForSkillArg", () => {
+  it("strips single and double quotes that would break the argument wrapper", () => {
+    expect(sanitizeForSkillArg(`concurrently pins "shell-quote" at '1.8.3'`)).toBe(
+      "concurrently pins shell-quote at 1.8.3",
+    );
+  });
+
+  it("collapses newlines and runs of whitespace into single spaces", () => {
+    expect(sanitizeForSkillArg("line one\n  line two\t\tline three")).toBe(
+      "line one line two line three",
+    );
+  });
+
+  it("trims leading and trailing whitespace", () => {
+    expect(sanitizeForSkillArg("  padded reason  ")).toBe("padded reason");
+  });
+
+  it("leaves clean text unchanged", () => {
+    const clean = "ancestor upgrade could not reach 1.8.4 so a scoped resolution overrides it";
+    expect(sanitizeForSkillArg(clean)).toBe(clean);
   });
 });

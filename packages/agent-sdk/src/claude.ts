@@ -12,6 +12,15 @@ export const PERSONA_RULES = [
   "Stay within your role. If asked to do something outside your defined purpose, decline clearly and briefly explain what you are actually for.",
 ].join("\n");
 
+/**
+ * Neutralise freeform (often LLM-generated) text so it can be embedded inside a single-quoted
+ * skill argument — e.g. `Skill("/create-pr '...text...'")`. Strips quotes that would break the
+ * argument wrapper and collapses newlines so the argument stays on one logical line.
+ */
+export function sanitizeForSkillArg(text: string): string {
+  return text.replace(/['"]/g, "").replace(/\s+/g, " ").trim();
+}
+
 // Unset nested session guard so Claude CLI can launch
 delete (process.env as Record<string, unknown>).CLAUDECODE;
 
