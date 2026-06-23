@@ -21,7 +21,7 @@ import {
 import { mkdir, writeFile, rm } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { dirname, join, resolve } from "node:path";
-import { createServersProcess } from "../lib/server-manager";
+import { createServersProcess, killAllServers, writeServersPidFile } from "../lib/server-manager";
 import { linkAgents } from "../lib/installer";
 import {
   BROWSER_BRIDGE_PORT_FILE,
@@ -261,15 +261,17 @@ function browserMiniWinBounds(w: BrowserWindow): Electron.Rectangle {
 
 // ── Servers ───────────────────────────────────────────────────────────────────
 
-function startServers(): void {
+async function startServers(): Promise<void> {
   if (serversProcess) return;
 
+  await killAllServers();
   serversProcess = createServersProcess(NEXT_PORT, "pipe");
+  if (serversProcess.pid !== undefined) writeServersPidFile(serversProcess.pid);
   pipeToLog(serversProcess, "a2a-servers");
 
   serversProcess.on("exit", () => {
     serversProcess = null;
-    if (!isQuitting) setTimeout(startServers, 5_000);
+    if (!isQuitting) setTimeout(() => void startServers(), 5_000);
   });
 
   // Check immediately, then rely on the 5s poll interval
@@ -280,7 +282,7 @@ function restartServers(): void {
   serversProcess?.kill("SIGTERM");
   serversProcess = null;
   refreshTray();
-  setTimeout(startServers, 500);
+  setTimeout(() => void startServers(), 500);
 }
 
 async function startOpenViking(): Promise<void> {
@@ -898,7 +900,7 @@ void app.whenReady().then(async () => {
     }
   });
 
-  startServers();
+  await startServers();
   void startOpenViking();
   startNextJs();
   setInterval(checkHealth, 5_000);

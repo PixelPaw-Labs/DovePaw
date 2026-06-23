@@ -11,22 +11,57 @@
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { AGENTS_ROOT, A2A_SERVERS_PID_FILE } from "./paths";
+import { KILL_ESCALATION_MS } from "./process-constants";
 
 /**
  * Kill the A2A servers process identified by the PID file.
  * No-ops silently if the file is absent or the process is already gone.
  */
 export function killServers(): void {
-  if (!existsSync(A2A_SERVERS_PID_FILE)) return;
-  const pid = parseInt(readFileSync(A2A_SERVERS_PID_FILE, "utf-8").trim(), 10);
-  if (isNaN(pid)) return;
+  const pid = readAndRemoveServersPid();
+  if (pid === null) return;
+  signalServerProcess(pid, "SIGTERM");
+}
+
+function readAndRemoveServersPid(): number | null {
+  if (!existsSync(A2A_SERVERS_PID_FILE)) return null;
+
+  const pid = Number.parseInt(readFileSync(A2A_SERVERS_PID_FILE, "utf-8").trim(), 10);
   try {
-    process.kill(pid, "SIGTERM");
+    rmSync(A2A_SERVERS_PID_FILE, { force: true });
   } catch {
-    // Already gone — fine
+    // Best effort. The restart path must not fail just because stale PID cleanup failed.
   }
+
+  return Number.isFinite(pid) ? pid : null;
+}
+
+/** Kill the tracked A2A server process group and wait before escalating. */
+export async function killAllServers(): Promise<void> {
+  const pid = readAndRemoveServersPid();
+  if (pid === null) return;
+
+  signalServerProcess(pid, "SIGTERM");
+  await new Promise((resolve) => setTimeout(resolve, KILL_ESCALATION_MS));
+  signalServerProcess(pid, "SIGKILL");
+}
+
+function signalServerProcess(pid: number, signal: NodeJS.Signals): void {
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // Already gone — fine.
+    }
+  }
+}
+
+export function writeServersPidFile(pid: number): void {
+  writeFileSync(A2A_SERVERS_PID_FILE, String(pid), "utf-8");
 }
 
 /**

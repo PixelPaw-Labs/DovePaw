@@ -9,7 +9,7 @@
  * disk-fallback lookup.
  */
 
-import { writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { existsSync, writeFileSync, readFileSync, rmSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { consola } from "consola";
 import { getAvailablePort, writePortsManifest, createServerFromDef } from "./lib/base-server.js";
@@ -40,8 +40,12 @@ consola.box(
 
 consola.info("Ready — waiting for chatbot connections via A2A SSE");
 
-// Write PID so the chatbot UI can signal a restart via /api/servers/restart
-writeFileSync(A2A_SERVERS_PID_FILE, String(process.pid), "utf-8");
+// Managed Electron/API starts write the process-group root PID before this
+// child boots. Standalone `npm run chatbot:servers` runs do not, so claim the
+// PID file only when it is absent or points at a dead process.
+if (shouldClaimPidFile()) {
+  writeFileSync(A2A_SERVERS_PID_FILE, String(process.pid), "utf-8");
+}
 const cleanupPid = () => {
   try {
     rmSync(A2A_SERVERS_PID_FILE);
@@ -76,3 +80,17 @@ process.on("unhandledRejection", (reason) => {
   if (msg === "Operation aborted") return;
   consola.error("A2A servers — unhandledRejection:", reason);
 });
+
+function shouldClaimPidFile(): boolean {
+  if (!existsSync(A2A_SERVERS_PID_FILE)) return true;
+
+  const pid = Number.parseInt(readFileSync(A2A_SERVERS_PID_FILE, "utf-8").trim(), 10);
+  if (!Number.isFinite(pid) || pid <= 1) return true;
+
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
+}
