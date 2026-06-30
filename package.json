@@ -75,7 +75,7 @@
     "lucide-react": "^1.17.0",
     "media-chrome": "^4.19.2",
     "motion": "^12.41.0",
-    "nanoid": "^5.1.11",
+    "nanoid": "^5.1.16",
     "next": "^16.2.9",
     "react": "^19.2.6",
     "react-dom": "^19.2.7",
