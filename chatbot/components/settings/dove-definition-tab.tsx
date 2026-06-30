@@ -246,7 +246,7 @@ export function DoveDefinitionTab({ initialDove }: DoveDefinitionTabProps) {
       <Section label="Model">
         <Row
           label="Default Model"
-          hint={`Applied to ${form.displayName} and every sub-agent SDK query. Accepts aliases or full IDs (e.g. claude-sonnet-4-6). Leave blank to use the SDK default.`}
+          hint={`Applied to ${form.displayName} and every sub-agent SDK query. Accepts aliases or full IDs (e.g. claude-sonnet-5). Leave blank to use the SDK default.`}
         >
           <Input
             value={form.defaultModel}

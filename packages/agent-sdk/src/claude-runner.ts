@@ -110,7 +110,7 @@ export class ClaudeRunner {
         prompt,
         options: {
           cwd,
-          model: opts.model ?? "claude-sonnet-4-6",
+          model: opts.model ?? "claude-sonnet-5",
           systemPrompt: {
             type: "preset",
             preset: "claude_code",

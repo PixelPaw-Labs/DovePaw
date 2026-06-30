@@ -314,7 +314,7 @@ describe("AgentRunner", () => {
         .run("prompt", {
           cwd: TMP_DIR,
           taskName: "t",
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-5",
           timeoutMs: 100,
           appendSystemPrompt: "Always explain your reasoning.",
         })
@@ -329,7 +329,7 @@ describe("AgentRunner", () => {
         .run("prompt", {
           cwd: TMP_DIR,
           taskName: "t",
-          model: "claude-sonnet-4-6",
+          model: "claude-sonnet-5",
           timeoutMs: 100,
           claudeOpts: { skills: [] },
         })
