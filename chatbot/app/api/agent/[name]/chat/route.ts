@@ -20,6 +20,7 @@ import {
   resolveAgentPort,
   createAgentClient,
 } from "@/lib/a2a-client";
+import { CancelTaskRequest } from "@a2a-js/sdk";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
 import { subscribeSession } from "@/lib/session-events";
 import { deleteSession, setSessionStatus, getSessionWorkspacePath } from "@/lib/db";
@@ -187,7 +188,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ n
     if (portValue !== null) {
       try {
         const client = await createAgentClient(portValue);
-        await client.cancelTask({ id: sessionId });
+        await client.cancelTask(CancelTaskRequest.fromJSON({ id: sessionId }));
       } catch {
         /* server unreachable or task already finished — STOP is best-effort */
       }

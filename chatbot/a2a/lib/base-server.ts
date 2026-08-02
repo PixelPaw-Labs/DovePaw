@@ -20,7 +20,7 @@ import { setMaxListeners } from "node:events";
 import { z } from "zod";
 import { consola } from "consola";
 import express from "express";
-import { AGENT_CARD_PATH } from "@a2a-js/sdk";
+import { A2A_PROTOCOL_VERSION, AGENT_CARD_PATH } from "@a2a-js/sdk";
 import type { AgentCard } from "@a2a-js/sdk";
 import type {
   AgentExecutor,
@@ -98,7 +98,7 @@ export function getAvailablePort(): Promise<number> {
 
 /**
  * Create and start an A2A Express server on the given dynamic port.
- * The agentCard.url is updated to reflect the actual port.
+ * The card's supportedInterfaces are filled in to reflect the actual port.
  */
 export function createAgentServer(
   agentCard: AgentCard,
@@ -109,10 +109,19 @@ export function createAgentServer(
 ): void {
   const card: AgentCard = {
     ...agentCard,
-    url: `http://localhost:${port}/a2a/jsonrpc`,
-    additionalInterfaces: [
-      { url: `http://localhost:${port}/a2a/jsonrpc`, transport: "JSONRPC" },
-      { url: `http://localhost:${port}/a2a/rest`, transport: "HTTP+JSON" },
+    supportedInterfaces: [
+      {
+        url: `http://localhost:${port}/a2a/jsonrpc`,
+        protocolBinding: "JSONRPC",
+        tenant: "",
+        protocolVersion: A2A_PROTOCOL_VERSION,
+      },
+      {
+        url: `http://localhost:${port}/a2a/rest`,
+        protocolBinding: "HTTP+JSON",
+        tenant: "",
+        protocolVersion: A2A_PROTOCOL_VERSION,
+      },
     ],
   };
 
@@ -180,13 +189,17 @@ export function createServerFromDef(def: AgentDef, port: number): void {
   const agentCard: AgentCard = {
     name: def.displayName,
     description: def.description,
-    url: "",
-    protocolVersion: "0.3.0",
     version: "1.0.0",
-    skills: [],
-    capabilities: { streaming: true, pushNotifications: false },
+    // Filled in by createAgentServer once the dynamic port is known.
+    supportedInterfaces: [],
+    provider: undefined,
+    capabilities: { streaming: true, pushNotifications: false, extensions: [] },
+    securitySchemes: {},
+    securityRequirements: [],
     defaultInputModes: ["text"],
     defaultOutputModes: ["text"],
+    skills: [],
+    signatures: [],
   };
 
   const sessionManager = new SessionManager();

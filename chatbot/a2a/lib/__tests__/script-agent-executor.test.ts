@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { Part } from "@a2a-js/sdk";
 
 // These are pure functions — no mocks needed.
 import { extractInstruction } from "../message-parts";
@@ -13,20 +14,20 @@ import { withMemoryReminder } from "@@/lib/subagent-reminder";
 
 const startScriptTool = startRunScriptToolName("test_agent");
 
+const textPart = (text: string): Part => Part.fromJSON({ text });
+const dataPart = (value: unknown): Part => Part.fromJSON({ data: value });
+
 describe("extractInstruction", () => {
   it("returns text from a single text part", () => {
-    expect(extractInstruction([{ kind: "text", text: "P1AB1234 example.com:zone123" }])).toBe(
+    expect(extractInstruction([textPart("P1AB1234 example.com:zone123")])).toBe(
       "P1AB1234 example.com:zone123",
     );
   });
 
   it("joins multiple text parts with a space", () => {
-    expect(
-      extractInstruction([
-        { kind: "text", text: "incidents today" },
-        { kind: "text", text: "example.com:abc123" },
-      ]),
-    ).toBe("incidents today example.com:abc123");
+    expect(extractInstruction([textPart("incidents today"), textPart("example.com:abc123")])).toBe(
+      "incidents today example.com:abc123",
+    );
   });
 
   it("returns empty string when there are no parts", () => {
@@ -34,22 +35,17 @@ describe("extractInstruction", () => {
   });
 
   it("returns empty string when the only text part is empty", () => {
-    expect(extractInstruction([{ kind: "text", text: "" }])).toBe("");
+    expect(extractInstruction([textPart("")])).toBe("");
   });
 
   it("ignores non-text parts", () => {
-    expect(
-      extractInstruction([
-        { kind: "data", text: "ignored" },
-        { kind: "text", text: "incidents today" },
-      ]),
-    ).toBe("incidents today");
+    expect(extractInstruction([dataPart({ ignored: true }), textPart("incidents today")])).toBe(
+      "incidents today",
+    );
   });
 
   it("trims surrounding whitespace", () => {
-    expect(extractInstruction([{ kind: "text", text: "  incidents today  " }])).toBe(
-      "incidents today",
-    );
+    expect(extractInstruction([textPart("  incidents today  ")])).toBe("incidents today");
   });
 });
 

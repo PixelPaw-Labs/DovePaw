@@ -62,6 +62,7 @@ vi.mock("@/a2a/lib/workspace", () => ({
   restoreAgentWorkspace: () => ({ cleanup: mockWorkspaceCleanup }),
 }));
 
+import { CancelTaskRequest } from "@a2a-js/sdk";
 import { DELETE } from "../sessions/all/route";
 
 describe("DELETE /api/sessions/all", () => {
@@ -155,7 +156,9 @@ describe("DELETE /api/sessions/all", () => {
 
     await DELETE();
 
-    expect(mockCancelTask).toHaveBeenCalledWith({ id: "sess-launchd-1" });
-    expect(mockCancelTask).toHaveBeenCalledWith({ id: "sess-chat-2" });
+    expect(mockCancelTask).toHaveBeenCalledWith(
+      CancelTaskRequest.fromJSON({ id: "sess-launchd-1" }),
+    );
+    expect(mockCancelTask).toHaveBeenCalledWith(CancelTaskRequest.fromJSON({ id: "sess-chat-2" }));
   });
 });
