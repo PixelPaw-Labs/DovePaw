@@ -123,7 +123,7 @@ For a scheduled run there are **four distinct OS processes**:
 
 A holds the SSE consumer end of the A2A stream. B owns the actual executor. C is not in the call stack — its `activeControllers` map (the `sessionRunner` registry from Spec 11) **never sees the session**.
 
-Consequence: the session shows up in the UI (it's in the DB via `upsertSession`), and any STOP from the UI hits Next.js — but the controller it would abort lives in process A, not C. Next.js has to call `client.cancelTask({ id })` directly via A2A to reach B.
+Consequence: the session shows up in the UI (it's in the DB via `upsertSession`), and any STOP from the UI hits Next.js — but the controller it would abort lives in process A, not C. Next.js has to call `client.cancelTask(...)` directly via A2A to reach B.
 
 ## 7. STOP / abort behaviour for scheduled sessions
 
@@ -139,7 +139,7 @@ sequenceDiagram
   UI->>NX: DELETE { sessionId, method: "stop" }
   NX->>AC: activeControllers.get(sessionId)?.abort()
   Note over AC: launchd path: Map miss — no controller registered
-  NX->>CL: createAgentClient(port).cancelTask({ id: sessionId })
+  NX->>CL: createAgentClient(port).cancelTask(CancelTaskRequest.fromJSON({ id: sessionId }))
   CL->>AS: A2A cancelTask
   AS->>EX: activeExecutors.get(taskId)?.cancelTask()
   EX-->>EX: abortController.abort() → SDK unwinds
@@ -220,7 +220,7 @@ The previous sections describe what the code **does**. This section flags things
 
 ### Concern 2 · ★ — `a2a-trigger.mjs` exits before the A2A task fully terminates
 
-The trigger iterates the SSE stream until it sees a final `status-update`. After that it `process.exit(state === "completed" ? 0 : 1)`. The A2A server has likely written final state by then, but any post-final cleanup the executor does (workspace teardown, persistence flush) races against process exit. In practice harmless, but means the launchd `lastExitCode` does not reflect the agent's own outcome — only whether the A2A task reached a terminal state.
+The trigger iterates the SSE stream, tracking the state of each `statusUpdate` event. After the stream ends it `process.exit(state === TaskState.TASK_STATE_COMPLETED ? 0 : 1)`. (SDK v1.0 dropped the `final` flag — terminality is derived from the state itself, and the server closes the stream on any terminal or interrupted state.) The A2A server has likely written final state by then, but any post-final cleanup the executor does (workspace teardown, persistence flush) races against process exit. In practice harmless, but means the launchd `lastExitCode` does not reflect the agent's own outcome — only whether the A2A task reached a terminal state.
 
 ### Concern 3 · ★ — Trigger script bypasses Next.js DB hooks
 

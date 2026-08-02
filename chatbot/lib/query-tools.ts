@@ -10,6 +10,7 @@
  */
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
+import { CancelTaskRequest, Role, SendMessageRequest, roleToJSON } from "@a2a-js/sdk";
 import { randomUUID } from "node:crypto";
 import type { AgentDef } from "@@/lib/agents";
 import { z } from "zod";
@@ -162,27 +163,29 @@ export function makeAskTool(
       try {
         const client = await createAgentClient(port);
         const contextId = contextStore?.get(agent.manifestKey);
-        const result = await client.sendMessage({
-          message: {
-            kind: "message",
-            messageId: randomUUID(),
-            role: "user",
-            parts: [
-              {
-                kind: "text",
-                text: withMemoryReminder(
-                  instruction,
-                  agentPersistentStateDir(agent.name),
-                  doveStartToolName(agent),
-                ),
-              },
-            ],
-            ...(contextId ? { contextId } : {}),
-            metadata: { senderAgentId: "dove", mode: AgentCallMode.Ask },
-          },
-          configuration: { blocking: false },
-        });
-        if (result.kind !== "task") {
+        const result = await client.sendMessage(
+          SendMessageRequest.fromJSON({
+            message: {
+              messageId: randomUUID(),
+              role: roleToJSON(Role.ROLE_USER),
+              parts: [
+                {
+                  text: withMemoryReminder(
+                    instruction,
+                    agentPersistentStateDir(agent.name),
+                    doveStartToolName(agent),
+                  ),
+                },
+              ],
+              ...(contextId ? { contextId } : {}),
+              metadata: { senderAgentId: "dove", mode: AgentCallMode.Ask },
+            },
+            // v1.0's returnImmediately replaces v0.3's configuration.blocking: false.
+            configuration: { returnImmediately: true },
+          }),
+        );
+        // SendMessageResult is Message | Task; only a Task carries the id we need.
+        if (!("id" in result)) {
           return {
             content: [
               { type: "text" as const, text: "Error: task ID not received from agent server." },
@@ -192,7 +195,8 @@ export function makeAskTool(
         contextStore?.set(agent.manifestKey, result.contextId);
         signal?.addEventListener(
           "abort",
-          () => void client.cancelTask({ id: result.id }).catch(() => {}),
+          () =>
+            void client.cancelTask(CancelTaskRequest.fromJSON({ id: result.id })).catch(() => {}),
           { once: true },
         );
         const started: TaskStartedContent = { taskId: result.id, contextId: result.contextId };

@@ -1,8 +1,10 @@
+import type { Part } from "@a2a-js/sdk";
+
 /** Extract the plain text instruction from an A2A user message's parts. */
-export function extractInstruction(parts: { kind: string; text?: string }[]): string {
-  return parts
-    .filter((p) => p.kind === "text")
-    .map((p) => p.text ?? "")
-    .join(" ")
-    .trim();
+export function extractInstruction(parts: Part[]): string {
+  const texts: string[] = [];
+  for (const part of parts) {
+    if (part.content?.$case === "text") texts.push(part.content.value);
+  }
+  return texts.join(" ").trim();
 }

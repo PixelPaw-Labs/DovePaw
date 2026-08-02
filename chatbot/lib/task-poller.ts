@@ -9,7 +9,7 @@
  * resolution internally so pending-state logic is never duplicated.
  */
 
-import { TaskNotFoundError } from "@a2a-js/sdk/client";
+import { A2A_ERROR_CODE, TaskNotFoundError } from "@a2a-js/sdk/errors";
 import {
   resolveAgentPort,
   createAgentClient,
@@ -87,6 +87,27 @@ export function unreachableMessage(port: number | string) {
 
 export function isConnectionError(msg: string) {
   return msg.includes("ECONNREFUSED") || msg.includes("ENOTFOUND");
+}
+
+/**
+ * Whether a client error means "this task no longer exists".
+ *
+ * `err instanceof TaskNotFoundError` alone does not work: the SDK's dist bundles
+ * (errors/, client/, server/, server/express/) each inline their own copy of the
+ * A2AError base class, so instanceof never matches across a bundle boundary.
+ * Verified against a live server on 1.0.0 — same duplication in 1.0.1.
+ *
+ * That same duplication also stops the express handler recognising the server's
+ * TaskNotFoundError, so it currently downgrades the response to INTERNAL_ERROR
+ * (-32603) instead of TASK_NOT_FOUND (-32001). Hence the message fallback — the
+ * envelope-code check is what should match once upstream fixes the bundling.
+ */
+export function isTaskNotFound(err: unknown): boolean {
+  if (err instanceof TaskNotFoundError) return true;
+  if (!(err instanceof Error)) return false;
+  const { envelopeCode } = err as Error & { envelopeCode?: unknown };
+  if (envelopeCode === A2A_ERROR_CODE.TASK_NOT_FOUND) return true;
+  return /task not found/i.test(err.message);
 }
 
 // ─── TaskPoller ───────────────────────────────────────────────────────────────
@@ -197,7 +218,7 @@ export class TaskPoller {
    * Returns the result when complete, or { status: "still_running" } on timeout
    * so the caller can retry with the same taskId.
    * When registry + awaitTool are provided, re-registers on still_running and
-   * resolves on completion (or TaskNotFoundError).
+   * resolves on completion (or when the task is gone).
    */
   async poll(taskId: string, timeoutMs: number): Promise<PollToolResult> {
     const { registry, awaitTool } = this;
@@ -270,7 +291,7 @@ export class TaskPoller {
         structuredContent: completed,
       };
     } catch (err: unknown) {
-      if (err instanceof TaskNotFoundError) {
+      if (isTaskNotFound(err)) {
         // Task is gone and can never resolve — clear the registry entry so the
         // Stop hook doesn't keep blocking on an ID that will never complete.
         registry?.resolve(taskId);

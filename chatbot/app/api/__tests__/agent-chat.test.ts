@@ -45,6 +45,14 @@ vi.mock("@a2a-js/sdk/client", () => ({
   }),
 }));
 
+import { TaskState } from "@a2a-js/sdk";
+import { CancelTaskRequest } from "@a2a-js/sdk";
+import {
+  a2aEvents,
+  artifactEvent,
+  statusEvent,
+  taskEvent,
+} from "@/lib/__tests__/__fixtures__/a2a-events";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import { POST, DELETE } from "../agent/[name]/chat/route";
 
@@ -83,28 +91,11 @@ function parseSseEvents(body: string): object[] {
 // ─── Stream factory ───────────────────────────────────────────────────────────
 
 function makeStream(artifacts: Array<{ name: string; text: string }> = []) {
-  const events = [
-    { kind: "task", id: "task-123" },
-    ...artifacts.map((a) => ({
-      kind: "artifact-update",
-      artifact: {
-        artifactId: "art-1",
-        name: a.name,
-        parts: [{ kind: "text", text: a.text }],
-      },
-    })),
-    {
-      kind: "status-update",
-      status: { state: "completed" },
-      taskId: "task-123",
-      final: true,
-      contextId: "",
-    },
-  ];
-  async function* gen() {
-    for (const e of events) yield e;
-  }
-  return gen();
+  return a2aEvents(
+    taskEvent("task-123"),
+    ...artifacts.map((a) => artifactEvent(a.name, a.text)),
+    statusEvent(TaskState.TASK_STATE_COMPLETED),
+  );
 }
 
 // ─── Test setup ───────────────────────────────────────────────────────────────
@@ -274,6 +265,6 @@ describe("DELETE /api/agent/[name]/chat — STOP for launchd-triggered sessions"
 
     const response = await DELETE(request, { params });
     expect(response.status).toBe(200);
-    expect(mockCancelTask).toHaveBeenCalledWith({ id: sessionId });
+    expect(mockCancelTask).toHaveBeenCalledWith(CancelTaskRequest.fromJSON({ id: sessionId }));
   });
 });

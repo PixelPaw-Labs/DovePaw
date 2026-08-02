@@ -13,6 +13,17 @@ vi.mock("@/a2a/lib/ports-manifest", () => ({
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { ClientFactory } from "@a2a-js/sdk/client";
+import { TaskState } from "@a2a-js/sdk";
+import { CancelTaskRequest, Part } from "@a2a-js/sdk";
+import {
+  a2aEvents,
+  artifact,
+  artifactEvent,
+  messageEvent,
+  statusEvent,
+  taskEvent,
+  taskResult,
+} from "./__fixtures__/a2a-events";
 import {
   startAgentStream,
   streamCollect,
@@ -20,14 +31,10 @@ import {
   extractArtifactResult,
   formatAgentStreamContext,
   noAgentOutput,
-  type A2AStreamEvent,
+  subscribeTaskStream,
 } from "@/lib/a2a-client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function* asyncEvents(...events: object[]) {
-  for (const e of events) yield e;
-}
 
 function makeClientFactory(clientOverrides: Record<string, unknown>) {
   const client = {
@@ -49,7 +56,7 @@ describe("startAgentStream", () => {
 
   it("returns handle with taskId when first event is a task", async () => {
     makeClientFactory({
-      sendMessageStream: () => asyncEvents({ kind: "task", id: "task-123" }),
+      sendMessageStream: () => a2aEvents(taskEvent("task-123")),
     });
 
     const handle = await startAgentStream(3000, "hello");
@@ -61,7 +68,7 @@ describe("startAgentStream", () => {
   it("creates client at the correct localhost URL", async () => {
     const mockCreateFromUrl = vi.fn().mockResolvedValue({
       cancelTask: vi.fn().mockResolvedValue(undefined),
-      sendMessageStream: () => asyncEvents({ kind: "task", id: "t1" }),
+      sendMessageStream: () => a2aEvents(taskEvent("t1")),
     });
     vi.mocked(ClientFactory).mockImplementation(function () {
       return { createFromUrl: mockCreateFromUrl };
@@ -73,7 +80,7 @@ describe("startAgentStream", () => {
   });
 
   it("sends the message text in sendMessageStream parts", async () => {
-    const mockStream = vi.fn().mockReturnValue(asyncEvents({ kind: "task", id: "t1" }));
+    const mockStream = vi.fn().mockReturnValue(a2aEvents(taskEvent("t1")));
     makeClientFactory({ sendMessageStream: mockStream });
 
     await startAgentStream(3000, "do the thing");
@@ -81,7 +88,7 @@ describe("startAgentStream", () => {
     expect(mockStream).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.objectContaining({
-          parts: [{ kind: "text", text: "do the thing" }],
+          parts: [Part.fromJSON({ text: "do the thing" })],
         }),
       }),
       expect.any(Object),
@@ -90,7 +97,7 @@ describe("startAgentStream", () => {
 
   it("returns null when first event is not a task", async () => {
     makeClientFactory({
-      sendMessageStream: () => asyncEvents({ kind: "message", content: "hello" }),
+      sendMessageStream: () => a2aEvents(messageEvent()),
     });
 
     const handle = await startAgentStream(3000, "hello");
@@ -100,7 +107,7 @@ describe("startAgentStream", () => {
 
   it("returns null when stream is immediately done", async () => {
     makeClientFactory({
-      sendMessageStream: () => asyncEvents(),
+      sendMessageStream: () => a2aEvents(),
     });
 
     const handle = await startAgentStream(3000, "hello");
@@ -110,7 +117,7 @@ describe("startAgentStream", () => {
 
   it("calls cancelTask when abort signal fires after taskId is known", async () => {
     const client = makeClientFactory({
-      sendMessageStream: () => asyncEvents({ kind: "task", id: "task-abort" }),
+      sendMessageStream: () => a2aEvents(taskEvent("task-abort")),
     });
     const ac = new AbortController();
 
@@ -118,12 +125,14 @@ describe("startAgentStream", () => {
     ac.abort();
     await Promise.resolve(); // flush microtasks
 
-    expect(client.cancelTask).toHaveBeenCalledWith({ id: "task-abort" });
+    expect(client.cancelTask).toHaveBeenCalledWith(
+      CancelTaskRequest.fromJSON({ id: "task-abort" }),
+    );
   });
 
   it("does not call cancelTask when signal is not aborted", async () => {
     const client = makeClientFactory({
-      sendMessageStream: () => asyncEvents({ kind: "task", id: "task-ok" }),
+      sendMessageStream: () => a2aEvents(taskEvent("task-ok")),
     });
     const ac = new AbortController();
 
@@ -135,46 +144,14 @@ describe("startAgentStream", () => {
 
 // ─── collectStreamResult ──────────────────────────────────────────────────────
 
-async function* a2aEvents(...events: object[]): AsyncGenerator<A2AStreamEvent, void, undefined> {
-  for (const e of events) yield e as A2AStreamEvent;
-}
-
 describe("collectStreamResult", () => {
   it("excludes label artifact values from output", async () => {
     const { result } = await collectStreamResult(
       a2aEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "toolu_abc123" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "tool-call", parts: [{ kind: "text", text: "ToolSearch" }] },
-        },
-        {
-          kind: "artifact-update",
-          artifact: {
-            name: "label",
-            parts: [{ kind: "text", text: "ToolSearch: select:mcp__agents__start_pixelpaw_qa" }],
-          },
-        },
-        {
-          kind: "artifact-update",
-          artifact: {
-            name: "final-output",
-            parts: [{ kind: "text", text: "Here is Taylor's QA analysis" }],
-          },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "toolu_abc123"),
+        artifactEvent("tool-call", "ToolSearch"),
+        artifactEvent("label", "ToolSearch: select:mcp__agents__start_pixelpaw_qa"),
+        artifactEvent("final-output", "Here is Taylor's QA analysis"),
       ),
     );
     expect(result.output).not.toContain("ToolSearch");
@@ -185,31 +162,9 @@ describe("collectStreamResult", () => {
   it("excludes tool-call artifact values from output", async () => {
     const { result } = await collectStreamResult(
       a2aEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "ToolSearch" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "tool-call", parts: [{ kind: "text", text: "ToolSearch" }] },
-        },
-        {
-          kind: "artifact-update",
-          artifact: {
-            name: "final-output",
-            parts: [{ kind: "text", text: "Here are the results" }],
-          },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "ToolSearch"),
+        artifactEvent("tool-call", "ToolSearch"),
+        artifactEvent("final-output", "Here are the results"),
       ),
     );
     expect(result.output).not.toContain("ToolSearch");
@@ -219,24 +174,8 @@ describe("collectStreamResult", () => {
   it("includes final-output artifact value in output", async () => {
     const { result } = await collectStreamResult(
       a2aEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "step" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "done" }] },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "step"),
+        artifactEvent("final-output", "done"),
       ),
     );
     expect(result.output).toBe("done");
@@ -245,28 +184,9 @@ describe("collectStreamResult", () => {
   it("thinking artifact value is excluded from output", async () => {
     const { result } = await collectStreamResult(
       a2aEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "step" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "thinking", parts: [{ kind: "text", text: "inner thoughts" }] },
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "response" }] },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "step"),
+        artifactEvent("thinking", "inner thoughts"),
+        artifactEvent("final-output", "response"),
       ),
     );
     expect(result.output).toBe("response");
@@ -281,28 +201,9 @@ describe("streamCollect", () => {
     const chunks: { name: string; text: string }[] = [];
     for await (const event of streamCollect(
       a2aEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "step" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "thinking", parts: [{ kind: "text", text: "inner thoughts" }] },
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "response" }] },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "step"),
+        artifactEvent("thinking", "inner thoughts"),
+        artifactEvent("final-output", "response"),
       ),
     )) {
       if (event.kind === "chunk") chunks.push({ name: event.name, text: event.text });
@@ -315,24 +216,8 @@ describe("streamCollect", () => {
     const snapshots: string[] = [];
     for await (const event of streamCollect(
       a2aEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "working" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "done" }] },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "working"),
+        artifactEvent("final-output", "done"),
       ),
     )) {
       if (event.kind === "snapshot") snapshots.push(event.result.output);
@@ -351,11 +236,13 @@ describe("streamCollect", () => {
 
   it("snapshot carries the taskId from the task event", async () => {
     makeClientFactory({
-      resubscribeTask: vi.fn().mockReturnValue(asyncEvents({ kind: "task", id: "task-snap-id" })),
+      resubscribeTask: vi.fn().mockReturnValue(a2aEvents(taskEvent("task-snap-id"))),
     });
     const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
     let lastTaskId: string | undefined;
-    for await (const event of streamCollect(client.resubscribeTask({ id: "task-snap-id" }, {}))) {
+    for await (const event of streamCollect(
+      client.resubscribeTask({ id: "task-snap-id", tenant: "" }, {}),
+    )) {
       if (event.kind === "snapshot") lastTaskId = event.taskId;
     }
     expect(lastTaskId).toBe("task-snap-id");
@@ -367,24 +254,22 @@ describe("streamCollect", () => {
 describe("extractArtifactResult", () => {
   it("uses final-output artifact as output", () => {
     const result = extractArtifactResult([
-      { name: "tool-call", parts: [{ kind: "text", text: "ToolSearch" }] } as never,
-      { name: "final-output", parts: [{ kind: "text", text: "the answer" }] } as never,
+      artifact("tool-call", "ToolSearch"),
+      artifact("final-output", "the answer"),
     ]);
     expect(result.output).toBe("the answer");
   });
 
   it("falls back to stream artifact when no final-output", () => {
-    const result = extractArtifactResult([
-      { name: "stream", parts: [{ kind: "text", text: "streamed text" }] } as never,
-    ]);
+    const result = extractArtifactResult([artifact("stream", "streamed text")]);
     expect(result.output).toBe("streamed text");
   });
 
   it("does not include tool-call, tool-input, or thinking in output", () => {
     const result = extractArtifactResult([
-      { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] } as never,
-      { name: "tool-input", parts: [{ kind: "text", text: '{"cmd":"ls"}' }] } as never,
-      { name: "thinking", parts: [{ kind: "text", text: "reasoning" }] } as never,
+      artifact("tool-call", "Bash"),
+      artifact("tool-input", '{"cmd":"ls"}'),
+      artifact("thinking", "reasoning"),
     ]);
     expect(result.output).toBe(noAgentOutput());
   });
@@ -402,71 +287,81 @@ describe("collectStreamResult — finalState", () => {
     makeClientFactory({
       resubscribeTask: vi
         .fn()
-        .mockReturnValue(
-          asyncEvents({ kind: "status-update", status: { state: "completed" }, final: true }),
-        ),
+        .mockReturnValue(a2aEvents(statusEvent(TaskState.TASK_STATE_COMPLETED))),
     });
     const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
-    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    const { result } = await collectStreamResult(
+      client.resubscribeTask({ id: "t", tenant: "" }, {}),
+    );
     expect(result.finalState).toBe("completed");
   });
 
+  // Each SDK terminal state must map to the right DovePaw status string — these
+  // reach the MCP structuredContent, the PostToolUse hook contract and the UI.
+  it.each([
+    [TaskState.TASK_STATE_COMPLETED, "completed"],
+    [TaskState.TASK_STATE_FAILED, "failed"],
+    [TaskState.TASK_STATE_CANCELED, "canceled"],
+    [TaskState.TASK_STATE_REJECTED, "rejected"],
+  ])("maps terminal state %s to %s", async (state, expected) => {
+    const { result } = await collectStreamResult(a2aEvents(statusEvent(state)));
+    expect(result.finalState).toBe(expected);
+  });
+
+  it.each([
+    TaskState.TASK_STATE_SUBMITTED,
+    TaskState.TASK_STATE_WORKING,
+    TaskState.TASK_STATE_INPUT_REQUIRED,
+    TaskState.TASK_STATE_AUTH_REQUIRED,
+  ])("leaves finalState undefined for the non-terminal state %s", async (state) => {
+    const { result } = await collectStreamResult(a2aEvents(statusEvent(state)));
+    expect(result.finalState).toBeUndefined();
+  });
+
   it("leaves finalState undefined when no terminal status-update", async () => {
-    makeClientFactory({ resubscribeTask: vi.fn().mockReturnValue(asyncEvents()) });
+    makeClientFactory({ resubscribeTask: vi.fn().mockReturnValue(a2aEvents()) });
     const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
-    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    const { result } = await collectStreamResult(
+      client.resubscribeTask({ id: "t", tenant: "" }, {}),
+    );
     expect(result.finalState).toBeUndefined();
   });
 
   it("collects thinking from thinking artifact", async () => {
     makeClientFactory({
-      resubscribeTask: vi.fn().mockReturnValue(
-        asyncEvents(
-          {
-            kind: "artifact-update",
-            artifact: { name: "thinking", parts: [{ kind: "text", text: "Let me think..." }] },
-          },
-          { kind: "status-update", status: { state: "completed" }, final: true },
+      resubscribeTask: vi
+        .fn()
+        .mockReturnValue(
+          a2aEvents(
+            artifactEvent("thinking", "Let me think..."),
+            statusEvent(TaskState.TASK_STATE_COMPLETED),
+          ),
         ),
-      ),
     });
     const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
-    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    const { result } = await collectStreamResult(
+      client.resubscribeTask({ id: "t", tenant: "" }, {}),
+    );
     expect(result.thinking).toBe("Let me think...");
   });
 
   it("collects tool calls from tool-call + tool-input artifacts", async () => {
     makeClientFactory({
-      resubscribeTask: vi.fn().mockReturnValue(
-        asyncEvents(
-          {
-            kind: "status-update",
-            status: {
-              state: "working",
-              message: {
-                kind: "message",
-                messageId: "1",
-                role: "agent",
-                parts: [{ kind: "text", text: "calling bash" }],
-                timestamp: "",
-              },
-            },
-            final: false,
-          },
-          {
-            kind: "artifact-update",
-            artifact: { name: "tool-call", parts: [{ kind: "text", text: "bash" }] },
-          },
-          {
-            kind: "artifact-update",
-            artifact: { name: "tool-input", parts: [{ kind: "text", text: '{"command":"ls"}' }] },
-          },
-          { kind: "status-update", status: { state: "completed" }, final: true },
+      resubscribeTask: vi
+        .fn()
+        .mockReturnValue(
+          a2aEvents(
+            statusEvent(TaskState.TASK_STATE_WORKING, "calling bash"),
+            artifactEvent("tool-call", "bash"),
+            artifactEvent("tool-input", '{"command":"ls"}'),
+            statusEvent(TaskState.TASK_STATE_COMPLETED),
+          ),
         ),
-      ),
     });
     const client = await (await import("@@/lib/a2a-client")).createAgentClient(9999);
-    const { result } = await collectStreamResult(client.resubscribeTask({ id: "t" }, {}));
+    const { result } = await collectStreamResult(
+      client.resubscribeTask({ id: "t", tenant: "" }, {}),
+    );
     expect(result.toolCalls).toEqual(['bash: {"command":"ls"}']);
   });
 });
@@ -519,5 +414,89 @@ describe("formatAgentStreamContext", () => {
     expect(text).not.toContain("<thinking>");
     expect(text).not.toContain("<response>");
     expect(text).not.toContain("<actions>");
+  });
+});
+
+// ─── subscribeTaskStream — terminal-task fallback ─────────────────────────────
+
+/**
+ * Since SDK v1.0 the server REJECTS a resubscribe to a task that already reached
+ * a terminal state ("...is in a terminal state (3) and cannot be subscribed to").
+ * That is the normal case for await_* once its start_* task has finished, so the
+ * stream helper must recover the result from the stored task snapshot instead.
+ */
+describe("subscribeTaskStream — already-terminal task", () => {
+  const terminalRejection = () => {
+    const err = new Error("Task t1 is in a terminal state (3) and cannot be subscribed to.");
+    err.name = "JsonRpcTransportError";
+    return err;
+  };
+
+  async function drain(client: unknown) {
+    let last: { output: string; finalState?: string } | undefined;
+    for await (const ev of subscribeTaskStream(client as never, "t1")) {
+      if (ev.kind === "snapshot") last = ev.result;
+    }
+    return last;
+  }
+
+  it("falls back to the task snapshot when resubscribe rejects", async () => {
+    const getTask = vi.fn().mockResolvedValue(
+      taskResult("t1", {
+        state: TaskState.TASK_STATE_COMPLETED,
+        artifacts: [artifact("final-output", "the stored answer")],
+      }),
+    );
+    const result = await drain({
+      resubscribeTask: vi.fn(() => {
+        throw terminalRejection();
+      }),
+      getTask,
+      cancelTask: vi.fn(),
+    });
+
+    expect(result?.output).toBe("the stored answer");
+    expect(result?.finalState).toBe("completed");
+    expect(getTask).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
+  });
+
+  it("does not call getTask when the live stream works", async () => {
+    const getTask = vi.fn();
+    const result = await drain({
+      resubscribeTask: vi.fn(() => a2aEvents(artifactEvent("final-output", "live"))),
+      getTask,
+      cancelTask: vi.fn(),
+    });
+
+    expect(result?.output).toBe("live");
+    expect(getTask).not.toHaveBeenCalled();
+  });
+
+  it("propagates the original error when the task is genuinely gone", async () => {
+    const gone = new Error("Task not found: t1");
+    await expect(
+      drain({
+        resubscribeTask: vi.fn(() => {
+          throw terminalRejection();
+        }),
+        getTask: vi.fn().mockRejectedValue(gone),
+        cancelTask: vi.fn(),
+      }),
+    ).rejects.toThrow("Task not found: t1");
+  });
+
+  it("does not fall back after the stream has already delivered events", async () => {
+    const getTask = vi.fn();
+    await expect(
+      drain({
+        resubscribeTask: vi.fn(async function* () {
+          yield artifactEvent("final-output", "partial");
+          throw new Error("connection reset mid-stream");
+        }),
+        getTask,
+        cancelTask: vi.fn(),
+      }),
+    ).rejects.toThrow("connection reset mid-stream");
+    expect(getTask).not.toHaveBeenCalled();
   });
 });
