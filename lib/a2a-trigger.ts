@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { consola } from "consola";
 import { z } from "zod";
 import { scheduledJobSchema, type ScheduledJob } from "./agents-config-schemas";
+import { TaskState, taskStateToJSON } from "@a2a-js/sdk";
 import { startAgentStream } from "./a2a-client";
 import { agentDefinitionFile, portsFile } from "./paths";
 import { scheduler } from "./scheduler";
@@ -39,21 +40,22 @@ const PORTS_FILE = portsFile(Number(process.env.DOVEPAW_PORT ?? "7473"));
  * Pass `contextId` to continue an existing conversation; omit to start a fresh one.
  * The server-generated contextId for a fresh session becomes the DovePaw session ID.
  *
- * Returns the terminal task state: "completed" | "failed" | "canceled" | "unknown".
+ * Returns the last TaskState seen on the stream, or TASK_STATE_UNSPECIFIED if
+ * the agent never reported one.
  */
 export async function triggerAgent(
   port: number,
   instruction: string,
   contextId?: string,
-): Promise<string> {
+): Promise<TaskState> {
   const handle = await startAgentStream(port, instruction, undefined, contextId);
-  if (!handle) return "unknown";
+  if (!handle) return TaskState.TASK_STATE_UNSPECIFIED;
 
-  let finalState = "unknown";
+  let finalState = TaskState.TASK_STATE_UNSPECIFIED;
   for await (const event of handle.stream) {
-    if (event.kind === "status-update" && event.final) {
-      finalState = event.status.state;
-    }
+    if (event.payload?.$case !== "statusUpdate") continue;
+    const state = event.payload.value.status?.state;
+    if (state !== undefined) finalState = state;
   }
   return finalState;
 }
@@ -129,13 +131,13 @@ async function main(): Promise<void> {
 
   try {
     const state = await triggerAgent(port, instruction);
-    consola.info(`[a2a-trigger] ${manifestKey} finished — state: ${state}`);
+    consola.info(`[a2a-trigger] ${manifestKey} finished — state: ${taskStateToJSON(state)}`);
 
     if (jobId && jobConfig?.schedule?.type === "onetime") {
       await cleanupOnetimeJob(agentName, jobId, jobConfig.label || undefined);
     }
 
-    process.exit(state === "completed" ? 0 : 1);
+    process.exit(state === TaskState.TASK_STATE_COMPLETED ? 0 : 1);
   } catch (err) {
     consola.error(`[a2a-trigger] Failed to reach A2A server on port ${port}:`, err);
     process.exit(1);

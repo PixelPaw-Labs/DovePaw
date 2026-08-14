@@ -44,6 +44,8 @@ Every visible agent contributes three Dove-side MCP tools (see [`chatbot/lib/que
 | `start_<key>` | `taskId` immediately + structured                                                | Fire-and-forget; combine with `await_*` for parallel fan-out |
 | `await_<key>` | `still_running` (poll again) or `completed/failed/canceled/rejected` with result | Collect a `start_*`/`ask_*` result                           |
 
+> **`await_<key>` on an already-finished task.** Since `@a2a-js/sdk` v1.0 the server _rejects_ a `resubscribeTask` for a task that has reached a terminal state — and that is the normal case, because `start_*` returns immediately and the task usually finishes before the first `await_*`. `subscribeTaskStream` therefore falls back to `getTask` on a pre-stream failure and rebuilds the result from the task's stored artifacts. Only a pre-stream failure is recoverable; once events have been delivered the stream was genuinely interrupted and the error propagates. See [`chatbot/lib/a2a-client.ts`](../../chatbot/lib/a2a-client.ts).
+
 > The `_script` variants (`start_script_<key>`, `await_script_<key>`) live one layer deeper — they're the **sub-agent's** tools for executing its own script. See [Spec 05](05-a2a-spawn.md).
 
 ```mermaid

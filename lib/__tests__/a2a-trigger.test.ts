@@ -39,14 +39,47 @@ vi.mock("../paths", () => ({
   portsFile: mockPortsFile,
 }));
 
+import { Message, Role, TaskState, roleToJSON } from "@a2a-js/sdk";
 import { triggerAgent, resolvePort, readJobConfig, cleanupOnetimeJob } from "../a2a-trigger.js";
 
 function taskEvent(contextId = "ctx-1") {
-  return { kind: "task", id: "task-1", contextId, status: { state: "submitted" } };
+  return {
+    payload: {
+      $case: "task",
+      value: {
+        id: "task-1",
+        contextId,
+        status: { state: TaskState.TASK_STATE_SUBMITTED, message: undefined, timestamp: "" },
+        artifacts: [],
+        history: [],
+        metadata: undefined,
+      },
+    },
+  };
 }
 
-function statusEvent(state: string, final = false) {
-  return { kind: "status-update", final, status: { state } };
+// v1.0 dropped the `final` flag — terminality is derived from the state itself.
+function statusEvent(state: TaskState) {
+  return {
+    payload: {
+      $case: "statusUpdate",
+      value: {
+        taskId: "task-1",
+        contextId: "",
+        status: { state, message: undefined, timestamp: "" },
+        metadata: undefined,
+      },
+    },
+  };
+}
+
+function messageEvent() {
+  return {
+    payload: {
+      $case: "message",
+      value: Message.fromJSON({ role: roleToJSON(Role.ROLE_AGENT), parts: [{ text: "hello" }] }),
+    },
+  };
 }
 
 describe("triggerAgent", () => {
@@ -54,24 +87,30 @@ describe("triggerAgent", () => {
 
   it("returns 'completed' when final status-update is completed", async () => {
     mockSendMessageStream.mockReturnValue(
-      makeStream([taskEvent(), statusEvent("working"), statusEvent("completed", true)]),
+      makeStream([
+        taskEvent(),
+        statusEvent(TaskState.TASK_STATE_WORKING),
+        statusEvent(TaskState.TASK_STATE_COMPLETED),
+      ]),
     );
     expect(await triggerAgent(12345, "run")).toBe("completed");
   });
 
   it("returns 'failed' when final status-update is failed", async () => {
-    mockSendMessageStream.mockReturnValue(makeStream([taskEvent(), statusEvent("failed", true)]));
+    mockSendMessageStream.mockReturnValue(
+      makeStream([taskEvent(), statusEvent(TaskState.TASK_STATE_FAILED)]),
+    );
     expect(await triggerAgent(12345, "run")).toBe("failed");
   });
 
   it("returns 'unknown' when stream has no task event as first event", async () => {
-    mockSendMessageStream.mockReturnValue(makeStream([{ kind: "message" }]));
+    mockSendMessageStream.mockReturnValue(makeStream([messageEvent()]));
     expect(await triggerAgent(12345, "run")).toBe("unknown");
   });
 
   it("passes contextId in the message when provided", async () => {
     mockSendMessageStream.mockReturnValue(
-      makeStream([taskEvent("existing-ctx"), statusEvent("completed", true)]),
+      makeStream([taskEvent("existing-ctx"), statusEvent(TaskState.TASK_STATE_COMPLETED)]),
     );
     await triggerAgent(12345, "resume task", "existing-ctx");
     const [params] = mockSendMessageStream.mock.calls[0];
@@ -80,11 +119,12 @@ describe("triggerAgent", () => {
 
   it("omits contextId from the message when not provided", async () => {
     mockSendMessageStream.mockReturnValue(
-      makeStream([taskEvent(), statusEvent("completed", true)]),
+      makeStream([taskEvent(), statusEvent(TaskState.TASK_STATE_COMPLETED)]),
     );
     await triggerAgent(12345, "fresh task");
     const [params] = mockSendMessageStream.mock.calls[0];
-    expect(params.message.contextId).toBeUndefined();
+    // v1.0's Message requires contextId, so an absent context is the empty string.
+    expect(params.message.contextId).toBe("");
   });
 });
 

@@ -9,7 +9,8 @@
  *   extractArtifactResult — build StreamedResult from terminal task artifacts
  */
 
-import type { Artifact } from "@a2a-js/sdk";
+import { CancelTaskRequest, GetTaskRequest, SubscribeToTaskRequest, TaskState } from "@a2a-js/sdk";
+import type { Artifact, Part } from "@a2a-js/sdk";
 import type { Client } from "@a2a-js/sdk/client";
 import type { A2AStreamEvent } from "@@/lib/a2a-client";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
@@ -38,7 +39,26 @@ export type CollectedStream = {
   result: StreamedResult;
 };
 
+/**
+ * Terminal task states in DovePaw's own vocabulary. Distinct from the SDK's
+ * TaskState because this is what reaches the MCP structuredContent, the
+ * PostToolUse hook contract (AwaitToolStatus, which also carries the
+ * DovePaw-only "still_running") and the UI.
+ */
 export type TaskFinalState = "completed" | "failed" | "canceled" | "rejected";
+
+/** Terminal SDK states only — non-terminal states have no DovePaw equivalent. */
+const FINAL_STATES = new Map<TaskState, TaskFinalState>([
+  [TaskState.TASK_STATE_COMPLETED, "completed"],
+  [TaskState.TASK_STATE_FAILED, "failed"],
+  [TaskState.TASK_STATE_CANCELED, "canceled"],
+  [TaskState.TASK_STATE_REJECTED, "rejected"],
+]);
+
+/** Read the text out of an SDK Part, or undefined when it is not a text part. */
+function partText(part: Part): string | undefined {
+  return part.content?.$case === "text" ? part.content.value : undefined;
+}
 
 export type StreamedResult = {
   /** Primary text output (from artifact-update events), joined for readability. */
@@ -113,26 +133,21 @@ export async function* streamCollect(
     };
   };
 
-  const TERMINAL_STATES: ReadonlyArray<TaskFinalState> = [
-    "completed",
-    "failed",
-    "canceled",
-    "rejected",
-  ];
-  const isTaskFinalState = (s: string): s is TaskFinalState =>
-    (TERMINAL_STATES as readonly string[]).includes(s);
-
   for await (const event of stream) {
-    if (event.kind === "task") {
-      taskId = event.id;
-      // When resubscribeTask is called for an already-completed task the A2A SDK yields
-      // only this Task snapshot and returns immediately — no artifact-update or
-      // status-update events follow (the EventQueue was destructively consumed by the
-      // initial stream in start_*). Extract the output from the task's stored artifacts,
-      // which ResultManager populated during execution.
-      if (event.status?.state && isTaskFinalState(event.status.state)) {
-        finalState = event.status.state;
-        const stored = extractArtifactResult(event.artifacts, agentName);
+    const { payload } = event;
+    if (payload?.$case === "task") {
+      const task = payload.value;
+      taskId = task.id;
+      // A terminal Task snapshot arrives on its own, with no artifactUpdate or
+      // statusUpdate events following (the EventQueue was destructively consumed by
+      // the initial stream in start_*) — either as the first event of a live stream,
+      // or synthesised by resubscribeOrSnapshot for an already-finished task. Extract
+      // the output from the task's stored artifacts, which ResultManager populated
+      // during execution.
+      const state = task.status && FINAL_STATES.get(task.status.state);
+      if (state) {
+        finalState = state;
+        const stored = extractArtifactResult(task.artifacts, agentName);
         if (stored.thinking) thinkingChunks.push(stored.thinking);
         if (stored.output !== noAgentOutput(agentName)) {
           const entry: ProgressEntry = {
@@ -143,17 +158,20 @@ export async function* streamCollect(
           pendingEntry = entry;
         }
       }
-    } else if (event.kind === "artifact-update") {
-      const name = event.artifact.name ?? "";
-      for (const p of event.artifact.parts) {
-        if (p.kind === "text") {
-          yield { kind: "chunk", name, text: p.text };
+    } else if (payload?.$case === "artifactUpdate") {
+      const { artifact } = payload.value;
+      if (!artifact) continue;
+      const name = artifact.name;
+      for (const p of artifact.parts) {
+        const text = partText(p);
+        if (text !== undefined) {
+          yield { kind: "chunk", name, text };
           if (name === ARTIFACT.THINKING) {
-            thinkingChunks.push(p.text);
+            thinkingChunks.push(text);
           } else if (name === ARTIFACT.TOOL_CALL) {
-            pendingToolCall = p.text;
+            pendingToolCall = text;
           } else if (name === ARTIFACT.TOOL_INPUT && pendingToolCall) {
-            toolCalls.push(`${pendingToolCall}: ${p.text}`);
+            toolCalls.push(`${pendingToolCall}: ${text}`);
             pendingToolCall = "";
           }
           // final-output must always be captured. A resumed session may respond
@@ -164,30 +182,33 @@ export async function* streamCollect(
             progress.push(pendingEntry);
           }
           if (pendingEntry && !(TRANSIENT_ARTIFACT_NAMES as Set<string>).has(name)) {
-            accumulate(pendingEntry.artifacts, name, p.text);
+            accumulate(pendingEntry.artifacts, name, text);
             yield { kind: "snapshot", taskId, result: snapshot() };
           }
         }
       }
-    } else if (event.kind === "status-update") {
-      if (event.final) {
-        finalState = isTaskFinalState(event.status.state) ? event.status.state : "completed";
-        if (event.status.message) {
-          for (const p of event.status.message.parts) {
-            if (p.kind === "text" && p.text) {
-              const entry: ProgressEntry = {
-                message: p.text,
-                artifacts: { [ARTIFACT.FINAL_OUTPUT]: p.text },
-              };
-              progress.push(entry);
-              pendingEntry = entry;
-            }
+    } else if (payload?.$case === "statusUpdate") {
+      // v1.0 dropped the `final` flag — terminality is derived from the state itself.
+      const { status } = payload.value;
+      const state = status && FINAL_STATES.get(status.state);
+      if (state) {
+        finalState = state;
+        for (const p of status?.message?.parts ?? []) {
+          const text = partText(p);
+          if (text) {
+            const entry: ProgressEntry = {
+              message: text,
+              artifacts: { [ARTIFACT.FINAL_OUTPUT]: text },
+            };
+            progress.push(entry);
+            pendingEntry = entry;
           }
         }
-      } else if (event.status.message) {
-        for (const p of event.status.message.parts) {
-          if (p.kind === "text") {
-            const entry: ProgressEntry = { message: p.text, artifacts: {} };
+      } else if (status?.message) {
+        for (const p of status.message.parts) {
+          const text = partText(p);
+          if (text !== undefined) {
+            const entry: ProgressEntry = { message: text, artifacts: {} };
             progress.push(entry);
             pendingEntry = entry;
             yield { kind: "snapshot", taskId, result: snapshot() };
@@ -198,6 +219,42 @@ export async function* streamCollect(
   }
 
   yield { kind: "snapshot", taskId, result: snapshot() };
+}
+
+/**
+ * Resubscribe to a task's live event stream, falling back to its stored snapshot.
+ *
+ * Since SDK v1.0 the server REJECTS a subscribe to a task that already reached a
+ * terminal state ("Task <id> is in a terminal state (3) and cannot be subscribed
+ * to"), where v0.3 replied with the Task snapshot. That rejection is the normal
+ * case for await_* whenever its start_* task finished first, so recover the
+ * result via getTask — its artifacts are what ResultManager stored during
+ * execution, and the task branch of streamCollect already knows how to read them.
+ *
+ * Only a pre-stream failure is recoverable: once events have been delivered the
+ * stream was genuinely interrupted. getTask surfaces its own errors (task gone,
+ * server down) so the caller's existing handling still applies.
+ */
+async function* resubscribeOrSnapshot(
+  client: Client,
+  taskId: string,
+  signal: AbortSignal,
+): AsyncGenerator<A2AStreamEvent, void, undefined> {
+  let delivered = false;
+  try {
+    for await (const event of client.resubscribeTask(
+      SubscribeToTaskRequest.fromJSON({ id: taskId }),
+      { signal },
+    )) {
+      delivered = true;
+      yield event;
+    }
+    return;
+  } catch (err) {
+    if (delivered || signal.aborted) throw err;
+  }
+  const task = await client.getTask(GetTaskRequest.fromJSON({ id: taskId }));
+  yield { payload: { $case: "task", value: task } };
 }
 
 /**
@@ -215,11 +272,11 @@ export async function* subscribeTaskStream(
     "abort",
     () => {
       ac.abort();
-      void client.cancelTask({ id: taskId }).catch(() => {});
+      void client.cancelTask(CancelTaskRequest.fromJSON({ id: taskId })).catch(() => {});
     },
     { once: true },
   );
-  yield* streamCollect(client.resubscribeTask({ id: taskId }, { signal: ac.signal }), agentName);
+  yield* streamCollect(resubscribeOrSnapshot(client, taskId, ac.signal), agentName);
 }
 
 /**
@@ -267,10 +324,10 @@ export function extractArtifactResult(
 ): StreamedResult {
   const artifacts: Record<string, string> = {};
   for (const a of rawArtifacts ?? []) {
-    const name = a.name ?? "";
     for (const p of a.parts) {
-      if (p.kind === "text")
-        artifacts[name] = artifacts[name] ? `${artifacts[name]}\n${p.text}` : p.text;
+      const text = partText(p);
+      if (text !== undefined)
+        artifacts[a.name] = artifacts[a.name] ? `${artifacts[a.name]}\n${text}` : text;
     }
   }
   // Prefer final-output (complete response), fall back to stream (accumulated text deltas).

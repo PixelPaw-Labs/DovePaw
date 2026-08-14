@@ -1007,6 +1007,7 @@ function makeCanUseToolCtx(overrides?: { signal?: AbortSignal }) {
     displayName: undefined,
     blockedPath: undefined,
     toolUseID: "tu-mock",
+    requestId: "req-mock",
   };
 }
 
@@ -1055,7 +1056,7 @@ describe("buildDoveCanUseTool — AskUserQuestion", () => {
 
     const event = sent[0] as ChatSseQuestion;
     resolvePendingQuestion(event.requestId, answers);
-    const result = await resultPromise;
+    const result = (await resultPromise)!;
 
     expect(result.behavior).toBe("allow");
     expect((result as { updatedInput: unknown }).updatedInput).toMatchObject({ answers });
@@ -1073,7 +1074,7 @@ describe("buildDoveCanUseTool — AskUserQuestion", () => {
     );
 
     ctrl.abort();
-    const result = await resultPromise;
+    const result = (await resultPromise)!;
     expect(result.behavior).toBe("allow");
     expect((result as { updatedInput: Record<string, unknown> }).updatedInput.answers).toEqual({});
   });
@@ -1104,7 +1105,7 @@ describe("buildDoveCanUseTool — permission flow", () => {
     expect(event.requestId).toBeTruthy();
 
     resolvePendingPermission(event.requestId, true);
-    const result = await resultPromise;
+    const result = (await resultPromise)!;
     expect(result.behavior).toBe("allow");
   });
 
@@ -1115,7 +1116,7 @@ describe("buildDoveCanUseTool — permission flow", () => {
     const resultPromise = canUseTool("Write", { file_path: "/tmp/x" }, makeCanUseToolCtx());
     const event = sent[0] as ChatSsePermission;
     resolvePendingPermission(event.requestId, false);
-    const result = await resultPromise;
+    const result = (await resultPromise)!;
     expect(result.behavior).toBe("deny");
   });
 });
@@ -1130,8 +1131,8 @@ describe("buildDoveCanUseTool — abortPermissions", () => {
 
     abortPermissions();
     const [r1, r2] = await Promise.all([p1, p2]);
-    expect(r1.behavior).toBe("deny");
-    expect(r2.behavior).toBe("deny");
+    expect(r1!.behavior).toBe("deny");
+    expect(r2!.behavior).toBe("deny");
   });
 
   it("resolves in-flight AskUserQuestion requests with empty answers on abort", async () => {
@@ -1140,7 +1141,7 @@ describe("buildDoveCanUseTool — abortPermissions", () => {
 
     const p = canUseTool("AskUserQuestion", { questions: [sampleQuestion] }, makeCanUseToolCtx());
     abortPermissions();
-    const result = await p;
+    const result = (await p)!;
     expect(result.behavior).toBe("allow");
     expect((result as { updatedInput: Record<string, unknown> }).updatedInput.answers).toEqual({});
   });
@@ -1167,21 +1168,21 @@ describe("buildSubagentCanUseTool", () => {
   it("returns allow when fetch responds ok", async () => {
     mockFetch.mockResolvedValue(makeOkResponse(true));
     const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
-    const result = await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    const result = (await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx()))!;
     expect(result.behavior).toBe("allow");
   });
 
   it("returns deny when fetch responds not ok", async () => {
     mockFetch.mockResolvedValue(makeOkResponse(false));
     const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
-    const result = await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    const result = (await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx()))!;
     expect(result.behavior).toBe("deny");
   });
 
   it("returns deny when fetch rejects", async () => {
     mockFetch.mockRejectedValue(new Error("network error"));
     const canUseTool = buildSubagentCanUseTool("ctx-1", "7473");
-    const result = await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx());
+    const result = (await canUseTool("Bash", { command: "ls" }, makeCanUseToolCtx()))!;
     expect(result.behavior).toBe("deny");
   });
 
@@ -1196,7 +1197,7 @@ describe("buildSubagentCanUseTool", () => {
       makeCanUseToolCtx({ signal: ac.signal }),
     );
     ac.abort();
-    const result = await resultPromise;
+    const result = (await resultPromise)!;
     expect(result.behavior).toBe("deny");
   });
 

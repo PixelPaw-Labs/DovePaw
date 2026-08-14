@@ -6,11 +6,12 @@
  *   startAgentStream   — open sendMessageStream, extract taskId, wire abort
  */
 
-import { randomUUID } from "node:crypto";
 import { Agent, setGlobalDispatcher } from "undici";
 import { ClientFactory } from "@a2a-js/sdk/client";
 import type { Client } from "@a2a-js/sdk/client";
-import type { Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } from "@a2a-js/sdk";
+import { randomUUID } from "node:crypto";
+import { CancelTaskRequest, SendMessageRequest } from "@a2a-js/sdk";
+import type { StreamResponse } from "@a2a-js/sdk";
 
 /**
  * undici's default headersTimeout/bodyTimeout is 5 min. Both A2A SSE streams
@@ -21,7 +22,11 @@ import type { Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent } fr
  */
 setGlobalDispatcher(new Agent({ bodyTimeout: 0, headersTimeout: 0 }));
 
-export type A2AStreamEvent = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent;
+/**
+ * A single event from an A2A stream. Since SDK v1.0 this is the protobuf
+ * `StreamResponse` wrapper — the concrete event sits under `payload.$case`.
+ */
+export type A2AStreamEvent = StreamResponse;
 
 export type AgentStreamHandle = {
   client: Client;
@@ -58,29 +63,31 @@ export async function startAgentStream(
       : undefined;
 
   const stream = client.sendMessageStream(
-    {
+    SendMessageRequest.fromJSON({
       message: {
-        kind: "message",
         messageId: randomUUID(),
-        role: "user",
-        parts: [{ kind: "text", text: message }],
+        role: "ROLE_USER",
+        parts: [{ text: message }],
         ...(contextId ? { contextId } : {}),
         ...(metadata ? { metadata } : {}),
       },
-    },
+    }),
     { signal: ac.signal },
-  ) as AsyncGenerator<A2AStreamEvent, void, undefined>;
+  );
 
   const firstEvent = await stream[Symbol.asyncIterator]().next();
-  if (firstEvent.done || firstEvent.value.kind !== "task") {
+  if (firstEvent.done || firstEvent.value.payload?.$case !== "task") {
     return null;
   }
-  const taskId = firstEvent.value.id;
-  const resolvedContextId = firstEvent.value.contextId ?? taskId;
+  const task = firstEvent.value.payload.value;
+  const taskId = task.id;
+  const resolvedContextId = task.contextId || taskId;
 
-  signal?.addEventListener("abort", () => void client.cancelTask({ id: taskId }).catch(() => {}), {
-    once: true,
-  });
+  signal?.addEventListener(
+    "abort",
+    () => void client.cancelTask(CancelTaskRequest.fromJSON({ id: taskId })).catch(() => {}),
+    { once: true },
+  );
 
   return { client, taskId, contextId: resolvedContextId, stream };
 }

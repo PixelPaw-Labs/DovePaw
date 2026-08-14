@@ -18,7 +18,8 @@ vi.mock("express", () => {
   const app = { use: vi.fn(), listen: vi.fn() };
   return { default: vi.fn(() => app) };
 });
-vi.mock("@a2a-js/sdk", () => ({ AGENT_CARD_PATH: ".well-known/agent-card.json" }));
+// @a2a-js/sdk (root) is left unmocked — it is constants and protobuf enums the
+// code reads at module load. Only the server sub-paths need stubbing.
 vi.mock("@a2a-js/sdk/server", () => ({
   DefaultRequestHandler: vi.fn(),
   InMemoryTaskStore: vi.fn(),

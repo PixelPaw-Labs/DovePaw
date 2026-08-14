@@ -9,12 +9,6 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 
 vi.mock("@a2a-js/sdk/client", () => ({
   ClientFactory: vi.fn(),
-  TaskNotFoundError: class TaskNotFoundError extends Error {
-    constructor(msg?: string) {
-      super(msg ?? "Task not found");
-      this.name = "TaskNotFoundError";
-    }
-  },
 }));
 
 vi.mock("@/a2a/lib/ports-manifest", () => ({
@@ -82,7 +76,19 @@ vi.mock("@/lib/session-events", () => ({
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import { tool } from "@anthropic-ai/claude-agent-sdk";
-import { ClientFactory, TaskNotFoundError } from "@a2a-js/sdk/client";
+import { ClientFactory } from "@a2a-js/sdk/client";
+import { TaskNotFoundError } from "@a2a-js/sdk/errors";
+import { TaskState } from "@a2a-js/sdk";
+import { CancelTaskRequest, Part } from "@a2a-js/sdk";
+
+import {
+  artifactEvent,
+  messageEvent,
+  messageResult,
+  statusEvent,
+  taskEvent,
+  taskResult,
+} from "./__fixtures__/a2a-events";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
 import {
   makeAskTool,
@@ -205,11 +211,9 @@ describe("makeAskTool", () => {
 
   it("fires task and returns taskId immediately", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockSendMessage = vi.fn().mockResolvedValue({
-      kind: "task",
-      id: "task-abc",
-      status: { state: "working" },
-    });
+    const mockSendMessage = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-abc", { state: TaskState.TASK_STATE_WORKING }));
     vi.mocked(ClientFactory).mockImplementation(function () {
       return { createFromUrl: vi.fn().mockResolvedValue({ sendMessage: mockSendMessage }) };
     } as any);
@@ -226,7 +230,7 @@ describe("makeAskTool", () => {
       return {
         createFromUrl: vi
           .fn()
-          .mockResolvedValue({ sendMessage: vi.fn().mockResolvedValue({ kind: "message" }) }),
+          .mockResolvedValue({ sendMessage: vi.fn().mockResolvedValue(messageResult()) }),
       };
     } as any);
     const result = await handler({ instruction: "run" });
@@ -235,11 +239,9 @@ describe("makeAskTool", () => {
 
   it("passes instruction text to the agent", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockSendMessage = vi.fn().mockResolvedValue({
-      kind: "task",
-      id: "task-x",
-      status: { state: "working" },
-    });
+    const mockSendMessage = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-x", { state: TaskState.TASK_STATE_WORKING }));
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
@@ -253,7 +255,11 @@ describe("makeAskTool", () => {
     expect(mockSendMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         message: expect.objectContaining({
-          parts: [{ kind: "text", text: expect.stringContaining(instruction) }],
+          parts: [
+            expect.objectContaining({
+              content: { $case: "text", value: expect.stringContaining(instruction) },
+            }),
+          ],
         }),
       }),
     );
@@ -290,7 +296,7 @@ describe("makeAskTool", () => {
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
-          sendMessage: vi.fn().mockResolvedValue({ kind: "task", id: "task-abort" }),
+          sendMessage: vi.fn().mockResolvedValue(taskResult("task-abort")),
           cancelTask: mockCancelTask,
         }),
       };
@@ -299,7 +305,7 @@ describe("makeAskTool", () => {
     await h({ instruction: "run" });
     abortController.abort();
 
-    expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-abort" });
+    expect(mockCancelTask).toHaveBeenCalledWith(CancelTaskRequest.fromJSON({ id: "task-abort" }));
   });
 });
 
@@ -335,7 +341,7 @@ describe("makeStartTool", () => {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
           sendMessageStream: () =>
-            asyncEvents({ kind: "task", id: "task-abc-123", status: { state: "submitted" } }),
+            asyncEvents(taskEvent("task-abc-123", { state: TaskState.TASK_STATE_SUBMITTED })),
         }),
       };
     } as any);
@@ -351,7 +357,7 @@ describe("makeStartTool", () => {
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
-          sendMessageStream: () => asyncEvents({ kind: "message" }),
+          sendMessageStream: () => asyncEvents(messageEvent()),
         }),
       };
     } as any);
@@ -379,7 +385,7 @@ describe("makeStartTool", () => {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
           sendMessageStream: () =>
-            asyncEvents({ kind: "task", id: "task-start-abort", status: { state: "submitted" } }),
+            asyncEvents(taskEvent("task-start-abort", { state: TaskState.TASK_STATE_SUBMITTED })),
           cancelTask: mockCancelTask,
         }),
       };
@@ -388,7 +394,9 @@ describe("makeStartTool", () => {
     await h({ instruction: "run" });
     abortController.abort();
 
-    expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-start-abort" });
+    expect(mockCancelTask).toHaveBeenCalledWith(
+      CancelTaskRequest.fromJSON({ id: "task-start-abort" }),
+    );
   });
 });
 
@@ -423,24 +431,8 @@ describe("makeAwaitTool", () => {
     const mockResubscribe = vi.fn().mockReturnValue(
       asyncEvents(
         // status-update sets pendingEntry so the following artifact is accumulated
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "done" }],
-            },
-            timestamp: "",
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "done output" }] },
-        },
+        statusEvent(TaskState.TASK_STATE_WORKING, "done"),
+        artifactEvent("final-output", "done output"),
       ),
     );
     vi.mocked(ClientFactory).mockImplementation(function () {
@@ -449,7 +441,7 @@ describe("makeAwaitTool", () => {
       };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
+    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123", tenant: "" }, expect.anything());
     expect(result.structuredContent.result.output).toBe("done output");
     expect(result.content[0].text).toContain("done output");
   });
@@ -466,46 +458,29 @@ describe("makeAwaitTool", () => {
 
   it("resubscribes and collects chunks", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockResubscribe = vi.fn().mockReturnValue(
-      asyncEvents(
-        {
-          kind: "status-update",
-          status: {
-            state: "working",
-            timestamp: "",
-            message: {
-              kind: "message",
-              messageId: "1",
-              role: "agent",
-              parts: [{ kind: "text", text: "working" }],
-            },
-          },
-          final: false,
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "partial result" }] },
-        },
-      ),
-    );
+    const mockResubscribe = vi
+      .fn()
+      .mockReturnValue(
+        asyncEvents(
+          statusEvent(TaskState.TASK_STATE_WORKING, "working"),
+          artifactEvent("final-output", "partial result"),
+        ),
+      );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }),
       };
     } as any);
     const result = await handler({ taskId: "task-123" });
-    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
+    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123", tenant: "" }, expect.anything());
     expect(result.structuredContent.result.output).toBe("partial result");
   });
 
   it("always resubscribes regardless of task state", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockResubscribe = vi.fn().mockReturnValue(
-      asyncEvents({
-        kind: "artifact-update",
-        artifact: { name: "final-output", parts: [{ kind: "text", text: "result" }] },
-      }),
-    );
+    const mockResubscribe = vi
+      .fn()
+      .mockReturnValue(asyncEvents(artifactEvent("final-output", "result")));
     const captured = captureTools(() => makeAwaitTool(AGENT));
     const h = captured[doveAwaitToolName(AGENT)];
     vi.mocked(ClientFactory).mockImplementation(function () {
@@ -514,7 +489,7 @@ describe("makeAwaitTool", () => {
       };
     } as any);
     await h({ taskId: "task-123" });
-    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123" }, expect.anything());
+    expect(mockResubscribe).toHaveBeenCalledWith({ id: "task-123", tenant: "" }, expect.anything());
   });
 
   it("returns task-not-found message on TaskNotFoundError from resubscribeTask", async () => {
@@ -523,8 +498,14 @@ describe("makeAwaitTool", () => {
     const mockResubscribe = vi.fn().mockImplementation(() => {
       throw new TaskNotFoundError("task-123");
     });
+    // A real server 404s the snapshot fallback too when the task is genuinely gone.
+    const mockGetTask = vi.fn().mockRejectedValue(new TaskNotFoundError("task-123"));
     vi.mocked(ClientFactory).mockImplementation(function () {
-      return { createFromUrl: vi.fn().mockResolvedValue({ resubscribeTask: mockResubscribe }) };
+      return {
+        createFromUrl: vi
+          .fn()
+          .mockResolvedValue({ resubscribeTask: mockResubscribe, getTask: mockGetTask }),
+      };
     } as any);
     const result = await handler({ taskId: "task-123" });
     expect(result.content[0].text).toContain("task-123");
@@ -551,28 +532,18 @@ describe("makeAwaitTool", () => {
 
   it("collects tool-call and stream artifacts when stream completes without timeout", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "working" },
-    });
-    const mockResubscribe = vi.fn().mockReturnValue(
-      asyncEvents(
-        {
-          kind: "artifact-update",
-          artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "stream", parts: [{ kind: "text", text: "running tests..." }] },
-        },
-        {
-          kind: "status-update",
-          final: true,
-          status: { state: "completed" },
-        },
-      ),
-    );
+    const mockGetTask = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-123", { state: TaskState.TASK_STATE_WORKING }));
+    const mockResubscribe = vi
+      .fn()
+      .mockReturnValue(
+        asyncEvents(
+          artifactEvent("tool-call", "Bash"),
+          artifactEvent("stream", "running tests..."),
+          statusEvent(TaskState.TASK_STATE_COMPLETED),
+        ),
+      );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi
@@ -587,17 +558,13 @@ describe("makeAwaitTool", () => {
 
   it("still_running structuredContent has correct shape and base message when no progress captured", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "working" },
-    });
+    const mockGetTask = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-123", { state: TaskState.TASK_STATE_WORKING }));
     // Stream resolves with a terminal status-update but no artifacts — empty completion
     const mockResubscribe = vi
       .fn()
-      .mockReturnValue(
-        asyncEvents({ kind: "status-update", final: true, status: { state: "completed" } }),
-      );
+      .mockReturnValue(asyncEvents(statusEvent(TaskState.TASK_STATE_COMPLETED)));
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi
@@ -618,11 +585,9 @@ describe("makeAwaitTool", () => {
 
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     const mockCancelTask = vi.fn().mockResolvedValue({});
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-await-abort",
-      kind: "task",
-      status: { state: "working" },
-    });
+    const mockGetTask = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-await-abort", { state: TaskState.TASK_STATE_WORKING }));
     // Stream that terminates when the internal abort signal fires — avoids dangling generator.
     const mockResubscribe = vi
       .fn()
@@ -651,37 +616,24 @@ describe("makeAwaitTool", () => {
     abortController.abort();
     await resultPromise;
 
-    expect(mockCancelTask).toHaveBeenCalledWith({ id: "task-await-abort" });
+    expect(mockCancelTask).toHaveBeenCalledWith(
+      CancelTaskRequest.fromJSON({ id: "task-await-abort" }),
+    );
   });
 
   it("does not include status-update text in the collected result", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "working" },
-    });
-    const mockResubscribe = vi.fn().mockReturnValue(
-      asyncEvents(
-        {
-          kind: "status-update",
-          final: false,
-          status: {
-            state: "working",
-            message: {
-              kind: "message",
-              messageId: "msg-1",
-              role: "agent",
-              parts: [{ kind: "text", text: "progress noise" }],
-            },
-          },
-        },
-        {
-          kind: "artifact-update",
-          artifact: { name: "final-output", parts: [{ kind: "text", text: "actual result" }] },
-        },
-      ),
-    );
+    const mockGetTask = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-123", { state: TaskState.TASK_STATE_WORKING }));
+    const mockResubscribe = vi
+      .fn()
+      .mockReturnValue(
+        asyncEvents(
+          statusEvent(TaskState.TASK_STATE_WORKING, "progress noise"),
+          artifactEvent("final-output", "actual result"),
+        ),
+      );
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi
@@ -704,17 +656,12 @@ describe("makeAwaitTool", () => {
 
   it("works without getSessionId (no error thrown)", async () => {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
-    const mockGetTask = vi.fn().mockResolvedValue({
-      id: "task-123",
-      kind: "task",
-      status: { state: "working" },
-    });
-    const mockResubscribe = vi.fn().mockReturnValue(
-      asyncEvents({
-        kind: "artifact-update",
-        artifact: { name: "tool-call", parts: [{ kind: "text", text: "Bash" }] },
-      }),
-    );
+    const mockGetTask = vi
+      .fn()
+      .mockResolvedValue(taskResult("task-123", { state: TaskState.TASK_STATE_WORKING }));
+    const mockResubscribe = vi
+      .fn()
+      .mockReturnValue(asyncEvents(artifactEvent("tool-call", "Bash")));
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi
@@ -738,29 +685,15 @@ describe("makeAwaitTool — group-done detection", () => {
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
-          resubscribeTask: vi.fn().mockReturnValue(
-            asyncEvents(
-              {
-                kind: "status-update",
-                status: {
-                  state: "working",
-                  message: {
-                    kind: "message",
-                    messageId: "1",
-                    role: "agent",
-                    parts: [{ kind: "text", text: "done" }],
-                  },
-                  timestamp: "",
-                },
-                final: false,
-              },
-              {
-                kind: "artifact-update",
-                artifact: { name: "final-output", parts: [{ kind: "text", text: output }] },
-              },
-              { kind: "status-update", status: { state: "completed", timestamp: "" }, final: true },
+          resubscribeTask: vi
+            .fn()
+            .mockReturnValue(
+              asyncEvents(
+                statusEvent(TaskState.TASK_STATE_WORKING, "done"),
+                artifactEvent("final-output", output),
+                statusEvent(TaskState.TASK_STATE_COMPLETED),
+              ),
             ),
-          ),
         }),
       };
     } as any);
@@ -827,12 +760,12 @@ describe("makeStartGroupTool", () => {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
           sendMessageStream: vi.fn((_req: unknown) =>
-            asyncEvents({
-              kind: "task",
-              id: "task-grp-1",
-              contextId: "ctx-grp-1",
-              status: { state: "submitted" },
-            }),
+            asyncEvents(
+              taskEvent("task-grp-1", {
+                contextId: "ctx-grp-1",
+                state: TaskState.TASK_STATE_SUBMITTED,
+              }),
+            ),
           ),
         }),
       };
@@ -1050,9 +983,10 @@ describe("makeStartGroupTool", () => {
     for (const factoryCall of factoryCalls) {
       const client = await factoryCall.value.createFromUrl.mock.results[0].value;
       for (const call of client.sendMessageStream.mock.calls) {
-        const parts = call[0].message.parts as { kind: string; text?: string }[];
-        const text = parts.map((p) => p.text ?? "").join("");
-        messageTexts.push(text);
+        const parts = call[0].message.parts as Part[];
+        messageTexts.push(
+          parts.map((p) => (p.content?.$case === "text" ? p.content.value : "")).join(""),
+        );
       }
     }
     expect(messageTexts.some((t) => t.includes("investigate logs"))).toBe(true);
@@ -1327,20 +1261,16 @@ describe("makeStartGroupTool", () => {
 // ─── makeAwaitTool — group agent_status relay ─────────────────────────────────
 
 describe("makeAwaitTool — group agent_status relay", () => {
-  function mockCompletedAwait(state: "completed" | "failed" = "completed") {
+  function mockCompletedAwait(state: TaskState = TaskState.TASK_STATE_COMPLETED) {
     vi.mocked(readPortsManifest).mockReturnValue({ test_agent: 51001 } as any);
     vi.mocked(ClientFactory).mockImplementation(function () {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
-          resubscribeTask: vi.fn().mockReturnValue(
-            asyncEvents(
-              {
-                kind: "artifact-update",
-                artifact: { name: "final-output", parts: [{ kind: "text", text: "done" }] },
-              },
-              { kind: "status-update", status: { state, timestamp: "" }, final: true },
+          resubscribeTask: vi
+            .fn()
+            .mockReturnValue(
+              asyncEvents(artifactEvent("final-output", "done"), statusEvent(state)),
             ),
-          ),
         }),
       };
     } as any);
@@ -1353,7 +1283,7 @@ describe("makeAwaitTool — group agent_status relay", () => {
   });
 
   it("publishes agent_status:completed to groupContextId on success", async () => {
-    mockCompletedAwait("completed");
+    mockCompletedAwait(TaskState.TASK_STATE_COMPLETED);
     const { groupMemberCounters } = await import("@/lib/group-member-counter");
     groupMemberCounters.set("grp-1", { started: 1, completed: 0 });
     const captured = captureTools(() => makeAwaitTool(AGENT));
@@ -1366,7 +1296,7 @@ describe("makeAwaitTool — group agent_status relay", () => {
   });
 
   it("publishes agent_status:failed to groupContextId on task failure", async () => {
-    mockCompletedAwait("failed");
+    mockCompletedAwait(TaskState.TASK_STATE_FAILED);
     const { groupMemberCounters } = await import("@/lib/group-member-counter");
     groupMemberCounters.set("grp-1", { started: 1, completed: 0 });
     const captured = captureTools(() => makeAwaitTool(AGENT));
@@ -1379,7 +1309,7 @@ describe("makeAwaitTool — group agent_status relay", () => {
   });
 
   it("does not publish agent_status when groupContextId is omitted", async () => {
-    mockCompletedAwait("completed");
+    mockCompletedAwait(TaskState.TASK_STATE_COMPLETED);
     const captured = captureTools(() => makeAwaitTool(AGENT));
     const h = captured[doveAwaitToolName(AGENT)];
     await h({ taskId: "task-1", timeoutMs: 10000 });
@@ -1400,7 +1330,7 @@ describe("makeStartTool — group context status", () => {
       return {
         createFromUrl: vi.fn().mockResolvedValue({
           sendMessageStream: () =>
-            asyncEvents({ kind: "task", id: "task-start-grp", status: { state: "submitted" } }),
+            asyncEvents(taskEvent("task-start-grp", { state: TaskState.TASK_STATE_SUBMITTED })),
         }),
       };
     } as any);

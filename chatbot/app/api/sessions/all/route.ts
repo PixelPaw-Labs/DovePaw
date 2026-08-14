@@ -5,6 +5,7 @@ import { deletedSessionIds } from "@/lib/deleted-session-ids";
 import { restoreAgentWorkspace } from "@/a2a/lib/workspace";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { createAgentClient, resolveAgentPort } from "@/lib/a2a-client";
+import { CancelTaskRequest } from "@a2a-js/sdk";
 
 export async function DELETE() {
   // Mark every running session as deleted so their finally-blocks skip re-saving rows.
@@ -31,7 +32,7 @@ export async function DELETE() {
         if (port === null) return;
         try {
           const client = await createAgentClient(port);
-          await client.cancelTask({ id });
+          await client.cancelTask(CancelTaskRequest.fromJSON({ id }));
         } catch {
           /* server unreachable or task already done — best-effort */
         }
