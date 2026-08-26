@@ -31,9 +31,8 @@ export async function fetchSessionDetail(url: string, agentId: AgentId) {
   const detail = sessionDetailResponseSchema.parse(await (await fetch(url)).json());
   return {
     ...detail,
-    messages: detail.messages.map(
-      (m): ChatMessage =>
-        m.role === "assistant" ? Object.assign({}, m, { agentId }) : (m as ChatMessage),
+    messages: detail.messages.map((m): ChatMessage =>
+      m.role === "assistant" ? Object.assign({}, m, { agentId }) : (m as ChatMessage),
     ),
   };
 }

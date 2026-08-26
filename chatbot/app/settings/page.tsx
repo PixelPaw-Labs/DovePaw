@@ -18,9 +18,10 @@ export default async function SettingsPage() {
   const scheduledAgentEntries = permanentEntries.filter((a) => a.schedulingEnabled !== false);
   const initialAgentRepos: Record<string, string[]> = Object.fromEntries(
     await Promise.all(
-      permanentEntries.map(
-        async (a): Promise<[string, string[]]> => [a.name, (await readAgentSettings(a.name)).repos],
-      ),
+      permanentEntries.map(async (a): Promise<[string, string[]]> => [
+        a.name,
+        (await readAgentSettings(a.name)).repos,
+      ]),
     ),
   );
 

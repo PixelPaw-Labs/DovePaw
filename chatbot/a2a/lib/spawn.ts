@@ -215,14 +215,12 @@ export async function awaitScript(runId: string, timeoutMs = 0): Promise<AwaitSc
   const timeoutResult = Symbol("timeout");
   let timerId: ReturnType<typeof setTimeout>;
   const result = await Promise.race([
-    state.promise.then(
-      (output): ScriptCompletedContent => ({
-        status: "completed",
-        runId,
-        output,
-        durationMs: Date.now() - startTime,
-      }),
-    ),
+    state.promise.then((output): ScriptCompletedContent => ({
+      status: "completed",
+      runId,
+      output,
+      durationMs: Date.now() - startTime,
+    })),
     new Promise<typeof timeoutResult>((resolve) => {
       timerId = setTimeout(() => resolve(timeoutResult), timeoutMs || SCRIPT_POLL_TIMEOUT_MS);
     }),
