@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
-const root = import.meta.dirname;
+// The repo root. Not `import.meta.dirname` — Next evaluates this config from the
+// project directory passed to `next build/dev` (chatbot/), so that would resolve
+// one level too deep and point `@@` at chatbot/ instead of the repo root.
+// cwd is safe here: Next only finds this file at all when run from the repo root.
+const root = process.cwd();
 
 /** Minimal webpack config shape covering the fields this file touches. */
 interface WebpackConfig {
@@ -24,6 +28,10 @@ const nextConfig: NextConfig = {
     "better-sqlite3",
   ],
   turbopack: {
+    // Pin the workspace root. Without this Next walks up past the repo and can
+    // select an unrelated lockfile higher in the filesystem, which breaks
+    // resolution of devDependencies such as typescript during the build.
+    root,
     resolveAlias: {
       "@@": root,
     },
