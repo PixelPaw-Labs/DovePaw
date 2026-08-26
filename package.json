@@ -72,7 +72,7 @@
     "elkjs": "^0.12.0",
     "embla-carousel-react": "^8.6.0",
     "express": "^5.2.1",
-    "lucide-react": "^1.22.0",
+    "lucide-react": "^1.33.0",
     "media-chrome": "^4.19.2",
     "motion": "^13.1.1",
     "nanoid": "^6.0.1",
