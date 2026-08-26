@@ -125,17 +125,17 @@ case "$CMD" in
     RESP=$(curl -s --max-time 5 -X POST "\${BASE}/api/v1/search/find" \\
       -H "X-OpenViking-Agent: \${AGENT_ID}" \\
       -H "Content-Type: application/json" \\
-      -d "\$PAYLOAD" 2>/dev/null)
-    [ -n "\$RESP" ] && echo "\$RESP"
+      -d "$PAYLOAD" 2>/dev/null)
+    [ -n "$RESP" ] && echo "$RESP"
     ;;
   save)
     SID_RESP=$(curl -s --max-time 5 -X POST "\${BASE}/api/v1/sessions" \\
       -H "X-OpenViking-Agent: \${AGENT_ID}" \\
       -H "Content-Type: application/json" \\
       -d '{}' 2>/dev/null)
-    [ -z "\$SID_RESP" ] && exit 1
-    SID=$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['result']['session_id'])" "\$SID_RESP" 2>/dev/null)
-    [ -z "\$SID" ] && exit 1
+    [ -z "$SID_RESP" ] && exit 1
+    SID=$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['result']['session_id'])" "$SID_RESP" 2>/dev/null)
+    [ -z "$SID" ] && exit 1
     python3 -c "import json,sys; print(json.dumps({'role':'user','content':sys.argv[1]}))" "\${*}" | \\
     curl -s --max-time 5 -X POST "\${BASE}/api/v1/sessions/\${SID}/messages" \\
       -H "X-OpenViking-Agent: \${AGENT_ID}" \\
