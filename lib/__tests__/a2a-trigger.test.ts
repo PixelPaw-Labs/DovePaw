@@ -85,7 +85,7 @@ function messageEvent() {
 describe("triggerAgent", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns 'completed' when final status-update is completed", async () => {
+  it("returns TASK_STATE_COMPLETED when the final status-update is completed", async () => {
     mockSendMessageStream.mockReturnValue(
       makeStream([
         taskEvent(),
@@ -93,19 +93,19 @@ describe("triggerAgent", () => {
         statusEvent(TaskState.TASK_STATE_COMPLETED),
       ]),
     );
-    expect(await triggerAgent(12345, "run")).toBe("completed");
+    expect(await triggerAgent(12345, "run")).toBe(TaskState.TASK_STATE_COMPLETED);
   });
 
-  it("returns 'failed' when final status-update is failed", async () => {
+  it("returns TASK_STATE_FAILED when the final status-update is failed", async () => {
     mockSendMessageStream.mockReturnValue(
       makeStream([taskEvent(), statusEvent(TaskState.TASK_STATE_FAILED)]),
     );
-    expect(await triggerAgent(12345, "run")).toBe("failed");
+    expect(await triggerAgent(12345, "run")).toBe(TaskState.TASK_STATE_FAILED);
   });
 
-  it("returns 'unknown' when stream has no task event as first event", async () => {
+  it("returns TASK_STATE_UNSPECIFIED when the stream reports no status-update", async () => {
     mockSendMessageStream.mockReturnValue(makeStream([messageEvent()]));
-    expect(await triggerAgent(12345, "run")).toBe("unknown");
+    expect(await triggerAgent(12345, "run")).toBe(TaskState.TASK_STATE_UNSPECIFIED);
   });
 
   it("passes contextId in the message when provided", async () => {
