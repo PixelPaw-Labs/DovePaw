@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { z } from "zod";
 import { PROCESSING_FILE } from "@/lib/paths";
 import { readPortsManifest } from "@/a2a/lib/ports-manifest";
+import { probeAgentCard } from "@@/lib/a2a-client";
 import { getSchedulerStatuses } from "@/lib/agent-scheduler";
 import type { AgentStatus, StatusMessage } from "@/a2a/heartbeat-types";
 
@@ -21,19 +22,8 @@ const INTERVAL_MS = 10_000;
 const PING_TIMEOUT_MS = 5_000;
 
 async function pingAgent(port: number): Promise<Pick<AgentStatus, "online" | "latency">> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
-  const t0 = Date.now();
-  try {
-    const res = await fetch(`http://localhost:${port}/.well-known/agent-card.json`, {
-      signal: controller.signal,
-    });
-    return { online: res.ok, latency: Date.now() - t0 };
-  } catch {
-    return { online: false, latency: null };
-  } finally {
-    clearTimeout(timer);
-  }
+  const { ok, latencyMs } = await probeAgentCard(port, PING_TIMEOUT_MS);
+  return { online: ok, latency: latencyMs };
 }
 
 const processingStateSchema = z.record(

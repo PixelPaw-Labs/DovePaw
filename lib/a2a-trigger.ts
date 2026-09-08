@@ -16,7 +16,8 @@
  *
  * Exit codes:
  *   0 — task completed successfully
- *   1 — task failed, canceled, or server unavailable
+ *   1 — task failed or canceled
+ *   2 — the agent never ran: no A2A server answering on the resolved port
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -24,13 +25,22 @@ import { consola } from "consola";
 import { z } from "zod";
 import { scheduledJobSchema, type ScheduledJob } from "./agents-config-schemas";
 import { TaskState, taskStateToJSON } from "@a2a-js/sdk";
-import { startAgentStream } from "./a2a-client";
+import { probeAgentCard, startAgentStream } from "./a2a-client";
 import { agentDefinitionFile, portsFile } from "./paths";
 import { scheduler } from "./scheduler";
 
 const agentFileSchema = z.object({ scheduledJobs: z.array(scheduledJobSchema).optional() });
 
 const PORTS_FILE = portsFile(Number(process.env.DOVEPAW_PORT ?? "7473"));
+
+/**
+ * A scheduled job can fire while DovePaw is still booting — after a reboot, or
+ * when the Mac wakes from sleep and launchd immediately runs the missed job. A
+ * bounded wait rides that out instead of losing the run; anything longer means
+ * DovePaw simply is not running, which no amount of retrying will fix.
+ */
+const PROBE_ATTEMPTS = 6;
+const PROBE_RETRY_MS = 20_000;
 
 /**
  * Trigger an agent using sendMessageStream so the session is registered via the
@@ -58,6 +68,34 @@ export async function triggerAgent(
     if (state !== undefined) finalState = state;
   }
   return finalState;
+}
+
+/**
+ * Polls the agent card until the A2A server on `port` answers. Returns true as
+ * soon as it does, or false once every attempt has failed.
+ *
+ * The ports manifest is only rewritten when the A2A servers start, so a port
+ * read from it can be hours stale — pointing at a port nothing is listening on.
+ * Probing first turns that into one clear log line instead of an undici stack
+ * trace from deep inside the stream.
+ */
+export async function waitForAgentServer(
+  port: number,
+  attempts = PROBE_ATTEMPTS,
+  retryMs = PROBE_RETRY_MS,
+): Promise<boolean> {
+  /* oxlint-disable eslint/no-await-in-loop -- retries are inherently sequential: probe, then wait, then probe again */
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    if ((await probeAgentCard(port)).ok) return true;
+    if (attempt < attempts) {
+      consola.warn(
+        `[a2a-trigger] No A2A server on port ${port} — retrying in ${Math.round(retryMs / 1000)}s (${attempt}/${attempts - 1})`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryMs));
+    }
+  }
+  /* oxlint-enable eslint/no-await-in-loop */
+  return false;
 }
 
 /** Returns the numeric port for `manifestKey` from a parsed ports manifest, or null if absent/wrong type. */
@@ -118,6 +156,15 @@ async function main(): Promise<void> {
   if (port === null) {
     consola.error(`Agent "${manifestKey}" not found in ports manifest`);
     process.exit(1);
+  }
+
+  if (!(await waitForAgentServer(port))) {
+    const writtenAt = typeof ports.updatedAt === "string" ? ports.updatedAt : "unknown";
+    consola.error(
+      `[a2a-trigger] "${manifestKey}" did not run — nothing is answering on port ${port}. ` +
+        `DovePaw is not running, or the ports manifest is stale (last written ${writtenAt}).`,
+    );
+    process.exit(2);
   }
 
   let instruction = "";

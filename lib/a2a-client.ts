@@ -2,6 +2,7 @@
  * Low-level A2A streaming client helpers — no chatbot dependencies.
  * Shared by lib/a2a-trigger.ts and chatbot/lib/a2a-client.ts.
  *
+ *   probeAgentCard     — reachability check against an agent's card endpoint
  *   createAgentClient  — create A2A Client for a port
  *   startAgentStream   — open sendMessageStream, extract taskId, wire abort
  */
@@ -10,7 +11,7 @@ import { Agent, setGlobalDispatcher } from "undici";
 import { ClientFactory } from "@a2a-js/sdk/client";
 import type { Client } from "@a2a-js/sdk/client";
 import { randomUUID } from "node:crypto";
-import { CancelTaskRequest, SendMessageRequest } from "@a2a-js/sdk";
+import { AGENT_CARD_PATH, CancelTaskRequest, SendMessageRequest } from "@a2a-js/sdk";
 import type { StreamResponse } from "@a2a-js/sdk";
 
 /**
@@ -34,6 +35,33 @@ export type AgentStreamHandle = {
   contextId: string;
   stream: AsyncGenerator<A2AStreamEvent, void, undefined>;
 };
+
+/**
+ * Probes an agent's card endpoint to see whether its A2A server is actually
+ * answering on `port`. The ports manifest is only rewritten when the servers
+ * start, so a resolved port proves nothing about whether anything is listening
+ * — callers that must not act on a stale manifest should probe first.
+ *
+ * Never throws: an unreachable port resolves to `{ ok: false, latencyMs: null }`.
+ */
+export async function probeAgentCard(
+  port: number,
+  timeoutMs = 5_000,
+): Promise<{ ok: boolean; latencyMs: number | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
+  try {
+    const res = await fetch(`http://localhost:${port}/${AGENT_CARD_PATH}`, {
+      signal: controller.signal,
+    });
+    return { ok: res.ok, latencyMs: Date.now() - startedAt };
+  } catch {
+    return { ok: false, latencyMs: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Create A2A client for the given port. Throws on connection failure. */
 export async function createAgentClient(port: number): Promise<Client> {

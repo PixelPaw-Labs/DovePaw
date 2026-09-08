@@ -40,7 +40,13 @@ vi.mock("../paths", () => ({
 }));
 
 import { Message, Role, TaskState, roleToJSON } from "@a2a-js/sdk";
-import { triggerAgent, resolvePort, readJobConfig, cleanupOnetimeJob } from "../a2a-trigger.js";
+import {
+  triggerAgent,
+  resolvePort,
+  readJobConfig,
+  cleanupOnetimeJob,
+  waitForAgentServer,
+} from "../a2a-trigger.js";
 
 function taskEvent(contextId = "ctx-1") {
   return {
@@ -125,6 +131,62 @@ describe("triggerAgent", () => {
     const [params] = mockSendMessageStream.mock.calls[0];
     // v1.0's Message requires contextId, so an absent context is the empty string.
     expect(params.message.contextId).toBe("");
+  });
+});
+
+// ─── waitForAgentServer ───────────────────────────────────────────────────────
+
+describe("waitForAgentServer", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("returns true on the first probe when the server is already up", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await waitForAgentServer(63198, 6, 0)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns true once a later probe succeeds — a booting server does not lose the run", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("fetch failed"))
+      .mockRejectedValueOnce(new Error("fetch failed"))
+      .mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await waitForAgentServer(63198, 6, 0)).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns false after exhausting every attempt when nothing ever answers", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("fetch failed"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await waitForAgentServer(59901, 4, 0)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("probes exactly once when attempts is 1", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("fetch failed"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    expect(await waitForAgentServer(59901, 1, 0)).toBe(false);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits retryMs between failed probes", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("fetch failed"))
+      .mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const t0 = Date.now();
+    await waitForAgentServer(63198, 3, 40);
+
+    expect(Date.now() - t0).toBeGreaterThanOrEqual(35);
   });
 });
 
