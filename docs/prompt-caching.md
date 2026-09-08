@@ -37,14 +37,14 @@ so the only lever DovePaw has is **prefix stability**.
 
 ## Where DovePaw's prefix comes from
 
-Both the `tools` block and the `system` block are built per request in
-`chatbot/app/api/chat/route.ts`, and both iterate the **same agent list** returned by
-`readAgentsConfig()`:
+Both the `tools` block and the `system` block are built per request, and both iterate the
+**same agent list** returned by `readAgentsConfig()`:
 
-- **Tools** — `route.ts` maps every agent into its `ask_/start_/await_` trio
-  (`agents.flatMap(...)`). The trio's order follows the agent list order.
-- **System prompt** — `buildSystemPrompt()` renders the `<agents>` block by mapping over
-  the same list, and interpolates the live `{agentCount}`.
+- **Tools** — `chatbot/app/api/chat/route.ts` maps every agent into its `ask_/start_/await_`
+  trio (`agents.flatMap(...)`). The trio's order follows the agent list order.
+- **System prompt** — `buildOrchestratorPrompt()` in `chatbot/lib/orchestrator-agent.ts`
+  renders the `<agents>` block by mapping over the same list, and interpolates the live
+  `{agentCount}`.
 
 So the agent list order feeds **two** prefix regions at once. If that order is unstable,
 the prefix changes even when nothing about the roster actually changed — a needless cache
@@ -76,7 +76,7 @@ contractually stable. With the sort, an unchanged roster produces a byte-identic
 ### 2. A single system-prompt string
 
 The system prompt is passed as one preset with a single `append` string
-(`route.ts`, `systemPrompt: { type: "preset", preset: "claude_code", append: ... }`).
+(`chatbot/lib/orchestrator-agent.ts`, `systemPrompt: { type: "preset", preset: "claude_code", append: ... }`).
 Keep it one composed string. Do **not** split it into multiple `system` blocks — the
 SDK's auto-breakpoint logic places `cache_control` per block and can trip the
 4-breakpoint limit, surfacing as a `400` about `cache_control` blocks

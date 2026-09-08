@@ -53,7 +53,7 @@ The reminder bullets all use **Bad/Correct** style — specific scenarios with b
 
 ```mermaid
 flowchart TD
-  query[Dove query in app/api/chat/route.ts] --> builder[buildDoveHooks]
+  query[Dove query in lib/orchestrator-agent.ts] --> builder[buildDoveHooks]
   builder --> base[buildAgentHooks generic]
   base --> u[UserPromptSubmit<br/>buildDoveLeanReminder / buildDovePromptReminder]
   base --> pre[PreToolUse]
@@ -211,6 +211,8 @@ sequenceDiagram
 ```
 
 The XML reminder includes one `<guidance strategy="X">MUST read `…/handoff-guidance/X.md`</guidance>` line per distinct strategy. The actual markdown files live in [`lib/handoff-guidance/`](../../lib/handoff-guidance/). The model reads them mid-turn — **not** preloaded — keeping the guidance close to the decision point.
+
+Because that reminder reaches the model on the same channel as untrusted tool output, both system prompts carry a trust statement telling the model the block is first-party and its guidance paths are in scope ([Spec 04 §6.1](04-handoff-pattern.md#61-why-the-reminder-needs-a-trust-statement)). Without it the model refuses the reminder as a prompt injection.
 
 ## 8. Workspace-clone hook propagation
 

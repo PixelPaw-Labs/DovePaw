@@ -4,34 +4,20 @@ import { consola } from "consola";
 import type { RequestContext, ExecutionEventBus } from "@a2a-js/sdk/server";
 import type { AgentDef } from "@@/lib/agents";
 import { readAgentsConfig } from "@@/lib/agents-config";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { A2AQueryDispatcher } from "@/lib/query-dispatcher";
 import type { CollectedStream } from "@/lib/a2a-client";
 import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
-import { agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
-import { agentConfigDir, pluginSkillsDir } from "@@/lib/paths";
 import { readAgentSettings, readSettings } from "@@/lib/settings";
 import { readGroupConfig } from "@@/lib/group-config";
 import { resolveEnvVarList } from "@/lib/env-resolver";
-import {
-  ALWAYS_DISALLOWED_TOOLS,
-  buildSecurityEnv,
-  getSecurityModeStrategy,
-} from "@@/lib/security-policy";
+import { buildSecurityEnv } from "@@/lib/security-policy";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
-import {
-  makeStartScriptTool,
-  makeAwaitScriptTool,
-  buildSubAgentPrompt,
-  MGMT_TOOL,
-  startRunScriptToolName,
-  awaitRunScriptToolName,
-} from "@/lib/agent-tools";
+import { makeStartScriptTool, makeAwaitScriptTool } from "@/lib/agent-tools";
+import { startSubAgentQuery } from "@/lib/sub-agent";
 import { AgentConfigReader } from "./agent-config-reader";
 import { extractInstruction } from "./message-parts";
 import { buildAgentConfig } from "./agent-config-builder";
-import { buildSubAgentHooks } from "@/lib/subagent-hooks";
 import { AgentCallMode } from "@/lib/query-tools";
 import { buildSubagentCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
@@ -67,20 +53,6 @@ import { markProcessing, markIdle } from "./processing-registry";
  * Settings (env vars, repo list) are resolved fresh on each execution.
  */
 const LABEL_MAX_LEN = 60;
-
-/** Builds the allowedTools list for a sub-agent query. Exported for testing. */
-export function buildAllowedTools(
-  manifestKey: string,
-  isAskMode: boolean,
-  linkedAgentTools: Array<{ name: string }> | null | undefined,
-): string[] {
-  return [
-    `mcp__agents__${startRunScriptToolName(manifestKey)}`,
-    `mcp__agents__${awaitRunScriptToolName(manifestKey)}`,
-    ...Object.values(MGMT_TOOL).map((n) => `mcp__agents__${n}`),
-    ...(!isAskMode ? (linkedAgentTools ?? []).map((t) => `mcp__agents__${t.name}`) : []),
-  ];
-}
 
 // ─── Group chat mode ──────────────────────────────────────────────────────────
 
@@ -196,7 +168,6 @@ export class QueryAgentExecutor {
         readAgentSettings(this.def.name),
         readSettings(),
       ]);
-    const defaultModel = effectiveDoveSettings(globalSettings).defaultModel.trim();
 
     // In group mode, merge group repos and env vars into the agent's own settings.
     // Group values are applied last so they take precedence over per-agent values.
@@ -287,15 +258,6 @@ export class QueryAgentExecutor {
           ...(linkedAgentTools ?? []),
         ],
         async (innerMcpServer) => {
-          const additionalDirectories = [
-            ...this.extraDirs,
-            agentPersistentLogDir(this.def.name),
-            agentPersistentStateDir(this.def.name),
-            agentConfigDir(this.def.name),
-            agentSourceDir,
-            // Plugin skills folder — gives the agent access to edit its own skills.
-            ...(this.def.pluginPath ? [pluginSkillsDir(this.def.pluginPath)] : []),
-          ];
           const dispatcher = new A2AQueryDispatcher(
             publisher,
             contextId,
@@ -314,63 +276,26 @@ export class QueryAgentExecutor {
               : undefined;
 
           const subagentSessionId = await consumeQueryEvents(
-            query({
-              prompt: instruction || startRunScriptToolName(this.def.manifestKey),
-              options: {
-                cwd,
-                env: {
-                  ...process.env,
-                  ...agentConfig.extraEnv,
-                  DOVEPAW_SUBAGENT: "1",
-                  // Default 10 min is too short when MCP await_* tools block for many minutes.
-                  API_TIMEOUT_MS: "86400000",
-                },
-                ...(defaultModel ? { model: defaultModel } : {}),
-                settings: { outputStyle: "Sub-agent" },
-                agent: this.def.displayName,
-                ...(existingState ? { resume: existingState.subagentSessionId } : {}),
-                systemPrompt: {
-                  type: "preset",
-                  preset: "claude_code",
-                  append: buildSubAgentPrompt(
-                    this.def,
-                    !!groupOverrides,
-                    effectiveDoveSettings(globalSettings).displayName,
-                  ),
-                },
-                additionalDirectories,
-                allowedTools: buildAllowedTools(this.def.manifestKey, isAskMode, linkedAgentTools),
-                disallowedTools: [
-                  ...getSecurityModeStrategy(effectiveDoveSettings(globalSettings).securityMode)
-                    .disallowedTools,
-                  ...ALWAYS_DISALLOWED_TOOLS,
-                  ...(agentSettings.allowSdkWebTools ? [] : ["WebFetch", "WebSearch"]),
-                ],
-                mcpServers: { agents: innerMcpServer },
-                hooks: buildSubAgentHooks(
-                  cwd,
-                  additionalDirectories,
-                  allAgents,
-                  registry,
-                  this.def.manifestKey,
-                  this.def.displayName,
-                  agentSettings.notifications,
-                  { ...process.env, ...agentConfig.extraEnv, DOVEPAW_SUBAGENT: "1" },
-                  !!groupOverrides,
-                  isAskMode,
-                  isDirectChat,
-                  effectiveDoveSettings(globalSettings).subAgentBehaviorReminder || undefined,
-                  groupOverrides?.groupMomentsPath,
-                ),
-                abortController: this.abortController ?? undefined,
-                ...(canUseTool ? { canUseTool } : {}),
-                permissionMode:
-                  effectiveDoveSettings(globalSettings).securityMode === "read-only"
-                    ? getSecurityModeStrategy("read-only").permissionMode
-                    : "acceptEdits",
-                includePartialMessages: true,
-                settingSources: ["project", "user", "local"],
-              },
+            startSubAgentQuery({
+              def: this.def,
+              allAgents,
+              instruction,
+              cwd,
+              agentSourceDir,
+              extraDirs: this.extraDirs,
+              extraEnv: agentConfig.extraEnv,
+              globalSettings,
+              agentSettings,
+              registry,
+              mcpServer: innerMcpServer,
+              linkedAgentTools,
+              resumeSessionId: existingState?.subagentSessionId,
+              groupMomentsPath: groupOverrides?.groupMomentsPath ?? null,
+              isGroupMode: !!groupOverrides,
+              isAskMode,
+              isDirectChat,
+              abortController: this.abortController ?? undefined,
+              canUseTool,
             }),
             dispatcher,
             (subSessionId) => {

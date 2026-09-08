@@ -55,7 +55,6 @@ vi.mock("@/lib/memory", async () => {
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import {
-  buildSubAgentPrompt,
   makeAgentMgmtTools,
   makeStartScriptTool,
   startRunScriptToolName,
@@ -64,7 +63,6 @@ import {
 } from "@/lib/agent-tools";
 import { withStartReminder, stripStartReminder } from "@@/lib/subagent-reminder";
 import type { AgentDef } from "@@/lib/agents";
-import { scheduler } from "@@/lib/scheduler";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { startScript } from "@/a2a/lib/spawn";
 import { recloneReposIntoWorkspace } from "@/a2a/lib/workspace";
@@ -116,79 +114,7 @@ function captureToolHandler(
   return makeStartScriptTool(agentWithRepos, config, slugs, signal, onProgress) as any;
 }
 
-// ─── buildSubAgentPrompt ──────────────────────────────────────────────────────
-
-describe("buildSubAgentPrompt", () => {
-  it("opens with the Dove's mice character when no personality is set", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toMatch(/one of Dove's mice/i);
-    expect(prompt).toMatch(/Dove, the orchestrator/i);
-  });
-
-  it("uses the agent personality instead of the mice line when personality is set", () => {
-    const withPersonality: AgentDef = {
-      ...AGENT,
-      personality: "You are a relentless ticket-closer.",
-    };
-    const prompt = buildSubAgentPrompt(withPersonality);
-    expect(prompt).toMatch(/relentless ticket-closer/i);
-    expect(prompt).not.toMatch(/one of Dove's mice/i);
-  });
-
-  it("includes the agent display name as assigned role", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain("Test Agent");
-  });
-
-  it("includes the agent description", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain(AGENT.description);
-  });
-
-  it("does not tell the agent to ask the user to clarify", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).not.toMatch(/ask the user to clarify/i);
-  });
-
-  it("does not include a <reminder> block (injected per-prompt via UserPromptSubmit hook instead)", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).not.toContain("<reminder>");
-  });
-
-  it("includes the agent scheduler label in the managing section", () => {
-    const prompt = buildSubAgentPrompt(AGENT);
-    expect(prompt).toContain(scheduler.agentLabel(AGENT));
-  });
-
-  it("mentions schedule for a scheduled agent and omits on-demand language", () => {
-    const scheduled: AgentDef = {
-      ...AGENT,
-      schedule: { type: "calendar", hour: 0, minute: 0 },
-      schedulingEnabled: true,
-    };
-    const prompt = buildSubAgentPrompt(scheduled);
-    expect(prompt).toMatch(/runs on a schedule/i);
-    expect(prompt).not.toMatch(/on-demand only/i);
-  });
-
-  it("shows on-demand guidance for an agent with no schedule", () => {
-    const prompt = buildSubAgentPrompt(AGENT); // AGENT has no schedule field
-    expect(prompt).toMatch(/on-demand only/i);
-    expect(prompt).not.toMatch(/infer intent before acting/i);
-    expect(prompt).not.toMatch(/runs on a schedule/i);
-  });
-
-  it("shows on-demand guidance when schedulingEnabled is false even if schedule is set", () => {
-    const disabled: AgentDef = {
-      ...AGENT,
-      schedule: { type: "calendar", hour: 0, minute: 0 },
-      schedulingEnabled: false,
-    };
-    const prompt = buildSubAgentPrompt(disabled);
-    expect(prompt).toMatch(/on-demand only/i);
-    expect(prompt).not.toMatch(/infer intent before acting/i);
-  });
-});
+// buildSubAgentPrompt moved to sub-agent.test.ts, alongside the module that owns it.
 
 // ─── makeStartScriptTool ──────────────────────────────────────────────────────
 

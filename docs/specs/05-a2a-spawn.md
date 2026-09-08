@@ -118,7 +118,7 @@ sequenceDiagram
 
 `existingState` decides resume vs fresh — `subagentSessionId` is passed to `query({ resume })` and the workspace dir is reused.
 
-`buildSubAgentPrompt()` produces the inner system prompt — embeds persona, agent's file boundaries, and the per-agent management tool table (install/uninstall/load/unload/status/logs).
+`buildSubAgentPrompt()` in `chatbot/lib/sub-agent.ts` produces the inner system prompt — embeds persona, agent's file boundaries, and the per-agent management tool table (install/uninstall/load/unload/status/logs).
 
 ## 4.1 Full chain — A2A request → agent script's first line
 

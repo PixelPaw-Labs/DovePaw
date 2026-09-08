@@ -159,7 +159,7 @@ sequenceDiagram
 
 ## 8. Group-orchestrator score gate (Spec 01 cross-ref)
 
-The PreToolUse `start_*` gate is registered on Dove **whenever at least one eligible group exists** (`eligibleGroups.length > 0` in `route.ts`) — not only when a particular call happens inside a group session. That means **every** Dove-side `start_*` call in such a workspace must clear the gate, including ones for solo agents.
+The PreToolUse `start_*` gate is registered on Dove **whenever at least one eligible group exists** (`eligibleGroups.length > 0` — computed in `route.ts`, applied in `lib/orchestrator-agent.ts`) — not only when a particular call happens inside a group session. That means **every** Dove-side `start_*` call in such a workspace must clear the gate, including ones for solo agents.
 
 The gate logic (in `buildDoveHooks`, group branch):
 

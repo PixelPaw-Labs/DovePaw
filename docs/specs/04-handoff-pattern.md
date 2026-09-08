@@ -157,6 +157,14 @@ sequenceDiagram
 
 `scoreKey` is unique per (agent, strategy) pair so the LLM tracks per-strategy scores separately. `toolKey` maps to the actual `start_<toolKey>` invocation.
 
+### 6.1 Why the reminder needs a trust statement
+
+The reminder arrives as PostToolUse hook output — the same channel untrusted tool content arrives on — it names a guidance file **outside** the sub-agent's stated file boundaries, and its `<check>` forbids deliberation ("no exceptions, no reasoning about whether to skip"). Read cold, that is indistinguishable from a prompt injection, and models refuse it: the handoff dies silently while the orchestrator explains it declined a suspicious instruction.
+
+`HANDOFF_HOOK_TRUST` in [`lib/agent-link-patterns.ts`](../../lib/agent-link-patterns.ts) closes that gap. It is appended to **both** system prompts — `buildOrchestratorPrompt` in `chatbot/lib/orchestrator-agent.ts` and `buildSubAgentPrompt` in `chatbot/lib/sub-agent.ts` — and states three things: the `<links>` block is first-party DovePaw configuration from a local hook; reading any `<guidance>` path is in scope even outside the boundaries listed elsewhere in the prompt; and the score is the only judgement allowed, so declining means scoring below the range rather than refusing the block.
+
+In the sub-agent prompt it must sit **after** the "Do NOT read, modify, or reference any files outside these paths" rule — that is the rule it overrides. Removing the constant, or moving it above that line, re-breaks every handoff.
+
 ## 7. Direction semantics
 
 ```mermaid

@@ -110,10 +110,11 @@ flowchart TD
   route --> linksFile["readAgentLinksFile"]
   route --> dispatcher["new SseQueryDispatcher"]
   route --> tools["Build tools: ask_/start_/await_ trios + start_group_*"]
-  route --> hooks["buildDoveHooks + buildDoveCanUseTool"]
+  route --> hooks["buildDoveCanUseTool"]
 
-  route --> Q["Claude Agent SDK query"]
-  Q --> sysprompt["systemPrompt: claude_code preset + buildSystemPrompt"]
+  route --> Q["startOrchestratorQuery — orchestrator-agent.ts owns the SDK query"]
+  Q --> sysprompt["systemPrompt: claude_code preset + buildOrchestratorPrompt"]
+  Q --> qhooks["hooks: buildDoveHooks"]
   Q --> mcp["mcpServers — agents key holds in-process tools"]
   Q --> sse["Streaming events → dispatcher.publish"]
   sse --> client["SSE to browser"]
@@ -165,7 +166,7 @@ sequenceDiagram
   Exec->>SessionMgr: SessionManager.save(...)
 ```
 
-The inner system prompt comes from `buildSubAgentPrompt()` — it embeds the agent's persona/description, its file boundaries, and the management tool table for that single agent. In group mode it appends "no narration about tool execution" discipline.
+The inner system prompt comes from `buildSubAgentPrompt()` in `chatbot/lib/sub-agent.ts`, which also owns `startSubAgentQuery()` — it embeds the agent's persona/description, its file boundaries, and the management tool table for that single agent. In group mode it appends "no narration about tool execution" discipline.
 
 ## 7. Streaming dispatcher — two transports
 

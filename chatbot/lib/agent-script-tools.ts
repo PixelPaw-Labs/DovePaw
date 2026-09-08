@@ -1,8 +1,5 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { AgentDef } from "@@/lib/agents";
-import { formatScheduleDisplay } from "@@/lib/agents-config-schemas";
-import { scheduler } from "@@/lib/scheduler";
-import { agentEntryPath, agentPersistentLogDir, agentPersistentStateDir } from "@/lib/paths";
 import { z } from "zod";
 import { startScript, awaitScript } from "@/a2a/lib/spawn";
 import type { AgentConfig } from "@/a2a/lib/agent-config-builder";
@@ -11,7 +8,6 @@ import { getMemoryProvider } from "@/lib/memory";
 import type { PendingRegistry } from "@/lib/pending-registry";
 import { taskRuntime } from "@/lib/task-runtime";
 import type { AgentTaskStateMachine } from "@/lib/agent-task-state";
-import { MGMT_TOOL } from "./agent-mgmt-tools";
 
 // ─── Script run tool name helpers ─────────────────────────────────────────────
 
@@ -158,75 +154,4 @@ export function makeAwaitScriptTool(
   );
 }
 
-// ─── Sub-agent system prompt ───────────────────────────────────────────────────
-
-/** Builds the system prompt appended to the query() sub-agent inside QueryAgentExecutor. */
-export function buildSubAgentPrompt(
-  agent: AgentDef,
-  isGroupMode = false,
-  doveDisplayName?: string,
-): string {
-  const name = doveDisplayName ?? "Dove";
-  const opening =
-    agent.personality ??
-    `You are one of ${name}'s mice — a small, focused agent working on behalf of ${name}, the orchestrator. ${name} delegates tasks to you; your job is to get them done quietly and reliably without second-guessing or over-explaining.`;
-  return `${opening}
-
-Your assigned role: **${agent.displayName}**
-${agent.description}
-
-**When asked about this agent, THOROUGHLY explore and explain:**
-- What it does
-- How it does it (implementation details, not high-level marketing speak)
-- What env vars it needs
-- What inputs it requires
-- What the workflow is
-- When it normally runs: ${formatScheduleDisplay(agent.schedule)}
-- Whether it is already scheduled/active
-- Any other dependencies
-
-${
-  agent.schedule && agent.schedulingEnabled
-    ? `This agent runs on a schedule (${formatScheduleDisplay(agent.schedule)}) and produces output (files, logs, state) during those runs.`
-    : `This agent runs on-demand only — there are no scheduled runs and no past output to look for.`
-}
-
-**Managing this agent:**
-
-Label: \`${scheduler.agentLabel(agent)}\`
-Schedule: ${formatScheduleDisplay(agent.schedule)}
-
-You are responsible for installing and uninstalling ONLY yourself (\`${scheduler.agentLabel(agent)}\`).
-- Install means: build only YOUR TypeScript entry, then activate YOUR scheduler entry — do not touch other agents.
-- Uninstall means: deactivate YOUR scheduler entry and delete its config only — do not touch other agents.
-- Never install or uninstall any agent other than \`${scheduler.agentLabel(agent)}\`.
-
-| Task | Command |
-|---|---|
-| Install (build + load self) | Call the \`${MGMT_TOOL.install}\` MCP tool |
-| Uninstall (unload + delete self) | Call the \`${MGMT_TOOL.uninstall}\` MCP tool |
-| Load | Call the \`${MGMT_TOOL.load}\` MCP tool |
-| Unload | Call the \`${MGMT_TOOL.unload}\` MCP tool |
-| Check status / PID / last exit | Call the \`${MGMT_TOOL.status}\` MCP tool |
-| Read logs | Call the \`${MGMT_TOOL.logs}\` MCP tool |
-${scheduler.configFilePath(scheduler.agentLabel(agent)) ? `| Show config file | Read \`${scheduler.configFilePath(scheduler.agentLabel(agent))}\` using the Read tool |` : ""}
-
-**Your file boundaries — only access YOUR files, never other agents':**
-
-| Resource | Path |
-|---|---|
-${scheduler.configFilePath(scheduler.agentLabel(agent)) ? `| Config | \`${scheduler.configFilePath(scheduler.agentLabel(agent))}\` |` : ""}
-| Source | \`${agentEntryPath(agent.entryPath)}\` |
-| Logs | \`${agentPersistentLogDir(agent.name)}\` |
-| State | \`${agentPersistentStateDir(agent.name)}\` |
-
-Do NOT read, modify, or reference any files outside these paths.
-${
-  isGroupMode
-    ? `
-**Group chat mode — response discipline:**
-
-You are contributing to a shared group conversation. When your script completes, respond with your findings directly — no narration about tool execution. Do not say things like "I've kicked off the run", "waiting on output", "the run completed", or any similar status commentary. Deliver your analysis and conclusions only.`
-    : ""
-}`;
-}
+// The sub-agent system prompt lives in `sub-agent.ts`, alongside the query() call it feeds.

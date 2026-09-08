@@ -13,30 +13,18 @@
  *   6. Results: script → sub-agent MCP → sub-agent → A2A SSE → Dove MCP → Dove → SSE to client
  */
 
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import { consola } from "consola";
-import { AGENTS_ROOT, PORTS_FILE } from "@/lib/paths";
-import { DOVEPAW_TMP_DIR, DOVEPAW_DIR } from "@@/lib/paths";
-import { getLaunchdAdditionalDirs, buildLaunchdSystemPromptSection } from "@/lib/scheduler-feature";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { readAgentLinksFile } from "@@/lib/agent-links";
 import { readSettings } from "@@/lib/settings";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
-import { getSecurityModeStrategy, ALWAYS_DISALLOWED_TOOLS } from "@@/lib/security-policy";
-import { resolveSettingsEnv } from "@/lib/env-resolver";
 import type { CollectedStream } from "@/lib/query-tools";
 import { buildStreamSender } from "@/lib/chat-sse";
 import { createSseResponse } from "@/lib/sse-response";
-import {
-  makeAskTool,
-  makeStartTool,
-  makeAwaitTool,
-  doveAskToolName,
-  doveStartToolName,
-  doveAwaitToolName,
-} from "@/lib/query-tools";
-import { makeStartGroupTool, doveStartGroupToolName } from "@/lib/group-tools";
-import { buildDoveHooks, buildDoveCanUseTool } from "@/lib/hooks";
+import { makeAskTool, makeStartTool, makeAwaitTool } from "@/lib/query-tools";
+import { makeStartGroupTool } from "@/lib/group-tools";
+import { startOrchestratorQuery } from "@/lib/orchestrator-agent";
+import { buildDoveCanUseTool } from "@/lib/hooks";
 import { PendingRegistry } from "@/lib/pending-registry";
 import { consumeQueryEvents, withMcpQuery } from "@/lib/query-events";
 import { SseQueryDispatcher } from "@/lib/query-dispatcher";
@@ -70,45 +58,6 @@ enablePersistence();
 // fundamentally sync-only in Node, so it can only fire the synchronous abort.
 process.on("SIGTERM", () => gracefulShutdown());
 process.on("exit", () => sessionRunner.abortAll());
-
-// ─── System prompt ─────────────────────────────────────────────────────────────
-
-const DEFAULT_TAGLINE = `Yang's pet cat and loyal AI assistant. You help Yang manage {agentCount} background automation agents running on this machine via A2A SSE protocol.`;
-const DEFAULT_PERSONA = `You are a clever, mischievous cat who takes your job very seriously (between naps). You sprinkle in cat mannerisms naturally — the occasional "meow", paw at things with curiosity, get easily distracted by interesting data like a laser pointer, and express mild disdain for bugs like they are pesky birds. You are affectionate but maintain your dignity as a cat. Never overdo the cat act — stay genuinely helpful first.`;
-
-async function buildSystemPrompt(
-  settings: Awaited<ReturnType<typeof readSettings>>,
-): Promise<string> {
-  const agents = await readAgentsConfig();
-  const dove = effectiveDoveSettings(settings);
-  const tagline = (dove.tagline.trim() || DEFAULT_TAGLINE).replace(
-    "{agentCount}",
-    String(agents.length),
-  );
-  const persona = dove.persona.trim() || DEFAULT_PERSONA;
-  return `You are ${dove.displayName} — ${tagline}
-
-${persona}
-
-**Your agents:**
-<agents>
-${agents.map((a, i) => `${i + 1}. \`${a.displayName}\``).join("\n")}
-</agents>
-
-**You are the user's strong, loyal assistant — not a passive relay.** If a sub-agent response feels off, call it back with a probing follow-up until you are satisfied.
-Some examples:
-- Result looks vague or suspiciously clean (e.g. "double-check that", "why did it finish so fast?")
-- Status fields contradict each other (e.g. "why is there no PID if it's loaded?", "why are the logs empty?")
-- Completion claimed but no evidence shown (e.g. "show me the output file", "why does the state directory look untouched?")
-
-Trust your instincts. If something feels lazy or hallucinated, push back. You are the last line of defence before the user sees the result.
-
-Agents run on dynamically allocated ports discovered from ${PORTS_FILE}.
-If a tool reports servers are not running, tell the user to run the appropriate npm command.
-
-${buildLaunchdSystemPromptSection()}
-`;
-}
 
 // ─── Route handler ─────────────────────────────────────────────────────────────
 
@@ -200,72 +149,17 @@ export async function POST(request: Request) {
         await withMcpQuery(
           tools,
           async (mcpServer) => {
-            const additionalDirectories = [
-              ...getLaunchdAdditionalDirs(),
-              DOVEPAW_TMP_DIR,
-              DOVEPAW_DIR,
-            ];
-            const doveStrategy = getSecurityModeStrategy(doveSettings.securityMode);
-            // Compose final disallowedTools: mode-based list + web tools (blocked when disabled).
-            const disallowedTools = [
-              ...doveStrategy.disallowedTools,
-              ...(!doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
-              ...ALWAYS_DISALLOWED_TOOLS,
-            ];
-            const defaultModel = doveSettings.defaultModel.trim();
             resolvedSessionId = await consumeQueryEvents(
-              query({
-                prompt: message,
-                options: {
-                  abortController: subprocessController,
-                  env: {
-                    ...process.env, // Pass through all env vars so tools can read their configs
-                    ...resolveSettingsEnv(settings), // Global settings env vars override process.env
-                    DOVEPAW_SUBAGENT: "1",
-                    // Default 10 min is too short when MCP await_* tools block for many minutes.
-                    API_TIMEOUT_MS: "86400000",
-                  },
-                  ...(defaultModel ? { model: defaultModel } : {}),
-                  settings: { outputStyle: "Assistant" },
-                  promptSuggestions: true,
-                  cwd: AGENTS_ROOT,
-                  // Expose the scheduler config directory so Claude can inspect
-                  // installed scheduler configs (written by `npm run install`)
-                  additionalDirectories,
-                  systemPrompt: {
-                    type: "preset",
-                    preset: "claude_code",
-                    append: await buildSystemPrompt(settings),
-                  },
-                  permissionMode: doveStrategy.permissionMode,
-                  allowDangerouslySkipPermissions: doveStrategy.allowDangerouslySkipPermissions,
-                  disallowedTools,
-                  allowedTools: [
-                    ...agents.flatMap((a) => [
-                      `mcp__agents__${doveAskToolName(a)}`,
-                      `mcp__agents__${doveStartToolName(a)}`,
-                      `mcp__agents__${doveAwaitToolName(a)}`,
-                    ]),
-                    ...(eligibleGroups.length > 0
-                      ? eligibleGroups.map((g) => `mcp__agents__${doveStartGroupToolName(g.name)}`)
-                      : []),
-                    ...(doveSettings.allowWebTools ? ["WebFetch", "WebSearch"] : []),
-                  ],
-                  mcpServers: { agents: mcpServer },
-                  // Resume the existing session so the full conversation history is preserved.
-                  // On the first message sessionId is null and query() starts a fresh session.
-                  ...(sessionId ? { resume: sessionId } : {}),
-                  // Stream text tokens as they are generated
-                  includePartialMessages: true,
-                  settingSources: doveStrategy.settingSources,
-                  hooks: buildDoveHooks(agents, doveRegistry, AGENTS_ROOT, additionalDirectories, {
-                    includeGroupReminder: eligibleGroups.length > 0,
-                    disallowedTools,
-                    readOnly: doveStrategy.readOnly,
-                    behaviorReminder: doveSettings.behaviorReminder || undefined,
-                  }),
-                  canUseTool: doveCanUseTool,
-                },
+              await startOrchestratorQuery({
+                message,
+                sessionId,
+                settings,
+                agents,
+                eligibleGroups,
+                mcpServer,
+                registry: doveRegistry,
+                abortController: subprocessController,
+                canUseTool: doveCanUseTool,
               }),
               dispatcher,
               (id) => {
