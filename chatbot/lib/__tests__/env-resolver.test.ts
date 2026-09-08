@@ -1,12 +1,14 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/keyring", () => ({
-  DOVEPAW_SERVICE: "dovepaw",
+// Partial mock: only the keychain read is faked. The service-name helpers stay
+// real so these tests assert the same strings the settings routes write under.
+vi.mock("@/lib/keyring", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/keyring")>()),
   getSecret: vi.fn(),
 }));
 
-import { getSecret } from "@/lib/keyring";
-import { resolveSettingsEnv } from "@/lib/env-resolver";
+import { getSecret, agentKeychainService, groupKeychainService } from "@/lib/keyring";
+import { resolveEnvVarList, resolveSettingsEnv } from "@/lib/env-resolver";
 import type { GlobalSettings } from "@@/lib/settings-schemas";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -104,9 +106,11 @@ describe("secret env vars", () => {
 
 describe("per-agent env vars", () => {
   it("includes a plain per-agent var", () => {
-    const env = resolveSettingsEnv(makeSettings(), [
-      { id: "1", key: "ZENDESK_SLACK_CHANNELS", value: "support,billing", isSecret: false },
-    ]);
+    const env = resolveSettingsEnv(
+      makeSettings(),
+      [{ id: "1", key: "ZENDESK_SLACK_CHANNELS", value: "support,billing", isSecret: false }],
+      "zendesk-triager",
+    );
     expect(env["ZENDESK_SLACK_CHANNELS"]).toBe("support,billing");
   });
 
@@ -114,23 +118,89 @@ describe("per-agent env vars", () => {
     const settings = makeSettings({
       envVars: [{ id: "1", key: "SLACK_WORKSPACE", value: "global.slack.com", isSecret: false }],
     });
-    const env = resolveSettingsEnv(settings, [
-      { id: "2", key: "SLACK_WORKSPACE", value: "agent.slack.com", isSecret: false },
-    ]);
+    const env = resolveSettingsEnv(
+      settings,
+      [{ id: "2", key: "SLACK_WORKSPACE", value: "agent.slack.com", isSecret: false }],
+      "zendesk-triager",
+    );
     expect(env["SLACK_WORKSPACE"]).toBe("agent.slack.com");
   });
 
   it("per-agent secret var is resolved from keychain", () => {
     vi.mocked(getSecret).mockReturnValue("agent-secret");
-    const env = resolveSettingsEnv(makeSettings(), [
-      { id: "1", key: "AGENT_TOKEN", value: "", isSecret: true },
-    ]);
+    const env = resolveSettingsEnv(
+      makeSettings(),
+      [{ id: "1", key: "AGENT_TOKEN", value: "", isSecret: true }],
+      "memory-dream",
+    );
     expect(env["AGENT_TOKEN"]).toBe("agent-secret");
+  });
+
+  it("reads a per-agent secret from the agent's keychain service, not the global one", () => {
+    vi.mocked(getSecret).mockReturnValue("agent-secret");
+    resolveSettingsEnv(
+      makeSettings(),
+      [{ id: "1", key: "SESSION_API_TOKEN", value: "", isSecret: true }],
+      "memory-dream",
+    );
+    // This is the service the settings route writes under — the two must agree.
+    expect(getSecret).toHaveBeenCalledWith(
+      agentKeychainService("memory-dream"),
+      "SESSION_API_TOKEN",
+    );
+  });
+
+  it("keeps global secrets on the global service even when an agent name is given", () => {
+    vi.mocked(getSecret).mockReturnValue("global-secret");
+    const settings = makeSettings({
+      envVars: [{ id: "1", key: "GLOBAL_TOKEN", value: "", isSecret: true }],
+    });
+    resolveSettingsEnv(settings, [], "memory-dream");
+    expect(getSecret).toHaveBeenCalledWith("dovepaw", "GLOBAL_TOKEN");
+  });
+
+  it("an explicit keychainService still wins for a per-agent var", () => {
+    vi.mocked(getSecret).mockReturnValue("linked-secret");
+    resolveSettingsEnv(
+      makeSettings(),
+      [
+        {
+          id: "1",
+          key: "JIRA_API_TOKEN",
+          value: "",
+          isSecret: true,
+          keychainService: "jira-cli",
+          keychainAccount: "user@example.com",
+        },
+      ],
+      "memory-dream",
+    );
+    expect(getSecret).toHaveBeenCalledWith("jira-cli", "user@example.com");
   });
 
   it("defaults to empty array when agentEnvVars omitted", () => {
     const env = resolveSettingsEnv(makeSettings());
     expect(env).toEqual({});
+  });
+});
+
+// ─── Group env vars ───────────────────────────────────────────────────────────
+
+describe("group env vars", () => {
+  it("reads a group secret from the group's keychain service", () => {
+    vi.mocked(getSecret).mockReturnValue("group-secret");
+    const env = resolveEnvVarList(
+      [{ id: "1", key: "GROUP_TOKEN", value: "", isSecret: true }],
+      groupKeychainService("squad"),
+    );
+    expect(getSecret).toHaveBeenCalledWith(groupKeychainService("squad"), "GROUP_TOKEN");
+    expect(env["GROUP_TOKEN"]).toBe("group-secret");
+  });
+
+  it("falls back to the global service when no scope is given", () => {
+    vi.mocked(getSecret).mockReturnValue("secret");
+    resolveEnvVarList([{ id: "1", key: "LOOSE_TOKEN", value: "", isSecret: true }]);
+    expect(getSecret).toHaveBeenCalledWith("dovepaw", "LOOSE_TOKEN");
   });
 });
 

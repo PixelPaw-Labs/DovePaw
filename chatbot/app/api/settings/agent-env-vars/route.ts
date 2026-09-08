@@ -13,13 +13,9 @@ import {
   isDovepawManaged,
 } from "@@/lib/settings";
 import type { EnvVar } from "@@/lib/settings-schemas";
-import { getSecret, setSecret, deleteSecret } from "@/lib/keyring";
+import { getSecret, setSecret, deleteSecret, agentKeychainService } from "@/lib/keyring";
 import { readAgentsConfig } from "@@/lib/agents-config";
 import { envVarFields, parseBody, buildUpdatedEnvVar } from "@/lib/env-var-routes";
-
-function agentKeychainService(agentName: string) {
-  return `dovepaw-agent-${agentName}`;
-}
 
 function resolveCoords(v: EnvVar, agentName: string) {
   return {

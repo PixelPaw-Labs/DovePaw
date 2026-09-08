@@ -23,7 +23,7 @@ export class AgentConfigReader {
   ): Promise<{ extraEnv: Record<string, string>; repoSlugs: string[] }> {
     const settings = await readSettings();
     const agentSettings = await readAgentSettings(agentName);
-    const extraEnv = resolveSettingsEnv(settings, agentSettings.envVars);
+    const extraEnv = resolveSettingsEnv(settings, agentSettings.envVars, agentName);
     const repoSlugs = agentSettings.repos
       .map((id) => settings.repositories.find((r) => r.id === id))
       .filter((r): r is NonNullable<typeof r> => r !== undefined)

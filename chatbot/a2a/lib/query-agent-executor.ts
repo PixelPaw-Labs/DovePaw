@@ -11,6 +11,7 @@ import { upsertProgressEntry, type ProgressEntry } from "@/lib/progress";
 import { readAgentSettings, readSettings } from "@@/lib/settings";
 import { readGroupConfig } from "@@/lib/group-config";
 import { resolveEnvVarList } from "@/lib/env-resolver";
+import { groupKeychainService } from "@/lib/keyring";
 import { buildSecurityEnv } from "@@/lib/security-policy";
 import { effectiveDoveSettings } from "@@/lib/settings-schemas";
 import { makeStartScriptTool, makeAwaitScriptTool } from "@/lib/agent-tools";
@@ -184,7 +185,10 @@ export class QueryAgentExecutor {
           repoSlugs = [...new Set([...agentRepoSlugs, ...groupRepoSlugs])];
         }
         if (groupConfig.envVars.length > 0) {
-          groupExtraEnv = resolveEnvVarList(groupConfig.envVars);
+          groupExtraEnv = resolveEnvVarList(
+            groupConfig.envVars,
+            groupKeychainService(groupOverrides.groupName),
+          );
         }
       }
     }

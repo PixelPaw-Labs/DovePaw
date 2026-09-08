@@ -8,13 +8,9 @@
 import { z } from "zod";
 import { makeEnvVar, isDovepawManaged } from "@@/lib/settings";
 import type { EnvVar } from "@@/lib/settings-schemas";
-import { getSecret, setSecret, deleteSecret } from "@/lib/keyring";
+import { getSecret, setSecret, deleteSecret, groupKeychainService } from "@/lib/keyring";
 import { readOrCreateGroupConfig, patchGroupConfig } from "@@/lib/group-config";
 import { envVarFields, parseBody, buildUpdatedEnvVar } from "@/lib/env-var-routes";
-
-function groupKeychainService(groupName: string) {
-  return `dovepaw-group-${groupName}`;
-}
 
 function resolveCoords(v: EnvVar, groupName: string) {
   return {
