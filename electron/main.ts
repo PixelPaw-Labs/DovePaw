@@ -36,6 +36,7 @@ import { getAvailablePort } from "../lib/get-available-port";
 import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 import { startBrowserBridge } from "./browser-bridge";
 import { computeLoadFailureMessage } from "./lib/load-error";
+import { nextScriptForMode } from "./lib/next-script";
 import { renderErrorPage } from "./lib/error-page";
 import { teardownTab } from "./lib/tab-teardown";
 import { animate } from "animejs";
@@ -54,6 +55,7 @@ const PORTS_FILE = portsFile(NEXT_PORT);
 const ASSETS_DIR = resolve(__dirname, "../assets");
 const LOGS_DIR = DOVEPAW_LOGS_DIR;
 const NPM_BIN = "npm";
+const NEXT_SCRIPT = nextScriptForMode(process.env.DOVEPAW_MODE);
 const CHATBOT_URL = `http://localhost:${NEXT_PORT}`;
 const SERVICE_NAME = "DovePaw";
 const WINDOW_STATE_FILE = join(DOVEPAW_DIR, "window-state.json");
@@ -321,7 +323,7 @@ async function startOpenViking(): Promise<void> {
 function startNextJs(): void {
   if (nextProcess) return;
 
-  nextProcess = spawn(NPM_BIN, ["run", "chatbot:dev"], {
+  nextProcess = spawn(NPM_BIN, ["run", NEXT_SCRIPT], {
     cwd: REPO_ROOT,
     env: { ...process.env, DOVEPAW_PORT: String(NEXT_PORT) },
     stdio: "pipe",

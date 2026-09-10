@@ -107,7 +107,7 @@ sequenceDiagram
   participant F as ~/.dovepaw/*
 
   U->>E: Launch DovePaw.app
-  E->>N: spawn next start
+  E->>N: spawn chatbot:dev, or chatbot:start when DOVEPAW_MODE=prod
   E->>A: npm run chatbot:servers
   par
     N->>N: instrumentation.ts boot

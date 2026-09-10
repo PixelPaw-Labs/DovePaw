@@ -2,16 +2,24 @@
 set -e
 cd "$(dirname "$0")/.."
 
+MODE=dev
+if [ "$1" = "--prod" ]; then MODE=prod; fi
+
 echo "Deploying agent SDK…"
 npx tsx scripts/setup.ts
+
+if [ "$MODE" = prod ]; then
+  echo "Building chatbot…"
+  npm run chatbot:build
+fi
 
 echo "Compiling…"
 npx tsup --config electron/tsup.config.ts
 
 mkdir -p ~/.dovepaw/logs
-nohup electron electron/.dist/main.cjs > ~/.dovepaw/logs/electron.log 2>&1 &
+DOVEPAW_MODE=$MODE nohup electron electron/.dist/main.cjs > ~/.dovepaw/logs/electron.log 2>&1 &
 ELECTRON_PID=$!
-echo "DovePawA2A launched (PID: $ELECTRON_PID) — logs: ~/.dovepaw/logs/electron.log"
+echo "DovePawA2A launched in $MODE mode (PID: $ELECTRON_PID) — logs: ~/.dovepaw/logs/electron.log"
 
 # Wait for OpenViking port file (written by main.ts after sidecar is ready)
 for i in $(seq 1 40); do

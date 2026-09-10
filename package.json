@@ -26,6 +26,7 @@
     "electron:icons": "python3 scripts/generate-electron-icons.py",
     "electron:compile": "tsup --config electron/tsup.config.ts",
     "electron:dev": "bash scripts/electron-launch.sh",
+    "electron:prod": "bash scripts/electron-launch.sh --prod",
     "electron:build": "npm run electron:compile && electron-builder --config electron-builder.config.ts --mac"
   },
   "dependencies": {
