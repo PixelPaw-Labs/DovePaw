@@ -3,6 +3,7 @@ export * from "./claude.js";
 export * from "./exec.js";
 export * from "./git.js";
 export * from "./json.js";
+export * from "./keep-awake.js";
 export * from "./lock.js";
 export * from "./logger.js";
 export * from "./paths.js";

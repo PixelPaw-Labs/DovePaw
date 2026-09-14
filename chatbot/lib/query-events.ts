@@ -12,6 +12,7 @@ import type {
   SDKSystemMessage,
   SDKTaskProgressMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import { withKeepAwake } from "@@/lib/keep-awake";
 
 /** Type guard — `task_id` is unique to SDKTaskProgressMessage among system subtypes. */
 function isTaskProgress(event: SDKMessage): event is SDKTaskProgressMessage {
@@ -38,10 +39,11 @@ export async function withMcpQuery(
   tools: Parameters<typeof createSdkMcpServer>[0]["tools"],
   run: (mcpServer: ReturnType<typeof createSdkMcpServer>) => Promise<void>,
   onError?: (err: unknown, isAbort: boolean) => void,
+  description = "dovepaw-agent",
 ): Promise<void> {
   const mcpServer = createSdkMcpServer({ name: "agents", tools });
   try {
-    await run(mcpServer);
+    await withKeepAwake(description, () => run(mcpServer));
   } catch (err: unknown) {
     const isAbort =
       err instanceof Error && (err.name === "AbortError" || err.message === "Operation aborted");

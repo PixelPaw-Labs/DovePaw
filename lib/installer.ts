@@ -145,6 +145,9 @@ export async function deployAgentSdk(): Promise<void> {
   const claudeSdkLink = join(anthropicNmScope, "claude-agent-sdk");
   await rm(claudeSdkLink, { recursive: true, force: true });
   await symlink(agentNodeModule("@anthropic-ai/claude-agent-sdk"), claudeSdkLink);
+  const pervigilLink = join(AGENT_SDK_DIR, "node_modules", "pervigil");
+  await rm(pervigilLink, { recursive: true, force: true });
+  await symlink(agentNodeModule("pervigil"), pervigilLink);
   // Ensure ~/.dovepaw/tmp/ is treated as ESM so tsx loads tmp agent scripts
   // in ESM mode. Without this, Node.js defaults to CJS and require()ing the
   // ESM-only @openai/codex-sdk (transitively via the SDK index) fails with

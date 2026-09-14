@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { randomUUID } from "node:crypto";
 import { TSX_BIN, OPENVIKING_CLI_CONFIG, OPENVIKING_PORT_FILE } from "@/lib/paths";
+import { withKeepAwake } from "@@/lib/keep-awake";
 import { stripStartReminder } from "@@/lib/subagent-reminder";
 import { KILL_ESCALATION_MS } from "@@/lib/process-constants";
 import type { AgentConfig } from "./agent-config-builder";
@@ -138,7 +139,7 @@ export function spawnAndCollect(
     signal?.addEventListener("abort", killProc, { once: true });
   }
 
-  const promise = new Promise<string>((resolve) => {
+  const rawPromise = new Promise<string>((resolve) => {
     const rl = createInterface({ input: proc.stdout, crlfDelay: Infinity });
     rl.on("line", (line) => {
       lines.push(line);
@@ -166,6 +167,8 @@ export function spawnAndCollect(
     });
   });
 
+  const promise = withKeepAwake(`script:${config.agentName}`, () => rawPromise);
+
   return { promise, lines };
 }
 
@@ -187,9 +190,17 @@ export function startScript(
   runningScripts.set(runId, { phase: "running", promise, startTime });
   // Cache the output when the process exits so awaitScript can collect it
   // even if the script finishes before the next poll (avoids "not_found").
-  void promise.then((output) => {
-    runningScripts.set(runId, { phase: "done", output, durationMs: Date.now() - startTime });
-  });
+  void promise
+    .then((output) => {
+      runningScripts.set(runId, { phase: "done", output, durationMs: Date.now() - startTime });
+    })
+    .catch((err) => {
+      runningScripts.set(runId, {
+        phase: "done",
+        output: `Script failed: ${String(err)}`,
+        durationMs: Date.now() - startTime,
+      });
+    });
   return { runId };
 }
 

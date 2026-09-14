@@ -8,6 +8,7 @@ import type {
 } from "@openai/codex-sdk";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { withKeepAwake } from "./keep-awake.js";
 
 export interface CodexRunOpts {
   /** Working directory for codex execution */
@@ -66,8 +67,10 @@ export class CodexRunner {
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
     try {
-      await this.connect(opts);
-      return await this.execute(prompt, opts.timeoutMs ?? 30 * 60 * 1000);
+      return await withKeepAwake(`codex:${opts.taskName}`, async () => {
+        await this.connect(opts);
+        return await this.execute(prompt, opts.timeoutMs ?? 30 * 60 * 1000);
+      });
     } finally {
       process.off("SIGTERM", shutdown);
       process.off("SIGINT", shutdown);

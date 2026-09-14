@@ -3,6 +3,7 @@ import { createWriteStream, writeFileSync } from "node:fs";
 import { access, cp, mkdir, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { exec } from "./exec.js";
+import { withKeepAwake } from "./keep-awake.js";
 import { claudeSettingsLocalPath } from "./paths.js";
 
 export interface RunOpts {
@@ -79,7 +80,7 @@ export class ClaudeRunner {
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
     try {
-      return await this.runOnce(prompt, opts);
+      return await withKeepAwake(`claude:${opts.taskName}`, () => this.runOnce(prompt, opts));
     } finally {
       process.off("SIGTERM", shutdown);
       process.off("SIGINT", shutdown);

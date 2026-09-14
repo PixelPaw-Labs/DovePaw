@@ -78,6 +78,7 @@
     "motion": "^13.1.1",
     "nanoid": "^6.0.1",
     "next": "^16.3.3",
+    "pervigil": "^0.6.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.8",
     "react-icons": "^5.7.0",

@@ -230,6 +230,7 @@ Worth highlighting:
 stateDiagram-v2
   [*] --> running: startScript created entry
   running --> done: process exit (output cached)
+  running --> done: promise rejected — failure text cached (see 8.1)
   running --> still_running: SCRIPT_POLL_TIMEOUT_MS elapsed
   still_running --> running: caller pollss again
   done --> drained: awaitScript returned cached output → delete entry
@@ -290,6 +291,25 @@ Critical Codex notes:
 - `env` field on `CodexOptions` _replaces_ `process.env` — always spread `...process.env` explicitly
 - `approvalPolicy` maps to `"on-request"` for read-only/supervised, `"never"` for autonomous
 - `webSearchEnabled` honours `DOVEPAW_ALLOW_WEB_TOOLS=1`
+
+### 8.1 Keeping the host awake
+
+A long agent run easily outlives the host's idle-sleep timer. Every long-running invocation is wrapped in `withKeepAwake(description, fn)` — `lib/keep-awake.ts` on the chatbot/A2A side, `packages/agent-sdk/src/keep-awake.ts` for agent scripts — which holds a pervigil system sleep lock for the duration of `fn` and releases it in a `finally`.
+
+| Call site                               | Wraps                                         | Description tag        |
+| --------------------------------------- | --------------------------------------------- | ---------------------- |
+| `chatbot/app/api/chat/route.ts`         | Dove's orchestrator `query()`                 | `dove-orchestrator`    |
+| `QueryAgentExecutor` via `withMcpQuery` | the inner sub-agent `query()`                 | the agent's `def.name` |
+| `spawn.ts spawnAndCollect`              | the child process's stdout-collection promise | `script:<agentName>`   |
+| `ClaudeRunner.run`                      | `runOnce`                                     | `claude:<taskName>`    |
+| `CodexRunner.run`                       | `connect` + `execute`                         | `codex:<taskName>`     |
+
+Two properties the wrapper placement has to preserve:
+
+- **Signal handlers stay synchronous.** In both runners the `process.once("SIGTERM" / "SIGINT")` registration happens _before_ `withKeepAwake`, never inside its callback. Registering inside defers it by at least a microtask, leaving a window where the process is working but cannot shut down cleanly. `claude-runner.test.ts` and `codex-runner.test.ts` both assert the handler is present synchronously after `run()` returns control.
+- **`spawnAndCollect`'s promise can now reject.** The raw promise resolves on both `close` and `error`, so structurally it could never reject, and `startScript` relied on that with a bare `void promise.then()`. The wrapped promise's rejection behaviour is pervigil's, so `startScript` attaches a `.catch()` that records the run as `done` with the failure text. Without it a failed lock strands the entry in `running` forever and every `await_script_*` poll returns `still_running`.
+
+pervigil runs non-strict (`strict` defaults to `false`), so an unsupported platform or container degrades to a silent no-op instead of throwing, and it installs no signal listeners of its own — it cannot interfere with the handlers above.
 
 ## 9. Workspace lifecycle
 

@@ -31,7 +31,11 @@ describe("AbortSignal fires synchronously", () => {
   });
 });
 
-const { mockSpawn } = vi.hoisted(() => ({ mockSpawn: vi.fn() }));
+const { mockSpawn, mockKeepAwake } = vi.hoisted(() => ({
+  mockSpawn: vi.fn(),
+  // Passthrough by default so no test acquires a real OS sleep lock.
+  mockKeepAwake: vi.fn((_description: string, fn: () => Promise<unknown>) => fn()),
+}));
 
 vi.mock("node:child_process", async (importOriginal) => ({
   ...(await importOriginal<typeof import("node:child_process")>()),
@@ -46,6 +50,7 @@ vi.mock("@/lib/paths", () => ({
   OPENVIKING_CLI_CONFIG: "/mock/.dovepaw/openviking/ovcli.conf",
   OPENVIKING_PORT_FILE: "/mock/.dovepaw/.openviking-port.json",
 }));
+vi.mock("@@/lib/keep-awake", () => ({ withKeepAwake: mockKeepAwake }));
 
 import { existsSync } from "node:fs";
 import {
@@ -268,6 +273,28 @@ describe("startScript / awaitScript — still_running", () => {
 
     const result = await awaitPromise;
     expect(result).toMatchObject({ status: "still_running", runId });
+  });
+});
+
+describe("startScript — sleep lock failure", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+    vi.mocked(existsSync).mockReturnValue(true);
+  });
+
+  it("records the run as done when the sleep lock rejects, rather than stranding it as running", async () => {
+    mockKeepAwake.mockRejectedValueOnce(new Error("lock unavailable"));
+    makeProc();
+
+    const { runId } = startScript(BASE_CONFIG, "run");
+    await flushMicrotasks();
+
+    // Without the .catch() the entry stays phase:"running" forever and every
+    // poll returns still_running until the caller gives up.
+    const result = await awaitScript(runId);
+    expect(result).toMatchObject({ status: "completed", runId });
+    expect((result as { output: string }).output).toContain("lock unavailable");
+    expect(getPendingRunIds()).not.toContain(runId);
   });
 });
 
