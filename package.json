@@ -75,7 +75,7 @@
     "express": "^5.2.1",
     "lucide-react": "^1.37.0",
     "media-chrome": "^4.19.2",
-    "motion": "^13.1.1",
+    "motion": "^13.2.0",
     "nanoid": "^6.0.1",
     "next": "^16.3.3",
     "pervigil": "^0.6.0",
