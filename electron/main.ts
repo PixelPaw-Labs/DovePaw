@@ -348,7 +348,7 @@ void app.whenReady().then(async () => {
 
   // Set dock icon on macOS (dev mode doesn't pick up the bundled icns automatically)
   if (process.platform === "darwin" && app.dock) {
-    const dockIconPath = resolve(ASSETS_DIR, "icon.png");
+    const dockIconPath = resolve(ASSETS_DIR, "app-icon.png");
     if (existsSync(dockIconPath)) app.dock.setIcon(nativeImage.createFromPath(dockIconPath));
   }
 
@@ -359,7 +359,7 @@ void app.whenReady().then(async () => {
     minWidth: 1200,
     minHeight: 700,
     title: SERVICE_NAME,
-    icon: resolve(ASSETS_DIR, "icon.png"),
+    icon: resolve(ASSETS_DIR, "app-icon.png"),
     webPreferences: {
       preload: resolve(__dirname, "preload.cjs"),
       contextIsolation: true,

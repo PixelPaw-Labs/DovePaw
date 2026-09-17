@@ -1,87 +1,129 @@
 #!/usr/bin/env python3
-"""
-Extract tray and app icons from an ICO file for the DovePaw A2A menubar app.
+"""Build the macOS app icon from genuine high-resolution artwork.
 
 Usage:
-  python3 scripts/generate-electron-icons.py <source.ico>
+  python3 scripts/generate-electron-icons.py [source.png]
 
-Outputs to electron/assets/:
-  icon.png          16×16  full-color  (servers healthy)
-  icon@2x.png       32×32  full-color  (retina)
-  iconError.png     16×16  grayscale   (servers down)
-  iconError@2x.png  32×32  grayscale   (retina)
-  app-icon.icns             macOS app icon for packaged build
-
-Requires: pip install pillow
+The source defaults to electron/assets/app-icon.png. It must be square and at
+least 1024×1024 so the script can never silently upscale a tray-sized image.
+The 16×16 and 32×32 menu-bar icons are intentionally maintained separately.
 """
 
-import os
+import re
+import shutil
+import subprocess
 import sys
-from PIL import Image
+import tempfile
+from pathlib import Path
 
 
-def extract(ico: Image.Image, size: int) -> Image.Image:
-    ico.size = (size, size)
-    return ico.convert("RGBA")
+MIN_APP_ICON_SIZE = 1024
+ICONSET_SIZES = (
+    ("icon_16x16.png", 16),
+    ("icon_16x16@2x.png", 32),
+    ("icon_32x32.png", 32),
+    ("icon_32x32@2x.png", 64),
+    ("icon_128x128.png", 128),
+    ("icon_128x128@2x.png", 256),
+    ("icon_256x256.png", 256),
+    ("icon_256x256@2x.png", 512),
+    ("icon_512x512.png", 512),
+    ("icon_512x512@2x.png", 1024),
+)
+
+
+def validate_dimensions(width: int, height: int) -> None:
+    if width != height:
+        raise ValueError(f"App icon source must be square; got {width}×{height}")
+    if width < MIN_APP_ICON_SIZE:
+        raise ValueError(
+            f"App icon source must be at least {MIN_APP_ICON_SIZE}×{MIN_APP_ICON_SIZE}; "
+            f"got {width}×{height}"
+        )
+
+
+def image_dimensions(source: Path) -> tuple[int, int]:
+    result = subprocess.run(
+        ["sips", "-g", "pixelWidth", "-g", "pixelHeight", str(source)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    width_match = re.search(r"pixelWidth: (\d+)", result.stdout)
+    height_match = re.search(r"pixelHeight: (\d+)", result.stdout)
+    if not width_match or not height_match:
+        raise ValueError(f"Could not read image dimensions from {source}")
+    return int(width_match.group(1)), int(height_match.group(1))
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
-        print("Usage: python3 scripts/generate-electron-icons.py <source.ico>")
+    if len(sys.argv) > 2:
+        print("Usage: python3 scripts/generate-electron-icons.py [source.png]")
         sys.exit(1)
 
-    source = sys.argv[1]
-    if not os.path.exists(source):
+    assets_dir = Path(__file__).resolve().parent.parent / "electron" / "assets"
+    source = Path(sys.argv[1]).resolve() if len(sys.argv) == 2 else assets_dir / "app-icon.png"
+    if not source.exists():
         print(f"Error: file not found: {source}")
         sys.exit(1)
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    assets_dir = os.path.normpath(os.path.join(script_dir, "..", "electron", "assets"))
-    os.makedirs(assets_dir, exist_ok=True)
+    try:
+        width, height = image_dimensions(source)
+        validate_dimensions(width, height)
+        _generate_app_icons(source, assets_dir)
+    except (subprocess.CalledProcessError, ValueError) as error:
+        print(f"Error: {error}")
+        sys.exit(1)
 
-    # Tray icons — extract directly, no processing
-    tray_icons = [
-        ("icon.png", 16, False),
-        ("icon@2x.png", 32, False),
-        ("iconError.png", 16, True),
-        ("iconError@2x.png", 32, True),
-    ]
-    for filename, size, grayscale in tray_icons:
-        img = extract(Image.open(source), size)
-        if grayscale:
-            img = img.convert("LA").convert("RGBA")
-        img.save(os.path.join(assets_dir, filename), "PNG")
-        print(f"  ✓  {filename}  ({size}×{size}{'  grayscale' if grayscale else ''})")
-
-    # App icon (.icns) — use largest available size, scale up as needed
-    _generate_icns(source, assets_dir)
-
-    print(f"\nIcons written to {assets_dir}")
+    print(f"\nApp icons written to {assets_dir}")
 
 
-def _generate_icns(source: str, assets_dir: str) -> None:
-    """Build app-icon.icns using macOS iconutil."""
-    import subprocess, shutil, tempfile
+def _generate_app_icons(source: Path, assets_dir: Path) -> None:
+    """Create the runtime PNG and packaged ICNS with native macOS tools."""
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    app_icon_png = assets_dir / "app-icon.png"
 
-    ico = Image.open(source)
-    available = sorted(ico.info.get("sizes", {ico.size}), key=lambda s: s[0])
-    largest_size = available[-1][0]
-    ico.size = (largest_size, largest_size)
-    base = ico.convert("RGBA")
-
-    iconset = tempfile.mkdtemp(suffix=".iconset")
-    for size in [16, 32, 64, 128, 256, 512]:
-        base.resize((size, size), Image.LANCZOS).save(
-            os.path.join(iconset, f"icon_{size}x{size}.png")
+    with tempfile.TemporaryDirectory() as temporary_dir:
+        normalized_icon = Path(temporary_dir) / "app-icon.png"
+        subprocess.run(
+            [
+                "sips",
+                "-z",
+                str(MIN_APP_ICON_SIZE),
+                str(MIN_APP_ICON_SIZE),
+                str(source),
+                "--out",
+                str(normalized_icon),
+            ],
+            check=True,
+            capture_output=True,
         )
-        base.resize((size * 2, size * 2), Image.LANCZOS).save(
-            os.path.join(iconset, f"icon_{size}x{size}@2x.png")
+        shutil.copyfile(normalized_icon, app_icon_png)
+
+        iconset = Path(temporary_dir) / "app-icon.iconset"
+        iconset.mkdir()
+        for filename, size in ICONSET_SIZES:
+            subprocess.run(
+                [
+                    "sips",
+                    "-z",
+                    str(size),
+                    str(size),
+                    str(app_icon_png),
+                    "--out",
+                    str(iconset / filename),
+                ],
+                check=True,
+                capture_output=True,
+            )
+
+        subprocess.run(
+            ["iconutil", "-c", "icns", str(iconset), "-o", str(assets_dir / "app-icon.icns")],
+            check=True,
         )
 
-    icns_path = os.path.join(assets_dir, "app-icon.icns")
-    subprocess.run(["iconutil", "-c", "icns", iconset, "-o", icns_path], check=True)
-    shutil.rmtree(iconset)
-    print(f"  ✓  app-icon.icns  (from {largest_size}×{largest_size})")
+    print(f"  ✓  app-icon.png   ({MIN_APP_ICON_SIZE}×{MIN_APP_ICON_SIZE})")
+    print("  ✓  app-icon.icns  (complete Retina icon set)")
 
 
 if __name__ == "__main__":
