@@ -27,6 +27,18 @@ describe("dependabot auto-merge workflow", () => {
     expect(existsSync(resolve(root, file!))).toBe(true);
   });
 
+  it("runs every job only for PRs opened by Dependabot", () => {
+    const jobs = workflow
+      .slice(workflow.indexOf("\njobs:"))
+      .split(/^  (?=\w[\w-]*:\s*$)/m)
+      .slice(1);
+    expect(jobs.length).toBeGreaterThan(0);
+    for (const job of jobs) {
+      expect(job).toMatch(/if: github\.event\.pull_request\.user\.login == 'dependabot\[bot\]'/);
+    }
+    expect(workflow).not.toMatch(/github\.actor/);
+  });
+
   it("merges only after the verify job passes", () => {
     expect(workflow).toMatch(/merge:[\s\S]*needs: verify/);
   });

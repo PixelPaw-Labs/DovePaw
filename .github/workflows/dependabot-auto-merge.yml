@@ -10,7 +10,7 @@ permissions:
 jobs:
   verify:
     name: Lint & Test
-    if: github.actor == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: macos-latest
 
     steps:
@@ -38,7 +38,7 @@ jobs:
   merge:
     name: Approve & merge
     needs: verify
-    if: github.actor == 'dependabot[bot]'
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write
