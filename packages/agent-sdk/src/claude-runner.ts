@@ -2,10 +2,10 @@ import { query, type HookEvent, type HookCallbackMatcher } from "@anthropic-ai/c
 import { createWriteStream, writeFileSync } from "node:fs";
 import { access, cp, mkdir, rm, symlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { answerUnattendedPermission } from "./addon-approval.js";
 import { exec } from "./exec.js";
 import { withKeepAwake } from "./keep-awake.js";
 import { claudeSettingsLocalPath } from "./paths.js";
+import { answerUnattendedPermission } from "./unattended-permission.js";
 
 export interface RunOpts {
   repos?: string[];
