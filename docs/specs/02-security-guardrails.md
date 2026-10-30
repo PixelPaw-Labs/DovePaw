@@ -173,7 +173,7 @@ flowchart LR
   rs --> hk{"strategy.readOnly?"}
   hk -- yes --> bh["PreToolUse Bash hook<br/>denies bashHasWriteOperation"]
   hk -- no --> none["(no hook added)"]
-  cut["canUseTool = answerUnattendedPermission"]
+  cut["canUseTool = createUnattendedPermissionAnswer"]
   pm & dt & bh & cut --> claude["ClaudeRunner.run query()"]
 ```
 
@@ -181,7 +181,7 @@ Three practical consequences:
 
 - The Bash write-op hook from section 4 runs **twice** for any tool call inside a sub-agent: once on Dove's gate (catches `start_*`/`ask_*` invocation itself), once inside the agent's own `query()` (catches nested tool calls the script makes). Both gates share the same `bashHasWriteOperation` regex via the duplicated `security-policy.ts` (see section 11).
 - `WebFetch`/`WebSearch` are added to `disallowedTools` by default in **every** mode unless `DOVEPAW_ALLOW_WEB_TOOLS=1` is set. The mode strategy itself doesn't restrict web tools — that lives in `resolveClaudeSecurityOpts` as a separate concern.
-- An agent script has nobody to answer a permission prompt, so `ClaudeRunner` always passes `answerUnattendedPermission` ([`packages/agent-sdk/src/unattended-permission.ts`](../../packages/agent-sdk/src/unattended-permission.ts)) as `canUseTool`. It allows only an ask whose `decisionReason` says an add-on (e.g. a skill) "has never been approved on this laptop" or "differs from the one you approved on …" — the asks a machine-wide add-on approval hook raises — and only when no user ask rule forced the prompt. Every other ask is denied with its own reason, which is what the SDK did before the callback existed. It is not a security gate (see section 7); it only answers asks that would otherwise become refusals.
+- An agent script has nobody to answer a permission prompt, so `ClaudeRunner` always passes `createUnattendedPermissionAnswer` ([`packages/agent-sdk/src/unattended-permission.ts`](../../packages/agent-sdk/src/unattended-permission.ts)) as `canUseTool`. It allows two kinds of ask, and only when no user ask rule forced the prompt. The first is an ask whose `decisionReason` says an add-on (e.g. a skill) "has never been approved on this laptop" or "differs from the one you approved on …" — the asks a machine-wide add-on approval hook raises. The second is an MCP tool whose own server marks it `readOnly` and not `destructive`, looked up by the ask's `mcpServer.name` in the query's `mcpServerStatus()`. That list is cached per run and fetched again when a tool is missing from it, so servers that connect late are still found; a failed lookup denies. The read-only label is the server's own claim, so a server that mislabels a write tool gets it approved — unlabelled tools are never approved. Every other ask is denied with its own reason, which is what the SDK did before the callback existed. It is not a security gate (see section 7); it only answers asks that would otherwise become refusals.
 
 ## 10. Codex security mapping
 

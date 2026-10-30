@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { exec } from "./exec.js";
 import { withKeepAwake } from "./keep-awake.js";
 import { claudeSettingsLocalPath } from "./paths.js";
-import { answerUnattendedPermission } from "./unattended-permission.js";
+import { createUnattendedPermissionAnswer } from "./unattended-permission.js";
 
 export interface RunOpts {
   repos?: string[];
@@ -141,7 +141,7 @@ export class ClaudeRunner {
                 },
               }
             : {}),
-          canUseTool: answerUnattendedPermission,
+          canUseTool: createUnattendedPermissionAnswer(() => stream.mcpServerStatus()),
           abortController: this.abortController,
         },
       });
