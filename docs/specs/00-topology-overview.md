@@ -55,12 +55,12 @@ flowchart TB
   EXEC -. reads port file .-> OV
 ```
 
-| Process            | Job                                                                                      | What it must never do                                                                                             |
-| ------------------ | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Electron           | UI shell + bridge servers. Spawns Next.js and A2A children at app start.                 | Run agent logic                                                                                                   |
-| Next.js (7473)     | Browser-facing HTTP/SSE, Dove orchestrator query(), DB writes, OpenViking sidecar owner. | Spawn agent scripts directly                                                                                      |
-| A2A (per agent)    | Receive A2A tasks, run sub-agent `query()`, spawn child scripts.                         | Publish SSE to browser (must relay via HTTP — see [ADR-0004](../adr/0004-a2a-to-chatbot-event-relay-via-http.md)) |
-| Agent script child | Do the real work; emit progress via HTTP POST to A2A server.                             | Import DovePaw internals — language-neutral contract                                                              |
+| Process            | Job                                                                                                                                                                                                 | What it must never do                                                                                             |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Electron           | UI shell + bridge servers. Spawns Next.js and A2A children at app start. Sends every http/https/mailto link that leaves the chatbot origin to the system browser (`electron/lib/external-link.ts`). | Run agent logic; open external pages in its own windows                                                           |
+| Next.js (7473)     | Browser-facing HTTP/SSE, Dove orchestrator query(), DB writes, OpenViking sidecar owner.                                                                                                            | Spawn agent scripts directly                                                                                      |
+| A2A (per agent)    | Receive A2A tasks, run sub-agent `query()`, spawn child scripts.                                                                                                                                    | Publish SSE to browser (must relay via HTTP — see [ADR-0004](../adr/0004-a2a-to-chatbot-event-relay-via-http.md)) |
+| Agent script child | Do the real work; emit progress via HTTP POST to A2A server.                                                                                                                                        | Import DovePaw internals — language-neutral contract                                                              |
 
 ## 2. Data directories (host filesystem)
 

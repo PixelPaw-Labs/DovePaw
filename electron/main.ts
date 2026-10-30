@@ -35,6 +35,7 @@ import { bootOpenViking } from "../lib/openviking-spawner";
 import { getAvailablePort } from "../lib/get-available-port";
 import { killStaleProcess, writePidFile } from "../lib/process-orphan-cleanup";
 import { startBrowserBridge } from "./browser-bridge";
+import { isExternalLink, leavesApp } from "./lib/external-link";
 import { computeLoadFailureMessage } from "./lib/load-error";
 import { nextScriptForMode } from "./lib/next-script";
 import { renderErrorPage } from "./lib/error-page";
@@ -230,6 +231,12 @@ function saveWindowState(w: BrowserWindow): void {
   }
 }
 
+function openInExternalBrowser(url: string): void {
+  shell.openExternal(url).catch((err: unknown) => {
+    console.warn(`[links] failed to open ${url} in the default browser:`, err);
+  });
+}
+
 // ── Browser panel bounds ──────────────────────────────────────────────────────
 
 const BROWSER_HEADER_HEIGHT = 44; // matches chatbot header height
@@ -367,21 +374,15 @@ void app.whenReady().then(async () => {
     },
   });
 
-  // Open web URLs (e.g. the OpenViking console) in a child window inside the
-  // app. Without a handler Electron silently drops window.open() calls, so the
-  // console launcher button appears to do nothing.
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//i.test(url)) {
-      return {
-        action: "allow",
-        overrideBrowserWindowOptions: {
-          width: 1200,
-          height: 800,
-          webPreferences: { contextIsolation: true, nodeIntegration: false },
-        },
-      };
-    }
+    if (isExternalLink(url)) openInExternalBrowser(url);
     return { action: "deny" };
+  });
+
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!leavesApp(url, CHATBOT_URL)) return;
+    event.preventDefault();
+    if (isExternalLink(url)) openInExternalBrowser(url);
   });
 
   // Hide to tray on close instead of quitting
