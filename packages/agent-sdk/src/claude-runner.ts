@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { exec } from "./exec.js";
 import { withKeepAwake } from "./keep-awake.js";
 import { claudeSettingsLocalPath } from "./paths.js";
+import { SessionInput } from "./session-input.js";
 import { createUnattendedPermissionAnswer } from "./unattended-permission.js";
 
 export interface RunOpts {
@@ -106,10 +107,11 @@ export class ClaudeRunner {
     const timeoutMs = opts.timeoutMs ?? 24 * 60 * 60 * 1000;
     const timeoutId = setTimeout(() => this.abortController?.abort(), timeoutMs);
     const logStream = this.logFile ? createWriteStream(this.logFile, { flags: "a" }) : null;
+    const input = new SessionInput(prompt);
 
     try {
       const stream = query({
-        prompt,
+        prompt: input,
         options: {
           cwd,
           model: opts.model ?? "claude-sonnet-5",
@@ -150,6 +152,7 @@ export class ClaudeRunner {
       let isError = false;
 
       for await (const message of stream) {
+        input.observe(message);
         if (logStream) logStream.write(JSON.stringify(message) + "\n");
         if (message.type === "result") {
           if (message.subtype === "success") {
@@ -169,6 +172,7 @@ export class ClaudeRunner {
       const msg = err instanceof Error ? err.message : String(err);
       return { code: 1, stdout: `Error: ${msg}` };
     } finally {
+      input.close();
       clearTimeout(timeoutId);
       this.abortController = null;
       logStream?.end();
