@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { AgentConfigEntry } from "../lib/agents-config-schemas.js";
+import { isCompiledAgentScript, type AgentConfigEntry } from "../lib/agents-config-schemas.js";
 
 /**
  * Build the tsup entry map from agent config entries.
@@ -8,7 +8,7 @@ import type { AgentConfigEntry } from "../lib/agents-config-schemas.js";
 export function buildTsupEntries(entries: AgentConfigEntry[]): Record<string, string> {
   return Object.fromEntries(
     entries
-      .filter((a) => (a.scriptFile ?? "main.ts").endsWith(".ts"))
+      .filter((a) => isCompiledAgentScript(a.scriptFile ?? "main.ts"))
       .map((a) => {
         const scriptFile = a.scriptFile ?? "main.ts";
         const entryFile = a.pluginPath

@@ -2,6 +2,11 @@
 import { z } from "zod";
 import { envVarSchema, agentNotificationConfigSchema } from "./settings-schemas";
 
+/** True when an agent entry file is TypeScript and gets compiled to dist/agents/<name>.mjs. */
+export function isCompiledAgentScript(scriptFile: string): boolean {
+  return scriptFile.endsWith(".ts");
+}
+
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export const agentIntervalScheduleSchema = z.object({
