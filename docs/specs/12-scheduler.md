@@ -194,6 +194,8 @@ The label slug is `slugifyJobLabel(label)` — lowercase, non-alphanum collapsed
 └── <agentName>.mjs                — bundled agent code (when needed by main.ts agents)
 ```
 
+`deployAgentScript()` only deploys agents whose entry file is TypeScript (`isCompiledAgentScript`, the same rule `buildTsupEntries` uses). Shell, Python and Ruby agents are skipped up front, so a missing `.mjs` only triggers `npm run build` for a TypeScript agent; scheduled installs run every agent in parallel, and parallel builds collide while redeploying `~/.dovepaw/sdk/`.
+
 `deployTriggerScript()` from [`lib/installer.ts`](../../lib/installer.ts) runs once at install time. `copyNativePackages` deploys the SDK plus its peers. Note that the trigger script is **not** rebuilt on every agent change — only when the trigger source itself changes, which is rare.
 
 ## 11. Cron-specific quirks (Linux)

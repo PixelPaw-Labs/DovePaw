@@ -83,7 +83,7 @@ export async function installAgent(
   if (agent.schedulingEnabled === false) return { skipped: true };
 
   await Promise.all([
-    deployAgentScript(agent.name),
+    deployAgentScript(agent),
     deployTriggerScript(),
     copyNativePackages(nativePackages),
   ]);

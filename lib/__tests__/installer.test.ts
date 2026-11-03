@@ -391,3 +391,50 @@ describe("deployTriggerScript", () => {
     expect(chmod).toHaveBeenCalledOnce();
   });
 });
+
+describe("deployAgentScript", () => {
+  let deployAgentScript: typeof import("../installer.js").deployAgentScript;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.resetModules();
+    const mod = await import("../installer.js");
+    deployAgentScript = mod.deployAgentScript;
+  });
+
+  it("skips non-TypeScript agents without building or copying", async () => {
+    vi.mocked(access).mockRejectedValue(new Error("ENOENT"));
+
+    await deployAgentScript({ name: "shell-agent", entryPath: "agents/shell-agent/main.sh" });
+
+    expect(exec).not.toHaveBeenCalled();
+    expect(copyFile).not.toHaveBeenCalled();
+  });
+
+  it("copies the compiled script directly when dist file exists", async () => {
+    vi.mocked(access).mockResolvedValue(undefined);
+
+    await deployAgentScript({ name: "ts-agent", entryPath: "agents/ts-agent/main.ts" });
+
+    expect(exec).not.toHaveBeenCalled();
+    expect(copyFile).toHaveBeenCalledOnce();
+    expect(chmod).toHaveBeenCalledOnce();
+  });
+
+  it("runs npm run build before copying when a TypeScript agent's dist file is missing", async () => {
+    vi.mocked(access).mockRejectedValue(new Error("ENOENT"));
+    vi.mocked(exec).mockImplementation((_cmd, _opts, cb) => {
+      (cb as unknown as (err: ExecException | null, stdout: string, stderr: string) => void)(
+        null,
+        "",
+        "",
+      );
+      return {} as ReturnType<typeof exec>;
+    });
+
+    await deployAgentScript({ name: "ts-agent", entryPath: "agents/ts-agent/main.ts" });
+
+    expect(exec).toHaveBeenCalledWith("npm run build", expect.anything(), expect.any(Function));
+    expect(copyFile).toHaveBeenCalledOnce();
+  });
+});

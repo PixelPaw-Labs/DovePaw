@@ -166,7 +166,7 @@ export async function installAgent(
 ): Promise<{ skipped: boolean }> {
   if (agent.schedulingEnabled === false) return { skipped: true };
   await Promise.all([
-    deployAgentScript(agent.name),
+    deployAgentScript(agent),
     deployTriggerScript(),
     copyNativePackages(nativePackages),
   ]);

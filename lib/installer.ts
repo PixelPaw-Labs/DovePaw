@@ -23,6 +23,7 @@ import {
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { AgentDef } from "./agents";
+import { isCompiledAgentScript } from "./agents-config-schemas";
 import { agentPersistentLogDir } from "./paths";
 import {
   A2A_TRIGGER_SCRIPT,
@@ -56,22 +57,19 @@ const copyNativeOnceMap = new Map<string, Promise<void>>();
 /** Copy compiled .mjs to ~/.dovepaw/cron and make it executable.
  *  Triggers a full build first if the compiled output is missing.
  *  No-op for non-TS agents (e.g. .sh) that produce no compiled output. */
-export async function deployAgentScript(agentName: string): Promise<void> {
+export async function deployAgentScript(
+  agent: Pick<AgentDef, "name" | "entryPath">,
+): Promise<void> {
+  if (!isCompiledAgentScript(agent.entryPath)) return;
   await mkdir(SCHEDULER_ROOT, { recursive: true });
-  const src = agentDistScript(agentName);
+  const src = agentDistScript(agent.name);
   try {
     await access(src);
   } catch {
     await execAsync("npm run build", { cwd: AGENTS_ROOT });
-    // Non-TS agents produce no .mjs after build — skip deployment for them.
-    try {
-      await access(src);
-    } catch {
-      return;
-    }
   }
-  await copyFile(src, schedulerScript(agentName));
-  await chmod(schedulerScript(agentName), 0o755);
+  await copyFile(src, schedulerScript(agent.name));
+  await chmod(schedulerScript(agent.name), 0o755);
 }
 
 /** Copy compiled a2a-trigger.mjs to ~/.dovepaw/cron and make it executable.
