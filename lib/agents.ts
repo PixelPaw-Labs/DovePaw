@@ -59,6 +59,8 @@ export interface AgentDef {
   personality?: string;
   /** Multiple scheduled jobs — each gets its own scheduler config entry. */
   scheduledJobs?: ScheduledJob[];
+  /** MCP servers the script needs logged in before it starts. */
+  requiredMcpServers?: string[];
 }
 
 /** Build a full AgentDef (including icon and derived fields) from a serializable config entry. */
@@ -112,5 +114,6 @@ export function buildAgentDef(entry: AgentConfigEntry): AgentDef {
     pluginPath: entry.pluginPath,
     personality: entry.personality,
     scheduledJobs: entry.scheduledJobs,
+    requiredMcpServers: entry.requiredMcpServers,
   };
 }

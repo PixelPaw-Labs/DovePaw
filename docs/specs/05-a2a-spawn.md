@@ -259,6 +259,7 @@ The child receives an explicitly-constructed env, never `process.env` mutation:
     // DOVEPAW_TASK_ID (A2A taskId)
     // DOVEPAW_A2A_PORT
     // DOVEPAW_SECURITY_MODE / DOVEPAW_DISALLOWED_TOOLS / DOVEPAW_ALLOW_WEB_TOOLS
+    // DOVEPAW_REQUIRED_MCP_SERVERS (agent.json requiredMcpServers, comma-joined)
     // DOVE_MEMORY_REMINDER (textual reminder for AgentRunner to append to system prompt)
     // user-configured envVars
 }
@@ -291,6 +292,16 @@ Critical Codex notes:
 - `env` field on `CodexOptions` _replaces_ `process.env` — always spread `...process.env` explicitly
 - `approvalPolicy` maps to `"on-request"` for read-only/supervised, `"never"` for autonomous
 - `webSearchEnabled` honours `DOVEPAW_ALLOW_WEB_TOOLS=1`
+
+### 8.0 Waiting for MCP logins before the run
+
+Before routing, `AgentRunner.run` calls `ensureMcpLogins` (`packages/agent-sdk/src/mcp-login.ts`) with the servers in `DOVEPAW_REQUIRED_MCP_SERVERS`, using the CLI the run will use:
+
+1. List servers from the run's `cwd` — `claude mcp list` (health-checks each server, so it catches expired tokens) or `codex mcp list --json` (only reports whether a login is stored, so an expired Codex token is not caught here).
+2. A required server missing from the list fails the run with `MCP server not configured for <cli>`.
+3. Each required server that needs a login gets `<cli> mcp login <name>` under `script` (Claude refuses to log in without a terminal). That opens the OAuth page in the browser and exits once the user logs in.
+4. The first wait per server publishes a `Waiting for MCP login` progress entry (`server` artifact) and sends a notification through `POST /internal/tasks/:taskId/notify`, which the A2A server routes to the agent's configured channel (ntfy).
+5. Re-list until every required server is connected. After 4 hours the run fails with `Gave up waiting for the <name> MCP login`.
 
 ### 8.1 Keeping the host awake
 

@@ -9,6 +9,8 @@ import type {
   PreToolUseHookSpecificOutput,
 } from "@anthropic-ai/claude-agent-sdk";
 import { bashHasWriteOperation, getSecurityModeStrategy } from "./security-policy.js";
+import { notifyUser, publishStatusToUI } from "./logger.js";
+import { ensureMcpLogins, readRequiredMcpServers } from "./mcp-login.js";
 
 interface ClaudeRunOpts {
   permissionMode?: "default" | "acceptEdits" | "bypassPermissions" | "plan" | "dontAsk" | "auto";
@@ -156,6 +158,18 @@ export function appendMemoryReminder(append: string | undefined): string | undef
   return base ? `${base}\n\n${wrapped}` : wrapped;
 }
 
+async function announceMcpLoginWait(server: string): Promise<void> {
+  await Promise.all([
+    publishStatusToUI("Waiting for MCP login", { server }).catch((err: unknown) =>
+      console.error("Progress update failed:", err),
+    ),
+    notifyUser(
+      "MCP login needed",
+      `Log in to ${server} in your browser so the run can continue.`,
+    ).catch((err: unknown) => console.error("Notification failed:", err)),
+  ]);
+}
+
 function isCodexModel(model: string): boolean {
   const m = model.toLowerCase().trim();
   return m === "codex" || m.startsWith("gpt");
@@ -179,6 +193,16 @@ export class AgentRunner {
   async run(prompt: string, opts: AgentRunOpts): Promise<{ code: number; stdout: string }> {
     const model = opts.model ?? (process.env.AGENT_SCRIPT_MODEL ?? "").trim();
     const appendSystemPrompt = appendMemoryReminder(opts.appendSystemPrompt);
+    try {
+      await ensureMcpLogins({
+        cli: isCodexModel(model) ? "codex" : "claude",
+        servers: readRequiredMcpServers(),
+        cwd: opts.cwd,
+        onWaiting: announceMcpLoginWait,
+      });
+    } catch (err) {
+      return { code: 1, stdout: `Error: ${err instanceof Error ? err.message : String(err)}` };
+    }
     if (isCodexModel(model)) {
       const codexPrompt = opts.onCodexPrompt ? opts.onCodexPrompt(prompt) : prompt;
       const approvalPolicy = resolveCodexApprovalPolicy();

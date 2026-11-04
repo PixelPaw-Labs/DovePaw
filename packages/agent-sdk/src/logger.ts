@@ -30,6 +30,21 @@ export async function publishStatusToUI(
   });
 }
 
+/**
+ * Send a notification through the agent's configured channel (e.g. ntfy) via the
+ * A2A server's internal notify endpoint. No-op outside an A2A-spawned run.
+ */
+export async function notifyUser(title: string, message: string): Promise<void> {
+  const port = process.env.DOVEPAW_A2A_PORT;
+  const taskId = process.env.DOVEPAW_TASK_ID;
+  if (!port || !taskId) return;
+  await fetch(`http://localhost:${port}/internal/tasks/${taskId}/notify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, message }),
+  });
+}
+
 export function createLogger(logDir: string, logFile: string) {
   mkdirSync(logDir, { recursive: true });
 

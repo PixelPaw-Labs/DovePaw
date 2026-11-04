@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { publishStatusToUI } from "./logger.js";
+import { notifyUser, publishStatusToUI } from "./logger.js";
 
 describe("publishStatusToUI", () => {
   beforeEach(() => {
@@ -45,6 +45,36 @@ describe("publishStatusToUI", () => {
   it("does nothing when DOVEPAW_TASK_ID is not set", async () => {
     delete process.env.DOVEPAW_TASK_ID;
     await publishStatusToUI("Hello");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("notifyUser", () => {
+  beforeEach(() => {
+    process.env.DOVEPAW_A2A_PORT = "9999";
+    process.env.DOVEPAW_TASK_ID = "task-123";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+  });
+
+  afterEach(() => {
+    delete process.env.DOVEPAW_A2A_PORT;
+    delete process.env.DOVEPAW_TASK_ID;
+    vi.unstubAllGlobals();
+  });
+
+  it("posts the title and message to the A2A server notify endpoint", async () => {
+    await notifyUser("MCP login needed", "Log in to buildkite");
+    const call = vi.mocked(fetch).mock.calls[0];
+    expect(call[0]).toBe("http://localhost:9999/internal/tasks/task-123/notify");
+    expect(JSON.parse(call[1]!.body as string)).toEqual({
+      title: "MCP login needed",
+      message: "Log in to buildkite",
+    });
+  });
+
+  it("does nothing outside an A2A-spawned run", async () => {
+    delete process.env.DOVEPAW_TASK_ID;
+    await notifyUser("t", "m");
     expect(fetch).not.toHaveBeenCalled();
   });
 });

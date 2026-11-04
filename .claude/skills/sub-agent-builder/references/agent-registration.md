@@ -66,6 +66,14 @@ Calendar (weekday is optional — 1=Mon … 7=Sun; omit for daily):
 "schedule": { "type": "calendar", "hour": 9, "minute": 0, "weekday": 1 }
 ```
 
+### requiredMcpServers field (add only when the script uses OAuth MCP servers)
+
+```json
+"requiredMcpServers": ["sumo-logic", "buildkite"]
+```
+
+Names come from `claude mcp list`. A name matches the full server name or the part after the last `:`, so `sumo-logic` matches `plugin:sumologic:sumo-logic`. At the start of each run any listed server that needs a login gets `mcp login`, which opens the OAuth page in the browser, and the run waits up to 4 hours for it to connect.
+
 ### repos field
 
 UUID strings from `~/.dovepaw/settings.json`. Match user's selected repo paths to their `id` fields.

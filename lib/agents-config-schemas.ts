@@ -145,6 +145,9 @@ export const agentConfigEntrySchema = z.object({
   personality: z.string().optional(),
   /** Multiple scheduled jobs — each gets its own scheduler config entry. Replaces top-level schedule/runAtLoad. */
   scheduledJobs: z.array(scheduledJobSchema).optional(),
+  /** MCP servers the script needs logged in before it starts, e.g. ["sumo-logic", "buildkite"].
+   *  A run pauses and opens the OAuth login for any that need it. */
+  requiredMcpServers: z.array(z.string()).optional(),
 });
 
 export type AgentConfigEntry = z.infer<typeof agentConfigEntrySchema>;

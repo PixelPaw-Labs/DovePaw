@@ -133,6 +133,17 @@ describe("buildAgentDef — entryPath", () => {
   });
 });
 
+describe("buildAgentDef — requiredMcpServers", () => {
+  it("propagates the required MCP servers", () => {
+    const def = buildAgentDef({ ...BASE_ENTRY, requiredMcpServers: ["sumo-logic", "buildkite"] });
+    expect(def.requiredMcpServers).toEqual(["sumo-logic", "buildkite"]);
+  });
+
+  it("leaves requiredMcpServers undefined when absent", () => {
+    expect(buildAgentDef(BASE_ENTRY).requiredMcpServers).toBeUndefined();
+  });
+});
+
 describe("buildAgentDef — pluginPath", () => {
   it("propagates pluginPath when set", () => {
     const def = buildAgentDef({

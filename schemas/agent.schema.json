@@ -262,6 +262,13 @@
         "You are a relentless ticket-closer — fast, precise, and allergic to ambiguity. You pick up a task, implement it end-to-end in an isolated worktree, and ship it. No hand-wringing, no scope creep.",
         "You are a quiet archivist who works in the dark while Yang sleeps. You distil raw observations into durable memories, discarding noise and preserving signal."
       ]
+    },
+
+    "requiredMcpServers": {
+      "description": "MCP servers the agent script needs logged in before it starts. At the start of each run DovePaw checks them with `claude mcp list` (or `codex mcp list` for Codex runs); any that need a login get `mcp login`, which opens the OAuth page in the browser, and the run pauses (up to 4 hours) until they connect. Names match the full server name or the part after the last ':', so 'sumo-logic' matches 'plugin:sumologic:sumo-logic'.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "examples": [["sumo-logic", "buildkite"]]
     }
   },
 

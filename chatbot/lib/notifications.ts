@@ -25,6 +25,20 @@ function resolveEnvRef(value: string, env: Record<string, string | undefined>): 
   return env[match[1]] ?? "";
 }
 
+/** Resolve `$VAR` / `${VAR}` references in the channel's fields against `env`. */
+export function resolveNotificationChannel(
+  channel: AgentNotificationConfig["channel"],
+  env?: Record<string, string | undefined>,
+): AgentNotificationConfig["channel"] {
+  return env && channel.type === "ntfy"
+    ? {
+        type: "ntfy",
+        topic: resolveEnvRef(channel.topic, env),
+        server: resolveEnvRef(channel.server, env),
+      }
+    : channel;
+}
+
 // ─── Channel dispatch ─────────────────────────────────────────────────────────
 
 async function sendNtfyNotification(
@@ -79,14 +93,7 @@ export function buildNotificationHooks(
 ): Partial<Record<HookEvent, HookCallbackMatcher[]>> {
   if (!config.enabled) return {};
 
-  const channel: AgentNotificationConfig["channel"] =
-    env && config.channel.type === "ntfy"
-      ? {
-          type: "ntfy",
-          topic: resolveEnvRef(config.channel.topic, env),
-          server: resolveEnvRef(config.channel.server, env),
-        }
-      : config.channel;
+  const channel = resolveNotificationChannel(config.channel, env);
 
   const hooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
 

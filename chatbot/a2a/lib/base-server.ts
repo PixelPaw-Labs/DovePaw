@@ -47,6 +47,9 @@ import { SessionManager } from "@/lib/session-manager";
 import { upsertSession, setActiveSession, setSessionStatus } from "@/lib/db";
 import { makeAgentMgmtTools } from "@/lib/agent-tools";
 import { scheduler } from "@@/lib/scheduler";
+import { readAgentSettings } from "@@/lib/settings";
+import { resolveNotificationChannel, sendNotification } from "@/lib/notifications";
+import { AgentConfigReader } from "./agent-config-reader";
 
 // ─── Event bus manager ────────────────────────────────────────────────────────
 
@@ -106,6 +109,7 @@ export function createAgentServer(
   port: number,
   sessionManager?: SessionManager,
   publisherRegistry?: Map<string, ExecutorPublisher>,
+  notifyUser?: (title: string, message: string) => Promise<void>,
 ): void {
   const card: AgentCard = {
     ...agentCard,
@@ -173,6 +177,22 @@ export function createAgentServer(
       publisher.publishStatusToUI(parsed.data.message, parsed.data.artifacts);
       res.json({ ok: true });
     });
+
+    if (notifyUser) {
+      app.post("/internal/tasks/:taskId/notify", async (req, res) => {
+        const parsed = z.object({ title: z.string(), message: z.string() }).safeParse(req.body);
+        if (!parsed.success) {
+          res.status(400).json({ error: parsed.error.message });
+          return;
+        }
+        if (!publisherRegistry.has(req.params.taskId)) {
+          res.status(404).json({ error: `No active publisher for task ${req.params.taskId}` });
+          return;
+        }
+        await notifyUser(parsed.data.title, parsed.data.message);
+        res.json({ ok: true });
+      });
+    }
   }
 
   app.listen(port, "127.0.0.1", () => {
@@ -232,5 +252,19 @@ export function createServerFromDef(def: AgentDef, port: number): void {
       await activeExecutors.get(taskId)?.cancelTask();
     },
   };
-  createAgentServer(agentCard, executor, port, sessionManager, publisherRegistry);
+  const agentConfigReader = new AgentConfigReader();
+  const notifyUser = async (title: string, message: string) => {
+    const [{ extraEnv }, { notifications }] = await Promise.all([
+      agentConfigReader.resolveAgentSettings(def.name),
+      readAgentSettings(def.name),
+    ]);
+    if (!notifications?.enabled) return;
+    await sendNotification(
+      resolveNotificationChannel(notifications.channel, { ...process.env, ...extraEnv }),
+      `[${def.displayName}] ${title}`,
+      message,
+      4,
+    );
+  };
+  createAgentServer(agentCard, executor, port, sessionManager, publisherRegistry, notifyUser);
 }

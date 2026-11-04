@@ -19,6 +19,7 @@ Fill in all fields:
 - `schedule` — include only when schedulingEnabled; use `"interval"` or `"calendar"` type
 - `repos` — UUIDs from settings.json matching selected repo paths
 - `envVars` — `[{ "id": "<uuid>", "key": "VAR", "value": "", "isSecret": true }]` for each required var — `id` is required by the schema (use `crypto.randomUUID()` pattern: generate a fresh UUID for each entry)
+- `requiredMcpServers` — include only when the agent's script calls OAuth MCP servers (e.g. its skill's `allowed-tools` lists `mcp__buildkite__*`). List the server names, e.g. `["sumo-logic", "buildkite"]`; check them with `claude mcp list`. The run then pauses and opens the login for any that need it instead of failing mid-run. Omit for agents that use no OAuth MCP servers
 - `iconName` / `iconBg` / `iconColor` — from icon choice (see color palettes in `references/agent-registration.md`)
 - `doveCard` — write a concise title + description + starter prompt
 - `suggestions` — exactly 3 chips in this fixed order:

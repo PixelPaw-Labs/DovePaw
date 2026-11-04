@@ -6,6 +6,7 @@ export * from "./json.js";
 export * from "./keep-awake.js";
 export * from "./lock.js";
 export * from "./logger.js";
+export * from "./mcp-login.js";
 export * from "./paths.js";
 export * from "./projects.js";
 export * from "./repos.js";

@@ -223,6 +223,9 @@ export class QueryAgentExecutor {
             agentSettings.allowScriptWebTools,
           ),
           ...(this.port ? { DOVEPAW_A2A_PORT: String(this.port) } : {}),
+          ...(this.def.requiredMcpServers?.length
+            ? { DOVEPAW_REQUIRED_MCP_SERVERS: this.def.requiredMcpServers.join(",") }
+            : {}),
         },
         repoSlugs,
       );
