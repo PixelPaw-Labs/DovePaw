@@ -8,12 +8,14 @@ import { ensureWorktree } from "./claude-runner.js";
 import { withKeepAwake } from "./keep-awake.js";
 import type { SecurityMode } from "./security-policy.js";
 
+export const DEFAULT_ANTIGRAVITY_MODEL = "gemini-4-neon";
+
 export interface AntigravityRunOpts {
   /** Working directory for Antigravity execution */
   cwd: string;
   /** Task name for logging/tracking */
   taskName: string;
-  /** Model override (e.g. "gemini-3.8-flash"). Omit to use the SDK default model. */
+  /** Gemini model ID (defaults to "gemini-4-neon") */
   model?: string;
   /** Timeout in milliseconds (defaults to 30 minutes) */
   timeoutMs?: number;
@@ -159,7 +161,7 @@ export class AntigravityRunner {
     const payload = {
       prompt,
       cwd,
-      ...(opts.model ? { model: opts.model } : {}),
+      model: opts.model?.trim() || DEFAULT_ANTIGRAVITY_MODEL,
       ...(opts.additionalDirectories?.length
         ? { additionalDirectories: opts.additionalDirectories }
         : {}),

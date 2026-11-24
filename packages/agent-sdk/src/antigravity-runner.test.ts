@@ -78,7 +78,7 @@ describe("AntigravityRunner", () => {
     const res = await runner.run("ship it", {
       cwd: TMP_DIR,
       taskName: "bridge-ok",
-      model: "gemini-3.8-flash",
+      model: "gemini-4-neon",
       additionalDirectories: ["/extra/dir"],
       appendSystemPrompt: "Be concise.",
       sessionId: "conv-1",
@@ -97,7 +97,7 @@ describe("AntigravityRunner", () => {
     expect(echoed).toMatchObject({
       prompt: "ship it",
       cwd: TMP_DIR,
-      model: "gemini-3.8-flash",
+      model: "gemini-4-neon",
       additionalDirectories: ["/extra/dir"],
       appendSystemPrompt: "Be concise.",
       sessionId: "conv-1",
@@ -110,6 +110,26 @@ describe("AntigravityRunner", () => {
     expect(String(echoed.saveDir)).toContain(".antigravity-sessions");
     const logLines = readFileSync(logFile, "utf-8").trim().split("\n");
     expect(logLines).toHaveLength(2);
+  });
+
+  it("defaults model to gemini-4-neon when omitted", async () => {
+    const stubBridge = join(TMP_DIR, "default-model-bridge.py");
+    writeFileSync(
+      stubBridge,
+      [
+        "import json, sys",
+        "payload = json.loads(sys.stdin.read())",
+        'print(json.dumps({"type": "result", "ok": True, "text": payload["model"]}), flush=True)',
+      ].join("\n"),
+    );
+    const runner = new AntigravityRunner(TMP_DIR);
+    const res = await runner.run("hello", {
+      cwd: TMP_DIR,
+      taskName: "default-model",
+      pythonBin: "python3",
+      bridgeScriptPath: stubBridge,
+    });
+    expect(res).toEqual({ code: 0, stdout: "gemini-4-neon" });
   });
 
   it("returns error code and message when bridge emits an error event", async () => {

@@ -170,7 +170,7 @@ export interface AgentRunOpts {
   cwd: string;
   taskName: string;
   timeoutMs?: number;
-  /** Model to use. Reads AGENT_SCRIPT_MODEL env var if absent. GPT/codex → CodexRunner; antigravity/agy/gemini-* → AntigravityRunner; Claude/blank → ClaudeRunner. */
+  /** Model to use. Reads AGENT_SCRIPT_MODEL env var if absent. GPT/codex → CodexRunner; gemini-* → AntigravityRunner; Claude/blank → ClaudeRunner. */
   model?: string;
   /** Extra directories to expose to the agent. Mapped to `repos` for Claude, `additionalDirectories` for Codex/Antigravity. */
   additionalDirectories?: string[];
@@ -221,7 +221,7 @@ function isCodexModel(model: string): boolean {
 
 export function isAntigravityModel(model: string): boolean {
   const m = model.toLowerCase().trim();
-  return m === "antigravity" || m === "agy" || m.startsWith("gemini");
+  return m.startsWith("gemini");
 }
 
 function isClaudeModel(model: string): boolean {
@@ -247,7 +247,6 @@ export class AgentRunner {
     const appendSystemPrompt = appendMemoryReminder(opts.appendSystemPrompt);
 
     if (isAntigravityModel(model)) {
-      const normalized = model.toLowerCase().trim();
       const agyPrompt = opts.onAntigravityPrompt ? opts.onAntigravityPrompt(prompt) : prompt;
       const { securityMode, allowWebTools, enableSandbox } = resolveAntigravitySecurityOpts(
         opts.antigravityOpts,
@@ -256,7 +255,7 @@ export class AgentRunner {
         cwd: opts.cwd,
         taskName: opts.taskName,
         timeoutMs: opts.timeoutMs,
-        ...(normalized !== "antigravity" && normalized !== "agy" ? { model } : {}),
+        model,
         additionalDirectories: opts.additionalDirectories,
         apiKey: opts.apiKey,
         sessionId: opts.antigravityOpts?.sessionId ?? opts.claudeOpts?.sessionId,
@@ -315,7 +314,7 @@ export class AgentRunner {
     }
     if (!isClaudeModel(model)) {
       throw new Error(
-        `Unknown model: "${model}". Expected a Claude, Codex, or Antigravity/Gemini model identifier.`,
+        `Unknown model: "${model}". Expected a Claude, Codex, or Gemini model identifier.`,
       );
     }
     const { permissionMode, disallowedTools, hooks } = resolveClaudeSecurityOpts(opts.claudeOpts);

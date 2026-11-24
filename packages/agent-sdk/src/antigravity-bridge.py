@@ -95,6 +95,8 @@ async def run_agent(payload: dict[str, Any]) -> int:
     model = payload.get("model")
     if isinstance(model, str) and model.strip():
         config_kwargs["model"] = model.strip()
+    else:
+        config_kwargs["model"] = "gemini-4-neon"
 
     system_instructions = payload.get("appendSystemPrompt")
     if isinstance(system_instructions, str) and system_instructions.strip():

@@ -233,7 +233,11 @@ describe("AgentRunner", () => {
       ).rejects.toThrow('Unknown model: "llama-3"');
     });
 
-    it('routes model "antigravity", "agy", and gemini-* to AntigravityRunner', async () => {
+    it("routes gemini-* models to AntigravityRunner and rejects non-gemini placeholder names", async () => {
+      await expect(
+        runner.run("prompt", { cwd: TMP_DIR, taskName: "t", model: "antigravity" }),
+      ).rejects.toThrow('Unknown model: "antigravity"');
+
       mkdirSync(TMP_DIR, { recursive: true });
       const stubBridge = join(TMP_DIR, "dispatch-agy-bridge.py");
       writeFileSync(
@@ -245,26 +249,26 @@ describe("AgentRunner", () => {
         ].join("\n"),
       );
       try {
-        const resDefault = await runner.run("hi", {
+        const resNeon = await runner.run("hi", {
           cwd: TMP_DIR,
           taskName: "t",
-          model: "antigravity",
+          model: "gemini-4-neon",
           antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
         });
-        expect(resDefault.code).toBe(0);
-        expect((JSON.parse(resDefault.stdout) as { model?: string }).model).toBeUndefined();
+        expect(resNeon.code).toBe(0);
+        expect((JSON.parse(resNeon.stdout) as { model?: string }).model).toBe("gemini-4-neon");
 
-        const resGemini = await runner.run("hi", {
+        const resCarbon = await runner.run("hi", {
           cwd: TMP_DIR,
           taskName: "t",
-          model: "gemini-3.8-flash",
+          model: "gemini-4-carbon",
           onAntigravityPrompt: (p) => `${p} [agy]`,
           antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
         });
-        expect(resGemini.code).toBe(0);
-        expect(JSON.parse(resGemini.stdout)).toMatchObject({
+        expect(resCarbon.code).toBe(0);
+        expect(JSON.parse(resCarbon.stdout)).toMatchObject({
           prompt: "hi [agy]",
-          model: "gemini-3.8-flash",
+          model: "gemini-4-carbon",
         });
       } finally {
         rmSync(TMP_DIR, { recursive: true, force: true });
@@ -436,7 +440,7 @@ describe("AgentRunner", () => {
       }
     });
 
-    it("routes to Antigravity when AGENT_SCRIPT_MODEL is antigravity/agy/gemini-*", async () => {
+    it("routes to Antigravity when AGENT_SCRIPT_MODEL is a gemini-* model", async () => {
       mkdirSync(TMP_DIR, { recursive: true });
       const stubBridge = join(TMP_DIR, "env-agy-bridge.py");
       writeFileSync(
@@ -447,14 +451,14 @@ describe("AgentRunner", () => {
           'print(json.dumps({"type": "result", "ok": True, "text": payload.get("model", "default")}), flush=True)',
         ].join("\n"),
       );
-      process.env.AGENT_SCRIPT_MODEL = "gemini-3.8-flash";
+      process.env.AGENT_SCRIPT_MODEL = "gemini-4-neon";
       try {
         const res = await runner.run("prompt", {
           cwd: TMP_DIR,
           taskName: "t",
           antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
         });
-        expect(res).toEqual({ code: 0, stdout: "gemini-3.8-flash" });
+        expect(res).toEqual({ code: 0, stdout: "gemini-4-neon" });
       } finally {
         rmSync(TMP_DIR, { recursive: true, force: true });
       }
@@ -477,15 +481,16 @@ describe("AgentRunner", () => {
 });
 
 describe("isAntigravityModel", () => {
-  it("matches antigravity, agy, and gemini-* case-insensitively", () => {
-    expect(isAntigravityModel("antigravity")).toBe(true);
-    expect(isAntigravityModel("AGY")).toBe(true);
-    expect(isAntigravityModel("gemini-3.8-flash")).toBe(true);
-    expect(isAntigravityModel("Gemini-Pro")).toBe(true);
+  it("matches gemini-* model IDs case-insensitively", () => {
+    expect(isAntigravityModel("gemini-4-neon")).toBe(true);
+    expect(isAntigravityModel("gemini-4-carbon")).toBe(true);
+    expect(isAntigravityModel("GEMINI-4-NEON")).toBe(true);
   });
 
-  it("does not match Claude, Codex, empty, or unknown models", () => {
+  it("does not match Claude, Codex, placeholder aliases, empty, or unknown models", () => {
     expect(isAntigravityModel("")).toBe(false);
+    expect(isAntigravityModel("antigravity")).toBe(false);
+    expect(isAntigravityModel("agy")).toBe(false);
     expect(isAntigravityModel("claude-sonnet-5")).toBe(false);
     expect(isAntigravityModel("gpt-5.4")).toBe(false);
     expect(isAntigravityModel("codex")).toBe(false);
