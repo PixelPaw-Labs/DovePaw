@@ -26,6 +26,7 @@ When building a tmp agent, skill files live in a `skill/` subdirectory — separ
 ~/.dovepaw/tmp/<name>/skill/         ← skill files (SKILL.md, references/, scripts/, etc.)
 ~/.claude/skills/<name>/             ← symlink pointing to ~/.dovepaw/tmp/<name>/skill/
 ~/.codex/skills/<name>/              ← symlink pointing to ~/.dovepaw/tmp/<name>/skill/
+~/.gemini/config/skills/<name>/      ← symlink pointing to ~/.dovepaw/tmp/<name>/skill/
 ```
 
 Create the `skill/` dir and symlinks with Python (bypasses shell permission checks):
@@ -35,7 +36,7 @@ python3 -c "
 import os
 skill_dir = os.path.expanduser('~/.dovepaw/tmp/<name>/skill')
 os.makedirs(skill_dir, exist_ok=True)
-for skills_root in ['~/.claude/skills/<name>', '~/.codex/skills/<name>']:
+for skills_root in ['~/.claude/skills/<name>', '~/.codex/skills/<name>', '~/.gemini/config/skills/<name>']:
     link = os.path.expanduser(skills_root)
     os.makedirs(os.path.dirname(link), exist_ok=True)
     if not os.path.exists(link):

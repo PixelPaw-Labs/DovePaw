@@ -1,6 +1,25 @@
 /** Zod schemas for the DovePaw plugin system. No Node.js imports — safe in client components. */
 import { z } from "zod";
 
+// ─── Skill Symlink Targets ────────────────────────────────────────────────────
+
+export const BUILTIN_SKILL_TARGETS = [
+  { id: "claude", label: "Claude Code", path: "~/.claude/skills" },
+  { id: "codex", label: "Codex", path: "~/.codex/skills" },
+  { id: "antigravity", label: "Antigravity", path: "~/.gemini/config/skills" },
+] as const;
+
+export const DEFAULT_SKILL_TARGET_PATHS: readonly string[] = BUILTIN_SKILL_TARGETS.map(
+  (t) => t.path,
+);
+
+/** Normalize a skill target path (trim whitespace and trailing slashes except root `/`). */
+export function normalizeSkillTargetPath(targetPath: string): string {
+  const trimmed = targetPath.trim();
+  if (trimmed === "/" || trimmed === "~") return trimmed;
+  return trimmed.replace(/\/+$/, "");
+}
+
 // ─── Plugin Manifest (dovepaw-plugin.json in the plugin repo) ─────────────────
 
 export const pluginManifestSchema = z.object({
@@ -32,9 +51,20 @@ export const pluginRecordSchema = z.object({
   agentNames: z.array(z.string()),
   /** Names of skills this plugin provides (kept in sync via sync/update) */
   skillNames: z.array(z.string()).optional().default([]),
+  /**
+   * Optional list of target directories where this plugin's skills are symlinked
+   * (e.g. "~/.claude/skills", "~/.gemini/config/skills", or an absolute path).
+   * When omitted, defaults to all built-in targets. An empty array disables skill symlinking.
+   */
+  skillTargets: z.array(z.string().min(1)).optional(),
 });
 
 export type PluginRecord = z.infer<typeof pluginRecordSchema>;
+
+/** Return effective skill symlink target paths for a plugin (falls back to built-in defaults when unset). */
+export function resolvePluginSkillTargets(plugin: Pick<PluginRecord, "skillTargets">): string[] {
+  return plugin.skillTargets ?? [...DEFAULT_SKILL_TARGET_PATHS];
+}
 
 // ─── Plugins Registry (~/.dovepaw/plugins.json) ───────────────────────────────
 

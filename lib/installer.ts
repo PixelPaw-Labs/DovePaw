@@ -33,6 +33,7 @@ import {
   AGENT_SETTINGS_DIR,
   AGENTS_DIST,
   AGENTS_ROOT,
+  ANTIGRAVITY_SKILLS_ROOT,
   CLAUDE_OUTPUT_STYLES_ROOT,
   CLAUDE_RULES_ROOT,
   CODEX_SKILLS_ROOT,
@@ -42,9 +43,17 @@ import {
   SKILLS_ROOT,
   agentDistScript,
   agentNodeModule,
+  expandHomePath,
   schedulerNodeModule,
   schedulerScript,
 } from "./paths";
+
+const SKILL_ROOTS = [SKILLS_ROOT, CODEX_SKILLS_ROOT, ANTIGRAVITY_SKILLS_ROOT];
+
+function resolveSkillRoots(skillTargets?: readonly string[]): string[] {
+  if (!skillTargets) return SKILL_ROOTS;
+  return skillTargets.map(expandHomePath);
+}
 
 const execAsync = promisify(exec);
 
@@ -186,11 +195,17 @@ export async function linkAgents(): Promise<void> {
   }
 }
 
-/** Symlink a plugin's skills into ~/.claude/skills/ and ~/.codex/skills/. */
-export async function linkPluginSkills(pluginDir: string, skillNames: string[]): Promise<void> {
+/** Symlink a plugin's skills into the configured skill target directories (defaults to Claude, Codex, Antigravity). */
+export async function linkPluginSkills(
+  pluginDir: string,
+  skillNames: string[],
+  skillTargets?: readonly string[],
+): Promise<void> {
   if (skillNames.length === 0) return;
+  const roots = resolveSkillRoots(skillTargets);
+  if (roots.length === 0) return;
   await Promise.all(
-    [SKILLS_ROOT, CODEX_SKILLS_ROOT].flatMap((root) =>
+    roots.flatMap((root) =>
       skillNames.map(async (skill) => {
         await mkdir(root, { recursive: true });
         const link = join(root, skill);
@@ -222,10 +237,16 @@ export async function getAgentLogs(agent: AgentDef, lines = 100): Promise<string
   return `${logFiles[0].name} (last ${lines} lines):\n\n${all.slice(-lines).join("\n")}`;
 }
 
-/** Remove ~/.claude/skills/ and ~/.codex/skills/ symlinks for a plugin's skills. */
-export async function unlinkPluginSkills(skillNames: string[]): Promise<void> {
+/** Remove symlinks for a plugin's skills from the configured skill target directories (defaults to Claude, Codex, Antigravity). */
+export async function unlinkPluginSkills(
+  skillNames: string[],
+  skillTargets?: readonly string[],
+): Promise<void> {
+  if (skillNames.length === 0) return;
+  const roots = resolveSkillRoots(skillTargets);
+  if (roots.length === 0) return;
   await Promise.all(
-    [SKILLS_ROOT, CODEX_SKILLS_ROOT].flatMap((root) =>
+    roots.flatMap((root) =>
       skillNames.map((skill) => rm(join(root, skill), { recursive: true, force: true })),
     ),
   );
@@ -308,7 +329,7 @@ export async function syncOutputStyles(): Promise<void> {
   );
 }
 
-/** Symlink skills from agent-local/<name>/skill/ into ~/.claude/skills/ and ~/.codex/skills/. */
+/** Symlink skills from agent-local/<name>/skill/ into ~/.claude/skills/, ~/.codex/skills/, and ~/.gemini/config/skills/. */
 export async function linkLocalAgentSkills(): Promise<void> {
   let entries;
   try {
@@ -327,7 +348,7 @@ export async function linkLocalAgentSkills(): Promise<void> {
           return;
         }
         await Promise.all(
-          [SKILLS_ROOT, CODEX_SKILLS_ROOT].map(async (root) => {
+          SKILL_ROOTS.map(async (root) => {
             await mkdir(root, { recursive: true });
             const link = join(root, d.name);
             await rm(link, { recursive: true, force: true });

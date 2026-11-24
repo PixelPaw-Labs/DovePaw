@@ -40,7 +40,7 @@ if (uninstall) {
   const pluginsToUnlink = await listPlugins();
   if (pluginsToUnlink.length > 0) {
     console.log("\nUnlinking skills...\n");
-    await Promise.all(pluginsToUnlink.map((p) => unlinkPluginSkills(p.skillNames)));
+    await Promise.all(pluginsToUnlink.map((p) => unlinkPluginSkills(p.skillNames, p.skillTargets)));
   }
   console.log(`\nDone. Scripts remain in ${SCHEDULER_ROOT}/ for manual use.`);
   process.exit(0);
@@ -54,7 +54,7 @@ await linkAgentSdkToAgentLocal();
 const plugins = await listPlugins();
 await Promise.all([
   ...plugins.map((p) => linkAgentSdkToPlugin(p.path)),
-  ...plugins.map((p) => linkPluginSkills(p.path, p.skillNames)),
+  ...plugins.map((p) => linkPluginSkills(p.path, p.skillNames, p.skillTargets)),
   linkLocalAgentSkills(),
   syncAgentLocalToSettings(),
   syncClaudeRules(),

@@ -83,8 +83,16 @@ vi.mock("node:util", () => ({
   promisify: () => execAsyncSpy,
 }));
 
-const { addPlugin, removePlugin, listPlugins, syncPlugin, updatePlugin, isGitHubSlug, repoName } =
-  await import("../plugin-manager.js");
+const {
+  addPlugin,
+  removePlugin,
+  listPlugins,
+  syncPlugin,
+  updatePlugin,
+  updatePluginSkillTargets,
+  isGitHubSlug,
+  repoName,
+} = await import("../plugin-manager.js");
 const { linkPluginSkills, unlinkPluginSkills } = await import("../installer.js");
 
 // ─── isGitHubSlug ─────────────────────────────────────────────────────────────
@@ -299,7 +307,11 @@ describe("addPlugin — local path", () => {
     const record = await addPlugin(pluginDir);
 
     expect(record.skillNames).toEqual(["create-pr", "git-commit"]);
-    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["create-pr", "git-commit"]);
+    expect(linkPluginSkills).toHaveBeenCalledWith(
+      pluginDir,
+      ["create-pr", "git-commit"],
+      undefined,
+    );
   });
 
   it("stores empty skillNames when plugin has no skills", async () => {
@@ -307,7 +319,7 @@ describe("addPlugin — local path", () => {
     const record = await addPlugin(pluginDir);
 
     expect(record.skillNames).toEqual([]);
-    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, []);
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, [], undefined);
   });
 });
 
@@ -336,7 +348,7 @@ describe("removePlugin", () => {
     vi.clearAllMocks();
 
     await removePlugin("test-plugin");
-    expect(unlinkPluginSkills).toHaveBeenCalledWith(["create-pr"]);
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(["create-pr"], undefined);
   });
 });
 
@@ -399,7 +411,7 @@ describe("syncPlugin", () => {
     await expect(syncPlugin("no-such-plugin")).rejects.toThrow("not installed");
   });
 
-  it("links newly added skills on sync", async () => {
+  it("links all manifest skills (existing and newly added) on sync", async () => {
     const pluginDir = makePluginDir("test-plugin", ["agent-a"], {}, ["create-pr"]);
     await addPlugin(pluginDir);
     vi.clearAllMocks();
@@ -418,7 +430,11 @@ describe("syncPlugin", () => {
 
     const updated = await syncPlugin("test-plugin");
     expect(updated.skillNames).toEqual(["create-pr", "git-commit"]);
-    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["git-commit"]);
+    expect(linkPluginSkills).toHaveBeenCalledWith(
+      pluginDir,
+      ["create-pr", "git-commit"],
+      undefined,
+    );
   });
 
   it("unlinks removed skills on sync", async () => {
@@ -438,7 +454,7 @@ describe("syncPlugin", () => {
 
     const updated = await syncPlugin("test-plugin");
     expect(updated.skillNames).toEqual(["create-pr"]);
-    expect(unlinkPluginSkills).toHaveBeenCalledWith(["git-commit"]);
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(["git-commit"], undefined);
   });
 
   it("runs npm install in the plugin dir", async () => {
@@ -544,7 +560,7 @@ describe("updatePlugin", () => {
 
     await updatePlugin("test-plugin");
 
-    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["create-pr"]);
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["create-pr"], undefined);
   });
 
   it("throws when plugin is not installed", async () => {
@@ -555,5 +571,83 @@ describe("updatePlugin", () => {
     const pluginDir = makePluginDir("test-plugin", ["my-agent"]);
     writeRegistry(pluginDir, { gitUrl: undefined });
     await expect(updatePlugin("test-plugin")).rejects.toThrow("git URL");
+  });
+});
+
+// ─── updatePluginSkillTargets ─────────────────────────────────────────────────
+
+describe("updatePluginSkillTargets", () => {
+  it("unlinks removed targets, links new targets, and persists skillTargets", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr"]);
+    await addPlugin(pluginDir);
+    vi.clearAllMocks();
+
+    const updated = await updatePluginSkillTargets("test-plugin", [
+      "~/.claude/skills/",
+      "~/.cursor/skills",
+      "~/.cursor/skills/",
+    ]);
+
+    expect(updated.skillTargets).toEqual(["~/.claude/skills", "~/.cursor/skills"]);
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(
+      ["create-pr"],
+      ["~/.codex/skills", "~/.gemini/config/skills"],
+    );
+    expect(linkPluginSkills).toHaveBeenCalledWith(
+      pluginDir,
+      ["create-pr"],
+      ["~/.claude/skills", "~/.cursor/skills"],
+    );
+
+    const registry = JSON.parse(readFileSync(PLUGINS_REGISTRY_FILE, "utf-8")) as {
+      plugins: { name: string; skillTargets?: string[] }[];
+    };
+    expect(registry.plugins[0]!.skillTargets).toEqual(["~/.claude/skills", "~/.cursor/skills"]);
+  });
+
+  it("supports empty skillTargets array to disable all symlinks for a plugin", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr"]);
+    await addPlugin(pluginDir);
+    vi.clearAllMocks();
+
+    const updated = await updatePluginSkillTargets("test-plugin", []);
+
+    expect(updated.skillTargets).toEqual([]);
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(
+      ["create-pr"],
+      ["~/.claude/skills", "~/.codex/skills", "~/.gemini/config/skills"],
+    );
+    expect(linkPluginSkills).toHaveBeenCalledWith(pluginDir, ["create-pr"], []);
+  });
+
+  it("preserves custom skillTargets on sync and remove", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr"]);
+    await addPlugin(pluginDir);
+    await updatePluginSkillTargets("test-plugin", ["~/.gemini/config/skills"]);
+    vi.clearAllMocks();
+
+    await syncPlugin("test-plugin");
+    expect(linkPluginSkills).toHaveBeenCalledWith(
+      pluginDir,
+      ["create-pr"],
+      ["~/.gemini/config/skills"],
+    );
+
+    vi.clearAllMocks();
+    await removePlugin("test-plugin");
+    expect(unlinkPluginSkills).toHaveBeenCalledWith(["create-pr"], ["~/.gemini/config/skills"]);
+  });
+
+  it("rejects relative target paths", async () => {
+    const pluginDir = makePluginDir("test-plugin", ["my-agent"], {}, ["create-pr"]);
+    await addPlugin(pluginDir);
+
+    await expect(updatePluginSkillTargets("test-plugin", ["relative/skills"])).rejects.toThrow(
+      "must start with ~/ or be absolute",
+    );
+  });
+
+  it("throws when plugin is not installed", async () => {
+    await expect(updatePluginSkillTargets("no-such-plugin", [])).rejects.toThrow("not installed");
   });
 });

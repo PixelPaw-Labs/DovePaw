@@ -2,9 +2,23 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronRight, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  FolderSymlink,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+  X,
+} from "lucide-react";
 import { z } from "zod";
-import { pluginRecordSchema } from "@@/lib/plugin-schemas";
+import {
+  BUILTIN_SKILL_TARGETS,
+  normalizeSkillTargetPath,
+  pluginRecordSchema,
+  resolvePluginSkillTargets,
+} from "@@/lib/plugin-schemas";
 import type { PluginRecord } from "@@/lib/plugin-schemas";
 import { cn } from "@/lib/utils";
 
@@ -117,13 +131,53 @@ interface PluginCardProps {
   onUpdate: () => void;
   onSync: () => void;
   onRemove: () => void;
+  onUpdateSkillTargets: (skillTargets: string[]) => void;
 }
 
-function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProps) {
+const BUILTIN_SKILL_TARGET_PATHS = new Set<string>(BUILTIN_SKILL_TARGETS.map((t) => t.path));
+
+function PluginCard({
+  plugin,
+  busy,
+  onUpdate,
+  onSync,
+  onRemove,
+  onUpdateSkillTargets,
+}: PluginCardProps) {
   const [expanded, setExpanded] = React.useState(false);
   const [skillsExpanded, setSkillsExpanded] = React.useState(false);
+  const [targetsExpanded, setTargetsExpanded] = React.useState(false);
+  const [customPath, setCustomPath] = React.useState("");
+  const [pathError, setPathError] = React.useState<string | null>(null);
   const [confirming, setConfirming] = React.useState(false);
   const confirmTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const activeTargets = resolvePluginSkillTargets(plugin);
+  const customTargets = activeTargets.filter((p) => !BUILTIN_SKILL_TARGET_PATHS.has(p));
+
+  function toggleBuiltinTarget(targetPath: string) {
+    const next = activeTargets.includes(targetPath)
+      ? activeTargets.filter((p) => p !== targetPath)
+      : [...activeTargets, targetPath];
+    onUpdateSkillTargets(next);
+  }
+
+  function handleAddCustomTarget() {
+    const normalized = normalizeSkillTargetPath(customPath);
+    if (!normalized) return;
+    if (!normalized.startsWith("~/") && !normalized.startsWith("/")) {
+      setPathError("Path must start with ~/ or /");
+      return;
+    }
+    setPathError(null);
+    setCustomPath("");
+    if (activeTargets.includes(normalized)) return;
+    onUpdateSkillTargets([...activeTargets, normalized]);
+  }
+
+  function handleRemoveCustomTarget(targetPath: string) {
+    onUpdateSkillTargets(activeTargets.filter((p) => p !== targetPath));
+  }
 
   const installedDate = new Date(plugin.installedAt).toLocaleDateString("en-US", {
     year: "numeric",
@@ -213,18 +267,33 @@ function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProp
             {plugin.agentNames.length} agent{plugin.agentNames.length !== 1 ? "s" : ""}
           </button>
           {plugin.skillNames.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setSkillsExpanded((v) => !v)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {skillsExpanded ? (
-                <ChevronDown className="w-3 h-3" />
-              ) : (
-                <ChevronRight className="w-3 h-3" />
-              )}
-              {plugin.skillNames.length} skill{plugin.skillNames.length !== 1 ? "s" : ""}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setSkillsExpanded((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {skillsExpanded ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+                {plugin.skillNames.length} skill{plugin.skillNames.length !== 1 ? "s" : ""}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTargetsExpanded((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {targetsExpanded ? (
+                  <ChevronDown className="w-3 h-3" />
+                ) : (
+                  <ChevronRight className="w-3 h-3" />
+                )}
+                <FolderSymlink className="w-3 h-3" />
+                {activeTargets.length} symlink folder{activeTargets.length !== 1 ? "s" : ""}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -240,18 +309,96 @@ function PluginCard({ plugin, busy, onUpdate, onSync, onRemove }: PluginCardProp
         </div>
       )}
 
+      {/* Collapsible skill symlink target selector */}
+      {targetsExpanded && plugin.skillNames.length > 0 && (
+        <div className="border-t border-border/40 bg-muted/30 px-5 py-3 flex flex-col gap-2.5">
+          <p className="text-xs font-medium text-muted-foreground">
+            Choose folders where this plugin&apos;s skills are symlinked:
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {BUILTIN_SKILL_TARGETS.map((target) => (
+              <label
+                key={target.id}
+                className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none"
+              >
+                <input
+                  type="checkbox"
+                  checked={activeTargets.includes(target.path)}
+                  disabled={busy}
+                  onChange={() => toggleBuiltinTarget(target.path)}
+                  className="rounded border-border accent-primary"
+                />
+                <span className="font-medium">{target.label}</span>
+                <span className="text-muted-foreground/70 font-mono">{target.path}</span>
+              </label>
+            ))}
+          </div>
+
+          {customTargets.length > 0 && (
+            <div className="flex flex-col gap-1 pt-1 border-t border-border/30">
+              {customTargets.map((targetPath) => (
+                <div key={targetPath} className="flex items-center justify-between gap-2 text-xs">
+                  <span className="font-mono text-muted-foreground truncate">{targetPath}</span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => handleRemoveCustomTarget(targetPath)}
+                    aria-label={`Remove ${targetPath}`}
+                    className="p-0.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="text"
+              value={customPath}
+              disabled={busy}
+              onChange={(e) => {
+                setCustomPath(e.target.value);
+                if (pathError) setPathError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddCustomTarget();
+              }}
+              placeholder="~/.cursor/skills or /custom/skills/path"
+              aria-label="Custom symlink folder"
+              className="flex-1 px-2.5 py-1 text-xs bg-background border border-border rounded-md outline-none focus:ring-2 focus:ring-primary/40 font-mono"
+            />
+            <button
+              type="button"
+              disabled={busy || !customPath.trim()}
+              onClick={handleAddCustomTarget}
+              className="px-2.5 py-1 text-xs rounded-md border border-border text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-40"
+            >
+              Add folder
+            </button>
+          </div>
+          {pathError && <p className="text-xs text-destructive">{pathError}</p>}
+        </div>
+      )}
+
       {/* Collapsible skill list with symlink paths */}
       {skillsExpanded && plugin.skillNames.length > 0 && (
         <div className="border-t border-border/40 bg-muted/30 px-5 py-3 flex flex-col gap-2">
           {plugin.skillNames.map((name) => (
             <div key={name} className="flex flex-col gap-0.5">
               <p className="text-sm text-muted-foreground font-mono">• {name}</p>
-              <p className="text-xs text-muted-foreground/60 font-mono pl-3">
-                ~/.claude/skills/{name}
-              </p>
-              <p className="text-xs text-muted-foreground/60 font-mono pl-3">
-                ~/.codex/skills/{name}
-              </p>
+              {activeTargets.length === 0 ? (
+                <p className="text-xs text-muted-foreground/60 italic pl-3">
+                  No symlink folders enabled
+                </p>
+              ) : (
+                activeTargets.map((targetPath) => (
+                  <p key={targetPath} className="text-xs text-muted-foreground/60 font-mono pl-3">
+                    {targetPath}/{name}
+                  </p>
+                ))
+              )}
             </div>
           ))}
         </div>
@@ -323,6 +470,35 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Action failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleUpdateSkillTargets(
+    pluginName: string,
+    skillTargets: string[],
+  ): Promise<void> {
+    setBusy(pluginName);
+    setError(null);
+    try {
+      const res = await fetch(`/api/settings/plugins/${pluginName}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skillTargets }),
+      });
+      const data: unknown = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          errorResponseSchema.parse(data).error ?? "Failed to update symlink folders",
+        );
+      }
+      const { plugin } = pluginResponseSchema.parse(data);
+      setPlugins((prev) => prev.map((p) => (p.name === plugin.name ? plugin : p)));
+      router.refresh();
+      showNotice(`Updated skill symlink folders for "${plugin.name}".`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update symlink folders");
     } finally {
       setBusy(null);
     }
@@ -403,6 +579,9 @@ export function PluginManagementContent({ initialPlugins }: PluginManagementCont
               }
               onRemove={() =>
                 void callPluginAction(plugin.name, `/api/settings/plugins/${plugin.name}`, "DELETE")
+              }
+              onUpdateSkillTargets={(skillTargets) =>
+                void handleUpdateSkillTargets(plugin.name, skillTargets)
               }
             />
           ))}

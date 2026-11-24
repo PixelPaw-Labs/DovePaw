@@ -61,6 +61,88 @@ describe("PluginCard — date rendering", () => {
     });
     expect(screen.getByText(`Installed ${expectedDate}`)).toBeTruthy();
   });
+
+  it("displays Claude, Codex, and Antigravity skill symlink paths when skills are expanded", () => {
+    const plugin = { ...PLUGIN, skillNames: ["create-pr"] };
+    render(<PluginManagementContent initialPlugins={[plugin]} />);
+    fireEvent.click(screen.getByText("1 skill"));
+    expect(screen.getByText("~/.claude/skills/create-pr")).toBeTruthy();
+    expect(screen.getByText("~/.codex/skills/create-pr")).toBeTruthy();
+    expect(screen.getByText("~/.gemini/config/skills/create-pr")).toBeTruthy();
+  });
+
+  it("toggles built-in symlink targets and adds/removes custom folders via PATCH", async () => {
+    const pluginWithSkills: PluginRecord = {
+      ...PLUGIN,
+      skillNames: ["create-pr"],
+      skillTargets: ["~/.claude/skills", "~/.gemini/config/skills"],
+    };
+    const afterToggle: PluginRecord = {
+      ...pluginWithSkills,
+      skillTargets: ["~/.claude/skills"],
+    };
+    const afterCustomAdd: PluginRecord = {
+      ...afterToggle,
+      skillTargets: ["~/.claude/skills", "~/.cursor/skills"],
+    };
+
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        const rawBody = typeof init.body === "string" ? init.body : "{}";
+        const body = JSON.parse(rawBody) as { skillTargets: string[] };
+        const nextPlugin = body.skillTargets.includes("~/.cursor/skills")
+          ? afterCustomAdd
+          : afterToggle;
+        return { ok: true, json: async () => ({ plugin: nextPlugin }) } as Response;
+      }
+      return { ok: true, json: async () => ({ plugins: [pluginWithSkills] }) } as Response;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<PluginManagementContent initialPlugins={[pluginWithSkills]} />);
+
+    fireEvent.click(screen.getByText("2 symlink folders"));
+    const antigravityCheckbox = screen.getByLabelText(/Antigravity/i) as HTMLInputElement;
+    expect(antigravityCheckbox.checked).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(antigravityCheckbox);
+    });
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        ([url, init]) => url === PLUGIN_DELETE_URL && init?.method === "PATCH",
+      );
+      expect(patchCall).toBeTruthy();
+      const rawBody = typeof patchCall![1]!.body === "string" ? patchCall![1]!.body : "{}";
+      expect(JSON.parse(rawBody)).toEqual({
+        skillTargets: ["~/.claude/skills"],
+      });
+    });
+
+    // Reject relative path client-side
+    const input = screen.getByLabelText("Custom symlink folder");
+    fireEvent.change(input, { target: { value: "relative/path" } });
+    fireEvent.click(screen.getByText("Add folder"));
+    expect(screen.getByText("Path must start with ~/ or /")).toBeTruthy();
+
+    // Add valid custom folder
+    fireEvent.change(input, { target: { value: "~/.cursor/skills/" } });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Add folder"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("~/.cursor/skills")).toBeTruthy();
+    });
+  });
+
+  it("shows empty notice in skills panel when no symlink folders are enabled", () => {
+    const plugin: PluginRecord = { ...PLUGIN, skillNames: ["create-pr"], skillTargets: [] };
+    render(<PluginManagementContent initialPlugins={[plugin]} />);
+    fireEvent.click(screen.getByText("1 skill"));
+    expect(screen.getByText("No symlink folders enabled")).toBeTruthy();
+  });
 });
 
 describe("PluginManagementContent — server restart wiring", () => {

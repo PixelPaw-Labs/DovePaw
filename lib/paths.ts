@@ -79,6 +79,15 @@ export const SKILLS_ROOT = join(process.env.HOME!, ".claude/skills");
 export const CLAUDE_OUTPUT_STYLES_ROOT = join(process.env.HOME!, ".claude/output-styles");
 /** ~/.codex/skills — Codex skills directory */
 export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
+/** ~/.gemini/config/skills — Antigravity skills directory */
+export const ANTIGRAVITY_SKILLS_ROOT = join(process.env.HOME!, ".gemini/config/skills");
+/** Expand a leading `~` or `~/` to `$HOME`; absolute paths pass through unchanged. */
+export function expandHomePath(p: string): string {
+  const trimmed = p.trim();
+  if (trimmed === "~") return process.env.HOME!;
+  if (trimmed.startsWith("~/")) return join(process.env.HOME!, trimmed.slice(2));
+  return trimmed;
+}
 /** Resolve an agent's entry point to an absolute path. Absolute paths (e.g. tmp agents) pass through unchanged. */
 export const agentEntryPath = (entryPath: string) =>
   isAbsolute(entryPath) ? entryPath : join(AGENTS_ROOT, entryPath);

@@ -84,7 +84,7 @@ describe("linkLocalAgentSkills", () => {
     expect(mockSymlink).not.toHaveBeenCalled();
   });
 
-  it("symlinks skill/ into ~/.claude/skills/<name> and ~/.codex/skills/<name>", async () => {
+  it("symlinks skill/ into ~/.claude/skills/<name>, ~/.codex/skills/<name>, and ~/.gemini/config/skills/<name>", async () => {
     const { linkLocalAgentSkills } = await import("@@/lib/installer");
     mockReaddir.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
     mockAccess.mockResolvedValue(undefined);
@@ -92,9 +92,12 @@ describe("linkLocalAgentSkills", () => {
     const dests = mockSymlink.mock.calls.map((args) => String(args[1]));
     expect(dests.some((d) => d.includes(".claude/skills") && d.endsWith("my-agent"))).toBe(true);
     expect(dests.some((d) => d.includes(".codex/skills") && d.endsWith("my-agent"))).toBe(true);
+    expect(dests.some((d) => d.includes(".gemini/config/skills") && d.endsWith("my-agent"))).toBe(
+      true,
+    );
   });
 
-  it("removes existing link before symlinking in both roots", async () => {
+  it("removes existing link before symlinking in all skill roots", async () => {
     const { linkLocalAgentSkills } = await import("@@/lib/installer");
     mockReaddir.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
     mockAccess.mockResolvedValue(undefined);
@@ -102,6 +105,9 @@ describe("linkLocalAgentSkills", () => {
     const rmPaths = mockRm.mock.calls.map((args) => String(args[0]));
     expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("my-agent"))).toBe(true);
     expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("my-agent"))).toBe(true);
+    expect(rmPaths.some((p) => p.includes(".gemini/config/skills") && p.endsWith("my-agent"))).toBe(
+      true,
+    );
   });
 });
 

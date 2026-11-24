@@ -87,7 +87,11 @@ describe("linkAgentSdkToAgentLocal", () => {
 });
 
 describe("linkPluginSkills", () => {
-  let linkPluginSkills: (pluginDir: string, skillNames: string[]) => Promise<void>;
+  let linkPluginSkills: (
+    pluginDir: string,
+    skillNames: string[],
+    skillTargets?: readonly string[],
+  ) => Promise<void>;
   let symlinkMock: ReturnType<typeof vi.fn>;
   let rmMock: ReturnType<typeof vi.fn>;
 
@@ -118,16 +122,41 @@ describe("linkPluginSkills", () => {
     expect(dests.some((d) => d.includes(".codex/skills") && d.endsWith("create-pr"))).toBe(true);
   });
 
-  it("removes existing link before symlinking in both roots", async () => {
+  it("symlinks each skill into ~/.gemini/config/skills", async () => {
+    await linkPluginSkills("/plugin", ["create-pr"]);
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".gemini/config/skills") && d.endsWith("create-pr"))).toBe(
+      true,
+    );
+  });
+
+  it("removes existing link before symlinking in all skill roots", async () => {
     await linkPluginSkills("/plugin", ["create-pr"]);
     const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
     expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("create-pr"))).toBe(true);
     expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("create-pr"))).toBe(true);
+    expect(
+      rmPaths.some((p) => p.includes(".gemini/config/skills") && p.endsWith("create-pr")),
+    ).toBe(true);
+  });
+
+  it("symlinks only into custom skillTargets when provided", async () => {
+    await linkPluginSkills("/plugin", ["create-pr"], ["~/.cursor/skills", "/opt/custom-skills"]);
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests).toHaveLength(2);
+    expect(dests.some((d) => d.includes(".cursor/skills") && d.endsWith("create-pr"))).toBe(true);
+    expect(dests.includes("/opt/custom-skills/create-pr")).toBe(true);
+    expect(dests.some((d) => d.includes(".claude/skills"))).toBe(false);
+  });
+
+  it("does nothing when skillTargets is an explicit empty array", async () => {
+    await linkPluginSkills("/plugin", ["create-pr"], []);
+    expect(symlinkMock).not.toHaveBeenCalled();
   });
 });
 
 describe("unlinkPluginSkills", () => {
-  let unlinkPluginSkills: (skillNames: string[]) => Promise<void>;
+  let unlinkPluginSkills: (skillNames: string[], skillTargets?: readonly string[]) => Promise<void>;
   let rmMock: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
@@ -149,6 +178,27 @@ describe("unlinkPluginSkills", () => {
     await unlinkPluginSkills(["create-pr"]);
     const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
     expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("create-pr"))).toBe(true);
+  });
+
+  it("removes skill from ~/.gemini/config/skills", async () => {
+    await unlinkPluginSkills(["create-pr"]);
+    const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
+    expect(
+      rmPaths.some((p) => p.includes(".gemini/config/skills") && p.endsWith("create-pr")),
+    ).toBe(true);
+  });
+
+  it("removes skill only from specified skillTargets", async () => {
+    await unlinkPluginSkills(["create-pr"], ["~/.cursor/skills"]);
+    const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
+    expect(rmPaths).toHaveLength(1);
+    expect(rmPaths[0]).toContain(".cursor/skills");
+    expect(rmPaths[0]).toMatch(/create-pr$/);
+  });
+
+  it("does nothing when skillTargets is empty", async () => {
+    await unlinkPluginSkills(["create-pr"], []);
+    expect(rmMock).not.toHaveBeenCalled();
   });
 });
 
@@ -200,6 +250,16 @@ describe("linkLocalAgentSkills", () => {
     expect(dests.some((d) => d.includes(".codex/skills") && d.endsWith("my-agent"))).toBe(true);
   });
 
+  it("symlinks skill/ into ~/.gemini/config/skills/<name>", async () => {
+    readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
+    accessMock.mockResolvedValue(undefined);
+    await linkLocalAgentSkills();
+    const dests = symlinkMock.mock.calls.map((args) => String(args[1]));
+    expect(dests.some((d) => d.includes(".gemini/config/skills") && d.endsWith("my-agent"))).toBe(
+      true,
+    );
+  });
+
   it("removes existing link before symlinking", async () => {
     readdirMock.mockResolvedValue([{ name: "my-agent", isDirectory: () => true }]);
     accessMock.mockResolvedValue(undefined);
@@ -207,6 +267,9 @@ describe("linkLocalAgentSkills", () => {
     const rmPaths = rmMock.mock.calls.map((args) => String(args[0]));
     expect(rmPaths.some((p) => p.includes(".claude/skills") && p.endsWith("my-agent"))).toBe(true);
     expect(rmPaths.some((p) => p.includes(".codex/skills") && p.endsWith("my-agent"))).toBe(true);
+    expect(rmPaths.some((p) => p.includes(".gemini/config/skills") && p.endsWith("my-agent"))).toBe(
+      true,
+    );
   });
 });
 

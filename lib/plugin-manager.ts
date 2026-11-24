@@ -6,7 +6,7 @@
 import { exec } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile, rm, symlink, unlink } from "node:fs/promises";
-import { join } from "node:path";
+import { join, isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import { agentConfigEntrySchema } from "./agents-config-schemas";
 import { readAgentFile, writeAgentFile } from "./agents-config";
@@ -15,9 +15,11 @@ import { makeEnvVar } from "./settings";
 import { pushConfig } from "./s3-config-sync";
 import { linkAgentSdkToPlugin, linkPluginSkills, unlinkPluginSkills } from "./installer";
 import {
+  normalizeSkillTargetPath,
   pluginManifestSchema,
   pluginRecordSchema,
   pluginsRegistrySchema,
+  resolvePluginSkillTargets,
   type PluginManifest,
   type PluginRecord,
   type PluginsRegistry,
@@ -168,15 +170,16 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     }
   }
 
+  const registry = await readRegistry();
+  const existing = registry.plugins.find((p) => p.name === manifest.name);
+
   await execAsync(`npm install --prefix ${pluginDir}`);
   await linkAgentSdkToPlugin(pluginDir);
-  await linkPluginSkills(pluginDir, manifest.skills);
+  await linkPluginSkills(pluginDir, manifest.skills, existing?.skillTargets);
 
   await Promise.all(manifest.agents.map((agentName) => upsertAgentSettings(agentName, pluginDir)));
 
-  const registry = await readRegistry();
   const now = new Date().toISOString();
-  const existing = registry.plugins.find((p) => p.name === manifest.name);
 
   const record: PluginRecord = pluginRecordSchema.parse({
     name: manifest.name,
@@ -186,6 +189,7 @@ export async function addPlugin(source: string): Promise<PluginRecord> {
     version: manifest.version,
     agentNames: manifest.agents,
     skillNames: manifest.skills,
+    ...(existing?.skillTargets !== undefined ? { skillTargets: existing.skillTargets } : {}),
   });
 
   if (existing) {
@@ -213,7 +217,7 @@ export async function removePlugin(pluginName: string): Promise<void> {
       const dir = agentConfigDir(agentName);
       if (existsSync(dir)) await rm(dir, { recursive: true });
     }),
-    unlinkPluginSkills(plugin.skillNames),
+    unlinkPluginSkills(plugin.skillNames, plugin.skillTargets),
   ]);
 
   registry.plugins = registry.plugins.filter((p) => p.name !== pluginName);
@@ -241,21 +245,19 @@ export async function syncPlugin(pluginName: string): Promise<PluginRecord> {
   const removedAgents = plugin.agentNames.filter((n) => !manifest.agents.includes(n));
   // Unlink skills no longer in the manifest
   const removedSkills = plugin.skillNames.filter((s) => !manifest.skills.includes(s));
-  // Link newly added skills
-  const addedSkills = manifest.skills.filter((s) => !plugin.skillNames.includes(s));
 
   await Promise.all([
     ...removedAgents.map(async (agentName) => {
       const dir = agentConfigDir(agentName);
       if (existsSync(dir)) await rm(dir, { recursive: true });
     }),
-    unlinkPluginSkills(removedSkills),
+    unlinkPluginSkills(removedSkills, plugin.skillTargets),
   ]);
 
-  // Upsert settings for current agents
+  // Upsert settings for current agents and ensure all current skills are linked
   await Promise.all([
     ...manifest.agents.map((agentName) => upsertAgentSettings(agentName, plugin.path)),
-    linkPluginSkills(plugin.path, addedSkills),
+    linkPluginSkills(plugin.path, manifest.skills, plugin.skillTargets),
   ]);
 
   const updated: PluginRecord = {
@@ -263,6 +265,50 @@ export async function syncPlugin(pluginName: string): Promise<PluginRecord> {
     version: manifest.version,
     agentNames: manifest.agents,
     skillNames: manifest.skills,
+  };
+  const idx = registry.plugins.indexOf(plugin);
+  registry.plugins[idx] = updated;
+  await writeRegistry(registry);
+  return updated;
+}
+
+/**
+ * Update the skill symlink target directories for an installed plugin.
+ * Unlinks skills from removed targets, links skills into the new targets, and persists to plugins.json.
+ */
+export async function updatePluginSkillTargets(
+  pluginName: string,
+  skillTargets: string[],
+): Promise<PluginRecord> {
+  const registry = await readRegistry();
+  const plugin = registry.plugins.find((p) => p.name === pluginName);
+  if (!plugin) throw new Error(`Plugin "${pluginName}" is not installed`);
+
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of skillTargets) {
+    const target = normalizeSkillTargetPath(raw);
+    if (!target) continue;
+    if (!target.startsWith("~/") && !isAbsolute(target)) {
+      throw new Error(`Invalid skill target path "${raw}": must start with ~/ or be absolute`);
+    }
+    if (!seen.has(target)) {
+      seen.add(target);
+      normalized.push(target);
+    }
+  }
+
+  const prevTargets = resolvePluginSkillTargets(plugin);
+  const removedTargets = prevTargets.filter((t) => !seen.has(t));
+
+  if (removedTargets.length > 0) {
+    await unlinkPluginSkills(plugin.skillNames, removedTargets);
+  }
+  await linkPluginSkills(plugin.path, plugin.skillNames, normalized);
+
+  const updated: PluginRecord = {
+    ...plugin,
+    skillTargets: normalized,
   };
   const idx = registry.plugins.indexOf(plugin);
   registry.plugins[idx] = updated;
@@ -283,6 +329,5 @@ export async function updatePlugin(pluginName: string): Promise<PluginRecord> {
   await execAsync(`git -C ${plugin.path} reset --hard origin/main`);
   await execAsync(`npm install --prefix ${plugin.path}`);
   await linkAgentSdkToPlugin(plugin.path);
-  await linkPluginSkills(plugin.path, plugin.skillNames);
   return syncPlugin(pluginName);
 }
