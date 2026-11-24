@@ -1,5 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { AntigravityRunner, type AntigravityRunOpts } from "./antigravity-runner.js";
 import { ClaudeRunner, type RunOpts } from "./claude-runner.js";
 import { CodexRunner, type CodexRunOpts } from "./codex-runner.js";
 import type { WebSearchMode, SandboxMode, CodexOptions, ApprovalMode } from "@openai/codex-sdk";
@@ -8,7 +9,11 @@ import type {
   HookCallbackMatcher,
   PreToolUseHookSpecificOutput,
 } from "@anthropic-ai/claude-agent-sdk";
-import { bashHasWriteOperation, getSecurityModeStrategy } from "./security-policy.js";
+import {
+  bashHasWriteOperation,
+  getSecurityModeStrategy,
+  type SecurityMode,
+} from "./security-policy.js";
 import { notifyUser, publishStatusToUI } from "./logger.js";
 import { ensureMcpLogins, readRequiredMcpServers } from "./mcp-login.js";
 
@@ -124,25 +129,64 @@ interface CodexOpts {
   networkAccessEnabled?: boolean;
 }
 
-/** Union of all opts supported across runners. Claude-specific fields are ignored for Codex and vice versa. */
+export interface AntigravityOpts {
+  allowWebTools?: boolean;
+  enableSandbox?: boolean;
+  enableSubagents?: boolean;
+  skillsPaths?: string[];
+  sessionId?: string;
+  saveDir?: string;
+  worktree?: string;
+  worktreeCopy?: Array<{ src: string; dst: string }>;
+  vertex?: boolean;
+  project?: string;
+  location?: string;
+  pythonBin?: string;
+  bridgeScriptPath?: string;
+}
+
+export function resolveAntigravitySecurityOpts(
+  antigravityOpts: AntigravityOpts | undefined,
+  env: Record<string, string | undefined> = process.env,
+): {
+  securityMode: SecurityMode;
+  allowWebTools: boolean;
+  enableSandbox: boolean;
+} {
+  const envMode = env.DOVEPAW_SECURITY_MODE;
+  const securityMode: SecurityMode =
+    envMode === "read-only" || envMode === "supervised" || envMode === "autonomous"
+      ? envMode
+      : "autonomous";
+  const allowWebTools =
+    env.DOVEPAW_ALLOW_WEB_TOOLS === "1" ? true : (antigravityOpts?.allowWebTools ?? false);
+  const enableSandbox =
+    securityMode === "supervised" ? true : (antigravityOpts?.enableSandbox ?? false);
+  return { securityMode, allowWebTools, enableSandbox };
+}
+
+/** Union of all opts supported across runners. Runner-specific fields are ignored by other runners. */
 export interface AgentRunOpts {
   cwd: string;
   taskName: string;
   timeoutMs?: number;
-  /** Model to use. Reads AGENT_SCRIPT_MODEL env var if absent. GPT/codex IDs → CodexRunner; anything else → ClaudeRunner. */
+  /** Model to use. Reads AGENT_SCRIPT_MODEL env var if absent. GPT/codex → CodexRunner; antigravity/agy/gemini-* → AntigravityRunner; Claude/blank → ClaudeRunner. */
   model?: string;
-  /** Extra directories to expose to the agent. Mapped to `repos` for Claude, `additionalDirectories` for Codex. */
+  /** Extra directories to expose to the agent. Mapped to `repos` for Claude, `additionalDirectories` for Codex/Antigravity. */
   additionalDirectories?: string[];
-  /** API key override. Mapped to ANTHROPIC_API_KEY for Claude, apiKey for Codex. */
+  /** API key override. Mapped to ANTHROPIC_API_KEY for Claude, apiKey for Codex/Antigravity. */
   apiKey?: string;
-  /** Resume a prior session. Uses --resume for Claude, resumeThread() for Codex. */
+  /** Resume a prior session. Uses --resume for Claude, resumeThread() for Codex, conversation_id for Antigravity. */
   resumeSession?: string;
-  /** Additional instructions appended to the system prompt (claude_code preset append / Codex developer_instructions). */
+  /** Additional instructions appended to the system prompt (claude_code preset append / Codex developer_instructions / Antigravity system_instructions). */
   appendSystemPrompt?: string;
   claudeOpts?: ClaudeRunOpts;
   codexOpts?: CodexOpts;
+  antigravityOpts?: AntigravityOpts;
   /** Called when Codex is the active runner. Return value replaces the prompt sent to Codex. */
   onCodexPrompt?: (prompt: string) => string;
+  /** Called when Antigravity is the active runner. Return value replaces the prompt sent to Antigravity. */
+  onAntigravityPrompt?: (prompt: string) => string;
 }
 
 /**
@@ -175,14 +219,19 @@ function isCodexModel(model: string): boolean {
   return m === "codex" || m.startsWith("gpt");
 }
 
+export function isAntigravityModel(model: string): boolean {
+  const m = model.toLowerCase().trim();
+  return m === "antigravity" || m === "agy" || m.startsWith("gemini");
+}
+
 function isClaudeModel(model: string): boolean {
   const m = model.toLowerCase().trim();
   return m === "" || m === "claude" || m.startsWith("claude");
 }
 
 /**
- * Unified agent runner. Delegates to ClaudeRunner or CodexRunner based on the
- * effective model: opts.model → AGENT_SCRIPT_MODEL env var → default (ClaudeRunner).
+ * Unified agent runner. Delegates to ClaudeRunner, CodexRunner, or AntigravityRunner
+ * based on the effective model: opts.model → AGENT_SCRIPT_MODEL env var → default (ClaudeRunner).
  */
 export class AgentRunner {
   constructor(
@@ -190,9 +239,45 @@ export class AgentRunner {
     private readonly logFile?: string,
   ) {}
 
-  async run(prompt: string, opts: AgentRunOpts): Promise<{ code: number; stdout: string }> {
+  async run(
+    prompt: string,
+    opts: AgentRunOpts,
+  ): Promise<{ code: number; stdout: string; sessionId?: string }> {
     const model = opts.model ?? (process.env.AGENT_SCRIPT_MODEL ?? "").trim();
     const appendSystemPrompt = appendMemoryReminder(opts.appendSystemPrompt);
+
+    if (isAntigravityModel(model)) {
+      const normalized = model.toLowerCase().trim();
+      const agyPrompt = opts.onAntigravityPrompt ? opts.onAntigravityPrompt(prompt) : prompt;
+      const { securityMode, allowWebTools, enableSandbox } = resolveAntigravitySecurityOpts(
+        opts.antigravityOpts,
+      );
+      return new AntigravityRunner(this.logDir, this.logFile ?? "").run(agyPrompt, {
+        cwd: opts.cwd,
+        taskName: opts.taskName,
+        timeoutMs: opts.timeoutMs,
+        ...(normalized !== "antigravity" && normalized !== "agy" ? { model } : {}),
+        additionalDirectories: opts.additionalDirectories,
+        apiKey: opts.apiKey,
+        sessionId: opts.antigravityOpts?.sessionId ?? opts.claudeOpts?.sessionId,
+        resumeSession: opts.resumeSession,
+        saveDir: opts.antigravityOpts?.saveDir,
+        worktree: opts.antigravityOpts?.worktree ?? opts.claudeOpts?.worktree,
+        worktreeCopy: opts.antigravityOpts?.worktreeCopy ?? opts.claudeOpts?.worktreeCopy,
+        appendSystemPrompt,
+        securityMode,
+        allowWebTools,
+        enableSandbox,
+        enableSubagents: opts.antigravityOpts?.enableSubagents,
+        skillsPaths: opts.antigravityOpts?.skillsPaths,
+        vertex: opts.antigravityOpts?.vertex,
+        project: opts.antigravityOpts?.project,
+        location: opts.antigravityOpts?.location,
+        pythonBin: opts.antigravityOpts?.pythonBin,
+        bridgeScriptPath: opts.antigravityOpts?.bridgeScriptPath,
+      } satisfies AntigravityRunOpts);
+    }
+
     try {
       await ensureMcpLogins({
         cli: isCodexModel(model) ? "codex" : "claude",
@@ -229,7 +314,9 @@ export class AgentRunner {
       } satisfies CodexRunOpts);
     }
     if (!isClaudeModel(model)) {
-      throw new Error(`Unknown model: "${model}". Expected a Claude or Codex model identifier.`);
+      throw new Error(
+        `Unknown model: "${model}". Expected a Claude, Codex, or Antigravity/Gemini model identifier.`,
+      );
     }
     const { permissionMode, disallowedTools, hooks } = resolveClaudeSecurityOpts(opts.claudeOpts);
     return new ClaudeRunner(this.logDir, this.logFile ?? "").run(prompt, {

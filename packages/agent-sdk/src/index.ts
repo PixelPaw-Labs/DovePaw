@@ -1,4 +1,5 @@
 export * from "./agent-runner.js";
+export * from "./antigravity-runner.js";
 export * from "./claude.js";
 export * from "./exec.js";
 export * from "./git.js";

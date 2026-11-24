@@ -1,10 +1,12 @@
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
   AgentRunner,
   appendMemoryReminder,
   deriveApprovalsReviewer,
+  isAntigravityModel,
+  resolveAntigravitySecurityOpts,
   resolveClaudeSecurityOpts,
   resolveCodexSandboxMode,
   resolveCodexApprovalPolicy,
@@ -227,8 +229,46 @@ describe("AgentRunner", () => {
 
     it("throws for unrecognized model identifiers", async () => {
       await expect(
-        runner.run("prompt", { cwd: TMP_DIR, taskName: "t", model: "gemini-pro" }),
-      ).rejects.toThrow('Unknown model: "gemini-pro"');
+        runner.run("prompt", { cwd: TMP_DIR, taskName: "t", model: "llama-3" }),
+      ).rejects.toThrow('Unknown model: "llama-3"');
+    });
+
+    it('routes model "antigravity", "agy", and gemini-* to AntigravityRunner', async () => {
+      mkdirSync(TMP_DIR, { recursive: true });
+      const stubBridge = join(TMP_DIR, "dispatch-agy-bridge.py");
+      writeFileSync(
+        stubBridge,
+        [
+          "import json, sys",
+          "payload = json.loads(sys.stdin.read())",
+          'print(json.dumps({"type": "result", "ok": True, "text": json.dumps(payload)}), flush=True)',
+        ].join("\n"),
+      );
+      try {
+        const resDefault = await runner.run("hi", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "antigravity",
+          antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
+        });
+        expect(resDefault.code).toBe(0);
+        expect((JSON.parse(resDefault.stdout) as { model?: string }).model).toBeUndefined();
+
+        const resGemini = await runner.run("hi", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          model: "gemini-3.8-flash",
+          onAntigravityPrompt: (p) => `${p} [agy]`,
+          antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
+        });
+        expect(resGemini.code).toBe(0);
+        expect(JSON.parse(resGemini.stdout)).toMatchObject({
+          prompt: "hi [agy]",
+          model: "gemini-3.8-flash",
+        });
+      } finally {
+        rmSync(TMP_DIR, { recursive: true, force: true });
+      }
     });
 
     it('routes model "codex" to Codex runner', async () => {
@@ -396,18 +436,92 @@ describe("AgentRunner", () => {
       }
     });
 
+    it("routes to Antigravity when AGENT_SCRIPT_MODEL is antigravity/agy/gemini-*", async () => {
+      mkdirSync(TMP_DIR, { recursive: true });
+      const stubBridge = join(TMP_DIR, "env-agy-bridge.py");
+      writeFileSync(
+        stubBridge,
+        [
+          "import json, sys",
+          "payload = json.loads(sys.stdin.read())",
+          'print(json.dumps({"type": "result", "ok": True, "text": payload.get("model", "default")}), flush=True)',
+        ].join("\n"),
+      );
+      process.env.AGENT_SCRIPT_MODEL = "gemini-3.8-flash";
+      try {
+        const res = await runner.run("prompt", {
+          cwd: TMP_DIR,
+          taskName: "t",
+          antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
+        });
+        expect(res).toEqual({ code: 0, stdout: "gemini-3.8-flash" });
+      } finally {
+        rmSync(TMP_DIR, { recursive: true, force: true });
+      }
+    });
+
     it("throws when AGENT_SCRIPT_MODEL is an unrecognized identifier", async () => {
-      process.env.AGENT_SCRIPT_MODEL = "gemini-ultra";
+      process.env.AGENT_SCRIPT_MODEL = "llama-3";
       await expect(runner.run("prompt", { cwd: TMP_DIR, taskName: "t" })).rejects.toThrow(
-        'Unknown model: "gemini-ultra"',
+        'Unknown model: "llama-3"',
       );
     });
 
     it("opts.model takes precedence over AGENT_SCRIPT_MODEL", async () => {
       process.env.AGENT_SCRIPT_MODEL = "gpt-5.4";
       await expect(
-        runner.run("prompt", { cwd: TMP_DIR, taskName: "t", model: "gemini-pro" }),
-      ).rejects.toThrow('Unknown model: "gemini-pro"');
+        runner.run("prompt", { cwd: TMP_DIR, taskName: "t", model: "llama-3" }),
+      ).rejects.toThrow('Unknown model: "llama-3"');
+    });
+  });
+});
+
+describe("isAntigravityModel", () => {
+  it("matches antigravity, agy, and gemini-* case-insensitively", () => {
+    expect(isAntigravityModel("antigravity")).toBe(true);
+    expect(isAntigravityModel("AGY")).toBe(true);
+    expect(isAntigravityModel("gemini-3.8-flash")).toBe(true);
+    expect(isAntigravityModel("Gemini-Pro")).toBe(true);
+  });
+
+  it("does not match Claude, Codex, empty, or unknown models", () => {
+    expect(isAntigravityModel("")).toBe(false);
+    expect(isAntigravityModel("claude-sonnet-5")).toBe(false);
+    expect(isAntigravityModel("gpt-5.4")).toBe(false);
+    expect(isAntigravityModel("codex")).toBe(false);
+    expect(isAntigravityModel("llama-3")).toBe(false);
+  });
+});
+
+describe("resolveAntigravitySecurityOpts", () => {
+  it("defaults to autonomous mode with web tools and sandbox disabled", () => {
+    expect(resolveAntigravitySecurityOpts(undefined, {})).toEqual({
+      securityMode: "autonomous",
+      allowWebTools: false,
+      enableSandbox: false,
+    });
+  });
+
+  it("forces sandbox on in supervised mode", () => {
+    expect(
+      resolveAntigravitySecurityOpts(
+        { enableSandbox: false },
+        { DOVEPAW_SECURITY_MODE: "supervised" },
+      ),
+    ).toEqual({
+      securityMode: "supervised",
+      allowWebTools: false,
+      enableSandbox: true,
+    });
+  });
+
+  it("enables web tools when DOVEPAW_ALLOW_WEB_TOOLS=1", () => {
+    expect(
+      resolveAntigravitySecurityOpts({ allowWebTools: false }, { DOVEPAW_ALLOW_WEB_TOOLS: "1" }),
+    ).toEqual({
+      securityMode: "autonomous",
+      allowWebTools: true,
+      enableSandbox: false,
     });
   });
 });

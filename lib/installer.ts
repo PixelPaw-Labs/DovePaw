@@ -33,7 +33,9 @@ import {
   AGENT_SETTINGS_DIR,
   AGENTS_DIST,
   AGENTS_ROOT,
+  ANTIGRAVITY_PYTHON_BIN,
   ANTIGRAVITY_SKILLS_ROOT,
+  ANTIGRAVITY_VENV_DIR,
   CLAUDE_OUTPUT_STYLES_ROOT,
   CLAUDE_RULES_ROOT,
   CODEX_SKILLS_ROOT,
@@ -161,6 +163,29 @@ export async function deployAgentSdk(): Promise<void> {
   // ERR_PACKAGE_PATH_NOT_EXPORTED.
   await mkdir(DOVEPAW_TMP_DIR, { recursive: true });
   await writeFile(join(DOVEPAW_TMP_DIR, "package.json"), '{"type":"module"}\n', "utf-8");
+}
+
+/**
+ * Ensure the Python google-antigravity SDK is installed in ~/.dovepaw/antigravity-venv
+ * so @dovepaw/agent-sdk can bridge sub-agent runs to google.antigravity.
+ * No-ops quickly when already installed.
+ */
+export async function deployAntigravitySdk(): Promise<void> {
+  try {
+    await access(ANTIGRAVITY_PYTHON_BIN);
+    await execAsync(`"${ANTIGRAVITY_PYTHON_BIN}" -c "import google.antigravity"`);
+    return;
+  } catch {
+    // Missing venv or package — install below
+  }
+
+  try {
+    await execAsync(`uv venv "${ANTIGRAVITY_VENV_DIR}"`);
+    await execAsync(`uv pip install --python "${ANTIGRAVITY_PYTHON_BIN}" google-antigravity`);
+  } catch {
+    await execAsync(`python3 -m venv "${ANTIGRAVITY_VENV_DIR}"`);
+    await execAsync(`"${ANTIGRAVITY_PYTHON_BIN}" -m pip install google-antigravity`);
+  }
 }
 
 /**
