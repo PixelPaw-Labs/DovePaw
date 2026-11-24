@@ -81,13 +81,6 @@ export const CLAUDE_OUTPUT_STYLES_ROOT = join(process.env.HOME!, ".claude/output
 export const CODEX_SKILLS_ROOT = join(process.env.HOME!, ".codex/skills");
 /** ~/.gemini/config/skills — Antigravity skills directory */
 export const ANTIGRAVITY_SKILLS_ROOT = join(process.env.HOME!, ".gemini/config/skills");
-/** ~/.dovepaw/antigravity-venv — isolated Python venv holding google-antigravity SDK */
-export const ANTIGRAVITY_VENV_DIR = join(DOVEPAW_DIR, "antigravity-venv");
-/** ~/.dovepaw/antigravity-venv/bin/python — Python interpreter for Antigravity sub-agent bridge */
-export const ANTIGRAVITY_PYTHON_BIN =
-  process.platform === "win32"
-    ? join(ANTIGRAVITY_VENV_DIR, "Scripts", "python.exe")
-    : join(ANTIGRAVITY_VENV_DIR, "bin", "python");
 /** Expand a leading `~` or `~/` to `$HOME`; absolute paths pass through unchanged. */
 export function expandHomePath(p: string): string {
   const trimmed = p.trim();

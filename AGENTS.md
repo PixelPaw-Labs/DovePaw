@@ -70,3 +70,7 @@ Plugin repo (e.g. owner/my-agents)
 | Schema validation | Zod |
 | Linting / formatting | oxlint + oxfmt |
 | Testing | Vitest |
+
+## Testing Rules
+
+- **Never invoke the real `agy` CLI in tests.** All tests exercising `AntigravityRunner` or `AgentRunner` with `gemini-*` models must inject a local stub/mock executable via `agyBin` (or `DOVEPAW_AGY_BIN`) — never spawn the real `agy` binary in tests.

@@ -1,9 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { createWriteStream, existsSync, writeFileSync } from "node:fs";
+import { accessSync, constants, createWriteStream, writeFileSync } from "node:fs";
 import { cp, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { delimiter, dirname, join } from "node:path";
 import { ensureWorktree } from "./claude-runner.js";
 import { withKeepAwake } from "./keep-awake.js";
 import type { SecurityMode } from "./security-policy.js";
@@ -17,44 +16,28 @@ export interface AntigravityRunOpts {
   taskName: string;
   /** Gemini model ID (defaults to "gemini-4-neon") */
   model?: string;
+  /** Reasoning effort passed to `agy --effort` */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Timeout in milliseconds (defaults to 30 minutes) */
   timeoutMs?: number;
-  /** Additional directories to expose to the agent alongside cwd */
+  /** Additional directories to expose via repeatable `--add-dir` flags */
   additionalDirectories?: string[];
-  /** Optional API key override for Gemini / Vertex Express */
-  apiKey?: string;
-  /** Assign a session/conversation ID for later resumption via resumeSession */
-  sessionId?: string;
-  /** Resume a prior Antigravity conversation by ID */
+  /** Resume a prior Antigravity conversation by ID (`--conversation`) */
   resumeSession?: string;
-  /** Directory to persist Antigravity conversation state across turns (auto-set when sessionId/resumeSession is used) */
-  saveDir?: string;
+  /** Continue the most recent conversation (`--continue`) */
+  continueSession?: boolean;
   /** Git worktree branch name — creates/reuses <cwd>/.claude/worktrees/<branch> just like ClaudeRunner */
   worktree?: string;
   /** Paths to copy into the worktree after it is created. Only used when `worktree` is set. */
   worktreeCopy?: Array<{ src: string; dst: string }>;
-  /** Additional system instructions passed to LocalAgentConfig.system_instructions */
+  /** Additional instructions prepended to the prompt in <system-instructions> tags */
   appendSystemPrompt?: string;
   /** Security mode translated from DOVEPAW_SECURITY_MODE */
   securityMode?: SecurityMode;
-  /** Allow SEARCH_WEB / READ_URL_CONTENT builtin tools */
-  allowWebTools?: boolean;
-  /** Enable OS-level terminal sandbox in RunCommandConfig */
+  /** Enable OS-level terminal sandbox (`--sandbox`) */
   enableSandbox?: boolean;
-  /** Allow Antigravity nested subagents (defaults to true) */
-  enableSubagents?: boolean;
-  /** Directories scanned for Antigravity skills (defaults to ~/.gemini/config/skills if present) */
-  skillsPaths?: string[];
-  /** Enable Vertex AI backend */
-  vertex?: boolean;
-  /** GCP project ID (when vertex is true) */
-  project?: string;
-  /** GCP location (when vertex is true) */
-  location?: string;
-  /** Override Python interpreter path (defaults to DOVEPAW_ANTIGRAVITY_PYTHON or ~/.dovepaw/antigravity-venv/bin/python) */
-  pythonBin?: string;
-  /** Override bridge script path (primarily for testing) */
-  bridgeScriptPath?: string;
+  /** Override `agy` CLI binary path (defaults to DOVEPAW_AGY_BIN, PATH lookup, or ~/.local/bin/agy) */
+  agyBin?: string;
 }
 
 export interface AntigravityResult {
@@ -63,38 +46,104 @@ export interface AntigravityResult {
   sessionId?: string;
 }
 
-function defaultDovepawDir(): string {
-  return process.env.DOVEPAW_DATA_DIR ?? join(homedir(), ".dovepaw");
+function toFieldMap(value: unknown): Map<string, unknown> | null {
+  return typeof value === "object" && value !== null ? new Map(Object.entries(value)) : null;
 }
 
-/** Resolve the Python interpreter with google-antigravity installed. */
-export function resolveAntigravityPython(
-  override?: string,
-  env: Record<string, string | undefined> = process.env,
-): string {
-  if (override?.trim()) return override.trim();
-  if (env.DOVEPAW_ANTIGRAVITY_PYTHON?.trim()) return env.DOVEPAW_ANTIGRAVITY_PYTHON.trim();
-  const venvDir = join(env.DOVEPAW_DATA_DIR ?? join(homedir(), ".dovepaw"), "antigravity-venv");
-  return process.platform === "win32"
-    ? join(venvDir, "Scripts", "python.exe")
-    : join(venvDir, "bin", "python");
-}
-
-/** Resolve antigravity-bridge.py from beside this module or from deployed ~/.dovepaw/sdk/src/. */
-export function resolveAntigravityBridgePath(override?: string): string {
-  if (override?.trim()) return override.trim();
+function isExecutable(filePath: string): boolean {
   try {
-    const localPath = join(dirname(fileURLToPath(import.meta.url)), "antigravity-bridge.py");
-    if (existsSync(localPath)) return localPath;
+    accessSync(filePath, constants.X_OK);
+    return true;
   } catch {
-    // Fallback below when bundled
+    return false;
   }
-  return join(defaultDovepawDir(), "sdk", "src", "antigravity-bridge.py");
 }
 
 /**
- * Antigravity runner that bridges Node.js/TypeScript sub-agent runs to the
- * official Python google-antigravity SDK via an isolated DovePaw Python venv.
+ * Locate the `agy` CLI binary. Throws an Error if `agy` is not installed.
+ * Checks explicit override, `DOVEPAW_AGY_BIN`, `PATH` entries, and `~/.local/bin/agy`
+ * (important for launchd daemons whose minimal PATH omits ~/.local/bin).
+ */
+export function resolveAgyBin(
+  override?: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  const explicit = override?.trim() || env.DOVEPAW_AGY_BIN?.trim();
+  if (explicit) {
+    if (explicit.includes("/") || explicit.includes("\\")) {
+      if (!isExecutable(explicit)) {
+        throw new Error(
+          `Antigravity CLI (agy) not found or not executable at "${explicit}". Install \`agy\` and sign in first.`,
+        );
+      }
+    }
+    return explicit;
+  }
+
+  const binName = process.platform === "win32" ? "agy.exe" : "agy";
+  const pathDirs = (env.PATH ?? "").split(delimiter).filter(Boolean);
+  const home = env.HOME ?? homedir();
+  const candidates = [
+    ...pathDirs.map((dir) => join(dir, binName)),
+    join(home, ".local", "bin", binName),
+  ];
+
+  for (const candidate of candidates) {
+    if (isExecutable(candidate)) return candidate;
+  }
+
+  throw new Error(
+    "Antigravity CLI (`agy`) is not installed or not found on PATH. Install `agy` and sign in before running Gemini sub-agents.",
+  );
+}
+
+/** Build the CLI argument vector for `agy --output-format stream-json --print=...`. */
+export function buildAgyArgs(prompt: string, opts: AntigravityRunOpts): string[] {
+  const model = opts.model?.trim() || DEFAULT_ANTIGRAVITY_MODEL;
+  const fullPrompt = opts.appendSystemPrompt?.trim()
+    ? `<system-instructions>\n${opts.appendSystemPrompt.trim()}\n</system-instructions>\n\n${prompt}`
+    : prompt;
+
+  const args: string[] = ["--output-format", "stream-json", "--model", model];
+
+  if (opts.effort) {
+    args.push("--effort", opts.effort);
+  }
+
+  if (opts.securityMode === "read-only") {
+    args.push("--mode", "plan", "--sandbox");
+  } else if (opts.securityMode === "supervised") {
+    args.push("--mode", "auto", "--sandbox");
+  } else {
+    args.push("--dangerously-skip-permissions");
+    if (opts.enableSandbox) args.push("--sandbox");
+  }
+
+  if (opts.resumeSession?.trim()) {
+    args.push("--conversation", opts.resumeSession.trim());
+  } else if (opts.continueSession) {
+    args.push("--continue");
+  }
+
+  if (opts.additionalDirectories?.length) {
+    for (const dir of opts.additionalDirectories) {
+      if (dir.trim()) args.push("--add-dir", dir.trim());
+    }
+  }
+
+  if (opts.timeoutMs && opts.timeoutMs > 0) {
+    const secs = Math.max(1, Math.ceil(opts.timeoutMs / 1000));
+    args.push("--print-timeout", `${secs}s`);
+  }
+
+  args.push(`--print=${fullPrompt}`);
+  return args;
+}
+
+/**
+ * Antigravity runner powered by the `agy` CLI (`--output-format stream-json`),
+ * using your existing Antigravity login without requiring GEMINI_API_KEY.
+ * Throws immediately if `agy` is not installed.
  */
 export class AntigravityRunner {
   private child: ChildProcess | null = null;
@@ -106,6 +155,9 @@ export class AntigravityRunner {
   ) {}
 
   async run(prompt: string, opts: AntigravityRunOpts): Promise<AntigravityResult> {
+    // Fail fast if `agy` is not installed (before creating worktrees or wake locks)
+    const agyBin = resolveAgyBin(opts.agyBin);
+
     const shutdown = () => {
       this.killRunningProcess();
       process.exit(0);
@@ -113,7 +165,9 @@ export class AntigravityRunner {
     process.once("SIGTERM", shutdown);
     process.once("SIGINT", shutdown);
     try {
-      return await withKeepAwake(`antigravity:${opts.taskName}`, () => this.runOnce(prompt, opts));
+      return await withKeepAwake(`antigravity:${opts.taskName}`, () =>
+        this.runOnce(agyBin, prompt, opts),
+      );
     } finally {
       process.off("SIGTERM", shutdown);
       process.off("SIGINT", shutdown);
@@ -121,25 +175,11 @@ export class AntigravityRunner {
     }
   }
 
-  private async runOnce(prompt: string, opts: AntigravityRunOpts): Promise<AntigravityResult> {
-    const pythonBin = resolveAntigravityPython(opts.pythonBin);
-    if (!opts.pythonBin && !existsSync(pythonBin)) {
-      return {
-        code: 1,
-        stdout:
-          `Error: Antigravity Python SDK venv not found at ${pythonBin}. ` +
-          `Run \`npm run build\` (or \`tsx scripts/setup.ts\`) to install google-antigravity.`,
-      };
-    }
-
-    const bridgePath = resolveAntigravityBridgePath(opts.bridgeScriptPath);
-    if (!existsSync(bridgePath)) {
-      return {
-        code: 1,
-        stdout: `Error: Antigravity bridge script not found at ${bridgePath}.`,
-      };
-    }
-
+  private async runOnce(
+    agyBin: string,
+    prompt: string,
+    opts: AntigravityRunOpts,
+  ): Promise<AntigravityResult> {
     const cwd = opts.worktree
       ? await ensureWorktree(opts.cwd, opts.worktree)
       : opts.cwd || process.cwd();
@@ -152,43 +192,16 @@ export class AntigravityRunner {
       );
     }
 
-    const saveDir =
-      opts.saveDir ??
-      (opts.sessionId || opts.resumeSession
-        ? join(defaultDovepawDir(), "agents", "state", ".antigravity-sessions")
-        : undefined);
-
-    const payload = {
-      prompt,
-      cwd,
-      model: opts.model?.trim() || DEFAULT_ANTIGRAVITY_MODEL,
-      ...(opts.additionalDirectories?.length
-        ? { additionalDirectories: opts.additionalDirectories }
-        : {}),
-      ...(opts.apiKey ? { apiKey: opts.apiKey } : {}),
-      ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
-      ...(opts.resumeSession ? { resumeSession: opts.resumeSession } : {}),
-      ...(saveDir ? { saveDir } : {}),
-      ...(opts.appendSystemPrompt ? { appendSystemPrompt: opts.appendSystemPrompt } : {}),
-      ...(opts.securityMode ? { securityMode: opts.securityMode } : {}),
-      ...(opts.allowWebTools !== undefined ? { allowWebTools: opts.allowWebTools } : {}),
-      ...(opts.enableSandbox !== undefined ? { enableSandbox: opts.enableSandbox } : {}),
-      ...(opts.enableSubagents !== undefined ? { enableSubagents: opts.enableSubagents } : {}),
-      ...(opts.skillsPaths !== undefined ? { skillsPaths: opts.skillsPaths } : {}),
-      ...(opts.vertex !== undefined ? { vertex: opts.vertex } : {}),
-      ...(opts.project ? { project: opts.project } : {}),
-      ...(opts.location ? { location: opts.location } : {}),
-    };
-
+    const args = buildAgyArgs(prompt, opts);
     const timeoutMs = opts.timeoutMs ?? 30 * 60 * 1000;
     const logStream = this.logFile ? createWriteStream(this.logFile, { flags: "a" }) : null;
     this.timedOut = false;
 
-    return new Promise<AntigravityResult>((resolve) => {
-      const child = spawn(pythonBin, ["-u", bridgePath], {
+    return new Promise<AntigravityResult>((resolve, reject) => {
+      const child = spawn(agyBin, args, {
         cwd,
         env: process.env,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe"],
       });
       this.child = child;
 
@@ -199,7 +212,8 @@ export class AntigravityRunner {
 
       let stdoutBuffer = "";
       let stderrOutput = "";
-      let finalText = "";
+      let resultResponse: string | undefined;
+      let streamedText = "";
       let conversationId: string | undefined;
       let errorMessage = "";
       let settled = false;
@@ -213,25 +227,57 @@ export class AntigravityRunner {
         resolve(result);
       };
 
+      const failSpawn = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutId);
+        this.child = null;
+        logStream?.end();
+        reject(err);
+      };
+
       const processLine = (line: string) => {
         const trimmed = line.trim();
         if (!trimmed) return;
         if (logStream) logStream.write(trimmed + "\n");
         try {
-          const event: unknown = JSON.parse(trimmed);
-          if (typeof event !== "object" || event === null) return;
-          const type: unknown = Reflect.get(event, "type");
-          const convId: unknown = Reflect.get(event, "conversationId");
-          if (typeof convId === "string" && convId) conversationId = convId;
-          if (type === "result") {
-            const text: unknown = Reflect.get(event, "text");
-            if (typeof text === "string") finalText = text;
-          } else if (type === "error") {
-            const message: unknown = Reflect.get(event, "message");
-            if (typeof message === "string") errorMessage = message;
+          const parsed = toFieldMap(JSON.parse(trimmed));
+          if (!parsed) return;
+
+          const topConvId = parsed.get("conversation_id");
+          if (typeof topConvId === "string" && topConvId) conversationId = topConvId;
+
+          const eventName = parsed.get("event");
+          if (eventName === "step_update") {
+            const stepUpdate = toFieldMap(parsed.get("step_update"));
+            if (stepUpdate) {
+              const stepConvId = stepUpdate.get("conversation_id");
+              if (typeof stepConvId === "string" && stepConvId) conversationId = stepConvId;
+              const delta = stepUpdate.get("text_delta");
+              if (typeof delta === "string") streamedText += delta;
+            }
+          } else if (eventName === "result") {
+            const resObj = toFieldMap(parsed.get("result"));
+            if (resObj) {
+              const resConvId = resObj.get("conversation_id");
+              if (typeof resConvId === "string" && resConvId) conversationId = resConvId;
+              const responseText = resObj.get("response");
+              if (typeof responseText === "string") resultResponse = responseText;
+              const status = resObj.get("status");
+              if (typeof status === "string" && status !== "SUCCESS") {
+                const errField = resObj.get("error");
+                errorMessage =
+                  typeof errField === "string" && errField
+                    ? errField
+                    : `Antigravity returned status ${status}`;
+              }
+            }
+          } else if (eventName === "error") {
+            const msg = parsed.get("message") ?? parsed.get("error");
+            if (typeof msg === "string" && msg) errorMessage = msg;
           }
         } catch {
-          // Non-JSON stdout line — ignore for structured parsing but keep in logStream above
+          // Non-JSON line (e.g. startup notice) — already written to logStream
         }
       };
 
@@ -249,10 +295,16 @@ export class AntigravityRunner {
       });
 
       child.on("error", (err) => {
-        finish({
-          code: 1,
-          stdout: `Error: Failed to spawn Antigravity Python SDK: ${err.message}`,
-        });
+        const enoent = (err as NodeJS.ErrnoException).code === "ENOENT";
+        if (enoent) {
+          failSpawn(
+            new Error(
+              `Antigravity CLI (\`agy\`) is not installed or could not be executed (${agyBin}).`,
+            ),
+          );
+          return;
+        }
+        finish({ code: 1, stdout: `Error: Failed to spawn agy CLI: ${err.message}` });
       });
 
       child.on("close", (exitCode) => {
@@ -265,7 +317,7 @@ export class AntigravityRunner {
         if (exitCode === 0 && !errorMessage) {
           finish({
             code: 0,
-            stdout: finalText,
+            stdout: resultResponse ?? streamedText,
             ...(conversationId ? { sessionId: conversationId } : {}),
           });
           return;
@@ -273,9 +325,6 @@ export class AntigravityRunner {
         const detail = errorMessage || stderrOutput.trim() || `exit code ${exitCode ?? "unknown"}`;
         finish({ code: 1, stdout: `Error: ${detail}` });
       });
-
-      child.stdin.write(JSON.stringify(payload));
-      child.stdin.end();
     });
   }
 

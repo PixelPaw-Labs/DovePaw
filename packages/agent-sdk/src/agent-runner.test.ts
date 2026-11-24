@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -239,37 +239,50 @@ describe("AgentRunner", () => {
       ).rejects.toThrow('Unknown model: "antigravity"');
 
       mkdirSync(TMP_DIR, { recursive: true });
-      const stubBridge = join(TMP_DIR, "dispatch-agy-bridge.py");
+      const stubAgy = join(TMP_DIR, "dispatch-agy");
       writeFileSync(
-        stubBridge,
+        stubAgy,
         [
-          "import json, sys",
-          "payload = json.loads(sys.stdin.read())",
-          'print(json.dumps({"type": "result", "ok": True, "text": json.dumps(payload)}), flush=True)',
+          "#!/usr/bin/env node",
+          "const args = process.argv.slice(2);",
+          'const model = args[args.indexOf("--model") + 1];',
+          'const printArg = args.find((a) => a.startsWith("--print=")) ?? "";',
+          'const prompt = printArg.slice("--print=".length);',
+          'console.log(JSON.stringify({ event: "result", result: { conversation_id: "conv-1", status: "SUCCESS", response: JSON.stringify({ model, prompt }) } }));',
         ].join("\n"),
       );
+      chmodSync(stubAgy, 0o755);
       try {
         const resNeon = await runner.run("hi", {
           cwd: TMP_DIR,
           taskName: "t",
           model: "gemini-4-neon",
-          antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
+          antigravityOpts: { agyBin: stubAgy },
         });
         expect(resNeon.code).toBe(0);
-        expect((JSON.parse(resNeon.stdout) as { model?: string }).model).toBe("gemini-4-neon");
+        expect(JSON.parse(resNeon.stdout)).toMatchObject({ model: "gemini-4-neon", prompt: "hi" });
 
         const resCarbon = await runner.run("hi", {
           cwd: TMP_DIR,
           taskName: "t",
           model: "gemini-4-carbon",
           onAntigravityPrompt: (p) => `${p} [agy]`,
-          antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
+          antigravityOpts: { agyBin: stubAgy },
         });
         expect(resCarbon.code).toBe(0);
         expect(JSON.parse(resCarbon.stdout)).toMatchObject({
           prompt: "hi [agy]",
           model: "gemini-4-carbon",
         });
+
+        await expect(
+          runner.run("hi", {
+            cwd: TMP_DIR,
+            taskName: "t",
+            model: "gemini-4-neon",
+            antigravityOpts: { agyBin: join(TMP_DIR, "missing-agy") },
+          }),
+        ).rejects.toThrow(/not found or not executable/);
       } finally {
         rmSync(TMP_DIR, { recursive: true, force: true });
       }
@@ -442,21 +455,23 @@ describe("AgentRunner", () => {
 
     it("routes to Antigravity when AGENT_SCRIPT_MODEL is a gemini-* model", async () => {
       mkdirSync(TMP_DIR, { recursive: true });
-      const stubBridge = join(TMP_DIR, "env-agy-bridge.py");
+      const stubAgy = join(TMP_DIR, "env-agy");
       writeFileSync(
-        stubBridge,
+        stubAgy,
         [
-          "import json, sys",
-          "payload = json.loads(sys.stdin.read())",
-          'print(json.dumps({"type": "result", "ok": True, "text": payload.get("model", "default")}), flush=True)',
+          "#!/usr/bin/env node",
+          "const args = process.argv.slice(2);",
+          'const model = args[args.indexOf("--model") + 1];',
+          'console.log(JSON.stringify({ event: "result", result: { status: "SUCCESS", response: model } }));',
         ].join("\n"),
       );
+      chmodSync(stubAgy, 0o755);
       process.env.AGENT_SCRIPT_MODEL = "gemini-4-neon";
       try {
         const res = await runner.run("prompt", {
           cwd: TMP_DIR,
           taskName: "t",
-          antigravityOpts: { pythonBin: "python3", bridgeScriptPath: stubBridge },
+          antigravityOpts: { agyBin: stubAgy },
         });
         expect(res).toEqual({ code: 0, stdout: "gemini-4-neon" });
       } finally {

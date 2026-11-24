@@ -13,7 +13,6 @@ import { SCHEDULER_ROOT } from "../lib/paths.js";
 import {
   copyNativePackages,
   deployAgentSdk,
-  deployAntigravitySdk,
   linkAgents,
   linkAgentSdkToAgentLocal,
   linkAgentSdkToPlugin,
@@ -51,11 +50,6 @@ if (uninstall) {
 
 await linkAgents();
 await deployAgentSdk();
-await deployAntigravitySdk().catch((err: unknown) => {
-  console.warn(
-    `  WARN: Antigravity Python SDK setup skipped (${err instanceof Error ? err.message : String(err)})`,
-  );
-});
 await linkAgentSdkToAgentLocal();
 const plugins = await listPlugins();
 await Promise.all([

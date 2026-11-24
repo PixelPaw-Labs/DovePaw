@@ -132,17 +132,15 @@ interface CodexOpts {
 export interface AntigravityOpts {
   allowWebTools?: boolean;
   enableSandbox?: boolean;
-  enableSubagents?: boolean;
-  skillsPaths?: string[];
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  continueSession?: boolean;
+  /** Kept for caller compatibility; `agy` manages conversation IDs server-side and returns sessionId. */
   sessionId?: string;
-  saveDir?: string;
+  /** Kept for caller compatibility; `agy` discovers skills from ~/.gemini/config/skills automatically. */
+  skillsPaths?: string[];
   worktree?: string;
   worktreeCopy?: Array<{ src: string; dst: string }>;
-  vertex?: boolean;
-  project?: string;
-  location?: string;
-  pythonBin?: string;
-  bridgeScriptPath?: string;
+  agyBin?: string;
 }
 
 export function resolveAntigravitySecurityOpts(
@@ -248,32 +246,22 @@ export class AgentRunner {
 
     if (isAntigravityModel(model)) {
       const agyPrompt = opts.onAntigravityPrompt ? opts.onAntigravityPrompt(prompt) : prompt;
-      const { securityMode, allowWebTools, enableSandbox } = resolveAntigravitySecurityOpts(
-        opts.antigravityOpts,
-      );
+      const { securityMode, enableSandbox } = resolveAntigravitySecurityOpts(opts.antigravityOpts);
       return new AntigravityRunner(this.logDir, this.logFile ?? "").run(agyPrompt, {
         cwd: opts.cwd,
         taskName: opts.taskName,
         timeoutMs: opts.timeoutMs,
         model,
+        effort: opts.antigravityOpts?.effort ?? opts.claudeOpts?.effort,
         additionalDirectories: opts.additionalDirectories,
-        apiKey: opts.apiKey,
-        sessionId: opts.antigravityOpts?.sessionId ?? opts.claudeOpts?.sessionId,
         resumeSession: opts.resumeSession,
-        saveDir: opts.antigravityOpts?.saveDir,
+        continueSession: opts.antigravityOpts?.continueSession ?? opts.claudeOpts?.continueSession,
         worktree: opts.antigravityOpts?.worktree ?? opts.claudeOpts?.worktree,
         worktreeCopy: opts.antigravityOpts?.worktreeCopy ?? opts.claudeOpts?.worktreeCopy,
         appendSystemPrompt,
         securityMode,
-        allowWebTools,
         enableSandbox,
-        enableSubagents: opts.antigravityOpts?.enableSubagents,
-        skillsPaths: opts.antigravityOpts?.skillsPaths,
-        vertex: opts.antigravityOpts?.vertex,
-        project: opts.antigravityOpts?.project,
-        location: opts.antigravityOpts?.location,
-        pythonBin: opts.antigravityOpts?.pythonBin,
-        bridgeScriptPath: opts.antigravityOpts?.bridgeScriptPath,
+        agyBin: opts.antigravityOpts?.agyBin,
       } satisfies AntigravityRunOpts);
     }
 

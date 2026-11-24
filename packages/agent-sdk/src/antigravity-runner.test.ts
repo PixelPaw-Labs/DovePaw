@@ -1,40 +1,145 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   AntigravityRunner,
-  resolveAntigravityBridgePath,
-  resolveAntigravityPython,
+  DEFAULT_ANTIGRAVITY_MODEL,
+  buildAgyArgs,
+  resolveAgyBin,
 } from "./antigravity-runner.js";
 
 const TMP_DIR = join(tmpdir(), `antigravity-runner-test-${process.pid}`);
 
-describe("resolveAntigravityPython", () => {
-  it("uses explicit override when provided", () => {
-    expect(resolveAntigravityPython("/custom/python", {})).toBe("/custom/python");
+function makeStubAgy(filePath: string, jsBody: string): string {
+  writeFileSync(filePath, `#!/usr/bin/env node\n${jsBody}\n`);
+  chmodSync(filePath, 0o755);
+  return filePath;
+}
+
+describe("resolveAgyBin", () => {
+  beforeEach(() => {
+    mkdirSync(TMP_DIR, { recursive: true });
   });
 
-  it("uses DOVEPAW_ANTIGRAVITY_PYTHON env var when set", () => {
-    expect(
-      resolveAntigravityPython(undefined, { DOVEPAW_ANTIGRAVITY_PYTHON: "/env/python3" }),
-    ).toBe("/env/python3");
+  afterEach(() => {
+    rmSync(TMP_DIR, { recursive: true, force: true });
   });
 
-  it("falls back to <DOVEPAW_DATA_DIR>/antigravity-venv/bin/python", () => {
-    const resolved = resolveAntigravityPython(undefined, { DOVEPAW_DATA_DIR: "/tmp/dovepaw-test" });
-    expect(resolved).toContain("/tmp/dovepaw-test/antigravity-venv/");
-    expect(resolved).toMatch(/python(\.exe)?$/);
+  it("uses explicit executable override when provided", () => {
+    const bin = makeStubAgy(join(TMP_DIR, "custom-agy"), "");
+    expect(resolveAgyBin(bin, {})).toBe(bin);
+  });
+
+  it("throws when explicit path does not exist or is not executable", () => {
+    const missing = join(TMP_DIR, "does-not-exist");
+    expect(() => resolveAgyBin(missing, {})).toThrow(/not found or not executable/);
+
+    const nonExec = join(TMP_DIR, "not-exec-agy");
+    writeFileSync(nonExec, "#!/bin/sh\n");
+    chmodSync(nonExec, 0o644);
+    expect(() => resolveAgyBin(nonExec, {})).toThrow(/not found or not executable/);
+  });
+
+  it("uses DOVEPAW_AGY_BIN env var when set", () => {
+    const bin = makeStubAgy(join(TMP_DIR, "env-agy"), "");
+    expect(resolveAgyBin(undefined, { DOVEPAW_AGY_BIN: bin })).toBe(bin);
+  });
+
+  it("finds agy on PATH", () => {
+    const binDir = join(TMP_DIR, "path-bin");
+    mkdirSync(binDir, { recursive: true });
+    const bin = makeStubAgy(join(binDir, "agy"), "");
+    expect(resolveAgyBin(undefined, { PATH: binDir, HOME: join(TMP_DIR, "empty-home") })).toBe(bin);
+  });
+
+  it("falls back to ~/.local/bin/agy when PATH omits it", () => {
+    const fakeHome = join(TMP_DIR, "home");
+    const localBinDir = join(fakeHome, ".local", "bin");
+    mkdirSync(localBinDir, { recursive: true });
+    const bin = makeStubAgy(join(localBinDir, "agy"), "");
+    expect(resolveAgyBin(undefined, { PATH: "", HOME: fakeHome })).toBe(bin);
+  });
+
+  it("throws a clear error when agy is not installed anywhere", () => {
+    expect(() =>
+      resolveAgyBin(undefined, { PATH: "", HOME: join(TMP_DIR, "no-agy-home") }),
+    ).toThrow(/Antigravity CLI \(`agy`\) is not installed/);
   });
 });
 
-describe("resolveAntigravityBridgePath", () => {
-  it("returns explicit override when provided", () => {
-    expect(resolveAntigravityBridgePath("/custom/bridge.py")).toBe("/custom/bridge.py");
+describe("buildAgyArgs", () => {
+  it("uses DEFAULT_ANTIGRAVITY_MODEL (gemini-4-neon) and autonomous flags by default", () => {
+    const args = buildAgyArgs("hello world", { cwd: TMP_DIR, taskName: "t" });
+    expect(args).toEqual([
+      "--output-format",
+      "stream-json",
+      "--model",
+      DEFAULT_ANTIGRAVITY_MODEL,
+      "--dangerously-skip-permissions",
+      "--print=hello world",
+    ]);
   });
 
-  it("resolves antigravity-bridge.py beside the runner module", () => {
-    expect(resolveAntigravityBridgePath()).toMatch(/antigravity-bridge\.py$/);
+  it("maps read-only and supervised security modes to plan/auto + sandbox", () => {
+    const readOnly = buildAgyArgs("check", {
+      cwd: TMP_DIR,
+      taskName: "t",
+      securityMode: "read-only",
+    });
+    expect(readOnly).toContain("--mode");
+    expect(readOnly[readOnly.indexOf("--mode") + 1]).toBe("plan");
+    expect(readOnly).toContain("--sandbox");
+    expect(readOnly).not.toContain("--dangerously-skip-permissions");
+
+    const supervised = buildAgyArgs("edit", {
+      cwd: TMP_DIR,
+      taskName: "t",
+      securityMode: "supervised",
+    });
+    expect(supervised[supervised.indexOf("--mode") + 1]).toBe("auto");
+    expect(supervised).toContain("--sandbox");
+  });
+
+  it("includes effort, sandbox, conversation/continue, add-dir, print-timeout, and system instructions", () => {
+    const args = buildAgyArgs("ship it", {
+      cwd: TMP_DIR,
+      taskName: "t",
+      model: "gemini-4-carbon",
+      effort: "high",
+      enableSandbox: true,
+      resumeSession: "conv-prev",
+      additionalDirectories: ["/extra/one", "/extra/two"],
+      timeoutMs: 45_000,
+      appendSystemPrompt: "Be concise.",
+    });
+
+    expect(args).toEqual([
+      "--output-format",
+      "stream-json",
+      "--model",
+      "gemini-4-carbon",
+      "--effort",
+      "high",
+      "--dangerously-skip-permissions",
+      "--sandbox",
+      "--conversation",
+      "conv-prev",
+      "--add-dir",
+      "/extra/one",
+      "--add-dir",
+      "/extra/two",
+      "--print-timeout",
+      "45s",
+      "--print=<system-instructions>\nBe concise.\n</system-instructions>\n\nship it",
+    ]);
+
+    const contArgs = buildAgyArgs("next", {
+      cwd: TMP_DIR,
+      taskName: "t",
+      continueSession: true,
+    });
+    expect(contArgs).toContain("--continue");
   });
 });
 
@@ -47,126 +152,127 @@ describe("AntigravityRunner", () => {
     rmSync(TMP_DIR, { recursive: true, force: true });
   });
 
-  it("returns an error when the default venv python does not exist", async () => {
-    const prev = process.env.DOVEPAW_DATA_DIR;
-    process.env.DOVEPAW_DATA_DIR = join(TMP_DIR, "missing-dovepaw");
+  it("throws immediately when agy is not installed", async () => {
+    const prevPath = process.env.PATH;
+    const prevHome = process.env.HOME;
+    const prevBin = process.env.DOVEPAW_AGY_BIN;
+    process.env.PATH = "";
+    process.env.HOME = join(TMP_DIR, "no-agy-home");
+    delete process.env.DOVEPAW_AGY_BIN;
     try {
       const runner = new AntigravityRunner(TMP_DIR);
-      const res = await runner.run("hello", { cwd: TMP_DIR, taskName: "missing-venv" });
-      expect(res.code).toBe(1);
-      expect(res.stdout).toContain("Antigravity Python SDK venv not found");
+      await expect(runner.run("hello", { cwd: TMP_DIR, taskName: "missing-agy" })).rejects.toThrow(
+        /Antigravity CLI \(`agy`\) is not installed/,
+      );
     } finally {
-      if (prev === undefined) delete process.env.DOVEPAW_DATA_DIR;
-      else process.env.DOVEPAW_DATA_DIR = prev;
+      if (prevPath === undefined) delete process.env.PATH;
+      else process.env.PATH = prevPath;
+      if (prevHome === undefined) delete process.env.HOME;
+      else process.env.HOME = prevHome;
+      if (prevBin === undefined) delete process.env.DOVEPAW_AGY_BIN;
+      else process.env.DOVEPAW_AGY_BIN = prevBin;
     }
   });
 
-  it("bridges JSON payload over stdin and parses NDJSON result + writes log", async () => {
-    const stubBridge = join(TMP_DIR, "stub-bridge.py");
-    writeFileSync(
-      stubBridge,
+  it("spawns agy CLI, parses stream-json events, and writes NDJSON log", async () => {
+    const stubAgy = makeStubAgy(
+      join(TMP_DIR, "stub-agy"),
       [
-        "import json, sys",
-        "payload = json.loads(sys.stdin.read())",
-        'print(json.dumps({"type": "init", "conversationId": "conv-1"}), flush=True)',
-        'print(json.dumps({"type": "result", "ok": True, "text": json.dumps(payload), "conversationId": "conv-1"}), flush=True)',
+        "const args = process.argv.slice(2);",
+        'console.log(JSON.stringify({ event: "init", conversation_id: "conv-123", init: { model: "gemini-4-neon" } }));',
+        'console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "conv-123", text_delta: "partial" } }));',
+        'console.log(JSON.stringify({ event: "result", result: { conversation_id: "conv-123", status: "SUCCESS", response: JSON.stringify(args) } }));',
       ].join("\n"),
     );
+
     const logFile = join(TMP_DIR, "run.jsonl");
     const runner = new AntigravityRunner(TMP_DIR, logFile);
 
     const res = await runner.run("ship it", {
       cwd: TMP_DIR,
-      taskName: "bridge-ok",
-      model: "gemini-4-neon",
+      taskName: "agy-ok",
+      model: "gemini-4-carbon",
       additionalDirectories: ["/extra/dir"],
       appendSystemPrompt: "Be concise.",
-      sessionId: "conv-1",
       resumeSession: "conv-prev",
       securityMode: "read-only",
-      allowWebTools: true,
-      enableSandbox: true,
-      skillsPaths: ["~/.gemini/config/skills"],
-      pythonBin: "python3",
-      bridgeScriptPath: stubBridge,
+      agyBin: stubAgy,
     });
 
     expect(res.code).toBe(0);
-    expect(res.sessionId).toBe("conv-1");
-    const echoed = JSON.parse(res.stdout) as Record<string, unknown>;
-    expect(echoed).toMatchObject({
-      prompt: "ship it",
-      cwd: TMP_DIR,
-      model: "gemini-4-neon",
-      additionalDirectories: ["/extra/dir"],
-      appendSystemPrompt: "Be concise.",
-      sessionId: "conv-1",
-      resumeSession: "conv-prev",
-      securityMode: "read-only",
-      allowWebTools: true,
-      enableSandbox: true,
-      skillsPaths: ["~/.gemini/config/skills"],
-    });
-    expect(String(echoed.saveDir)).toContain(".antigravity-sessions");
+    expect(res.sessionId).toBe("conv-123");
+    const passedArgs = JSON.parse(res.stdout) as string[];
+    expect(passedArgs).toEqual([
+      "--output-format",
+      "stream-json",
+      "--model",
+      "gemini-4-carbon",
+      "--mode",
+      "plan",
+      "--sandbox",
+      "--conversation",
+      "conv-prev",
+      "--add-dir",
+      "/extra/dir",
+      "--print=<system-instructions>\nBe concise.\n</system-instructions>\n\nship it",
+    ]);
     const logLines = readFileSync(logFile, "utf-8").trim().split("\n");
-    expect(logLines).toHaveLength(2);
+    expect(logLines).toHaveLength(3);
   });
 
-  it("defaults model to gemini-4-neon when omitted", async () => {
-    const stubBridge = join(TMP_DIR, "default-model-bridge.py");
-    writeFileSync(
-      stubBridge,
+  it("falls back to accumulated step_update text_delta when result has no response field", async () => {
+    const stubAgy = makeStubAgy(
+      join(TMP_DIR, "delta-agy"),
       [
-        "import json, sys",
-        "payload = json.loads(sys.stdin.read())",
-        'print(json.dumps({"type": "result", "ok": True, "text": payload["model"]}), flush=True)',
-      ].join("\n"),
-    );
-    const runner = new AntigravityRunner(TMP_DIR);
-    const res = await runner.run("hello", {
-      cwd: TMP_DIR,
-      taskName: "default-model",
-      pythonBin: "python3",
-      bridgeScriptPath: stubBridge,
-    });
-    expect(res).toEqual({ code: 0, stdout: "gemini-4-neon" });
-  });
-
-  it("returns error code and message when bridge emits an error event", async () => {
-    const stubBridge = join(TMP_DIR, "err-bridge.py");
-    writeFileSync(
-      stubBridge,
-      [
-        "import json, sys",
-        "sys.stdin.read()",
-        'print(json.dumps({"type": "error", "message": "Auth failed"}), flush=True)',
-        "sys.exit(1)",
+        'console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "conv-2", text_delta: "Hello " } }));',
+        'console.log(JSON.stringify({ event: "step_update", step_update: { conversation_id: "conv-2", text_delta: "world" } }));',
+        'console.log(JSON.stringify({ event: "result", result: { conversation_id: "conv-2", status: "SUCCESS" } }));',
       ].join("\n"),
     );
 
     const runner = new AntigravityRunner(TMP_DIR);
-    const res = await runner.run("hello", {
-      cwd: TMP_DIR,
-      taskName: "bridge-err",
-      pythonBin: "python3",
-      bridgeScriptPath: stubBridge,
-    });
+    const res = await runner.run("hi", { cwd: TMP_DIR, taskName: "delta", agyBin: stubAgy });
+    expect(res).toEqual({ code: 0, stdout: "Hello world", sessionId: "conv-2" });
+  });
 
-    expect(res.code).toBe(1);
-    expect(res.stdout).toBe("Error: Auth failed");
+  it("returns error code and message when agy emits an error event or non-SUCCESS result", async () => {
+    const stubErr = makeStubAgy(
+      join(TMP_DIR, "err-agy"),
+      [
+        'console.log(JSON.stringify({ event: "error", message: "Not signed in to Antigravity" }));',
+        "process.exit(1);",
+      ].join("\n"),
+    );
+
+    const runner = new AntigravityRunner(TMP_DIR);
+    const resErr = await runner.run("hello", {
+      cwd: TMP_DIR,
+      taskName: "agy-err",
+      agyBin: stubErr,
+    });
+    expect(resErr).toEqual({ code: 1, stdout: "Error: Not signed in to Antigravity" });
+
+    const stubFailedResult = makeStubAgy(
+      join(TMP_DIR, "fail-result-agy"),
+      'console.log(JSON.stringify({ event: "result", result: { status: "FAILED", error: "Quota exceeded" } }));',
+    );
+    const resFail = await runner.run("hello", {
+      cwd: TMP_DIR,
+      taskName: "agy-fail",
+      agyBin: stubFailedResult,
+    });
+    expect(resFail).toEqual({ code: 1, stdout: "Error: Quota exceeded" });
   });
 
   it("kills the subprocess and reports timeout when execution exceeds timeoutMs", async () => {
-    const slowBridge = join(TMP_DIR, "slow-bridge.py");
-    writeFileSync(slowBridge, "import sys, time\nsys.stdin.read()\ntime.sleep(30)\n");
+    const slowAgy = makeStubAgy(join(TMP_DIR, "slow-agy"), "setTimeout(() => {}, 30000);");
 
     const runner = new AntigravityRunner(TMP_DIR);
     const res = await runner.run("hello", {
       cwd: TMP_DIR,
-      taskName: "bridge-timeout",
+      taskName: "agy-timeout",
       timeoutMs: 150,
-      pythonBin: "python3",
-      bridgeScriptPath: slowBridge,
+      agyBin: slowAgy,
     });
 
     expect(res.code).toBe(1);
