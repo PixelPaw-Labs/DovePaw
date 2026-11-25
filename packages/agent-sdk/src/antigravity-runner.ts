@@ -113,7 +113,7 @@ export function buildAgyArgs(prompt: string, opts: AntigravityRunOpts): string[]
   if (opts.securityMode === "read-only") {
     args.push("--mode", "plan", "--sandbox");
   } else if (opts.securityMode === "supervised") {
-    args.push("--mode", "auto", "--sandbox");
+    args.push("--dangerously-skip-permissions", "--sandbox");
   } else {
     args.push("--dangerously-skip-permissions");
     if (opts.enableSandbox) args.push("--sandbox");

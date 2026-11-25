@@ -81,7 +81,7 @@ describe("buildAgyArgs", () => {
     ]);
   });
 
-  it("maps read-only and supervised security modes to plan/auto + sandbox", () => {
+  it("maps read-only to plan + sandbox and supervised to skip-permissions + sandbox", () => {
     const readOnly = buildAgyArgs("check", {
       cwd: TMP_DIR,
       taskName: "t",
@@ -97,7 +97,8 @@ describe("buildAgyArgs", () => {
       taskName: "t",
       securityMode: "supervised",
     });
-    expect(supervised[supervised.indexOf("--mode") + 1]).toBe("auto");
+    expect(supervised).not.toContain("--mode");
+    expect(supervised).toContain("--dangerously-skip-permissions");
     expect(supervised).toContain("--sandbox");
   });
 

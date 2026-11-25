@@ -199,6 +199,18 @@ Why `"on-request"` for both read-only and supervised: it lets Codex operate insi
 
 The Codex path has **no PreToolUse hook equivalent** — Codex SDK doesn't expose one. Enforcement is entirely sandbox + approval-policy driven. This is a real asymmetry with the Claude path: the Bash write-op hook does not run for Codex agents in read-only mode; the sandbox must catch it instead.
 
+## 10a. Gemini (agy) security mapping
+
+When `AgentRunner` routes to `AntigravityRunner` (model starts with `gemini`), `resolveAntigravitySecurityOpts` in [`packages/agent-sdk/src/agent-runner.ts`](../../packages/agent-sdk/src/agent-runner.ts) reads `DOVEPAW_SECURITY_MODE` (default `autonomous`), and `buildAgyArgs` in [`packages/agent-sdk/src/antigravity-runner.ts`](../../packages/agent-sdk/src/antigravity-runner.ts) turns it into `agy` flags:
+
+| Mode       | `agy` flags                                                                           |
+| ---------- | ------------------------------------------------------------------------------------- |
+| read-only  | `--mode plan --sandbox`                                                               |
+| supervised | `--dangerously-skip-permissions --sandbox`                                            |
+| autonomous | `--dangerously-skip-permissions`, plus `--sandbox` if `antigravityOpts.enableSandbox` |
+
+Supervised skips approval prompts and relies on the sandbox for its limit, the same as Codex acting freely inside its sandbox. It does not use `--mode auto`, because accounts without auto mode get every tool call denied and an agent script has nobody to answer a prompt. Like Codex, the Gemini path has no PreToolUse hook, so the sandbox is the only enforcement.
+
 ## 11. Two parallel copies of the policy
 
 `lib/security-policy.ts` (Dove side) and `packages/agent-sdk/src/security-policy.ts` (agent-script side) carry duplicate definitions of `getSecurityModeStrategy`, `READ_ONLY_DISALLOWED_TOOLS`, and `bashHasWriteOperation`. The duplication exists because the agent-sdk package is published independently and cannot import from `lib/` — plugin agents installed from external repos only have access to the published package.
